@@ -2,7 +2,9 @@ import { advanceTo } from "./clock";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSaveV3 } from "./save";
-import type { RoadGraph, SaveV3 } from "./types";
+import type { Field, RoadGraph, SaveV3, TerrainInfo, ZoneState } from "./types";
+import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
+import { makeFrame, type Frame } from "../world/frame";
 
 export interface Storage {
   get(): Promise<unknown>;
@@ -11,14 +13,29 @@ export interface Storage {
 }
 
 const AWAY_MIN_MS = 60_000;
+const ENRICH_BATCH = 32;
+const ENRICH_RETRY_MS = 30_000;
+
+// Looks up land type and slope at a local point. Injected so tests need no network.
+export type TerrainSampler = (frame: Frame, x: number, y: number) => Promise<TerrainInfo>;
 
 export class Handler {
   private save: SaveV3 | null = null;
+  private postedRev = -1; // zones rev the main thread already has
+  private enriching: Promise<void> | null = null;
+  private failed = new Set<string>(); // qkeys that could not be sampled; retried later
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private storage: Storage,
     private post: (msg: FromWorker) => void,
+    private sampler?: TerrainSampler,
   ) {}
+
+  // Resolves when no terrain enrichment is running (for tests).
+  async idle(): Promise<void> {
+    while (this.enriching) await this.enriching;
+  }
 
   async handle(msg: ToWorker): Promise<void> {
     try {
@@ -26,8 +43,12 @@ export class Handler {
         case "load":
           return await this.load(msg.legacy, msg.now);
         case "found": {
-          const save: SaveV3 = { version: 3, city: msg.city, sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads() } };
-          this.save = save;
+          const save: SaveV3 = {
+            version: 3,
+            city: msg.city,
+            sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() },
+          };
+          this.setSave(save);
           await this.storage.put(save);
           this.post({ t: "loaded", save, migrated: false, away: null });
           return;
@@ -38,7 +59,7 @@ export class Handler {
           if (this.save) await this.storage.put(this.save);
           return;
         case "reset":
-          this.save = null;
+          this.setSave(null);
           await this.storage.clear();
           this.post({ t: "resetDone" });
           return;
@@ -65,39 +86,141 @@ export class Handler {
     const realMs = now - save.sim.realTime;
     const sim = advanceTo(save.sim, now);
     const gameMinutes = sim.gameMinutes - save.sim.gameMinutes;
-    save = { ...save, sim };
-    this.save = save;
+    // Cells are derived data: rebuild them so saves without zones (or with stale ones) are consistent.
+    const z = sim.zones;
+    save = { ...save, sim: { ...sim, zones: { ...z, cells: regenerateCells(sim.roads, z.cells, z.fields, z.terrain) } } };
+    this.setSave(save);
     await this.storage.put(save);
     const away = realMs > AWAY_MIN_MS ? { realMs, gameMinutes } : null;
     this.post({ t: "loaded", save, migrated, away });
+    this.enrich();
+  }
+
+  private setSave(save: SaveV3 | null): void {
+    this.save = save;
+    this.postedRev = save ? save.sim.zones.rev : -1;
+    this.failed.clear();
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  // Zones are attached only when their rev moved since the last message that carried them.
+  private postSnapshot(): void {
+    if (!this.save) return;
+    const { zones, ...sim } = this.save.sim;
+    if (zones.rev !== this.postedRev) {
+      this.postedRev = zones.rev;
+      this.post({ t: "snapshot", sim, zones });
+    } else {
+      this.post({ t: "snapshot", sim });
+    }
+  }
+
+  private rezone(z: ZoneState, roads: RoadGraph, fields: Field[]): ZoneState {
+    return { ...z, fields, cells: regenerateCells(roads, z.cells, fields, z.terrain), rev: z.rev + 1 };
+  }
+
+  // Samples terrain for cells still pending; results are merged and cells regenerated per batch.
+  private enrich(): void {
+    if (this.enriching || !this.sampler) return;
+    this.enriching = this.enrichLoop().finally(() => {
+      this.enriching = null;
+      if (this.failed.size > 0 && !this.retryTimer) {
+        this.retryTimer = setTimeout(() => {
+          this.retryTimer = null;
+          this.failed.clear();
+          this.enrich();
+        }, ENRICH_RETRY_MS);
+      }
+    });
+  }
+
+  private async enrichLoop(): Promise<void> {
+    const sampler = this.sampler!;
+    try {
+      for (;;) {
+        const save = this.save;
+        if (!save) return;
+        const keys = pendingKeys(save.sim.zones.cells).filter((k) => !this.failed.has(k));
+        if (keys.length === 0) return;
+        const city = save.city;
+        const frame = makeFrame(city.lat, city.lng);
+        for (let n = 0; n < keys.length; n += ENRICH_BATCH) {
+          const got: Record<string, TerrainInfo> = {};
+          await Promise.all(
+            keys.slice(n, n + ENRICH_BATCH).map(async (k) => {
+              const [x, y] = qpoint(k);
+              try {
+                got[k] = await sampler(frame, x, y);
+              } catch {
+                this.failed.add(k);
+              }
+            }),
+          );
+          const cur = this.save;
+          if (!cur || cur.city !== city) return; // reset or re-founded meanwhile
+          if (Object.keys(got).length === 0) continue;
+          const z = cur.sim.zones;
+          const zones = this.rezone({ ...z, terrain: { ...z.terrain, ...got } }, cur.sim.roads, z.fields);
+          this.save = { ...cur, sim: { ...cur.sim, zones } };
+          this.postSnapshot();
+          try {
+            await this.storage.put(this.save);
+          } catch (e) {
+            this.post({ t: "error", message: String(e) });
+          }
+        }
+      }
+    } catch (e) {
+      this.post({ t: "error", message: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   private async command(id: number, cmd: Cmd): Promise<void> {
     const reject = (reason: string) => this.post({ t: "cmdResult", id, ok: false, reason });
     try {
       if (!this.save) return reject("Нет поселения");
-      const roads = this.save.sim.roads;
-      let next: RoadGraph;
+      const sim = this.save.sim;
+      const roads = sim.roads;
+      const z = sim.zones;
+      let next: RoadGraph = roads;
+      let zones: ZoneState;
       if (cmd.type === "addRoad") {
         const bad = validateAddRoad(cmd);
         if (bad) return reject(bad);
         const r = addRoad(roads, cmd.pts, cmd.kind, cmd.snapTol, cmd.labor);
         if (!r.ok) return reject(r.reason);
         next = r.graph;
+        zones = this.rezone(z, next, z.fields);
       } else if (cmd.type === "removeRoad") {
         if (!Object.hasOwn(roads.edges, cmd.edgeId)) return reject("Участок уже убран");
         next = removeEdge(roads, cmd.edgeId);
+        zones = this.rezone(z, next, z.fields);
+      } else if (cmd.type === "paintZones") {
+        if (!Array.isArray(cmd.keys) || cmd.keys.length > 50_000 || !cmd.keys.every((k) => typeof k === "string")) {
+          return reject("Некорректные клетки");
+        }
+        if (cmd.zone !== "none" && cmd.zone !== "res" && cmd.zone !== "craft" && cmd.zone !== "trade") return reject("Неизвестная зона");
+        zones = { ...z, cells: paintCells(z.cells, cmd.keys, cmd.zone), rev: z.rev + 1 };
+      } else if (cmd.type === "addField") {
+        const v = validateField(cmd.pts, roads, z.fields);
+        if (!v.ok) return reject(v.reason);
+        zones = this.rezone(z, roads, [...z.fields, { id: nextFieldId(z.fields), pts: v.pts, area: v.area }]);
+      } else if (cmd.type === "removeField") {
+        if (!z.fields.some((f) => f.id === cmd.id)) return reject("Поле уже убрано");
+        zones = this.rezone(z, roads, z.fields.filter((f) => f.id !== cmd.id));
       } else {
         return reject("Неизвестная команда");
       }
-      this.save = { ...this.save, sim: { ...this.save.sim, roads: next } };
-      this.post({ t: "snapshot", sim: this.save.sim });
+      this.save = { ...this.save, sim: { ...sim, roads: next, zones } };
+      this.postSnapshot();
       try {
         await this.storage.put(this.save);
       } catch (e) {
         this.post({ t: "error", message: String(e) });
       }
       this.post({ t: "cmdResult", id, ok: true });
+      this.enrich();
     } catch (e) {
       reject(e instanceof Error ? e.message : String(e));
     }
@@ -109,7 +232,7 @@ export class Handler {
     const sim = advanceTo(this.save.sim, now);
     if (sim.gameMinutes === this.save.sim.gameMinutes) return;
     this.save = { ...this.save, sim };
-    this.post({ t: "snapshot", sim });
+    this.postSnapshot();
     this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));
   }
 }

@@ -13,7 +13,7 @@ export function step(s: SimState): SimState {
   const hour = calendar(s.gameMinutes).hour;
   const working = hour >= WORK_START && hour < WORK_END;
   const roads = working ? advanceConstruction(s.roads, (WORKERS * BASE_TICK) / 60) : s.roads;
-  return { realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK, roads };
+  return { ...s, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK, roads };
 }
 
 // Caps the gap to `cap` real ms, then runs whole ticks up to `now`.

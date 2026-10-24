@@ -2,9 +2,10 @@
 import { Handler } from "./handler";
 import { idbStorage } from "./idbStorage";
 import type { FromWorker, ToWorker } from "./protocol";
+import { worldSampler } from "./worldSampler";
 
 const post = (msg: FromWorker) => self.postMessage(msg);
-const handler = new Handler(idbStorage, post);
+const handler = new Handler(idbStorage, post, worldSampler);
 
 self.onmessage = (e: MessageEvent<ToWorker>) => {
   void handler.handle(e.data);

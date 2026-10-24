@@ -1,5 +1,7 @@
+import { LANDS } from "../world/landcover";
 import { emptyRoads, ROAD_KINDS } from "./roads";
-import type { City, RoadEdge, RoadGraph, RoadNode, SaveV3 } from "./types";
+import type { City, Field, RoadEdge, RoadGraph, RoadNode, SaveV3, TerrainInfo, ZoneBlock, ZoneCell, ZoneState } from "./types";
+import { emptyZones } from "./zones";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -54,6 +56,53 @@ function parseRoads(v: unknown): RoadGraph | null {
   return { nodes, edges, nextId };
 }
 
+const ZONES = ["none", "res", "craft", "trade"];
+const BLOCKS = ["road", "overlap", "field", "water", "steep", "pending"];
+
+const isPoint = (p: unknown): p is [number, number] => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]);
+
+// Saves from before zoning have no `zones`: that is an empty state, not an error.
+function parseZones(v: unknown): ZoneState | null {
+  if (v === undefined) return emptyZones();
+  if (!isRecord(v) || !Array.isArray(v.cells) || !Array.isArray(v.fields) || !isRecord(v.terrain)) return null;
+  if (!Number.isInteger(v.rev) || (v.rev as number) < 0) return null;
+  const cells: ZoneCell[] = [];
+  for (const raw of v.cells) {
+    if (!isRecord(raw) || typeof raw.key !== "string") return null;
+    if (!Number.isInteger(raw.edge) || !Number.isInteger(raw.i) || (raw.i as number) < 0) return null;
+    if (raw.side !== 1 && raw.side !== -1) return null;
+    if (!Number.isInteger(raw.depth) || (raw.depth as number) < 0 || (raw.depth as number) > 3) return null;
+    if (!isNum(raw.cx) || !isNum(raw.cy) || !isNum(raw.angle)) return null;
+    if (typeof raw.zone !== "string" || !ZONES.includes(raw.zone)) return null;
+    if (raw.block !== null && (typeof raw.block !== "string" || !BLOCKS.includes(raw.block))) return null;
+    cells.push({
+      key: raw.key,
+      edge: raw.edge as number,
+      side: raw.side,
+      i: raw.i as number,
+      depth: raw.depth as number,
+      cx: raw.cx,
+      cy: raw.cy,
+      angle: raw.angle,
+      zone: raw.zone as ZoneCell["zone"],
+      block: raw.block as ZoneBlock | null,
+    });
+  }
+  const fields: Field[] = [];
+  for (const raw of v.fields) {
+    if (!isRecord(raw) || !Number.isInteger(raw.id) || (raw.id as number) < 1) return null;
+    if (!Array.isArray(raw.pts) || raw.pts.length < 3 || !raw.pts.every(isPoint)) return null;
+    if (!isNum(raw.area) || raw.area <= 0) return null;
+    fields.push({ id: raw.id as number, pts: (raw.pts as [number, number][]).map((p) => [p[0], p[1]]), area: raw.area });
+  }
+  const terrain: Record<string, TerrainInfo> = {};
+  for (const [key, raw] of Object.entries(v.terrain)) {
+    if (!isRecord(raw) || typeof raw.land !== "string" || !(LANDS as readonly string[]).includes(raw.land) || !isNum(raw.slope)) return null;
+    terrain[key] = { land: raw.land as TerrainInfo["land"], slope: raw.slope };
+  }
+  return { cells, fields, terrain, rev: v.rev as number };
+}
+
 export function parseSaveV3(value: unknown, now: number): SaveV3 | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
@@ -66,7 +115,10 @@ export function parseSaveV3(value: unknown, now: number): SaveV3 | null {
   if (!isNum(sim.gameMinutes) || sim.gameMinutes < 0) return null;
   const roads = parseRoads(sim.roads);
   if (!roads) return null;
-  return { version: 3, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads } };
+  // Cells are rebuilt from roads on load, so broken zone data only costs the paint,
+  // never the whole town (a rejected save would send the player back to founding).
+  const zones = parseZones(sim.zones) ?? emptyZones();
+  return { version: 3, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones } };
 }
 
 // Old localStorage saves (v1, v2): keep the city, start a fresh village.
@@ -82,5 +134,5 @@ export function migrateLegacy(raw: string, now: number): SaveV3 | null {
   if (o.version !== 1 && o.version !== 2) return null;
   const city = parseCity(o.city);
   if (!city) return null;
-  return { version: 3, city, sim: { realTime: now, gameMinutes: 0, roads: emptyRoads() } };
+  return { version: 3, city, sim: { realTime: now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() } };
 }

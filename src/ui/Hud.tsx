@@ -1,7 +1,7 @@
 import { calendar } from "../sim/clock";
 import { WORK_END, WORK_START, WORKERS } from "../sim/roads";
 import type { City } from "../sim/types";
-import { reset, roads } from "../simClient";
+import { reset, roads, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -28,6 +28,21 @@ export function Hud({ city }: { city: City }) {
       }
     }
   }
+  const z = zones.value;
+  let res = 0;
+  let craft = 0;
+  let trade = 0;
+  let fieldArea = 0;
+  if (z) {
+    for (const c of z.cells) {
+      if (c.block) continue;
+      if (c.zone === "res") res++;
+      else if (c.zone === "craft") craft++;
+      else if (c.zone === "trade") trade++;
+    }
+    for (const f of z.fields) fieldArea += f.area;
+  }
+  const ga = (fieldArea / 10000).toFixed(1).replace(".", ",");
   return (
     <div class="hud panel">
       <div class="hud-name">{city.name}</div>
@@ -36,6 +51,9 @@ export function Hud({ city }: { city: City }) {
       </div>
       <div class="hud-date">
         Строители: {WORKERS} · работают {pad(WORK_START)}–{pad(WORK_END)}
+      </div>
+      <div class="hud-date">
+        Зоны: жильё {res} · ремесло {craft} · торговля {trade} · поля {ga} га
       </div>
       {queue > 0 && (
         <div class="hud-date">

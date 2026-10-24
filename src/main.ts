@@ -5,6 +5,8 @@ import { createMap } from "./map/mapView";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachRoadLayer } from "./map/roadLayer";
 import { attachRoadTool } from "./map/roadTool";
+import { attachZoneLayer } from "./map/zoneLayer";
+import { attachZoneTool } from "./map/zoneTool";
 import { city, load } from "./simClient";
 import { App } from "./ui/App";
 
@@ -12,9 +14,11 @@ import { App } from "./ui/App";
 // Read it before creating the map, which writes its own hash on construction.
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
+attachZoneLayer(map); // zones beneath everything else we add
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachCityMarker(map);
 attachRoadTool(map);
+attachZoneTool(map);
 let centred = false;
 effect(() => {
   const c = city.value;

@@ -1,22 +1,19 @@
 import type maplibregl from "maplibre-gl";
-import { effect, signal } from "@preact/signals";
+import { effect } from "@preact/signals";
 import { addRoad, distToEdge, ROAD_KINDS, segmentCost, snapPoint, type Snap } from "../sim/roads";
-import type { RoadKind } from "../sim/types";
 import { frame, roads, sendCmd } from "../simClient";
 import { sampleProfile } from "../world/profile";
-
-export type Tool = RoadKind | "bulldoze";
-
-export const tool = signal<Tool | null>(null);
-// Brief message about a rejected action, shown by the toolbar.
-export const roadMsg = signal<string | null>(null);
+import { flash, isRoadTool, mapMpp, tool, type RoadTool } from "./tools";
 
 export const MIN_DRAW_ZOOM = 14;
 const SNAP_PX = 12;
 const PREVIEW_MS = 120;
-const EQUATOR_M = 40075016.686;
 
-const mapMpp = (lat: number, zoom: number) => (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+// The active tool when it is a road tool, else null (zone tools are handled by zoneTool.ts).
+const roadT = (): RoadTool | null => {
+  const t = tool.value;
+  return t && isRoadTool(t) ? t : null;
+};
 
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 const line = (a: [number, number], b: [number, number], props: GeoJSON.GeoJsonProperties = {}): GeoJSON.Feature => ({
@@ -24,13 +21,6 @@ const line = (a: [number, number], b: [number, number], props: GeoJSON.GeoJsonPr
   properties: props,
   geometry: { type: "LineString", coordinates: [a, b] },
 });
-
-let msgTimer = 0;
-function flash(text: string): void {
-  roadMsg.value = text;
-  clearTimeout(msgTimer);
-  msgTimer = window.setTimeout(() => (roadMsg.value = null), 3500);
-}
 
 // Interactive road drawing and bulldozing on top of the map.
 export function attachRoadTool(map: maplibregl.Map): void {
@@ -143,7 +133,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       timer = 0;
       const req = pendingCost;
       const f = frame.value;
-      const t = tool.value;
+      const t = roadT();
       if (!req || !f || !t || t === "bulldoze") return;
       const mine = ++seq;
       sampleProfile(f, [req.a.x, req.a.y], [req.b.x, req.b.y])
@@ -190,7 +180,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
   const onMove = (e: maplibregl.MapMouseEvent) => {
     lastEvent = e;
     cursor = { x: e.point.x, y: e.point.y };
-    const t = tool.value;
+    const t = roadT();
     if (!t || !ensure()) return;
     const ctx = context(e);
     if (!ctx) return;
@@ -239,7 +229,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
   };
 
   const onClick = (e: maplibregl.MapMouseEvent) => {
-    const t = tool.value;
+    const t = roadT();
     if (!t || busy || !ensure()) return;
     const ctx = context(e);
     if (!ctx || map.getZoom() < MIN_DRAW_ZOOM) return;
@@ -307,14 +297,14 @@ export function attachRoadTool(map: maplibregl.Map): void {
   };
 
   const onContext = (e: maplibregl.MapMouseEvent) => {
-    if (!tool.value) return;
+    if (!roadT()) return;
     e.preventDefault();
     e.originalEvent.preventDefault();
     if (start) endChain();
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || !tool.value) return;
+    if (e.key !== "Escape" || !roadT()) return;
     const el = e.target as HTMLElement | null;
     if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
     if (start) endChain();

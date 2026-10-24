@@ -215,3 +215,28 @@ body {
   box-shadow: 0 2px 8px rgba(60, 70, 40, 0.25);
   font-size: 12px;
 }
+
+.tool-groups {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+}
+
+.tool-groups .road-buttons + .road-buttons {
+  padding-left: 14px;
+  border-left: 1px solid #d5dbc2;
+}
+
+.road-buttons .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: baseline;
+}
+
+.road-hint {
+  text-align: center;
+}

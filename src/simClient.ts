@@ -8,6 +8,7 @@ const LEGACY_KEY = "rebirth.save";
 export const city = signal<City | null>(null);
 export const state = signal<SimState | null>(null);
 export const roads = computed(() => state.value?.roads ?? null);
+export const zones = computed(() => state.value?.zones ?? null);
 export const frame = computed(() => (city.value ? makeFrame(city.value.lat, city.value.lng) : null));
 export const away = signal<Away | null>(null);
 
@@ -40,9 +41,12 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       state.value = m.save?.sim ?? null;
       away.value = m.away;
       break;
-    case "snapshot":
-      state.value = m.sim;
+    case "snapshot": {
+      // Zones ride along only when they changed; otherwise keep the ones we have.
+      const z = m.zones ?? state.value?.zones;
+      if (z) state.value = { ...m.sim, zones: z };
       break;
+    }
     case "cmdResult": {
       const done = pending.get(m.id);
       pending.delete(m.id);
