@@ -34,8 +34,8 @@ let added = false;
 function addLayers(map: maplibregl.Map): void {
   if (added) return;
   added = true;
-  // The overlay goes under the city centre cell so the centre stays visible.
-  const before = map.getLayer("city-cell-fill") ? "city-cell-fill" : undefined;
+  // The overlay goes under the buildings so they stay visible.
+  const before = map.getLayer("buildings-fill") ? "buildings-fill" : undefined;
   map.addSource(OVERLAY_SRC, { type: "geojson", data: EMPTY });
   map.addLayer(
     {

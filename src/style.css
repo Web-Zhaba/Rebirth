@@ -140,3 +140,142 @@ body {
     bottom: 190px;
   }
 }
+
+/* Economy */
+.resbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  max-width: calc(100vw - 180px);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.res {
+  white-space: nowrap;
+}
+
+.rate {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #7a8468;
+}
+
+.rate.neg {
+  color: #c0392b;
+}
+
+.muted {
+  color: #7a8468;
+  font-size: 12px;
+}
+
+.cell-panel.interactive {
+  pointer-events: auto;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  width: min(270px, calc(100vw - 24px));
+}
+
+.cell-panel .close {
+  float: right;
+  margin: -4px -6px 0 0;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: #8a7a5a;
+  cursor: pointer;
+}
+
+.bld-current,
+.bld-list {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e0dcc4;
+}
+
+.bld {
+  margin-bottom: 8px;
+}
+
+.bld-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bld button {
+  margin-top: 4px;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: #a3c088;
+  color: #2f3a24;
+  cursor: pointer;
+}
+
+.bld button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reason {
+  color: #c0392b;
+  font-size: 12px;
+}
+
+.offline {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(320px, calc(100vw - 32px));
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.offline-title {
+  font-weight: 600;
+}
+
+.offline-gains {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+}
+
+.offline button {
+  font: inherit;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #a3c088;
+  color: #2f3a24;
+  cursor: pointer;
+}
+
+/* Under the HUD on phones instead of beside it. */
+@media (max-width: 700px) {
+  .resbar {
+    top: 112px;
+    left: 12px;
+    transform: none;
+    max-width: calc(100vw - 24px);
+  }
+  .cell-panel.interactive {
+    bottom: 44px;
+    max-height: calc(100vh - 300px);
+  }
+}

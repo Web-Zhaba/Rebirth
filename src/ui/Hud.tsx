@@ -1,11 +1,13 @@
 import type maplibregl from "maplibre-gl";
 import { overlayOn, type City } from "../game/state";
 import { clearSave } from "../game/save";
+import { stopSaving } from "../game/loop";
 import { hideOverlay, showOverlay } from "../map/cellLayers";
 
 export function Hud({ map, city }: { map: maplibregl.Map; city: City }) {
   const reset = () => {
     if (!confirm("Удалить поселение и начать заново?")) return;
+    stopSaving();
     clearSave();
     location.reload();
   };

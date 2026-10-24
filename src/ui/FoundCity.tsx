@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import maplibregl from "maplibre-gl";
 import { latLngToCell } from "h3-js";
-import { city } from "../game/state";
-import { writeSave } from "../game/save";
-import { drawCityCell } from "../map/cityLayer";
+import { city, economy } from "../game/state";
+import { initialEconomy } from "../game/sim";
+import { saveNow, startLoop } from "../game/loop";
 
 interface Point {
   lat: number;
@@ -55,11 +55,12 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
       cell: latLngToCell(point.lat, point.lng, 9),
       foundedAt: Date.now(),
     };
-    writeSave({ version: 1, city: c });
     marker.current?.remove();
     marker.current = null;
-    drawCityCell(map, c.cell);
+    economy.value = initialEconomy(c.cell, Date.now());
     city.value = c;
+    saveNow();
+    startLoop();
   };
 
   return (

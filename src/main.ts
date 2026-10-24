@@ -3,8 +3,10 @@ import { render, h } from "preact";
 import { createMap } from "./map/mapView";
 import { loadSave } from "./game/save";
 import { city } from "./game/state";
-import { drawCityCell } from "./map/cityLayer";
+import { resumeEconomy, startLoop } from "./game/loop";
+import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCellHover } from "./map/cellLayers";
+import { attachSelection } from "./map/selectionLayer";
 import { App } from "./ui/App";
 
 const save = loadSave();
@@ -12,11 +14,14 @@ const save = loadSave();
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
 attachCellHover(map);
+attachBuildingLayer(map);
+attachSelection(map);
 
 if (save) {
   city.value = save.city;
   if (!hasHash) map.jumpTo({ center: [save.city.lng, save.city.lat], zoom: 14.5 });
-  drawCityCell(map, save.city.cell);
+  resumeEconomy(save.economy, Date.now());
+  startLoop();
 }
 
 render(h(App, { map }), document.getElementById("ui")!);
