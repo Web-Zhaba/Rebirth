@@ -10,6 +10,8 @@ export interface NotebookProps {
   chronicle: ChronicleEntry[];
   seen: number;
   onSeen: (count: number) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 type Tab = "finds" | "history" | "chronicle";
@@ -21,8 +23,7 @@ const TABS: [Tab, string][] = [
 ];
 const KIND_ICON: Record<Find["kind"], string> = { poi: "◉", street: "≡", foundations: "▫" };
 
-export function Notebook({ finds, articles, chronicle, seen, onSeen }: NotebookProps) {
-  const [open, setOpen] = useState(false);
+export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpenChange }: NotebookProps) {
   const [tab, setTab] = useState<Tab>("finds");
   const total = finds.length + articles.length;
   const unseen = unseenCount(finds, articles, seen);
@@ -39,7 +40,7 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen }: NotebookP
         title="Записная книжка"
         aria-label="Записная книжка"
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={() => onOpenChange(!open)}
       >
         <span class="notebook-icon">📖</span>
         {unseen > 0 && !open && <span class="notebook-badge">{unseen > 99 ? "99+" : unseen}</span>}
@@ -77,7 +78,7 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen }: NotebookP
               ))}
             {tab === "history" &&
               (articles.length === 0 ? (
-                <div class="notebook-empty">Статей об этом месте пока нет.</div>
+                <div class="notebook-empty">Ведите раскопки — здесь появятся статьи о найденных местах</div>
               ) : (
                 newestFirst(articles).map((a) => (
                   <div class="notebook-entry" key={a.id}>

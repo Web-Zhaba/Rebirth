@@ -165,6 +165,18 @@ export interface FoundPlace {
   y?: number;
 }
 
+// A Wikipedia article unlocked by a dig (PLAN.md section 13). Text is CC BY-SA 4.0.
+export interface StoredArticle {
+  id: string; // "<lang>:<pageid>"
+  title: string;
+  extract: string; // up to 800 chars
+  url: string;
+  lang: "ru" | "en";
+  lat: number;
+  lng: number;
+  at: number; // gameMinutes
+}
+
 export interface Finds {
   foundations: FoundFoundation[];
   pois: FoundPlace[];
@@ -232,6 +244,7 @@ export interface SimState extends PeopleState {
   zones: ZoneState;
   chronicle: ChronicleEntry[]; // oldest first, capped at 1000
   finds: Finds;
+  articles: StoredArticle[]; // oldest first, capped at 500
   buildings: Record<number, Building>;
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
@@ -283,8 +296,8 @@ export interface Demand {
 }
 
 // What the worker streams every tick: no individual residents, only aggregates.
-// Zones and the chronicle travel separately, only when they changed.
-export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod" | "finds"> & {
+// Zones, the chronicle, finds and articles travel separately, only when they changed.
+export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod" | "finds" | "articles"> & {
   digs: DigInfo[]; // finished dig sites with their discs and find counts
   people: PeopleStats & { demand: Demand };
   economy: EconomyStats;
@@ -293,7 +306,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
 };
 
 // What the main thread keeps.
-export type ClientState = SimSnapshot & { zones: ZoneState; chronicle: ChronicleEntry[] };
+export type ClientState = SimSnapshot & { zones: ZoneState; chronicle: ChronicleEntry[]; finds: Finds; articles: StoredArticle[] };
 
 export interface ClientSave {
   version: 3;

@@ -1,6 +1,7 @@
 import { newTally, observe, summarize, type Tally } from "./away";
 import { advanceTo, BASE_TICK, capGap, MS_PER_GAME_MINUTE, TICK_MS } from "./clock";
 import { BUILDINGS } from "./buildings";
+import { addArticles } from "./articles";
 import { digInfos, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
@@ -12,7 +13,7 @@ import { SERVICES, isService } from "./services";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSaveV3 } from "./save";
 import { dayOf } from "./time";
-import type { BuildingQuery, ChronicleEntry, ClientSave, Field, RoadGraph, SaveV3, Site, SimSnapshot, SimState, TerrainInfo, ZoneState } from "./types";
+import type { BuildingQuery, ChronicleEntry, ClientSave, Field, Finds, RoadGraph, SaveV3, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 
@@ -29,7 +30,7 @@ const CHUNK_TICKS = 144; // one game day per chunk
 
 // What the main thread sees: aggregates instead of individual residents.
 export function toSnapshot(sim: SimState): SimSnapshot {
-  const { zones: _z, chronicle: _c, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, finds: _f, ...rest } = sim;
+  const { zones: _z, chronicle: _c, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, finds: _f, articles: _a, ...rest } = sim;
   const houseMood: Record<number, number> = {};
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
   return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim) };
@@ -51,7 +52,7 @@ function inspect(sim: SimState, id: number): BuildingQuery | null {
   return q;
 }
 
-const toClientSave = (save: SaveV3): ClientSave => ({ version: 3, city: save.city, sim: { ...toSnapshot(save.sim), zones: save.sim.zones, chronicle: save.sim.chronicle } });
+const toClientSave = (save: SaveV3): ClientSave => ({ version: 3, city: save.city, sim: { ...toSnapshot(save.sim), zones: save.sim.zones, chronicle: save.sim.chronicle, finds: save.sim.finds, articles: save.sim.articles } });
 const ENRICH_BATCH = 32;
 const ENRICH_RETRY_MS = 30_000;
 
@@ -62,6 +63,8 @@ export class Handler {
   private save: SaveV3 | null = null;
   private postedRev = -1; // zones rev the main thread already has
   private postedChronicle: ChronicleEntry[] | null = null; // the chronicle array the main thread already has
+  private postedFinds: Finds | null = null;
+  private postedArticles: StoredArticle[] | null = null;
   private busy = false; // loading or catching up: other messages wait in `queue`
   private queue: ToWorker[] = [];
   private catching: Promise<void> | null = null;
@@ -208,6 +211,8 @@ export class Handler {
     this.save = save;
     this.postedRev = save ? save.sim.zones.rev : -1;
     this.postedChronicle = save ? save.sim.chronicle : null;
+    this.postedFinds = save ? save.sim.finds : null;
+    this.postedArticles = save ? save.sim.articles : null;
     this.lifeDay = Number.NaN;
     this.failed.clear();
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -226,6 +231,15 @@ export class Handler {
     if (chronicle !== this.postedChronicle) {
       this.postedChronicle = chronicle;
       msg.chronicle = chronicle;
+    }
+    const { finds, articles } = this.save.sim;
+    if (finds !== this.postedFinds) {
+      this.postedFinds = finds;
+      msg.finds = finds;
+    }
+    if (articles !== this.postedArticles) {
+      this.postedArticles = articles;
+      msg.articles = articles;
     }
     this.post(msg);
   }
@@ -351,6 +365,15 @@ export class Handler {
         return await this.finishCommand(id);
       } else if (cmd.type === "recordFinds") {
         const r = recordFinds(sim, cmd);
+        if (!r.ok) return reject(r.reason);
+        if (r.sim === sim) {
+          this.post({ t: "cmdResult", id, ok: true }); // nothing new: no save
+          return;
+        }
+        this.save = { ...this.save, sim: r.sim };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "addArticles") {
+        const r = addArticles(sim, cmd);
         if (!r.ok) return reject(r.reason);
         if (r.sim === sim) {
           this.post({ t: "cmdResult", id, ok: true }); // nothing new: no save

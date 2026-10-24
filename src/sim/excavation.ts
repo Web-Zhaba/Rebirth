@@ -189,7 +189,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     seenS.add(t.id);
     seenName.add(t.name);
     newStreets.push({ id: t.id, name: t.name, kind: "street", digId: cmd.digId, at });
-    chronicle = addChronicle(chronicle, at, "dig:street", `Раскоп: найдена улица ${t.name}`);
+    chronicle = addChronicle(chronicle, at, "dig:street", `Раскоп: найдена старая улица — ${t.name}`);
   }
   const newF: FoundFoundation[] = [];
   let stone = 0;

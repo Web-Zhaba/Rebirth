@@ -1,8 +1,18 @@
 import type { Light, Trip } from "../map/lifeLayer";
 import type { Away } from "./away";
-import type { BuildingQuery, ChronicleEntry, City, ClientSave, RoadKind, SimSnapshot, Site, ZoneState, ZoneType } from "./types";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
 export type { Away };
+
+export interface ArticleInput {
+  id: string;
+  title: string;
+  extract: string;
+  url: string;
+  lang: "ru" | "en";
+  lat: number;
+  lng: number;
+}
 
 export type Cmd =
   // pts and labor are local meters / person-hours; labor has one entry per segment.
@@ -14,6 +24,8 @@ export type Cmd =
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "demolish"; id: number }
+  // Wikipedia articles found near the dig discs (validated, deduplicated by id and capped by the sim).
+  | { type: "addArticles"; articles: ArticleInput[] }
   // New finds of a dig site: foundations in local meters, named places and one entry per street name.
   | {
       type: "recordFinds";
@@ -38,8 +50,8 @@ export interface CmdResult {
 
 export type FromWorker =
   | { t: "loaded"; save: ClientSave | null; migrated: boolean; away: Away | null }
-  // zones only when their rev changed, the chronicle only when it grew since the previous snapshot
-  | { t: "snapshot"; sim: SimSnapshot; zones?: ZoneState; chronicle?: ChronicleEntry[] }
+  // zones only when their rev changed; the chronicle, finds and articles only when they changed since the previous snapshot
+  | { t: "snapshot"; sim: SimSnapshot; zones?: ZoneState; chronicle?: ChronicleEntry[]; finds?: Finds; articles?: StoredArticle[] }
   // catch-up in progress (game minutes); no snapshots or life messages until it ends
   | { t: "progress"; done: number; total: number }
   // the summary of a catch-up after the tab was hidden (a catch-up at load reports it in "loaded")

@@ -2,6 +2,7 @@ import "./style.css";
 import { render, h } from "preact";
 import { effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
+import { attachArticles } from "./map/articles";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
@@ -24,6 +25,7 @@ const map = createMap("map");
 attachZoneLayer(map); // zones beneath everything else we add
 attachRuinsLayer(map, oldWorld, frame); // old foundations and streets, beneath the roads
 attachExcavation();
+attachArticles();
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
 attachTrafficLayer(map);

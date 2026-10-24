@@ -51,6 +51,10 @@ tiles hold the buildings and streets that excavation reveals later.
 - **M3** hex-based idle economy. **Superseded** by the real-scale simulation below;
   its pure fixed-step simulation, offline catch-up, save validation and UI shell are
   the patterns to keep.
+- **S0–S8** real-scale simulation: local metric frame and worker-hosted sim, roads, zones, growth,
+  residents, production, services, visible life, idle catch-up and chronicle (section 7).
+- **E1** excavation: dig sites reveal the buried OSM city, finds are saved, rebuild on old foundations.
+- **E2** notebook: finds, Wikipedia articles unlocked by digs (saved with the town) and the chronicle.
 
 ## 5. Architecture
 
@@ -106,7 +110,7 @@ Each milestone ends with something playable in the browser.
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. **Done** (section 10). Worker posts a cosmetic `life` message per game day and on load (up to 300 walkers, carts per load capped at 6 per producer, traffic over all commuters, lights); nothing of it is in `SimState` or saves; the «движение» overlay joins the S6 switch. |
 | S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. **Done** (section 11). Catch-up runs in one-day chunks with `progress` messages (commands queue until it ends); `SimState.chronicle` (cap 1000, `addChronicle` in `sim/chronicle.ts` for E1) is saved and sent in snapshots only when it grows; the `Away` summary is counted step by step in `sim/away.ts`; a full 24 h catch-up of ~165 people took ~0.6 s in Node. |
 | E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. **Done** (section 12). The disc grows 40 m² × PACE = 160 m² per digger-hour from 15 to 120 m (about 8 days with 3 diggers); the main thread reports finds with `recordFinds` (saved in `SimState.finds`), and a rebuild on a foundation skips stone and saves 25 % labor. |
-| E2 | Notebook | Real Wikipedia entries tied to excavated places, plus the town chronicle. |
+| E2 | Notebook | Real Wikipedia entries tied to excavated places, plus the town chronicle. **Done** (section 13). `NotebookHost` feeds the panel from `SimState.finds` (mapped by `findsToEntries`), the new persisted `SimState.articles` (cap 500, `addArticles` command, one chronicle line each) and the chronicle; finds and articles reach the main thread only when they change; `map/articles.ts` queries Wikipedia per dig disc (`world/wikiSelect.ts` keeps hits within disc + 300 m); `seen` lives in localStorage; the notebook and the building panel never open together. |
 
 ## 8. S5 design: production
 
@@ -317,7 +321,7 @@ selected service is drawn as its covered road edges.
 - A "Записная книжка" panel with three tabs:
   - **Находки:** named POIs and streets found, counts of foundations per dig, with the date.
   - **История:** Wikipedia articles unlocked when their coordinates fall inside a revealed
-    disc (+ 50 m). Query `list=geosearch` around each dig (radius = disc + 300 m) in ru, en as
+    disc grown by 300 m (a dig hints at what lies around it; small towns have few articles). Query `list=geosearch` around each dig (radius = disc + 300 m) in ru, en as
     fallback, then `prop=extracts` (intro, plain text). Each entry keeps title, extract (≤ 800
     chars), link, language, coordinates, and shows "Википедия, CC BY-SA 4.0" with the link.
     Unlocked entries are saved with the town so they stay offline.

@@ -1,6 +1,7 @@
 import { LANDS } from "../world/landcover";
 import { BUILDINGS, UPGRADE } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
+import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
@@ -360,6 +361,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.landValue = numRecord(sim.landValue);
   g.chronicle = parseChronicle(sim.chronicle);
   g.finds = parseFinds(sim.finds);
+  g.articles = parseArticles(sim.articles);
   const ls = sim.lastSpawn;
   if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
     g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };

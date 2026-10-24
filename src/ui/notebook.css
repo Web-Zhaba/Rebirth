@@ -1,7 +1,8 @@
-/* Right-side drawer under the zoom buttons; keeps the top-left HUD free. */
+/* Right-side drawer under the zoom buttons (zoom, compass and globe reach down to ~100 px); keeps the top-left HUD free.
+   Shares the column with the building panel (only one is open) and stays above the bottom toolbar. */
 .notebook {
   position: absolute;
-  top: 84px;
+  top: 112px;
   right: 10px;
   display: flex;
   flex-direction: column;
@@ -43,7 +44,7 @@
 
 .notebook .notebook-panel {
   width: min(300px, calc(100vw - 20px));
-  max-height: min(480px, calc(100vh - 150px));
+  max-height: min(480px, max(160px, calc(100vh - 372px)));
   display: flex;
   flex-direction: column;
   font-size: 13px;

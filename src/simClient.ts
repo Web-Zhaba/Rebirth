@@ -22,6 +22,8 @@ export const digs = computed(() => state.value?.digs ?? []);
 export const services = computed(() => state.value?.services ?? null);
 export const events = computed(() => state.value?.events ?? []);
 export const chronicle = computed(() => state.value?.chronicle ?? []);
+export const finds = computed(() => state.value?.finds ?? null);
+export const articles = computed(() => state.value?.articles ?? []);
 export const away = signal<Away | null>(null);
 // Catch-up progress in game minutes while the worker advances the town; null otherwise.
 export const catchUp = signal<{ done: number; total: number } | null>(null);
@@ -91,10 +93,12 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       catchUp.value = null;
       break;
     case "snapshot": {
-      // Zones and the chronicle ride along only when they changed; otherwise keep the ones we have.
+      // Zones, the chronicle, finds and articles ride along only when they changed; otherwise keep the ones we have.
       const z = m.zones ?? state.value?.zones;
       const c = m.chronicle ?? state.value?.chronicle;
-      if (z && c) state.value = { ...m.sim, zones: z, chronicle: c };
+      const f = m.finds ?? state.value?.finds;
+      const a = m.articles ?? state.value?.articles;
+      if (z && c && f && a) state.value = { ...m.sim, zones: z, chronicle: c, finds: f, articles: a };
       break;
     }
     case "cmdResult": {

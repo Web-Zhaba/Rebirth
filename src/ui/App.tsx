@@ -5,6 +5,7 @@ import { BuildingPanel } from "./BuildingPanel";
 import { FoundCity } from "./FoundCity";
 import { Hud } from "./Hud";
 import { NightTint } from "./NightTint";
+import { NotebookHost } from "./NotebookHost";
 import { RoadTools } from "./RoadTools";
 import { TerrainInspector } from "./TerrainInspector";
 
@@ -17,6 +18,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <TerrainInspector map={map} />}
       {c && <RoadTools />}
       {c && <BuildingPanel />}
+      {c && <NotebookHost />}
       <AwayNotice />
     </>
   );

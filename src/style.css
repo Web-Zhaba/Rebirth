@@ -393,9 +393,9 @@ body {
 .building-panel {
   position: absolute;
   right: 12px;
-  top: 120px;
+  top: 160px; /* below the notebook button */
   width: 220px;
-  max-height: calc(100vh - 330px); /* above the toolbar */
+  max-height: calc(100vh - 370px); /* above the toolbar */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
