@@ -30,6 +30,16 @@ const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: strin
       { id: "barn", label: "Амбар", color: PLACED_COLORS.barn },
     ],
   },
+  {
+    title: "Службы",
+    buttons: [
+      { id: "well", label: "Колодец", color: PLACED_COLORS.well },
+      { id: "market", label: "Рынок", color: PLACED_COLORS.market },
+      { id: "chapel", label: "Часовня", color: PLACED_COLORS.chapel },
+      { id: "school", label: "Школа", color: PLACED_COLORS.school },
+      { id: "healer", label: "Лекарь", color: PLACED_COLORS.healer },
+    ],
+  },
 ];
 
 const ROAD_HINT = "Клик — точка, ПКМ или Esc — закончить";
@@ -51,6 +61,11 @@ const HINT: Record<Tool, string> = {
   quarry: PLACE_HINT,
   fisher: `${PLACE_HINT}. Круг — вода рядом (100 м)`,
   barn: PLACE_HINT,
+  well: `${PLACE_HINT}. Подсветка дорог — охват 150 м по дорогам`,
+  market: `${PLACE_HINT}. Подсветка дорог — охват 800 м, нужны работники`,
+  chapel: `${PLACE_HINT}. Подсветка дорог — охват 1000 м, нужен работник`,
+  school: `${PLACE_HINT}. Подсветка дорог — охват 800 м, нужны работники`,
+  healer: `${PLACE_HINT}. Подсветка дорог — охват 1000 м, нужен работник`,
   field: "Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить",
 };
 

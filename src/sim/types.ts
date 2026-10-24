@@ -84,6 +84,16 @@ export interface Building {
   created: number; // gameMinutes
   paid: boolean; // materials taken from the stock (done when construction starts)
   site?: Site; // terrain shares measured when a placed building was put down
+  level: number; // 1, or 2 for an izba rebuilt after the upgrade
+  streak: number; // days in a row a house met the upgrade conditions
+  upgrade?: Upgrade; // the rebuild into level 2 in progress; the house stays active meanwhile
+}
+
+// Work on a finished house: labor and materials are taken like those of a new building.
+export interface Upgrade {
+  labor: number; // person-hours
+  done: number;
+  paid: boolean;
 }
 
 // Shares 0..1 of forest, water and rock/sand around a placed building.
@@ -104,6 +114,8 @@ export interface Resident {
   job: number | null; // building id of the workplace
   commute: number | null; // minutes one way
   idleDays: number; // days in a row without any work
+  literate: boolean;
+  school: number; // days of school attended (children 7-14 in the reach of a staffed school)
 }
 
 export interface Household {
@@ -112,6 +124,7 @@ export interface Household {
   home: number | null; // building id; null = tents at the founding point
   members: number[];
   arrived: number; // gameMinutes
+  founder: boolean; // came with the founding party: never emigrates
   mood: number; // 0..100
 }
 
@@ -175,6 +188,9 @@ export interface SimState extends PeopleState {
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
   lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
+  // Derived once per game day (and on load): bit i of coverage[house] is set when service i covers it.
+  coverage: Record<number, number>;
+  landValue: Record<number, number>; // house id -> 0..100
 }
 
 export type Window = "sowing" | "harvest" | null;
@@ -186,6 +202,18 @@ export interface EconomyStats {
   yesterday: Stock; // production per good (food includes the harvest)
   fields: { count: number; ha: number; assignedHa: number; sown: number; reaped: number; expected: number; window: Window };
   avgMood: number;
+  forage: number; // kg of food a day the idle adults gather
+  outlook: number; // 0..1, can the food last to the end of the next harvest window
+}
+
+export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";
+
+export interface ServiceStats {
+  houses: number; // finished houses
+  covered: Record<ServiceId, number>; // houses covered per service
+  literate: number; // share 0..1 of adults
+  avgLandValue: number;
+  level2: number; // houses of level 2
 }
 
 export interface PeopleStats {
@@ -211,6 +239,8 @@ export interface Demand {
 export type SimSnapshot = Omit<SimState, "zones" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod"> & {
   people: PeopleStats & { demand: Demand };
   economy: EconomyStats;
+  services: ServiceStats;
+  houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
 };
 
 // What the main thread keeps.
@@ -228,6 +258,7 @@ export interface PersonInfo {
   age: number;
   sex: "m" | "f";
   role: string; // occupation text
+  literate: boolean;
 }
 
 export interface WorkerInfo {
@@ -235,6 +266,7 @@ export interface WorkerInfo {
   name: string;
   age: number;
   commute: number | null;
+  idle: boolean; // counted with the construction artel (no work for them at the moment)
 }
 
 export interface ProductionInfo {
@@ -247,8 +279,21 @@ export interface ProductionInfo {
 }
 
 export type BuildingQuery =
-  | { kind: "house"; households: { id: number; last: string; mood: number; people: PersonInfo[] }[] }
-  | { kind: "workplace"; capacity: number; workers: WorkerInfo[]; production?: ProductionInfo };
+  | {
+      kind: "house";
+      households: { id: number; last: string; mood: number; people: PersonInfo[] }[];
+      level: number;
+      landValue: number;
+      services: ServiceId[]; // covering this house
+      upgrading: boolean;
+    }
+  | {
+      kind: "workplace";
+      capacity: number;
+      workers: WorkerInfo[];
+      production?: ProductionInfo;
+      service?: { id: ServiceId; reach: number; covered: number; houses: number; working: boolean };
+    };
 
 export interface SaveV3 {
   version: 3;

@@ -84,7 +84,7 @@ tiles hold the buildings and streets that excavation reveals later.
 | Roads | Graph of nodes and straight segments, snapping to nodes and segments, splitting at intersections. Kinds: path, dirt road. Cost from length × slope × clearing. Capacity per kind. Bridges later. |
 | Zones | Cities: Skylines style: zone cells 8 × 8 m along both sides of a road, up to 4 deep, blocked by water, steep land and other roads. Zone types: residential, crafts, trade. Fields are painted as separate areas owned by a farmstead. |
 | Buildings | Templates with real footprints and heights (e.g. izba 6 × 8 m, 5 m high). Grow on zoned lots when demand exists; construction takes time and materials; levels improve with services and wealth; abandoned when unwanted. Public buildings are placed by the player. |
-| Residents | Name, age, sex, household, home, workplace, education, health, happiness. Daily events: ageing, births, deaths, marriages and new households, moving out, immigration and emigration driven by attractiveness. |
+| Residents | Name, age, sex, household, home, workplace, education, health, happiness. Daily events: ageing, births, deaths, marriages and new households, moving out, immigration driven by attractiveness and food outlook, emigration by low mood. |
 | Economy | Chains with real historical magnitudes: field → grain → mill → bakery → market; forest → logs → sawpit → planks; quarry → stone. Seasonal harvests, storage, shortages. |
 | Services | Well (water), market, chapel, school, healer. Coverage measured along the road network in meters, affects happiness and land value. |
 | Transport | Daily home→work assignment by shortest path on the road graph; travel time; congestion as flow vs capacity; unreachable jobs mean unemployment. |
@@ -102,7 +102,7 @@ Each milestone ends with something playable in the browser.
 | S3 | Growth | Demand model, buildings grow on lots from templates, construction by the work party (labor only), 2.5D buildings at real size. **Done.** Population is a placeholder (houses assumed full, work party = 10 + 1 per house) until S4; materials move to S5. |
 | S4 | Residents | Individual residents and households with life events, commuting, unemployment, migration; resident and household inspector. **Done.** Jobs by walking time on built roads (4 km/h, ≤ 45 min); jobless adults form the construction party; snapshots carry aggregates, the inspector queries the worker. Education, health and happiness come with S5–S6. |
 | S5 | Production | Goods chains, storage, seasons, shortages affecting happiness; construction consumes materials (logs, planks, stone). **Done** (section 8). |
-| S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. |
+| S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. **Done** (section 9). |
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. |
 | S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. |
 | E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. |
@@ -160,10 +160,28 @@ fraction. A household that emigrates takes its share of the food (food × member
 **Tents.** Households living in tents take no regular jobs: their adults are builders and put
 up homes first. Once housed they take jobs normally.
 
-**Mood** (per household, 0–100, starts at 60). Daily target = 10 + 60 × fed + 15 × wares
-supplied + 15 × has a house; mood moves a quarter of the way to it. Households in houses with
-mood < 35 leave (10 % a day). Immigration is scaled by min(1, food days / 30) and by average
-mood.
+**Mood** (per household, 0–100, starts at 60). Daily target = 10 + 45 × fed + 10 × wares
+supplied + 10 × has a house + service terms (section 9); mood moves a quarter of the way to it. Households in houses with
+mood < 35 leave (10 % a day). Immigration is scaled by the food outlook and by average mood.
+S6 changed the mood target (section 9) and added the unemployment term below.
+
+**Idle adults** (jobless, or farmers with no field work, while no construction work exists for them to join)
+subsist: each gathers food for the town, 1.2 kg a day (0.4 in winter), added to the stock at the daily food step
+(up to the barns' capacity) and shown in the HUD food line. They are unhappy: the household's mood target drops by
+12 × (idle adults / adults). There is no idle-based emigration any more: a family leaves only at mood < 35
+(10 % a day), and **founding households** (`Household.founder`, older saves: arrived at minute 0) never leave, so a
+town cannot empty out.
+
+**Food outlook** (a full-year horizon, so growth stops at a sustainable population). projected = stock + exactly
+one harvest + (the fishers' current daily output + the idle adults' foraging) × 360; the harvest is this year's unreaped expected amount while
+the harvest window (ends on day 225) is open (a field not sown yet counts in full, 400 kg/ha), otherwise next
+year's: 400 kg/ha of every field a gumno works. need = today's consumption × 360. outlook = clamp((projected /
+need − 0.9) / 0.3, 0, 1). The HUD food line says «на год не хватит» in red when outlook < 1.
+
+**Minimum artel.** While construction work exists the artel has at least max(3, ⌈0.2 × adults⌉) hands (jobless +
+idle farmers + workers of workshops without inputs). The shortfall is drafted from the employed: they keep their
+jobs, but every workplace's output in that tick is scaled by 1 − drafted / employed. The HUD counts drafted
+workers under «на стройке».
 
 **Construction materials.** Taken from the stock when construction starts; any shortfall is
 made by hand and added to the labor (per unit, already divided by PACE): logs 4 h/m³, planks
@@ -203,16 +221,45 @@ staffed by at least one worker.
 | Школа (school) | 8 × 10 m | 1 × 2 | 2 | 800 m | children 7–14 attend; a child who attended ≥ 2 years becomes literate at 15; +3 mood for families with children |
 | Лекарь (healer) | 6 × 6 m | 1 × 1 | 1 | 1000 m | death rates × 0.6; +2 mood |
 
+Labor and materials of the services (chosen like the S5 placed buildings; materials as in section 8):
+
+| Service | Labor (person-h) | Logs m³ | Planks m³ | Stone t | Height |
+|---|---|---|---|---|---|
+| Колодец | 30 | 2 | 0.5 | 3 | 2 m |
+| Рынок | 160 | 30 | 6 | 2 | 4 m |
+| Часовня | 180 | 35 | 4 | 6 | 8 m |
+| Школа | 150 | 40 | 5 | 3 | 5 m |
+| Лекарь | 80 | 14 | 2 | 1 | 4 m |
+
 Mood target becomes 10 + 45 × fed + 10 × wares + 10 × house + well 8 + market 5 + chapel 7
 + school 3 + healer 2 (max 100). Emigration below 35 stays.
 
-**Land value** of a house lot (0–100): 20 + 12 per covered service + 0.3 × (mood of the
-households within 100 m − 50), clamped. **House upgrade:** an izba whose land value ≥ 60 and
-whose household mood ≥ 70 for 10 days in a row rebuilds into level 2 (+2 residents, +1.5 m
+**Land value** of a house lot (0–100): 20 + 8 per covered service + 0.3 × (mood of the
+households within 100 m − 50), clamped. **House upgrade:** an izba whose land value ≥ 70 and
+whose household mood ≥ 75 for 20 days in a row rebuilds into level 2 (+2 residents, +1.5 m
 height; 60 h labor, 10 m³ logs, 2 m³ planks, taken like construction).
 
 **Literacy:** residents get `literate`; the HUD shows the literate share of adults. Literate
 workers make workshops and shops 20 % more productive.
+
+**Implementation notes (S6).**
+
+- Coverage (`coverage.ts`, `computeCoverage`) is a bit mask per finished house (bit order well, market, chapel,
+  school, healer) kept in `SimState.coverage`, with `landValue`; both are rebuilt at the end of the daily chain
+  (after moods and jobs), on load, and after road or demolish commands. The daily order is economy, people,
+  services, so the mood and the healer factor of a day use the coverage of the day before.
+- Market: its workers hand wares only to households whose house the market covers, after the shops' slots,
+  starting from a different household each day. Literate shop workers serve 12 × 1.2 households; literate
+  workshop workers count as 1.2 workers (`SERVICE.literateBoost`).
+- School: a child aged 7 to 14 whose house is covered by a staffed school gains one `school` day; the school
+  mood term applies to households with such children. Attendance stops at 15, `literate` is set on the first day at
+  15 or later with 720 days. The HUD share counts adults (16–59) only, so the first literate cohort shows at 16.
+- Upgrade: only the izba; the house stays `active` with an `upgrade { labor, done, paid }`, so the family keeps
+  its home. The artel serves it like a building under construction (`payMaterials`, `advanceBuildings`); on
+  completion `level` = 2 and the height grows 1.5 m. `Building.streak` counts the good days.
+- Blocked workshops: sawpit, smithy and carpentry whose input stock is empty and which made nothing yesterday
+  count their workers as builders (`idleWorkplaces`); such workers are not "unemployed" when nothing is built.
+- Saves: `level` 1 / `streak` 0 / `literate` false / `school` 0 by default, coverage and land value rebuilt on load.
 
 **Overlays:** a map overlay switch (none, water, market, chapel, school, healer, land value,
 mood) tints houses by coverage (yes/no) or value (gradient); the reach of a hovered or

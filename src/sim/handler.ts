@@ -1,9 +1,11 @@
 import { advanceTo } from "./clock";
 import { BUILDINGS } from "./buildings";
+import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, demand, emptyGrowth, placeBuilding, reconcile, seedOf } from "./growth";
 import { peopleStats, queryBuilding, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
+import { SERVICES, isService } from "./services";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSaveV3 } from "./save";
 import type { BuildingQuery, ClientSave, Field, RoadGraph, SaveV3, Site, SimSnapshot, SimState, TerrainInfo, ZoneState } from "./types";
@@ -22,15 +24,23 @@ const PERSIST_MINUTES = 60; // game minutes between saves while ticking
 // What the main thread sees: aggregates instead of individual residents.
 export function toSnapshot(sim: SimState): SimSnapshot {
   const { zones: _z, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, ...rest } = sim;
-  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) }, economy: economyStats(sim) };
+  const houseMood: Record<number, number> = {};
+  for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
+  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood };
 }
 
 // Who lives or works in a building, with production details for producers.
 function inspect(sim: SimState, id: number): BuildingQuery | null {
   const q = queryBuilding(sim, id);
   if (q?.kind === "workplace") {
-    const production = productionInfo(sim, sim.buildings[id]);
+    const b = sim.buildings[id];
+    const production = productionInfo(sim, b);
     if (production) q.production = production;
+    if (isService(b.template)) {
+      const stats = serviceStats(sim);
+      const staffed = BUILDINGS[b.template].jobs === 0 || q.workers.length > 0;
+      q.service = { id: b.template, reach: SERVICES[b.template].reach, covered: stats.covered[b.template], houses: stats.houses, working: b.state === "active" && staffed };
+    }
   }
   return q;
 }
@@ -115,7 +125,7 @@ export class Handler {
     // Cells are derived data: rebuild them so saves without zones (or with stale ones) are consistent.
     const z = sim.zones;
     const cells = regenerateCells(sim.roads, z.cells, z.fields, z.terrain);
-    save = { ...save, sim: syncPeople({ ...sim, zones: { ...z, cells }, buildings: reconcile(sim.buildings, sim.roads, cells) }) };
+    save = { ...save, sim: refreshServices(syncPeople({ ...sim, zones: { ...z, cells }, buildings: reconcile(sim.buildings, sim.roads, cells) })) };
     this.setSave(save);
     await this.storage.put(save);
     const away = realMs > AWAY_MIN_MS ? { realMs, gameMinutes } : null;
@@ -253,13 +263,13 @@ export class Handler {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");
         const rest = { ...sim.buildings };
         delete rest[cmd.id];
-        this.save = { ...this.save, sim: syncPeople({ ...sim, buildings: rest }) };
+        this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, buildings: rest })) };
         return await this.finishCommand(id);
       } else {
         return reject("Неизвестная команда");
       }
       const buildings = reconcile(sim.buildings, next, zones.cells);
-      this.save = { ...this.save, sim: syncPeople({ ...sim, roads: next, zones, buildings }) };
+      this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, roads: next, zones, buildings })) };
       await this.finishCommand(id);
     } catch (e) {
       reject(e instanceof Error ? e.message : String(e));

@@ -1,6 +1,8 @@
 import { BUILDINGS } from "./buildings";
 import { calendar } from "./time";
-import type { Building, Field, FieldWork, Resident, SimState, Window } from "./types";
+import type { Building, Field, FieldWork, Resident, SimState, Stock, Window } from "./types";
+
+export const FISH = { kgHour: 0.2, winter: 0.5 }; // kg of food per worker-hour, winter factor
 
 // Field work tuning (design: PLAN.md section 8).
 export const FIELD = {
@@ -13,6 +15,8 @@ export const FIELD = {
   radius: 400, // m, from the lot centre of a gumno to the centroid of a field
   harvestDays: 45, // of autumn
 };
+// Day of the year on which the harvest window closes (autumn starts on day 181).
+export const HARVEST_END_DAY = 2 * 90 + FIELD.harvestDays;
 
 export const haOf = (f: Field): number => f.area / 10_000;
 
@@ -80,21 +84,17 @@ export function remainingHours(f: Field, w: FieldWork, win: Window): number {
   return 0;
 }
 
-// Farmers (workers of a gumno) join the artel outside the two windows, and inside one
-// when their gumno has no work left in it.
-export function idleFarmers(s: Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod">): number {
+type Idle = Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod" | "stock">;
+
+// Active gumnos with no work for their farmers right now.
+export function idleGumnos(s: Idle): Set<number> {
+  const out = new Set<number>();
   const win = windowAt(s.gameMinutes);
-  const farmers = new Map<number, number>();
-  for (const r of Object.values(s.residents) as Resident[]) {
-    if (r.job === null) continue;
-    const b = s.buildings[r.job];
-    if (b && b.template === "gumno" && b.state === "active") farmers.set(b.id, (farmers.get(b.id) ?? 0) + 1);
-  }
-  if (farmers.size === 0) return 0;
-  let n = 0;
+  const gumnos = Object.values(s.buildings).filter((b) => b.template === "gumno" && b.state === "active");
+  if (gumnos.length === 0) return out;
   if (win === null) {
-    for (const k of farmers.values()) n += k;
-    return n;
+    for (const b of gumnos) out.add(b.id);
+    return out;
   }
   const year = calendar(s.gameMinutes).year;
   const assign = assignFields(s.zones.fields, s.buildings);
@@ -103,7 +103,46 @@ export function idleFarmers(s: Pick<SimState, "residents" | "buildings" | "gameM
     const g = assign.get(f.id);
     if (g !== undefined) left.set(g, (left.get(g) ?? 0) + remainingHours(f, workOf(s.prod.fields, f.id, year), win));
   }
-  for (const [g, k] of farmers) if ((left.get(g) ?? 0) <= 1e-9) n += k;
+  for (const b of gumnos) if ((left.get(b.id) ?? 0) <= 1e-9) out.add(b.id);
+  return out;
+}
+
+// The stock good a workshop needs to work at all.
+export const WORKSHOP_INPUT: Record<string, keyof Stock> = { sawpit: "logs", smithy: "logs", carpentry: "planks" };
+
+// Workshops that made nothing yesterday and find their input missing now: their workers have nothing to do.
+function blockedWorkshops(s: Pick<Idle, "buildings" | "stock" | "prod">): Set<number> {
+  const out = new Set<number>();
+  for (const b of Object.values(s.buildings)) {
+    const good = WORKSHOP_INPUT[b.template];
+    if (good && b.state === "active" && s.stock[good] <= 1e-9 && (s.prod.yesterday[b.id] ?? 0) <= 1e-9) out.add(b.id);
+  }
+  return out;
+}
+
+// Workplaces whose workers join the construction artel: farmers while the land has no work for them,
+// and the workers of workshops blocked by missing inputs.
+export function idleWorkplaces(s: Idle): Set<number> {
+  const out = idleGumnos(s);
+  for (const id of blockedWorkshops(s)) out.add(id);
+  return out;
+}
+
+// Farmers (workers of a gumno) join the artel outside the two windows, and inside one
+// when their gumno has no work left in it.
+export function idleFarmers(s: Idle): number {
+  const idle = idleGumnos(s);
+  return idle.size === 0 ? 0 : countWorkers(s.residents, idle);
+}
+
+export function idleWorkers(s: Idle): number {
+  const idle = idleWorkplaces(s);
+  return idle.size === 0 ? 0 : countWorkers(s.residents, idle);
+}
+
+function countWorkers(residents: Record<number, Resident>, set: Set<number>): number {
+  let n = 0;
+  for (const r of Object.values(residents)) if (r.job !== null && set.has(r.job)) n++;
   return n;
 }
 

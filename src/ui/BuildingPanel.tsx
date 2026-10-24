@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS } from "../sim/buildings";
+import { BUILDINGS, houseCapacity } from "../sim/buildings";
+import { SERVICES } from "../sim/services";
 import { familyGenitive } from "../sim/people";
 import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
@@ -99,7 +100,7 @@ export function BuildingPanel() {
   const jobs = info?.kind === "workplace" ? info.capacity : t.jobs;
   const capacity =
     t.residents > 0
-      ? `Вмещает ${t.residents} чел.`
+      ? `Вмещает ${houseCapacity(b)} чел.`
       : b.template === "gumno" && info?.kind !== "workplace"
         ? "Места зависят от полей"
         : jobs > 0
@@ -122,8 +123,29 @@ export function BuildingPanel() {
       <div class="building-name">{t.name}</div>
       <div>{status}</div>
       <div>
-        {t.along} × {t.deep} м, высота {t.height} м
+        {t.along} × {t.deep} м, высота {b.height} м
       </div>
+      {b.zone === "res" && b.state === "active" && <div>Уровень {b.level}</div>}
+      {b.upgrade && <div class="people-note">Перестраивается: {Math.floor((b.upgrade.done / b.upgrade.labor) * 100)} %</div>}
+      {info?.kind === "house" && (
+        <>
+          <div>Стоимость земли: {info.landValue}</div>
+          <div class={info.services.length === 0 ? "people-note" : ""}>
+            Рядом: {info.services.length > 0 ? info.services.map((id) => SERVICES[id].name.toLowerCase()).join(", ") : "ничего из служб"}
+          </div>
+          {b.template === "izba" && b.level < 2 && !b.upgrade && b.streak > 0 && (
+            <div class="people-note">Хороших дней подряд: {b.streak} из 20</div>
+          )}
+        </>
+      )}
+      {info?.kind === "workplace" && info.service && (
+        <>
+          <div>
+            Охват {info.service.reach} м: {info.service.covered} из {info.service.houses} домов
+          </div>
+          {!info.service.working && <div class="prod-warn">Не работает: нет работников</div>}
+        </>
+      )}
       {capacity && <div>{capacity}</div>}
       {info?.kind === "workplace" && info.production && <Production template={b.template} p={info.production} />}
       {info?.kind === "house" &&
@@ -139,7 +161,10 @@ export function BuildingPanel() {
               {h.people.map((p) => (
                 <div class="person" key={p.id}>
                   <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет")}
-                  <div class="person-role">{p.role}</div>
+                  <div class="person-role">
+                    {p.role}
+                    {p.literate && " · грамотный"}
+                  </div>
                 </div>
               ))}
             </div>
@@ -153,7 +178,10 @@ export function BuildingPanel() {
           {info.workers.map((w) => (
             <div class="person" key={w.id}>
               <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет")}
-              <div class="person-role">{w.commute === null ? "дорога неизвестна" : `дорога ~${Math.round(w.commute)} мин`}</div>
+              <div class="person-role">
+                {w.idle && "сейчас на стройке (нет работы) · "}
+                {w.commute === null ? "дорога неизвестна" : `дорога ~${Math.round(w.commute)} мин`}
+              </div>
             </div>
           ))}
         </div>

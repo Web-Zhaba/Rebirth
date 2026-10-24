@@ -5,6 +5,7 @@ import { createMap } from "./map/mapView";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachPlaceTool } from "./map/placeTool";
+import { attachReachLayer } from "./map/reachLayer";
 import { attachRoadLayer } from "./map/roadLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachZoneLayer } from "./map/zoneLayer";
@@ -19,6 +20,7 @@ const map = createMap("map");
 attachZoneLayer(map); // zones beneath everything else we add
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
+attachReachLayer(map);
 attachCityMarker(map);
 attachRoadTool(map);
 attachZoneTool(map);

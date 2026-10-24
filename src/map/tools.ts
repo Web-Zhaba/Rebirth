@@ -1,15 +1,15 @@
 import { signal } from "@preact/signals";
-import type { RoadKind, ZoneType } from "../sim/types";
+import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
 export type RoadTool = RoadKind | "bulldoze";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
 export type ZoneTool = BrushTool | "field";
-export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "barn";
+export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "barn" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "path" || t === "dirt" || t === "bulldoze";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
-export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "barn"];
+export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "barn", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
@@ -42,7 +42,29 @@ export const PLACED_COLORS: Record<PlaceTool, string> = {
   quarry: "#8d9096",
   fisher: "#4f86a8",
   barn: "#a2573f",
+  well: "#5aa0c8",
+  market: "#d08a3c",
+  chapel: "#9a78bd",
+  school: "#4aa583",
+  healer: "#cf5d57",
 };
+
+// Map overlay: houses tinted by coverage of one service, or by a value.
+export type Overlay = "none" | ServiceId | "value" | "mood";
+export const OVERLAYS: { id: Overlay; label: string }[] = [
+  { id: "none", label: "нет" },
+  { id: "well", label: "вода (колодец)" },
+  { id: "market", label: "рынок" },
+  { id: "chapel", label: "часовня" },
+  { id: "school", label: "школа" },
+  { id: "healer", label: "лекарь" },
+  { id: "value", label: "стоимость земли" },
+  { id: "mood", label: "настроение" },
+];
+export const overlay = signal<Overlay>("none");
+
+// Reach of the service being placed: where its lot front would be, and how far it serves (m).
+export const placeReach = signal<{ x: number; y: number; range: number; color: string } | null>(null);
 
 // Radius (m) of the terrain around a lot that matters to a placed building.
 export const SITE_RADIUS: Partial<Record<PlaceTool, number>> = { woodcutter: 150, fisher: 100, quarry: 50 };

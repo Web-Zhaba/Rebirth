@@ -1,5 +1,6 @@
+import { dailyServices } from "./coverage";
 import { advanceBuildings, spawnBuildings } from "./growth";
-import { builderCount, dailyStep } from "./people";
+import { builderCount, dailyStep, productionScale } from "./people";
 import { dailyEconomy, payMaterials, produceStep } from "./production";
 import { spendOnRoads, WORK_END, WORK_START } from "./roads";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
@@ -30,9 +31,9 @@ export function step(s: SimState): SimState {
     stock = paid.stock;
   }
   let cur: SimState = { ...s, roads, buildings, stock };
-  if (working) cur = produceStep(cur, BASE_TICK / 60);
+  if (working) cur = produceStep(cur, BASE_TICK / 60, productionScale(s));
   let next: SimState = { ...cur, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK };
-  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyStep(dailyEconomy(next)); // a tick crossed 00:00
+  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
   return spawnBuildings(next);
 }
 

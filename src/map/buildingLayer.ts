@@ -1,10 +1,11 @@
 import type maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
-import type { Building } from "../sim/types";
+import { covers } from "../sim/services";
+import type { Building, ClientState } from "../sim/types";
 import { pointInPolygon } from "../sim/zones";
-import { buildings, frame } from "../simClient";
+import { buildings, frame, state } from "../simClient";
 import type { Frame } from "../world/frame";
-import { BUILDING_COLORS, PLACED_COLORS, tool } from "./tools";
+import { BUILDING_COLORS, overlay, PLACED_COLORS, tool, type Overlay } from "./tools";
 
 const SRC = "buildings";
 
@@ -22,6 +23,28 @@ function ringOf(b: Building, f: Frame): [number, number][] {
   return ring;
 }
 
+const GOOD = "#3fae5a";
+const BAD = "#d0453d";
+const NEUTRAL = "#b9b9ad";
+const mix = (a: string, b: string, t: number): string => {
+  const p = (c: string, i: number) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
+  const ch = (i: number) => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, "0");
+  return `#${ch(0)}${ch(1)}${ch(2)}`;
+};
+// 0 (bad) .. 1 (good): red through yellow to green.
+const gradient = (t: number): string => (t < 0.5 ? mix(BAD, "#e6c84a", t * 2) : mix("#e6c84a", GOOD, (t - 0.5) * 2));
+
+// Overlay colour of a finished house ("" = keep its own colour).
+function tintOf(b: Building, ov: Overlay, st: ClientState): string {
+  if (ov === "none" || b.zone !== "res" || b.state !== "active") return "";
+  if (ov === "value") return gradient((st.landValue[b.id] ?? 0) / 100);
+  if (ov === "mood") {
+    const m = st.houseMood[b.id];
+    return m === undefined ? NEUTRAL : gradient(m / 100);
+  }
+  return covers(st.coverage[b.id], ov) ? GOOD : BAD;
+}
+
 // Buildings as fill-extrusions at real size: finished ones in full colour, those under construction
 // pale and growing with progress, planned ones as a dashed outline.
 export function attachBuildingLayer(map: maplibregl.Map): void {
@@ -31,7 +54,9 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     const byZone = ["match", ["get", "zone"], "res", BUILDING_COLORS.res, "craft", BUILDING_COLORS.craft, BUILDING_COLORS.trade];
     // Placed buildings have a colour of their own per template.
-    const color = ["match", ["get", "template"], ...Object.entries(PLACED_COLORS).flat(), byZone];
+    const placed = ["match", ["get", "template"], ...Object.entries(PLACED_COLORS).flat(), byZone];
+    // An overlay tint wins over the building's own colour.
+    const color = ["case", ["!=", ["get", "tint"], ""], ["to-color", ["get", "tint"]], placed];
     map.addLayer({
       id: "buildings-active",
       type: "fill-extrusion",
@@ -75,7 +100,9 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
     effect(() => {
       const list = buildings.value;
       const f = frame.value;
-      if (!list || !f) return;
+      const st = state.value;
+      const ov = overlay.value;
+      if (!list || !f || !st) return;
       const features: GeoJSON.Feature[] = Object.values(list).map((b) => {
         const progress = b.labor > 0 ? Math.min(1, b.done / b.labor) : 1;
         return {
@@ -85,6 +112,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
             zone: b.zone,
             template: b.template,
             state: b.state,
+            tint: tintOf(b, ov, st),
             h: b.height,
             hp: Math.max(0.5, b.height * progress),
           },

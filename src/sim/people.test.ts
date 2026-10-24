@@ -5,6 +5,7 @@ import { demand, emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import {
   builderCount,
+  RATES,
   constructionWork,
   createFounders,
   dailyStep,
@@ -58,6 +59,8 @@ function building(id: number, template: string, x: number, state: Building["stat
     done: state === "active" ? t.labor : 0,
     created: 0,
     paid: true,
+    level: 1,
+    streak: 0,
   };
 }
 
@@ -93,10 +96,12 @@ function custom(s: SimState, specs: HSpec[]): SimState {
         job: p.job ?? null,
         commute: p.job === undefined ? null : 5,
         idleDays: 0,
+        literate: false,
+        school: 0,
       };
       members.push(id);
     }
-    households[hid] = { id: hid, last: "Тестов", home: sp.home, members, arrived: 0, mood: 60 };
+    households[hid] = { id: hid, last: "Тестов", home: sp.home, members, arrived: 0, founder: false, mood: 60 };
   });
   return { ...s, residents, households, nextPersonId: pid, nextHouseholdId: specs.length + 1, events: [] };
 }
@@ -185,7 +190,11 @@ describe("moving in", () => {
 
 describe("immigration", () => {
   // 3 founding households move into houses 1-3 and house 4 stays vacant
-  const settled = (extra: Building[]) => day(town([...houses(3), building(4, "izba", 400), ...extra]));
+  // plenty of food: the outlook (a full year ahead) is 1
+  const settled = (extra: Building[]) => {
+    const s = town([...houses(3), building(4, "izba", 400), ...extra]);
+    return day({ ...s, stock: { ...s.stock, food: 20000 } });
+  };
   const jobs = () => [building(5, "smithy", 500), building(6, "carpentry", 600)]; // 7 jobs for 6 adults
 
   it("fills a vacant house when attractive", () => {
@@ -405,20 +414,33 @@ describe("emigration", () => {
     for (let i = 0; i < n; i++) s = day(s);
     return s;
   };
-  it("idle families stay before 5 days", () => {
-    const s = idle(4);
-    expect(Object.values(s.residents).filter((r) => r.idleDays === 4).length).toBeGreaterThanOrEqual(6);
+  it("idle families do not leave, however long they sit idle", () => {
+    const s = idle(30);
+    expect(Object.values(s.residents).filter((r) => r.idleDays >= 30).length).toBeGreaterThanOrEqual(6);
     expect(Object.keys(day(s, { rand: always, only: ["emigration"] }).households)).toHaveLength(3);
+    // immigrants (not founders) with good mood stay as well
+    const imm = custom(town(houses(2)), [{ home: 1, people: [{ age: 30 }, { age: 28 }] }]);
+    let t = imm;
+    for (let i = 0; i < 30; i++) t = day(t);
+    expect(t.households[1].founder).toBe(false);
+    expect(Object.keys(day(t, { rand: always, only: ["emigration"] }).households)).toHaveLength(1);
   });
-  it("leave after 5 idle days with the draw, vacating the house", () => {
-    const s = idle(5);
-    const a = day(s, { rand: always, only: ["emigration"] });
-    expect(Object.keys(a.households)).toHaveLength(0);
-    expect(Object.keys(a.residents)).toHaveLength(0);
-    expect(kinds(a).filter((k) => k === "departure")).toHaveLength(3);
+  it("only low mood makes a family leave (10 % a day), vacating the house", () => {
+    const base = custom(town(houses(2)), [{ home: 1, people: [{ age: 30 }, { age: 28 }] }, { home: 2, people: [{ age: 30 }] }]);
+    const sad = { ...base, households: { 1: { ...base.households[1], mood: 20 }, 2: { ...base.households[2], mood: 60 } } };
+    const a = day(sad, { rand: () => 0.05, only: ["emigration"] });
+    expect(Object.keys(a.households)).toEqual(["2"]);
+    expect(kinds(a).filter((k) => k === "departure")).toHaveLength(1);
     expect(a.events.at(-1)!.text).toContain("покинула поселение");
-    expect(vacantHouses(a.buildings, a.households)).toEqual([1, 2, 3]);
-    expect(Object.keys(day(s, { rand: never, only: ["emigration"] }).households)).toHaveLength(3);
+    expect(vacantHouses(a.buildings, a.households)).toEqual([1]);
+    expect(Object.keys(day(sad, { rand: () => 0.15, only: ["emigration"] }).households)).toHaveLength(2);
+    expect(RATES.moodLeaveDay).toBe(0.1);
+  });
+  it("founding households never emigrate, even unhappy", () => {
+    const s = day(town(houses(3))); // the founders move in
+    expect(Object.values(s.households).every((h) => h.founder && h.home !== null)).toBe(true);
+    const sad = { ...s, households: Object.fromEntries(Object.values(s.households).map((h) => [h.id, { ...h, mood: 5 }])) };
+    expect(Object.keys(day(sad, { rand: () => 0.01, only: ["emigration"] }).households)).toHaveLength(3);
   });
   it("founders in tents never leave", () => {
     let s = town([]);
@@ -529,7 +551,8 @@ describe("query", () => {
     const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "izba", 500, "planned")]), [
       { home: 1, people: [{ sex: "m", age: 30 }, { sex: "f", age: 28 }, { sex: "m", age: 5 }, { sex: "m", age: 70 }, { sex: "f", age: 65 }] },
     ]);
-    return { ...s, residents: { ...s.residents, 1: { ...s.residents[1], job: 2, commute: 4.6 } } };
+    // logs in the stock: the smithy is not blocked by missing inputs, its smith is at work
+    return { ...s, stock: { ...s.stock, logs: 5 }, residents: { ...s.residents, 1: { ...s.residents[1], job: 2, commute: 4.6 } } };
   };
   it("lists a household and the occupation of each member", () => {
     const s = base();
@@ -544,11 +567,11 @@ describe("query", () => {
     if (calm.kind === "house") expect(calm.households[0].people[1].role).toBe("без работы");
   });
   it("lists the workers of a workplace with their commute", () => {
-    expect(queryBuilding(base(), 2)).toEqual({ kind: "workplace", capacity: 3, workers: [{ id: 1, name: "Иван Тестов", age: 30, commute: 4.6 }] });
+    expect(queryBuilding(base(), 2)).toEqual({ kind: "workplace", capacity: 3, workers: [{ id: 1, name: "Иван Тестов", age: 30, commute: 4.6, idle: false }] });
     expect(queryBuilding(town([building(1, "shop", 100)]), 1)).toMatchObject({ kind: "workplace", capacity: 2, workers: [] });
   });
   it("an empty house and a missing building", () => {
-    expect(queryBuilding(town(houses(1)), 1)).toEqual({ kind: "house", households: [] });
+    expect(queryBuilding(town(houses(1)), 1)).toEqual({ kind: "house", households: [], level: 1, landValue: 0, services: [], upgrading: false });
     expect(queryBuilding(town([]), 5)).toBeNull();
   });
 });

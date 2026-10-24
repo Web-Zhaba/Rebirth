@@ -1,5 +1,5 @@
 import { LANDS } from "../world/landcover";
-import { BUILDINGS } from "./buildings";
+import { BUILDINGS, UPGRADE } from "./buildings";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
@@ -23,6 +23,7 @@ import type {
   Stock,
   TerrainInfo,
   TownEvent,
+  Upgrade,
   ZoneBlock,
   ZoneCell,
   ZoneState,
@@ -171,14 +172,22 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       created: raw.created,
       // Saves from before production: finished and started buildings were built without materials.
       paid: typeof raw.paid === "boolean" ? raw.paid : raw.state !== "planned",
+      // Saves from before services: level 1 (a level 2 only makes sense for the izba), no streak.
+      level: raw.level === 2 && raw.template === UPGRADE.template ? 2 : 1,
+      streak: nonNegInt(raw.streak) ? raw.streak : 0,
     };
     if (site) out[id].site = site;
+    const up = raw.upgrade;
+    if (up !== undefined && raw.state === "active" && isRecord(up) && isNum(up.labor) && up.labor > 0 && isNum(up.done) && up.done >= 0 && up.done <= up.labor) {
+      const upgrade: Upgrade = { labor: up.labor, done: up.done, paid: up.paid === true };
+      out[id].upgrade = upgrade;
+    }
   }
   return out;
 }
 
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food"];
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food"];
 
 // Structurally broken people data gives null (the caller starts over with founders). References to
 // buildings that do not exist are repaired instead: such households go back to tents, such workers
@@ -213,6 +222,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
       job: r.job as number | null,
       commute: r.commute as number | null,
       idleDays: r.idleDays,
+      literate: r.literate === true,
+      school: isNum(r.school) && r.school >= 0 ? r.school : 0,
     };
   }
   const households: Record<number, Household> = {};
@@ -239,7 +250,9 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
       }
     }
     const mood = isNum(h.mood) ? Math.min(100, Math.max(0, h.mood)) : MOOD_START;
-    households[id] = { id, last: h.last, home, members, arrived: h.arrived, mood };
+    // Saves from before the flag: the founding households arrived at minute 0.
+    const founder = typeof h.founder === "boolean" ? h.founder : h.arrived === 0;
+    households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood };
   }
   if (seen.size !== Object.keys(residents).length) return null; // a resident in no household
   for (const r of Object.values(residents)) {
@@ -327,6 +340,8 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   Object.assign(g, people);
   g.stock = parseStock(sim.stock);
   g.prod = parseProd(sim.prod);
+  g.coverage = numRecord(sim.coverage); // derived: rebuilt on load and every day
+  g.landValue = numRecord(sim.landValue);
   const ls = sim.lastSpawn;
   if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
     g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };

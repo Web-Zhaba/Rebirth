@@ -134,6 +134,25 @@ body {
   cursor: pointer;
 }
 
+.layers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7a8468;
+}
+
+.layers select {
+  flex: 1;
+  font: inherit;
+  padding: 2px 4px;
+  border: 1px solid #c9d1b0;
+  border-radius: 6px;
+  background: #fff;
+  color: #2f3a24;
+}
+
 .hud-warn {
   margin-top: 4px;
   max-width: 260px;
@@ -268,6 +287,21 @@ body {
 .tool-groups .road-buttons + .road-buttons {
   padding-left: 14px;
   border-left: 1px solid #d5dbc2;
+}
+
+/* Four groups of buttons must fit two rows in a ~800 px pane. */
+.tool-groups .road-buttons {
+  gap: 4px;
+}
+
+.tool-groups .road-buttons button {
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 4px 7px;
+}
+
+.tool-groups .road-buttons .swatch {
+  margin-right: 4px;
 }
 
 .road-buttons .swatch {

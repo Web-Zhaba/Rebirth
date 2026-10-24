@@ -1,8 +1,9 @@
-import { BUILDINGS, foodCapacity } from "./buildings";
-import { idleFarmers, jobsOf, assignFields } from "./fields";
+import { BUILDINGS, foodCapacity, houseCapacity } from "./buildings";
+import { assignFields, expectedKg, FIELD, idleGumnos, FISH, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
-import { workableEdges } from "./roads";
-import { dayOf, dayStart, YEAR_MIN } from "./time";
+import { covers, SERVICE, servicesIn } from "./services";
+import { WORK_END, WORK_START, workableEdges } from "./roads";
+import { calendar, dayOf, dayStart, YEAR_MIN } from "./time";
 import type { Building, BuildingQuery, Household, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
 import { CELL_SIZE } from "./zones";
 
@@ -11,7 +12,6 @@ export const ADULT_MIN = 16; // years
 export const ADULT_MAX = 60; // working age is [16, 60)
 export const WALK_SPEED = 4000 / 60; // m/min, 4 km/h
 export const MAX_COMMUTE = 45; // minutes
-export const IDLE_LEAVE_DAYS = 5;
 export const MAX_EVENTS = 50;
 
 // All life-event rates live here (annual unless noted).
@@ -20,7 +20,6 @@ export const RATES = {
   marriageDay: 0.02, // per eligible woman per day
   maxMarriagesPerDay: 3,
   immigrationDay: 0.5, // per vacant house, times attractiveness
-  emigrationDay: 0.2, // per household whose adults are all idle
   moodLeaveDay: 0.1, // per household in a house with mood below MOOD_LEAVE
 };
 export const MOOD_START = 60;
@@ -76,7 +75,7 @@ interface W extends PeopleState {
 
 const pick = <T>(arr: readonly T[], rand: Rand): T => arr[Math.min(arr.length - 1, Math.floor(rand() * arr.length))];
 
-const ageOf = (born: number, now: number): number => (now - born) / YEAR_MIN;
+export const ageOf = (born: number, now: number): number => (now - born) / YEAR_MIN;
 const isAdultAge = (age: number): boolean => age >= ADULT_MIN && age < ADULT_MAX;
 
 export const emptyPeople = (): PeopleState => ({ residents: {}, households: {}, nextPersonId: 1, nextHouseholdId: 1, events: [] });
@@ -95,16 +94,16 @@ function say(w: W, kind: EventKind, text: string): void {
 
 function addPerson(w: W, first: string, last: string, sex: "m" | "f", age: number, household: number): Resident {
   const id = w.nextPersonId++;
-  const r: Resident = { id, first, last, sex, born: w.now - age * YEAR_MIN, household, spouse: null, job: null, commute: null, idleDays: 0 };
+  const r: Resident = { id, first, last, sex, born: w.now - age * YEAR_MIN, household, spouse: null, job: null, commute: null, idleDays: 0, literate: false, school: 0 };
   w.residents[id] = r;
   return r;
 }
 
 // A married couple (ages in [ageMin, ageMax]) with `kids` children, as a new household.
-function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: number, home: number | null): Household {
+function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: number, home: number | null, founder = false): Household {
   const last = pick(SURNAMES, rand);
   const id = w.nextHouseholdId++;
-  const h: Household = { id, last, home, members: [], arrived: w.now, mood: MOOD_START };
+  const h: Household = { id, last, home, members: [], arrived: w.now, founder, mood: MOOD_START };
   w.households[id] = h;
   const hAge = ageMin + rand() * (ageMax - ageMin);
   const wAge = ageMin + rand() * (ageMax - ageMin);
@@ -135,7 +134,7 @@ export function createFounders(rng: number, now: number): { people: PeopleState;
   };
   const w: W = { ...emptyPeople(), now };
   const kids = pick(FOUNDER_KIDS, rand);
-  for (let i = 0; i < 3; i++) makeFamily(w, rand, 20, 40, kids[i], null);
+  for (let i = 0; i < 3; i++) makeFamily(w, rand, 20, 40, kids[i], null, true);
   const { now: _now, ...people } = w;
   return { people, rng: state };
 }
@@ -146,12 +145,12 @@ const NBUCKET = 64; // m
 const bkey = (bx: number, by: number) => bx * 65536 + by;
 const bidx = (v: number) => Math.floor(v / NBUCKET);
 
-interface Net {
+export interface Net {
   adj: Map<number, [number, number][]>; // node -> [neighbour, metres]
   grid: Map<number, { id: number; x: number; y: number }[]>;
 }
 
-function buildNet(g: RoadGraph): Net {
+export function buildNet(g: RoadGraph): Net {
   const adj = new Map<number, [number, number][]>();
   const link = (a: number, b: number, len: number) => {
     const l = adj.get(a);
@@ -178,7 +177,7 @@ function buildNet(g: RoadGraph): Net {
 const MAX_RING = Math.ceil((MAX_COMMUTE * WALK_SPEED) / NBUCKET) + 1;
 
 // Nearest net node by straight line, or null when none lies within walking range.
-function nearestNode(net: Net, x: number, y: number): { node: number; off: number } | null {
+export function nearestNode(net: Net, x: number, y: number): { node: number; off: number } | null {
   const bx = bidx(x);
   const by = bidx(y);
   let best = null as { node: number; off: number } | null;
@@ -245,7 +244,7 @@ class MinHeap {
 }
 
 // Road distance in metres from `start` to every node within `limit`.
-function reach(net: Net, start: number, limit: number): Map<number, number> {
+export function reach(net: Net, start: number, limit: number): Map<number, number> {
   const dist = new Map<number, number>([[start, 0]]);
   const done = new Set<number>();
   const heap = new MinHeap();
@@ -279,7 +278,7 @@ export function lotFront(b: Building): [number, number] {
 
 export const isFinishedHouse = (b: Building | undefined): b is Building => !!b && b.zone === "res" && b.state === "active";
 export const isWorkplace = (b: Building | undefined): b is Building => !!b && b.zone !== "res" && b.state === "active";
-const houseCap = (b: Building): number => BUILDINGS[b.template]?.residents ?? 0;
+const houseCap = (b: Building): number => houseCapacity(b);
 
 // Finished houses without a household, lowest id first.
 export function vacantHouses(buildings: Record<number, Building>, households: Record<number, Household>): number[] {
@@ -290,9 +289,9 @@ export function vacantHouses(buildings: Record<number, Building>, households: Re
   return out;
 }
 
-// Is there construction work (unfinished buildings or roads a work party can reach)?
+// Is there construction work (unfinished buildings, house upgrades or roads a work party can reach)?
 export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph): boolean {
-  for (const b of Object.values(buildings)) if (b.state !== "active") return true;
+  for (const b of Object.values(buildings)) if (b.state !== "active" || b.upgrade) return true;
   return workableEdges(roads).length > 0;
 }
 
@@ -305,6 +304,7 @@ interface Counts {
   employed: number;
   jobless: number; // adults with no regular job
   commuteSum: number;
+  literate: number; // literate adults
 }
 
 // Counted at the start of the game day, so the result is the same whenever it is asked within a day.
@@ -315,13 +315,14 @@ export function countResidents(residents: Record<number, Resident>, now: number)
   const hit = countCache.get(residents);
   if (hit && hit.day === day) return hit.c;
   const at = dayStart(now);
-  const c: Counts = { pop: 0, adults: 0, children: 0, employed: 0, jobless: 0, commuteSum: 0 };
+  const c: Counts = { pop: 0, adults: 0, children: 0, employed: 0, jobless: 0, commuteSum: 0, literate: 0 };
   for (const r of Object.values(residents)) {
     c.pop++;
     const age = ageOf(r.born, at);
     if (age < ADULT_MIN) c.children++;
     else if (age < ADULT_MAX) {
       c.adults++;
+      if (r.literate) c.literate++;
       if (r.job !== null) {
         c.employed++;
         c.commuteSum += r.commute ?? 0;
@@ -332,10 +333,83 @@ export function countResidents(residents: Record<number, Resident>, now: number)
   return c;
 }
 
-// Hands available to the construction artel: every adult without a regular job, plus farmers
-// while the land has no work for them.
-export const builderCount = (s: Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod">): number =>
-  countResidents(s.residents, s.gameMinutes).jobless + idleFarmers(s);
+// Food the idle adults gather for the town (berries, mushrooms, fishing, small game), kg a day each.
+export const FORAGE = { day: 1.2, winter: 0.4 };
+export const forageRate = (gameMinutes: number): number => (calendar(gameMinutes).season === 3 ? FORAGE.winter : FORAGE.day);
+
+// Adults with nothing to do: jobless (or farmers with no field work) while there is no construction work
+// for them to join. Their number is the unemployed of peopleStats.
+export function idleResidents(s: ArtelState): Set<number> {
+  const out = new Set<number>();
+  if (constructionWork(s.buildings, s.roads)) return out;
+  const farmless = idleGumnos(s);
+  for (const r of Object.values(s.residents)) {
+    if (!isAdultAge(ageOf(r.born, s.gameMinutes))) continue;
+    if (r.job === null || farmless.has(r.job)) out.add(r.id);
+  }
+  return out;
+}
+
+// Kg of food the idle adults gather in a day right now.
+export const forageKg = (s: ArtelState): number => idleResidents(s).size * forageRate(s.gameMinutes);
+
+export const MIN_ARTEL_SHARE = 0.2;
+export const MIN_ARTEL_FLOOR = 3;
+
+type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock">;
+
+// The construction artel: every adult without a regular job, plus farmers while the land has no work
+// for them and the workers of workshops without inputs. While construction work exists it has at least
+// max(3, ceil(20 % of the adults)) hands; the shortfall is drafted from the employed (they keep their
+// jobs, but production is scaled down, see productionScale).
+export function artel(s: ArtelState): { hands: number; drafted: number; employed: number } {
+  const c = countResidents(s.residents, s.gameMinutes);
+  const idle = idleWorkers(s);
+  const hands = c.jobless + idle;
+  let drafted = 0;
+  if (constructionWork(s.buildings, s.roads)) {
+    const min = Math.max(MIN_ARTEL_FLOOR, Math.ceil(MIN_ARTEL_SHARE * c.adults - 1e-9));
+    drafted = Math.max(0, Math.min(min - hands, c.employed - idle));
+  }
+  return { hands, drafted, employed: c.employed };
+}
+
+export const builderCount = (s: ArtelState): number => {
+  const a = artel(s);
+  return a.hands + a.drafted;
+};
+
+// Share of the work that is done at the workplaces while some of their workers are drafted.
+export function productionScale(s: ArtelState): number {
+  const a = artel(s);
+  return a.employed > 0 ? 1 - a.drafted / a.employed : 1;
+}
+
+// Can the food last a full year? projected = stock + exactly one harvest + the fishers' daily output x 360;
+// the harvest is this year's unreaped expected amount while the window has not closed (a field not sown yet
+// counts in full: 400 kg/ha), otherwise next year's (400 kg/ha of every field a gumno works).
+// need = today's consumption x 360. 0 below 90 % of the need, 1 from 120 %.
+export function foodOutlook(s: ArtelState & { households: SimState["households"] }): number {
+  const need = foodPerDay(s.residents, s.gameMinutes);
+  if (need <= 0) return 1;
+  const cal = calendar(s.gameMinutes);
+  const days = 360;
+  let projected = s.stock.food;
+  const open = cal.dayOfYear <= HARVEST_END_DAY;
+  const assign = assignFields(s.zones.fields, s.buildings);
+  for (const f of s.zones.fields) {
+    if (!assign.has(f.id)) continue;
+    const w = workOf(s.prod.fields, f.id, cal.year);
+    if (!open || w.sowH <= 0) projected += FIELD.yieldKgHa * haOf(f);
+    else projected += Math.max(0, expectedKg(f, w) - w.reaped);
+  }
+  const fishers = new Map<number, number>();
+  for (const r of Object.values(s.residents)) if (r.job !== null) fishers.set(r.job, (fishers.get(r.job) ?? 0) + 1);
+  let daily = 0;
+  for (const [id, n] of fishers) if (s.buildings[id]?.template === "fisher" && s.buildings[id].state === "active") daily += n * FISH.kgHour * (WORK_END - WORK_START) * (cal.season === 3 ? FISH.winter : 1);
+  projected += (daily + forageKg(s)) * days;
+  return Math.min(1, Math.max(0, (projected / (need * days) - 0.9) / 0.3));
+}
 
 // Kg of food the town eats in a day.
 export function foodPerDay(residents: Record<number, Resident>, now: number): number {
@@ -343,10 +417,11 @@ export function foodPerDay(residents: Record<number, Resident>, now: number): nu
   return c.adults * FOOD.adult + c.children * FOOD.child;
 }
 
-export function peopleStats(s: Pick<SimState, "residents" | "households" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod">): PeopleStats {
+export function peopleStats(s: ArtelState & Pick<SimState, "households">): PeopleStats {
   const c = countResidents(s.residents, s.gameMinutes);
   const work = constructionWork(s.buildings, s.roads);
-  const hands = c.jobless + idleFarmers(s);
+  const farmers = idleFarmers(s);
+  const blocked = idleWorkers(s) - farmers; // workers of workshops without inputs: busy by job, free for the artel
   let tents = 0;
   let households = 0;
   for (const h of Object.values(s.households)) {
@@ -358,8 +433,8 @@ export function peopleStats(s: Pick<SimState, "residents" | "households" | "buil
     adults: c.adults,
     children: c.children,
     employed: c.employed,
-    builders: work ? hands : 0,
-    unemployed: work ? 0 : hands,
+    builders: work ? c.jobless + farmers + blocked + artel(s).drafted : 0,
+    unemployed: work ? 0 : c.jobless + farmers,
     tents,
     avgCommute: c.employed > 0 ? c.commuteSum / c.employed : 0,
     households,
@@ -537,7 +612,9 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   if (on("death")) {
     for (const id of ids()) {
       const r = w.residents[id];
-      if (rand() < deathRate(ageOf(r.born, now)) / 360) {
+      const home = w.households[r.household]?.home;
+      const care = home != null && covers(s.coverage[home], "healer") ? SERVICE.healerDeathFactor : 1;
+      if (rand() < (deathRate(ageOf(r.born, now)) * care) / 360) {
         say(w, "death", `${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`);
         removePerson(w, r);
       }
@@ -592,7 +669,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
         detach(w, woman);
         const home = vacant.shift()!;
         const id = w.nextHouseholdId++;
-        w.households[id] = { id, last: man.last, home, members: [man.id, woman.id], arrived: now, mood: MOOD_START };
+        w.households[id] = { id, last: man.last, home, members: [man.id, woman.id], arrived: now, founder: false, mood: MOOD_START };
         man.household = id;
         woman.household = id;
         man.spouse = woman.id;
@@ -627,13 +704,13 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
     const unemployment = adults > 0 && !work ? jobless / adults : 0;
     const need = foodPerDay(w.residents, now);
-    const foodDays = need > 0 ? stock.food / need : Infinity;
+    const outlook = foodOutlook({ ...s, residents: w.residents, households: w.households, stock });
     let moodSum = 0;
     for (const h of Object.values(w.households)) moodSum += h.mood;
     const hs = Object.keys(w.households).length;
     const avgMood = hs > 0 ? moodSum / hs : MOOD_START;
     const attractive =
-      Math.min(1, Math.max(0, 1 - unemployment * 2)) * Math.min(1, foodDays / 30) * Math.min(1, Math.max(0, avgMood / 100));
+      Math.min(1, Math.max(0, 1 - unemployment * 2)) * outlook * Math.min(1, Math.max(0, avgMood / 100));
     for (const b of vacantHouses(buildings, w.households)) {
       if (!(rand() < RATES.immigrationDay * attractive)) continue;
       const room = Math.max(0, houseCap(buildings[b]) - 2);
@@ -647,14 +724,11 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // 6. emigration of idle families (never the founders in tents)
+  // 6. emigration of unhappy families (never the founding households, nor tents)
   if (on("emigration")) {
     for (const h of Object.values(w.households)) {
-      if (h.home === null) continue;
-      const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, now)));
-      const idle = adults.length > 0 && adults.every((r) => r.idleDays >= IDLE_LEAVE_DAYS);
-      const p = Math.max(idle ? RATES.emigrationDay : 0, h.mood < MOOD_LEAVE ? RATES.moodLeaveDay : 0);
-      if (p === 0 || !(rand() < p)) continue;
+      if (h.home === null || h.founder) continue;
+      if (!(h.mood < MOOD_LEAVE) || !(rand() < RATES.moodLeaveDay)) continue;
       const n = h.members.length;
       // They take their share of the food along.
       const pop = Object.keys(w.residents).length;
@@ -715,11 +789,17 @@ const WORK_TEXT: Record<string, string> = {
   sawpit: "пильщик — Пильня",
   quarry: "каменотёс — Каменоломня",
   fisher: "рыбак",
+  well: "работает у колодца",
+  market: "торгует на Рынке",
+  chapel: "служит в Часовне",
+  school: "учитель — Школа",
+  healer: "лекарь",
 };
 
-function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean): string {
-  if (age < ADULT_MIN) return "ребёнок";
+function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: Set<number>): string {
+  if (age < ADULT_MIN) return age >= SERVICE.schoolFrom && r.school > 0 ? "школьник" : "ребёнок";
   if (age >= ADULT_MAX) return r.sex === "m" ? "старик" : "старуха";
+  if (r.job !== null && idle.has(r.job)) return work ? "на стройке" : "без работы";
   if (r.job !== null) {
     const b = s.buildings[r.job];
     const t = b && BUILDINGS[b.template];
@@ -736,6 +816,7 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
   const now = s.gameMinutes;
   if (b.zone === "res") {
     const work = constructionWork(s.buildings, s.roads);
+    const idle = idleWorkplaces(s);
     const households = Object.values(s.households)
       .filter((h) => h.home === id)
       .map((h) => ({
@@ -747,13 +828,21 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
           .filter((r): r is Resident => !!r)
           .map((r) => {
             const age = ageOf(r.born, now);
-            return { id: r.id, name: fullName(r), age: Math.floor(age), sex: r.sex, role: roleOf(s, r, age, work) };
+            return { id: r.id, name: fullName(r), age: Math.floor(age), sex: r.sex, role: roleOf(s, r, age, work, idle), literate: r.literate };
           }),
       }));
-    return { kind: "house", households };
+    return {
+      kind: "house",
+      households,
+      level: b.level,
+      landValue: s.landValue[id] ?? 0,
+      services: servicesIn(s.coverage[id]),
+      upgrading: !!b.upgrade,
+    };
   }
+  const idle = idleWorkplaces(s).has(id);
   const workers = Object.values(s.residents)
     .filter((r) => r.job === id)
-    .map((r) => ({ id: r.id, name: fullName(r), age: Math.floor(ageOf(r.born, now)), commute: r.commute }));
+    .map((r) => ({ id: r.id, name: fullName(r), age: Math.floor(ageOf(r.born, now)), commute: r.commute, idle }));
   return { kind: "workplace", capacity: jobsOf(b, s), workers };
 }

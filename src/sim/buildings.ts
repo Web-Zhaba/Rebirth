@@ -65,7 +65,20 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   quarry: T("quarry", "Каменоломня", "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0]),
   fisher: T("fisher", "Рыбак", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0]),
   barn: T("barn", "Амбар", "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2]),
+  // Services (PLAN.md section 9); labor and materials chosen here, like the placed buildings above.
+  well: T("well", "Колодец", "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3]),
+  market: T("market", "Рынок", "placed", 2, 2, 12, 12, 4, 160, 4, [30, 6, 2]),
+  chapel: T("chapel", "Часовня", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6]),
+  school: T("school", "Школа", "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3]),
+  healer: T("healer", "Лекарь", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1]),
 };
+
+// Rebuilding an izba into level 2 (PLAN.md section 9): taken like construction, the family stays.
+export const UPGRADE = { template: "izba", labor: 60, materials: { logs: 10, planks: 2, stone: 0 } as Materials, residents: 2, height: 1.5 };
+
+// People a house holds: the template's capacity, plus the upgrade's.
+export const houseCapacity = (b: Pick<Building, "template" | "level">): number =>
+  (BUILDINGS[b.template]?.residents ?? 0) + (b.level >= 2 ? UPGRADE.residents : 0);
 
 // Templates of one zone type, in table order.
 export const templatesOf = (zone: ZoneType | "placed"): BuildingTemplate[] => Object.values(BUILDINGS).filter((t) => t.zone === zone);

@@ -3,11 +3,13 @@ import { effect, untracked } from "@preact/signals";
 import { BUILDINGS, type BuildingTemplate } from "../sim/buildings";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
 import { canPlace, makeBuilding } from "../sim/growth";
+import { lotFront } from "../sim/people";
+import { isService, SERVICES } from "../sim/services";
 import type { Site, ZoneCell } from "../sim/types";
 import { cellCorners } from "../sim/zones";
 import { buildingSet, frame, sendCmd, state, zones } from "../simClient";
 import { cachedSite, NO_SITE, siteAt } from "../world/site";
-import { flash, isPlaceTool, MIN_ZONE_ZOOM, PLACED_COLORS, SITE_RADIUS, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, MIN_ZONE_ZOOM, PLACED_COLORS, placeReach, SITE_RADIUS, tool, type PlaceTool } from "./tools";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
 const BUCKET = 16;
@@ -31,6 +33,7 @@ interface Verdict {
   side: 1 | -1;
   i: number;
   radius: number | undefined; // site radius of the template
+  front: Pt | null; // door of the lot, for the reach preview of services
 }
 
 // Lot hover and placement of the six player-built buildings.
@@ -86,6 +89,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
       source("place-lot")?.setData(empty());
       source("place-radius")?.setData(empty());
     }
+    placeReach.value = null;
     setLabel(null);
   };
 
@@ -149,6 +153,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
       }
       return n > 0 ? `${t.name} · поля рядом: ${n} (${gaText(ha)} га)` : `${t.name} · полей рядом нет`;
     }
+    if (isService(id)) return `${t.name} · охват ${SERVICES[id].reach} м по дорогам`;
     return t.name;
   };
 
@@ -162,10 +167,12 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     // Same geometry the sim builds; without the far cell the lot does not fit, show the first cell.
     let footprint: Pt[];
     let center: Pt;
+    let front: Pt | null = null;
     if (far) {
       const b = makeBuilding(t, c0, far, 0, 0);
       footprint = b.footprint;
       center = [b.lot.cx, b.lot.cy];
+      front = lotFront(b);
     } else {
       footprint = cellCorners(c0);
       center = [c0.cx, c0.cy];
@@ -186,7 +193,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
       }
     }
     const check = canPlace(st, t, c0.edge, c0.side, c0.i, site);
-    const base = { footprint, center, edge: c0.edge, side: c0.side, i: c0.i, radius };
+    const base = { footprint, center, edge: c0.edge, side: c0.side, i: c0.i, radius, front };
     if (!check.ok) return { ...base, ok: false, pending: false, text: check.reason };
     if (pending) return { ...base, ok: true, pending: true, text: "…" };
     return { ...base, ok: true, pending: false, text: siteText(id, site, t, center) };
@@ -200,6 +207,12 @@ export function attachPlaceTool(map: maplibregl.Map): void {
   const draw = (id: PlaceTool, v: Verdict | null) => {
     const f = frame.value;
     if (!ensure() || !f) return;
+    // Services show the road edges they would reach from this lot (only when the lot is allowed).
+    if (v && v.ok && v.front && isService(id)) {
+      const cur = placeReach.value;
+      const [x, y] = v.front;
+      if (!cur || cur.x !== x || cur.y !== y) placeReach.value = { x, y, range: SERVICES[id].reach, color: SERVICES[id].color };
+    } else if (placeReach.value) placeReach.value = null;
     if (!v) {
       source("place-lot")?.setData(empty());
       source("place-radius")?.setData(empty());

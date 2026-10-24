@@ -16,6 +16,7 @@ export const frame = computed(() => (city.value ? makeFrame(city.value.lat, city
 export const people = computed(() => state.value?.people ?? null);
 export const stock = computed(() => state.value?.stock ?? null);
 export const economy = computed(() => state.value?.economy ?? null);
+export const services = computed(() => state.value?.services ?? null);
 export const events = computed(() => state.value?.events ?? []);
 export const away = signal<Away | null>(null);
 

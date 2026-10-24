@@ -1,6 +1,7 @@
-import { BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity } from "./buildings";
-import { assignedHa, assignFields, expectedKg, FIELD, haOf, remainingHours, windowAt, workOf } from "./fields";
-import { foodPerDay, MAX_EVENTS } from "./people";
+import { BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE } from "./buildings";
+import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, windowAt, workOf } from "./fields";
+import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScale } from "./people";
+import { covers, SERVICE, serviceMood } from "./services";
 import { calendar, dayOf } from "./time";
 import type { Building, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
 
@@ -14,8 +15,8 @@ export const RATE = {
   logsPerPlank: 1.6, // m3 of logs per m3 of planks
   stone: 0.15, // t, times PACE and (0.4 + 0.6 rock)
   rockBase: 0.4,
-  fish: 0.2, // kg of food
-  winterFish: 0.5,
+  fish: FISH.kgHour, // kg of food
+  winterFish: FISH.winter,
   pottery: 0.025, // pieces
   smithy: 0.015,
   smithyLogs: 0.05, // m3 per piece (charcoal)
@@ -45,16 +46,24 @@ const flagsFor = (f: ProdFlags, year: number): ProdFlags => (f.year === year ? f
 
 // ---------- workers ----------
 
-const workerCache = new WeakMap<object, Map<number, number>>();
+interface Workers {
+  n: Map<number, number>; // workers per workplace id
+  lit: Map<number, number>; // of them literate
+}
+const workerCache = new WeakMap<object, Workers>();
 
-// Workers per workplace id; jobs change only at the daily step, so this holds for a whole day.
-function workersByJob(residents: Record<number, Resident>): Map<number, number> {
+// Jobs change only at the daily step, so this holds for a whole day.
+function workersByJob(residents: Record<number, Resident>): Workers {
   const hit = workerCache.get(residents);
   if (hit) return hit;
-  const m = new Map<number, number>();
-  for (const r of Object.values(residents)) if (r.job !== null) m.set(r.job, (m.get(r.job) ?? 0) + 1);
-  workerCache.set(residents, m);
-  return m;
+  const w: Workers = { n: new Map(), lit: new Map() };
+  for (const r of Object.values(residents)) {
+    if (r.job === null) continue;
+    w.n.set(r.job, (w.n.get(r.job) ?? 0) + 1);
+    if (r.literate) w.lit.set(r.job, (w.lit.get(r.job) ?? 0) + 1);
+  }
+  workerCache.set(residents, w);
+  return w;
 }
 
 // ---------- construction materials ----------
@@ -68,9 +77,14 @@ export function payMaterials(buildings: Record<number, Building>, stock: Stock, 
   for (const key of Object.keys(buildings)) {
     if (left <= EPS) break;
     let b = out[Number(key)];
-    if (b.state === "active") continue;
-    if (!b.paid) {
-      const m = BUILDINGS[b.template]?.materials;
+    // A finished house being upgraded is served like a building under construction.
+    const up = b.state === "active" ? b.upgrade : undefined;
+    if (b.state === "active" && !up) continue;
+    const paid = up ? up.paid : b.paid;
+    let labor = up ? up.labor : b.labor;
+    const done = up ? up.done : b.done;
+    if (!paid) {
+      const m = up ? UPGRADE.materials : BUILDINGS[b.template]?.materials;
       let hand = 0;
       const next = { ...st };
       if (m) {
@@ -81,11 +95,12 @@ export function payMaterials(buildings: Record<number, Building>, stock: Stock, 
         }
       }
       st = next;
-      b = { ...b, paid: true, labor: b.labor + hand };
+      labor += hand;
+      b = up ? { ...b, upgrade: { ...up, paid: true, labor } } : { ...b, paid: true, labor };
       if (out === buildings) out = { ...buildings };
       out[b.id] = b;
     }
-    left -= Math.min(left, Math.max(0, b.labor - b.done));
+    left -= Math.min(left, Math.max(0, labor - done));
   }
   return { buildings: out, stock: st };
 }
@@ -93,7 +108,8 @@ export function payMaterials(buildings: Record<number, Building>, stock: Stock, 
 // ---------- production (every work-hour tick) ----------
 
 // One tick of `dt` hours of work: producers, workshops and field work. Call during work hours only.
-export function produceStep(s: SimState, dt: number): SimState {
+// `scale` is the share of work left after workers were drafted into the artel (see people.ts).
+export function produceStep(s: SimState, dt: number, scale: number = productionScale(s)): SimState {
   const cal = calendar(s.gameMinutes);
   const workers = workersByJob(s.residents);
   const win = windowAt(s.gameMinutes);
@@ -116,9 +132,11 @@ export function produceStep(s: SimState, dt: number): SimState {
 
   for (const b of Object.values(s.buildings)) {
     if (b.state !== "active") continue;
-    const n = workers.get(b.id) ?? 0;
+    const n = workers.n.get(b.id) ?? 0;
     if (n === 0) continue;
-    const h = n * dt;
+    // Literate hands make a workshop more productive.
+    const eff = b.zone === "craft" ? n + SERVICE.literateBoost * (workers.lit.get(b.id) ?? 0) : n;
+    const h = eff * dt * scale;
     switch (b.template) {
       case "woodcutter": {
         const q = h * RATE.logs * PACE * (b.site?.forest ?? 0);
@@ -231,6 +249,9 @@ export function dailyEconomy(s: SimState): SimState {
   let events = s.events;
   const stock = { ...s.stock };
 
+  // the idle adults gather food for the town (as far as the barns hold it)
+  stock.food += Math.max(0, Math.min(forageKg(s), foodCapacity(s.buildings) - stock.food));
+
   // food
   const need = foodPerDay(s.residents, now);
   const eaten = Math.min(stock.food, need);
@@ -250,29 +271,59 @@ export function dailyEconomy(s: SimState): SimState {
     flags = { ...flags, rot: 0 };
   }
 
-  // wares: each employed trade worker serves 12 households a day, starting from a different one each day
-  let traders = 0;
+  // wares: each employed trade worker serves 12 households a day (a literate one 20 % more), starting
+  // from a different one each day; each market worker then hands out to 20 households the market covers
+  let shopSlots = 0;
+  let marketSlots = 0;
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
-    if (b && b.zone === "trade" && b.state === "active") traders++;
+    if (!b || b.state !== "active") continue;
+    if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (r.literate ? SERVICE.literateBoost : 0));
+    else if (b.template === "market") marketSlots += SERVICE.marketHouseholds;
   }
   const ids = Object.keys(s.households).map(Number).sort((p, q) => p - q);
   const served = new Map<number, number>(); // household -> share of its need supplied
-  let slots = traders * RATE.householdsPerTrader;
-  for (let k = 0; k < ids.length && slots > 0 && stock.wares > EPS; k++) {
-    const h = s.households[ids[(k + dayOf(now)) % ids.length]];
+  const hand = (h: Household) => {
     const want = RATE.waresPerPerson * h.members.length;
     const give = Math.min(want, stock.wares);
     stock.wares -= give;
-    slots--;
     served.set(h.id, want > 0 ? give / want : 1);
+  };
+  let slots = Math.floor(shopSlots + EPS);
+  for (let k = 0; k < ids.length && slots > 0 && stock.wares > EPS; k++) {
+    hand(s.households[ids[(k + dayOf(now)) % ids.length]]);
+    slots--;
+  }
+  slots = marketSlots;
+  for (let k = 0; k < ids.length && slots > 0 && stock.wares > EPS; k++) {
+    const h = s.households[ids[(k + dayOf(now)) % ids.length]];
+    if (served.has(h.id) || h.home === null || !covers(s.coverage[h.home], "market")) continue;
+    hand(h);
+    slots--;
   }
 
   // mood
   const households: Record<number, Household> = {};
+  const idle = idleResidents(s);
   for (const h of Object.values(s.households)) {
-    const target = 10 + 60 * fed + 15 * (served.get(h.id) ?? 0) + 15 * (h.home !== null ? 1 : 0);
+    let adults = 0;
+    let idlers = 0;
+    for (const m of h.members) {
+      const r = s.residents[m];
+      if (!r) continue;
+      const age = ageOf(r.born, now);
+      if (age >= 16 && age < 60) adults++;
+      if (idle.has(m)) idlers++;
+    }
+    const jobless = adults > 0 ? 12 * (idlers / adults) : 0;
+    const kids = h.members.some((m) => {
+      const r = s.residents[m];
+      const age = r ? ageOf(r.born, now) : 0;
+      return age >= SERVICE.schoolFrom && age < SERVICE.schoolTo;
+    });
+    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) : 0;
+    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless));
     households[h.id] = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep };
   }
 
@@ -353,6 +404,8 @@ export function economyStats(s: SimState): EconomyStats {
     yesterday,
     fields: { count: s.zones.fields.length, ha, assignedHa: aHa, sown: sowNeed > 0 ? sownH / sowNeed : 0, reaped, expected, window: windowAt(s.gameMinutes) },
     avgMood: hs > 0 ? moods / hs : 0,
+    forage: forageKg(s),
+    outlook: foodOutlook(s),
   };
 }
 

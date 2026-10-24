@@ -1,4 +1,4 @@
-import { BUILDINGS, FRONT_SETBACK, templatesOf, type BuildingTemplate } from "./buildings";
+import { BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate } from "./buildings";
 import { jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
 import { emptyProd, emptyStock } from "./production";
@@ -30,7 +30,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -42,6 +42,8 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
     stock: emptyStock(),
     prod: emptyProd(),
+    coverage: {},
+    landValue: {},
     ...f.people,
   };
 }
@@ -69,7 +71,7 @@ export function townStats(buildings: Record<number, Building>, jobs: (b: Buildin
     const t = BUILDINGS[b.template];
     if (!t) continue;
     if (b.zone === "res") {
-      houseCap += t.residents;
+      houseCap += houseCapacity(b);
       if (b.state !== "active") unfinishedHouses++;
     } else {
       const n = jobs(b);
@@ -82,7 +84,7 @@ export function townStats(buildings: Record<number, Building>, jobs: (b: Buildin
 }
 
 // Wanted new buildings per zone type (may be negative).
-export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes" | "zones" | "prod">): Demand {
+export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes" | "zones" | "prod" | "stock">): Demand {
   const st = townStats(s.buildings, (b) => jobsOf(b, s));
   const ps = peopleStats(s);
   const vacant = vacantHouses(s.buildings, s.households).length;
@@ -174,6 +176,8 @@ export function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id
     done: 0,
     created: now,
     paid: false,
+    level: 1,
+    streak: 0,
   };
   if (site) b.site = site;
   return b;
@@ -315,7 +319,19 @@ export function advanceBuildings(buildings: Record<number, Building>, personHour
   for (const key of Object.keys(buildings)) {
     if (left <= EPS) break;
     const b = buildings[Number(key)];
-    if (b.state === "active") continue;
+    if (b.state === "active") {
+      if (b.upgrade) {
+        const up = b.upgrade;
+        const rem = up.labor - up.done;
+        const use = Math.max(0, Math.min(left, rem));
+        left -= use;
+        const done = use >= rem - EPS ? up.labor : up.done + use;
+        if (out === buildings) out = { ...buildings };
+        const { upgrade: _u, ...rest } = b;
+        out[b.id] = done >= up.labor ? { ...rest, level: 2, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
+      }
+      continue;
+    }
     const remain = b.labor - b.done;
     const spend = Math.max(0, Math.min(left, remain));
     left -= spend;

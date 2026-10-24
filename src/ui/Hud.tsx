@@ -2,8 +2,9 @@ import type maplibregl from "maplibre-gl";
 import { calendar } from "../sim/clock";
 import { cutOffEdges, WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
-import { ZONE_COLORS } from "../map/tools";
-import { economy, events, people, reset, roads, stock, zones } from "../simClient";
+import { SERVICE_LIST } from "../sim/services";
+import { OVERLAYS, overlay, ZONE_COLORS, type Overlay } from "../map/tools";
+import { economy, events, people, reset, roads, services, stock, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -59,6 +60,7 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
   }
   const st = stock.value;
   const eco = economy.value;
+  const sv = services.value;
   let fieldLine: string | null = null;
   if (eco && eco.fields.assignedHa > 0) {
     if (eco.fields.window === "sowing") fieldLine = `Сев: ${Math.round(eco.fields.sown * 100)} %`;
@@ -86,6 +88,10 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
           <div class={eco.foodDays < LOW_FOOD_DAYS && eco.foodPerDay > 0 ? "hud-date stock-low" : "hud-date"}>
             Провизия {tons(st.food)} из {tons(eco.foodCap)} т
             {eco.foodPerDay > 0 && ` · на ${eco.foodDays >= 999 ? "999+" : Math.floor(eco.foodDays)} дн.`}
+            {eco.forage > 0 && ` · собирают +${amount(eco.forage)} кг/день`}
+            {eco.foodPerDay > 0 && eco.outlook < 1 && (
+              <span class="stock-low" title="Запасов и одного урожая не хватит на год вперёд: приезжих меньше"> · на год не хватит</span>
+            )}
           </div>
           <div class="hud-date">
             Брёвна {amount(st.logs)} м³ · доски {amount(st.planks)} м³ · камень {amount(st.stone)} т · утварь {Math.floor(st.wares)} шт
@@ -94,11 +100,32 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
           {eco.avgMood > 0 && <div class="hud-date">Настроение: {Math.round(eco.avgMood)}</div>}
         </div>
       )}
+      {sv && sv.houses > 0 && (
+        <div class="hud-date">
+          Грамотные: {Math.round(sv.literate * 100)} % · земля: {Math.round(sv.avgLandValue)}
+          {sv.level2 > 0 && ` · дома 2-го уровня: ${sv.level2}`}
+        </div>
+      )}
+      <label class="layers">
+        Слои
+        <select value={overlay.value} onChange={(e) => (overlay.value = (e.currentTarget as HTMLSelectElement).value as Overlay)}>
+          {OVERLAYS.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <details class="hud-more">
         <summary>Подробнее</summary>
         {p && (
           <div class="hud-date">
             Дорога на работу: {p.employed > 0 ? `~${Math.round(p.avgCommute)} мин` : "—"} · стройка {pad(WORK_START)}–{pad(WORK_END)}
+          </div>
+        )}
+        {sv && sv.houses > 0 && (
+          <div class="hud-date">
+            Охват домов (из {sv.houses}): {SERVICE_LIST.map((s) => `${s.name.toLowerCase()} ${sv.covered[s.id]}`).join(" · ")}
           </div>
         )}
         <div class="hud-date">

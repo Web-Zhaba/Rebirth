@@ -46,6 +46,8 @@ function bld(id: number, template: string, x: number, state: Building["state"] =
     done: state === "active" ? t.labor : 0,
     created: 0,
     paid: state !== "planned",
+    level: 1,
+    streak: 0,
   };
   if (site) b.site = site;
   return b;
@@ -107,17 +109,21 @@ function folk(s: SimState, specs: HSpec[]): SimState {
         job,
         commute: job === null ? null : 5,
         idleDays: 0,
+        literate: false,
+        school: 0,
       };
       members.push(id);
     };
     for (let k = 0; k < (sp.adults ?? 1); k++) add(30, sp.job ?? null);
     for (let k = 0; k < (sp.kids ?? 0); k++) add(5, null);
-    households[hid] = { id: hid, last: "Тестов", home: sp.home, members, arrived: 0, mood: sp.mood ?? 60 };
+    households[hid] = { id: hid, last: "Тестов", home: sp.home, members, arrived: 0, founder: false, mood: sp.mood ?? 60 };
   });
   return { ...s, residents, households, nextPersonId: pid, nextHouseholdId: specs.length + 1, events: [] };
 }
 
 const work = (s: SimState, dt = 1) => produceStep(s, dt);
+// An unfinished house far away: construction work exists, so jobless adults are builders, not idle.
+const busy = (s: SimState): SimState => ({ ...s, buildings: { ...s.buildings, 900: bld(900, "izba", 1900, "planned") } });
 
 describe("storage", () => {
   it("food capacity is 3 t plus 30 t per finished barn", () => {
@@ -155,7 +161,7 @@ describe("storage", () => {
 
 describe("food", () => {
   it("adults eat 0.7 kg and children 0.45 kg a day", () => {
-    let s = folk(town([]), [{ home: null, adults: 2, kids: 2 }]);
+    let s = busy(folk(town([]), [{ home: null, adults: 2, kids: 2 }]));
     expect(foodPerDay(s.residents, s.gameMinutes)).toBeCloseTo(2.3);
     const d = dailyEconomy({ ...s, gameMinutes: at(101) });
     expect(d.stock.food).toBeCloseTo(s.stock.food - 2.3);
@@ -163,15 +169,15 @@ describe("food", () => {
   });
   it("a shortage feeds everyone the same fraction and says so once", () => {
     let s = folk(town([]), [{ home: 1, adults: 1 }, { home: null, adults: 1, kids: 2 }]);
-    s = { ...s, buildings: { 1: bld(1, "izba", 0) } };
+    s = busy({ ...s, buildings: { 1: bld(1, "izba", 0) } });
     s = { ...s, stock: { ...s.stock, food: 1 } }; // needs 0.7 + 0.7 + 0.9 = 2.3
     const d = dailyEconomy({ ...s, gameMinutes: at(101) });
     expect(d.stock.food).toBe(0);
     expect(d.events.map((e) => e.text)).toEqual(["Провизия закончилась, люди голодают"]);
-    // fed = 1 / 2.3: both households move a quarter of the way towards 30 + 40 fed (+15 with a house)
+    // fed = 1 / 2.3: both households move a quarter of the way towards 10 + 45 fed (+10 with a house)
     const fed = 1 / 2.3;
-    expect(d.households[1].mood).toBeCloseTo(60 + (10 + 60 * fed + 15 - 60) / 4);
-    expect(d.households[2].mood).toBeCloseTo(60 + (10 + 60 * fed - 60) / 4);
+    expect(d.households[1].mood).toBeCloseTo(60 + (10 + 45 * fed + 10 - 60) / 4);
+    expect(d.households[2].mood).toBeCloseTo(60 + (10 + 45 * fed - 60) / 4);
     const again = dailyEconomy({ ...d, gameMinutes: at(102) });
     expect(again.events).toHaveLength(1);
     expect(again.prod.flags.hungry).toBe(true);
@@ -298,17 +304,17 @@ describe("fields", () => {
       // an unfinished building keeps the artel busy, so its hands count as builders
       return { ...s, residents: f.residents, households: f.households, buildings: { ...s.buildings, 9: bld(9, "izba", 700, "planned") } };
     };
-    expect(builderCount(mk(SPRING_NOON))).toBe(2);
+    expect(builderCount(mk(SPRING_NOON))).toBe(3); // 2 jobless + 1 drafted: the artel has at least 3
     expect(builderCount(mk(NOON))).toBe(6); // summer: the land has no work
     expect(builderCount(mk(HARVEST_NOON))).toBe(6); // nothing was sown, so nothing to reap
     const sown = (s: SimState) => ({ ...s, prod: { ...s.prod, fields: { 1: { year: 1, sowH: 500, harvH: 0, reaped: 0 } } } });
-    expect(builderCount(sown(mk(HARVEST_NOON)))).toBe(2);
+    expect(builderCount(sown(mk(HARVEST_NOON)))).toBe(3);
     const reaped = { ...mk(HARVEST_NOON) };
     expect(builderCount({ ...reaped, prod: { ...reaped.prod, fields: { 1: { year: 1, sowH: 500, harvH: 2000, reaped: 4000 } } } })).toBe(6); // harvest done
     expect(builderCount(mk(at(240, 12)))).toBe(6); // after the first 45 days of autumn
     expect(builderCount(mk(WINTER_NOON))).toBe(6);
     expect(peopleStats(mk(NOON)).builders).toBe(6);
-    expect(peopleStats(mk(SPRING_NOON)).builders).toBe(2);
+    expect(peopleStats(mk(SPRING_NOON)).builders).toBe(3);
   });
   it("gumno jobs: one per 2.5 ha, at most 16, none without fields", () => {
     const g = (fields: Field[]) => {
@@ -393,31 +399,31 @@ describe("construction materials", () => {
 });
 
 describe("mood", () => {
-  it("moves a quarter of the way to 30 + 40 fed + 15 wares + 15 house", () => {
-    let s = folk(town([bld(1, "izba", 0)]), [{ home: 1, adults: 2 }, { home: null, adults: 2 }]);
+  it("moves a quarter of the way to 10 + 45 fed + 10 wares + 10 house", () => {
+    let s = busy(folk(town([bld(1, "izba", 0)]), [{ home: 1, adults: 2 }, { home: null, adults: 2 }]));
     const d = dailyEconomy({ ...s, gameMinutes: at(101) });
-    expect(d.households[1].mood).toBeCloseTo(60 + (85 - 60) / 4);
-    expect(d.households[2].mood).toBeCloseTo(60 + (70 - 60) / 4);
+    expect(d.households[1].mood).toBeCloseTo(60 + (65 - 60) / 4);
+    expect(d.households[2].mood).toBeCloseTo(60 + (55 - 60) / 4);
   });
   it("wares from trade workers lift it: 12 households a day per trader, 0.05 per person", () => {
     const specs: HSpec[] = [{ home: null, adults: 1, job: 1 }, ...Array.from({ length: 13 }, () => ({ home: null, adults: 2, kids: 2 }))];
-    let s = folk(town([bld(1, "shop", 50)]), specs);
+    let s = busy(folk(town([bld(1, "shop", 50)]), specs));
     s = { ...s, stock: { ...s.stock, wares: 100 } };
     const d = dailyEconomy({ ...s, gameMinutes: at(101) });
     // one trader serves 12 of the 14 households
     const took = s.stock.wares - d.stock.wares; // the one-person household is served on some days only
     expect(took).toBeGreaterThanOrEqual(0.05 + 0.2 * 11 - 1e-9);
     expect(took).toBeLessThanOrEqual(0.2 * 12 + 1e-9);
-    const lifted = Object.values(d.households).filter((h) => h.mood > 60 + (70 - 60) / 4 + 0.01);
+    const lifted = Object.values(d.households).filter((h) => h.mood > 59);
     expect(lifted).toHaveLength(12);
     // no wares: nothing is handed out
     const dry = dailyEconomy({ ...s, stock: { ...s.stock, wares: 0 }, gameMinutes: at(101) });
     expect(dry.stock.wares).toBe(0);
-    expect(Object.values(dry.households).every((h) => Math.abs(h.mood - 62.5) < 1e-9)).toBe(true);
+    expect(Object.values(dry.households).every((h) => Math.abs(h.mood - 58.75) < 1e-9)).toBe(true);
     // the next day starts from another household
     const d2 = dailyEconomy({ ...s, gameMinutes: at(102) });
-    const a = Object.values(d.households).filter((h) => h.mood > 63).map((h) => h.id).join();
-    const b = Object.values(d2.households).filter((h) => h.mood > 63).map((h) => h.id).join();
+    const a = Object.values(d.households).filter((h) => h.mood > 59).map((h) => h.id).join();
+    const b = Object.values(d2.households).filter((h) => h.mood > 59).map((h) => h.id).join();
     expect(a).not.toBe(b);
   });
   it("households in houses with mood below 35 leave, 10 % a day; tents never", () => {
@@ -433,16 +439,16 @@ describe("mood", () => {
     expect(RATES.moodLeaveDay).toBe(0.1);
   });
   it("hunger alone drives a housed household below 35 and out", () => {
-    let s = folk(town([bld(1, "izba", 0), bld(2, "izba", 50)]), [{ home: 1, adults: 2 }, { home: 2, adults: 2 }]);
+    let s = busy(folk(town([bld(1, "izba", 0), bld(2, "izba", 50)]), [{ home: 1, adults: 2 }, { home: 2, adults: 2 }]));
     s = { ...s, stock: { ...s.stock, food: 0 } };
     let m = s.households[1].mood;
     for (let d = 0; d < 12; d++) {
       s = dailyEconomy({ ...s, gameMinutes: at(101 + d) });
-      expect(s.households[1].mood).toBeLessThan(m); // moving towards 10 + 15 = 25
+      expect(s.households[1].mood).toBeLessThan(m); // moving towards 10 + 10 = 20
       m = s.households[1].mood;
     }
     expect(m).toBeLessThan(35);
-    expect(m).toBeGreaterThan(25);
+    expect(m).toBeGreaterThan(20);
     const out = dailyStep(s, { rand: () => 0.05, only: ["emigration"] });
     expect(Object.keys(out.households)).toHaveLength(0);
   });
@@ -455,20 +461,22 @@ describe("mood", () => {
     const stay = dailyStep(s, { rand: () => 0.5, only: ["emigration"] });
     expect(stay.stock.food).toBe(800);
   });
-  it("immigration is scaled by food days (30 d for full strength) and by mood", () => {
+  it("immigration is scaled by the food outlook and by mood", () => {
     const base = folk(town([bld(1, "izba", 0), bld(2, "izba", 50), bld(3, "izba", 90, "planned")]), [{ home: 1, adults: 2, mood: 100 }]);
-    const need = foodPerDay(base.residents, base.gameMinutes); // 1.4 kg
-    const run = (foodDays: number, mood = 100, rand = 0.3) => {
-      const s = { ...base, stock: { ...base.stock, food: foodDays * need }, households: { 1: { ...base.households[1], mood } } };
+    const need = foodPerDay(base.residents, base.gameMinutes) * 360; // a full year, no harvest or fishers
+    // stock for an outlook of o: (stock / need - 0.9) / 0.3 = o
+    const run = (o: number, mood = 100, rand = 0.3) => {
+      const s = { ...base, stock: { ...base.stock, food: need * (0.9 + 0.3 * o) }, households: { 1: { ...base.households[1], mood } } };
       return dailyStep(s, { rand: () => rand, only: ["immigration"] });
     };
     // immigrationDay 0.5: with rand 0.3 a family comes only while the factors stay above 0.6
-    expect(Object.keys(run(40).households)).toHaveLength(2);
-    expect(Object.keys(run(15).households)).toHaveLength(1); // 0.5 x 0.5 = 0.25
-    expect(Object.keys(run(40, 50).households)).toHaveLength(1); // 0.5 x 0.5
-    expect(Object.keys(run(40, 100, 0.49).households)).toHaveLength(2);
-    expect(Object.keys(run(24, 100, 0.39).households)).toHaveLength(2); // 0.5 x 0.8 = 0.4
-    expect(Object.keys(run(24, 100, 0.41).households)).toHaveLength(1);
+    expect(Object.keys(run(1).households)).toHaveLength(2);
+    expect(Object.keys(run(0.5).households)).toHaveLength(1); // 0.5 x 0.5 = 0.25
+    expect(Object.keys(run(1, 50).households)).toHaveLength(1); // 0.5 x 0.5
+    expect(Object.keys(run(1, 100, 0.49).households)).toHaveLength(2);
+    expect(Object.keys(run(0.8, 100, 0.39).households)).toHaveLength(2); // 0.5 x 0.8 = 0.4
+    expect(Object.keys(run(0.8, 100, 0.41).households)).toHaveLength(1);
+    expect(Object.keys(run(0, 100, 0).households)).toHaveLength(1); // below 90 % of the need: nobody comes
   });
   it("immigrants bring 60 days of their food, up to the capacity", () => {
     const base = folk(town([bld(1, "izba", 0), bld(2, "izba", 50), bld(3, "izba", 90, "planned")]), [{ home: 1, adults: 2, mood: 100 }]);

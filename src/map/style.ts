@@ -31,6 +31,7 @@ export function rewildedStyle(): StyleSpecification {
   return {
     version: 8,
     projection: { type: "globe" },
+    glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
     sources: {
       terrain: {
         type: "raster-dem",
