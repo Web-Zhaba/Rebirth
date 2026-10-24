@@ -36,7 +36,7 @@ const gradient = (t: number): string => (t < 0.5 ? mix(BAD, "#e6c84a", t * 2) : 
 
 // Overlay colour of a finished house ("" = keep its own colour).
 function tintOf(b: Building, ov: Overlay, st: ClientState): string {
-  if (ov === "none" || b.zone !== "res" || b.state !== "active") return "";
+  if (ov === "none" || ov === "traffic" || b.zone !== "res" || b.state !== "active") return "";
   if (ov === "value") return gradient((st.landValue[b.id] ?? 0) / 100);
   if (ov === "mood") {
     const m = st.houseMood[b.id];

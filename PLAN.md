@@ -103,7 +103,7 @@ Each milestone ends with something playable in the browser.
 | S4 | Residents | Individual residents and households with life events, commuting, unemployment, migration; resident and household inspector. **Done.** Jobs by walking time on built roads (4 km/h, ≤ 45 min); jobless adults form the construction party; snapshots carry aggregates, the inspector queries the worker. Education, health and happiness come with S5–S6. |
 | S5 | Production | Goods chains, storage, seasons, shortages affecting happiness; construction consumes materials (logs, planks, stone). **Done** (section 8). |
 | S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. **Done** (section 9). |
-| S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. |
+| S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. **Done** (section 10). Worker posts a cosmetic `life` message per game day and on load (up to 300 walkers, carts per load capped at 6 per producer, traffic over all commuters, lights); nothing of it is in `SimState` or saves; the «движение» overlay joins the S6 switch. |
 | S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. |
 | E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. |
 | E2 | Notebook | Real Wikipedia entries tied to excavated places, plus the town chronicle. |

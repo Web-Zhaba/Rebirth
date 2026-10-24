@@ -1,5 +1,6 @@
 import { advanceTo } from "./clock";
 import { BUILDINGS } from "./buildings";
+import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, demand, emptyGrowth, placeBuilding, reconcile, seedOf } from "./growth";
 import { peopleStats, queryBuilding, syncPeople } from "./people";
@@ -8,6 +9,7 @@ import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSaveV3 } from "./save";
+import { dayOf } from "./time";
 import type { BuildingQuery, ClientSave, Field, RoadGraph, SaveV3, Site, SimSnapshot, SimState, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
@@ -58,6 +60,7 @@ export class Handler {
   private enriching: Promise<void> | null = null;
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private lifeDay = Number.NaN; // game day the main thread has visual life for
 
   constructor(
     private storage: Storage,
@@ -130,12 +133,14 @@ export class Handler {
     await this.storage.put(save);
     const away = realMs > AWAY_MIN_MS ? { realMs, gameMinutes } : null;
     this.post({ t: "loaded", save: toClientSave(save), migrated, away });
+    this.postLife(); // after the catch-up above has finished
     this.enrich();
   }
 
   private setSave(save: SaveV3 | null): void {
     this.save = save;
     this.postedRev = save ? save.sim.zones.rev : -1;
+    this.lifeDay = Number.NaN;
     this.failed.clear();
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
@@ -151,6 +156,19 @@ export class Handler {
       this.post({ t: "snapshot", sim, zones });
     } else {
       this.post({ t: "snapshot", sim });
+    }
+  }
+
+  // Walkers, carts, traffic and lights for the current game day; cosmetic, so a failure only costs the visuals.
+  private postLife(): void {
+    if (!this.save) return;
+    try {
+      const day = dayOf(this.save.sim.gameMinutes);
+      this.lifeDay = day;
+      const { trips, traffic, lights } = computeLife(this.save.sim, day);
+      this.post({ t: "life", day, trips, traffic, lights });
+    } catch (e) {
+      this.post({ t: "error", message: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -296,6 +314,7 @@ export class Handler {
     if (sim.gameMinutes === prev) return;
     this.save = { ...this.save, sim };
     this.postSnapshot();
+    if (dayOf(sim.gameMinutes) !== this.lifeDay) this.postLife();
     // Persist once per game hour, not every tick (commands and flush save as well).
     if (Math.floor(sim.gameMinutes / PERSIST_MINUTES) !== Math.floor(prev / PERSIST_MINUTES)) {
       this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));

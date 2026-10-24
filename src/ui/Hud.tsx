@@ -116,6 +116,13 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
           ))}
         </select>
       </label>
+      {overlay.value === "traffic" && (
+        <div class="traffic-legend" title="Жителей в день на участке дороги">
+          <span>мало</span>
+          <span class="traffic-ramp" />
+          <span>много</span>
+        </div>
+      )}
       <details class="hud-more">
         <summary>Подробнее</summary>
         {p && (

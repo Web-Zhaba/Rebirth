@@ -354,7 +354,7 @@ export function dailyEconomy(s: SimState): SimState {
 
 // ---------- aggregates and inspector ----------
 
-const GOOD: Record<string, keyof Stock> = {
+export const GOOD: Record<string, keyof Stock> = {
   woodcutter: "logs",
   sawpit: "planks",
   quarry: "stone",

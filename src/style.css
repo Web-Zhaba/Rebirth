@@ -430,3 +430,19 @@ body {
   color: #9c3a28;
   cursor: pointer;
 }
+
+.traffic-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7a8468;
+}
+
+.traffic-ramp {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #f3e08a, #f0b24a, #e0662f, #a8231c);
+}

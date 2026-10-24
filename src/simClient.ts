@@ -1,4 +1,6 @@
-import { computed, signal } from "@preact/signals";
+import { computed, effect, signal } from "@preact/signals";
+import type { Light, Trip } from "./map/lifeLayer";
+import { BASE_TICK, MS_PER_GAME_MINUTE } from "./sim/clock";
 import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState } from "./sim/types";
 import { makeFrame } from "./world/frame";
@@ -19,6 +21,22 @@ export const economy = computed(() => state.value?.economy ?? null);
 export const services = computed(() => state.value?.services ?? null);
 export const events = computed(() => state.value?.events ?? []);
 export const away = signal<Away | null>(null);
+
+// Visual life of the current game day (cosmetic, from the worker; see PLAN.md section 10).
+export const lifeTrips = signal<Trip[]>([]);
+export const lifeTraffic = signal<Record<number, number>>({});
+export const lifeLights = signal<Light[]>([]);
+// Game minutes, interpolated between snapshots and refreshed every 2 s for the life layer.
+export const gameClock = signal(0);
+const syncClock = () => {
+  const s = state.peek();
+  if (s) gameClock.value = s.gameMinutes + Math.min(Math.max(0, (Date.now() - s.realTime) / MS_PER_GAME_MINUTE), BASE_TICK - 0.001);
+};
+effect(() => {
+  void state.value;
+  syncClock();
+});
+setInterval(syncClock, 2000);
 
 const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module" });
 const send = (msg: ToWorker) => worker.postMessage(msg);
@@ -78,6 +96,11 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       done?.(m.data);
       break;
     }
+    case "life":
+      lifeTrips.value = m.trips;
+      lifeTraffic.value = m.traffic;
+      lifeLights.value = m.lights;
+      break;
     case "resetDone":
       location.reload();
       break;

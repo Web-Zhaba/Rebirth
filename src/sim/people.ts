@@ -198,7 +198,7 @@ export function nearestNode(net: Net, x: number, y: number): { node: number; off
   return best && best.off <= MAX_COMMUTE * WALK_SPEED ? best : null;
 }
 
-class MinHeap {
+export class MinHeap {
   private keys: number[] = [];
   private vals: number[] = [];
   get size(): number {

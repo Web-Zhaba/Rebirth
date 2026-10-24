@@ -49,8 +49,8 @@ export const PLACED_COLORS: Record<PlaceTool, string> = {
   healer: "#cf5d57",
 };
 
-// Map overlay: houses tinted by coverage of one service, or by a value.
-export type Overlay = "none" | ServiceId | "value" | "mood";
+// Map overlay: houses tinted by coverage of one service, or by a value; or roads by commuter traffic.
+export type Overlay = "none" | ServiceId | "value" | "mood" | "traffic";
 export const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: "none", label: "нет" },
   { id: "well", label: "вода (колодец)" },
@@ -60,8 +60,16 @@ export const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: "healer", label: "лекарь" },
   { id: "value", label: "стоимость земли" },
   { id: "mood", label: "настроение" },
+  { id: "traffic", label: "движение" },
 ];
 export const overlay = signal<Overlay>("none");
+// Traffic overlay ramp: commuters per road edge per day -> colour and line width (px); also the HUD legend.
+export const TRAFFIC_STOPS: { n: number; color: string; width: number }[] = [
+  { n: 1, color: "#f3e08a", width: 3 },
+  { n: 5, color: "#f0b24a", width: 5 },
+  { n: 15, color: "#e0662f", width: 8 },
+  { n: 40, color: "#a8231c", width: 11 },
+];
 
 // Reach of the service being placed: where its lot front would be, and how far it serves (m).
 export const placeReach = signal<{ x: number; y: number; range: number; color: string } | null>(null);

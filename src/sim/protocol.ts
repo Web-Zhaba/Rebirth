@@ -1,3 +1,4 @@
+import type { Light, Trip } from "../map/lifeLayer";
 import type { BuildingQuery, City, ClientSave, RoadKind, SimSnapshot, Site, ZoneState, ZoneType } from "./types";
 
 export type Cmd =
@@ -35,5 +36,7 @@ export type FromWorker =
   | { t: "snapshot"; sim: SimSnapshot; zones?: ZoneState }
   | ({ t: "cmdResult"; id: number } & CmdResult)
   | { t: "queryResult"; id: number; data: BuildingQuery | null }
+  // cosmetic, once per game day and on load, never during catch-up; not part of the sim state or saves
+  | { t: "life"; day: number; trips: Trip[]; traffic: Record<number, number>; lights: Light[] }
   | { t: "resetDone" }
   | { t: "error"; message: string };
