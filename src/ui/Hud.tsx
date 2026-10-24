@@ -1,29 +1,23 @@
-import type maplibregl from "maplibre-gl";
-import { overlayOn, type City } from "../game/state";
-import { clearSave } from "../game/save";
-import { stopSaving } from "../game/loop";
-import { hideOverlay, showOverlay } from "../map/cellLayers";
+import { calendar } from "../sim/clock";
+import type { City } from "../sim/types";
+import { reset } from "../simClient";
+import { useGameMinutes } from "./useGameMinutes";
 
-export function Hud({ map, city }: { map: maplibregl.Map; city: City }) {
-  const reset = () => {
-    if (!confirm("Удалить поселение и начать заново?")) return;
-    stopSaving();
-    clearSave();
-    location.reload();
-  };
-  const toggle = () => {
-    overlayOn.value = !overlayOn.value;
-    if (overlayOn.value) showOverlay(map, city.cell);
-    else hideOverlay(map);
+const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
+const pad = (n: number) => String(n).padStart(2, "0");
+
+export function Hud({ city }: { city: City }) {
+  const cal = calendar(useGameMinutes());
+  const onReset = () => {
+    if (confirm("Удалить поселение и начать заново?")) reset();
   };
   return (
     <div class="hud panel">
       <div class="hud-name">{city.name}</div>
-      <div class="hud-date">Основано: {new Date(city.foundedAt).toLocaleDateString("ru-RU")}</div>
-      <button class="link" onClick={toggle}>
-        {overlayOn.value ? "Скрыть клетки" : "Слой клеток"}
-      </button>
-      <button class="link" onClick={reset}>
+      <div class="hud-date">
+        Год {cal.year} · {SEASON_RU[cal.season]}, день {cal.dayOfSeason} · {pad(cal.hour)}:{pad(cal.minute)}
+      </div>
+      <button class="link" onClick={onReset}>
         Начать заново
       </button>
     </div>

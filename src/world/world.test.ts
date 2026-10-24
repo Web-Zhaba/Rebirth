@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { dominantLand } from "./cells";
-import { LANDS, pointInRings, type Land } from "./landcover";
+import { pointInRings } from "./landcover";
 import { lngLatToTile } from "./mercator";
 import { decodeTerrarium, decodeTerrariumPixels, slopeDegrees } from "./terrain";
-
-const shares = (o: Partial<Record<Land, number>>) =>
-  Object.fromEntries(LANDS.map((l) => [l, o[l] ?? 0])) as Record<Land, number>;
 
 describe("terrarium", () => {
   it("decodes known RGB values", () => {
@@ -48,14 +44,5 @@ describe("pointInRings", () => {
     expect(pointInRings(5, 5, [outer, hole])).toBe(false);
     expect(pointInRings(5, 5, [outer])).toBe(true);
     expect(pointInRings(20, 5, [outer, hole])).toBe(false);
-  });
-});
-
-describe("dominantLand", () => {
-  it("water wins at 50% or more", () => {
-    expect(dominantLand(shares({ water: 0.5, forest: 0.4, meadow: 0.1 }))).toBe("water");
-  });
-  it("otherwise picks the plurality of land", () => {
-    expect(dominantLand(shares({ water: 0.4, forest: 0.3, meadow: 0.2, sand: 0.1 }))).toBe("forest");
   });
 });
