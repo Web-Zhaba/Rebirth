@@ -1,4 +1,5 @@
-import { advanceConstruction, WORKERS, WORK_END, WORK_START } from "./roads";
+import { advanceBuildings, spawnBuildings, workforce } from "./growth";
+import { spendOnRoads, WORK_END, WORK_START } from "./roads";
 import type { SimState } from "./types";
 
 // 1 real second = 1 game minute.
@@ -12,8 +13,16 @@ export const DAYS_PER_SEASON = 90;
 export function step(s: SimState): SimState {
   const hour = calendar(s.gameMinutes).hour;
   const working = hour >= WORK_START && hour < WORK_END;
-  const roads = working ? advanceConstruction(s.roads, (WORKERS * BASE_TICK) / 60) : s.roads;
-  return { ...s, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK, roads };
+  let roads = s.roads;
+  let buildings = s.buildings;
+  if (working) {
+    // One work party: roads first, whatever hands are left go to buildings.
+    const r = spendOnRoads(s.roads, (workforce(s.buildings) * BASE_TICK) / 60);
+    roads = r.roads;
+    buildings = advanceBuildings(s.buildings, r.left);
+  }
+  const next = { ...s, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK, roads, buildings };
+  return spawnBuildings(next);
 }
 
 // Caps the gap to `cap` real ms, then runs whole ticks up to `now`.

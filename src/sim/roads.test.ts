@@ -11,6 +11,7 @@ import {
   type TerrainProfile,
 } from "./roads";
 import { emptyZones } from "./zones";
+import { emptyGrowth } from "./growth";
 import type { RoadGraph } from "./types";
 
 const NOW = 1_800_000_000_000;
@@ -217,7 +218,7 @@ describe("construction", () => {
   });
   it("works only 07:00-19:00 game time", () => {
     const g = add(emptyRoads(), [[0, 0], [50, 0]], [1000]);
-    const start = { realTime: NOW, gameMinutes: 0, roads: g, zones: emptyZones() }; // 06:00
+    const start = { realTime: NOW, gameMinutes: 0, roads: g, zones: emptyZones(), ...emptyGrowth(1) }; // 06:00
     const at = (minutes: number) => advanceTo(start, NOW + (minutes / BASE_TICK) * TICK_MS);
     expect(at(60).roads.edges[3].done).toBe(0); // 06:00-07:00 idle
     expect(at(70).roads.edges[3].done).toBeCloseTo(HOURS); // first work tick

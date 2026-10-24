@@ -1,7 +1,9 @@
 import { calendar } from "../sim/clock";
-import { WORK_END, WORK_START, WORKERS } from "../sim/roads";
+import { demand, townStats, workforce } from "../sim/growth";
+import { WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
-import { reset, roads, zones } from "../simClient";
+import { ZONE_COLORS } from "../map/tools";
+import { buildings, reset, roads, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -28,6 +30,15 @@ export function Hud({ city }: { city: City }) {
       }
     }
   }
+  const bs = buildings.value ?? {};
+  const stats = townStats(bs);
+  const workers = workforce(bs);
+  const dem = demand({ buildings: bs });
+  const bars: { label: string; value: number; color: string }[] = [
+    { label: "жильё", value: dem.res, color: ZONE_COLORS.res },
+    { label: "ремесло", value: dem.craft, color: ZONE_COLORS.craft },
+    { label: "торговля", value: dem.trade, color: ZONE_COLORS.trade },
+  ];
   const z = zones.value;
   let res = 0;
   let craft = 0;
@@ -50,14 +61,27 @@ export function Hud({ city }: { city: City }) {
         Год {cal.year} · {SEASON_RU[cal.season]}, день {cal.dayOfSeason} · {pad(cal.hour)}:{pad(cal.minute)}
       </div>
       <div class="hud-date">
-        Строители: {WORKERS} · работают {pad(WORK_START)}–{pad(WORK_END)}
+        Население: {stats.pop} (из них в палатках: {Math.max(0, 10 - stats.housing)})
+      </div>
+      <div class="hud-date">
+        Строители: {workers} · работают {pad(WORK_START)}–{pad(WORK_END)}
+      </div>
+      <div class="demand" title="Спрос на новые здания">
+        {bars.map((b) => (
+          <div class="demand-row" key={b.label}>
+            <span class="demand-label">{b.label}</span>
+            <span class="demand-track">
+              <span class="demand-fill" style={{ width: `${(Math.min(5, Math.max(0, b.value)) / 5) * 100}%`, background: b.color }} />
+            </span>
+          </div>
+        ))}
       </div>
       <div class="hud-date">
         Зоны: жильё {res} · ремесло {craft} · торговля {trade} · поля {ga} га
       </div>
       {queue > 0 && (
         <div class="hud-date">
-          В очереди: {queue} {plural(queue)} · ~{Math.ceil(remaining / WORKERS)} ч работы
+          В очереди: {queue} {plural(queue)} · ~{Math.ceil(remaining / workers)} ч работы
         </div>
       )}
       <button class="link" onClick={onReset}>

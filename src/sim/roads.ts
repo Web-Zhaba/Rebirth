@@ -315,7 +315,8 @@ export function workableEdges(g: RoadGraph): number[] {
 }
 
 // Spends person-hours FIFO on workable edges; leftovers carry to the next one.
-export function advanceConstruction(g: RoadGraph, personHours: number): RoadGraph {
+// Returns the graph and the person-hours nobody could use (no reachable work).
+export function spendOnRoads(g: RoadGraph, personHours: number): { roads: RoadGraph; left: number } {
   let edges = g.edges;
   let copied = false;
   let left = personHours;
@@ -336,5 +337,7 @@ export function advanceConstruction(g: RoadGraph, personHours: number): RoadGrap
       left = 0;
     }
   }
-  return copied ? { ...g, edges } : g;
+  return { roads: copied ? { ...g, edges } : g, left };
 }
+
+export const advanceConstruction = (g: RoadGraph, personHours: number): RoadGraph => spendOnRoads(g, personHours).roads;

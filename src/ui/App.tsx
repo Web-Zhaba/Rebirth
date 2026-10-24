@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { city } from "../simClient";
 import { AwayNotice } from "./AwayNotice";
+import { BuildingPanel } from "./BuildingPanel";
 import { FoundCity } from "./FoundCity";
 import { Hud } from "./Hud";
 import { NightTint } from "./NightTint";
@@ -15,6 +16,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <NightTint />}
       {c && <TerrainInspector map={map} />}
       {c && <RoadTools />}
+      {c && <BuildingPanel />}
       <AwayNotice />
     </>
   );

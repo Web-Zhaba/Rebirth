@@ -99,9 +99,9 @@ Each milestone ends with something playable in the browser.
 | S0 | New foundation | Local metric frame, game clock with day/night tint, worker-hosted sim with command/snapshot protocol, save v3 with migration from v2, M3 hex economy removed. Unit tests for frame conversion and the worker protocol. |
 | S1 | Roads | Draw roads with snapping and intersection splitting, cost from terrain, rendered at real width; delete roads; graph persisted. Tests for graph editing and costs. |
 | S2 | Zones | Zone cells generated along roads, blocked correctly by water/steep land/other roads; paint and unpaint zones; fields as areas. |
-| S3 | Growth | Demand model, buildings grow on lots from templates, construction with materials, 2.5D buildings at real size. |
+| S3 | Growth | Demand model, buildings grow on lots from templates, construction by the work party (labor only), 2.5D buildings at real size. **Done.** Population is a placeholder (houses assumed full, work party = 10 + 1 per house) until S4; materials move to S5. |
 | S4 | Residents | Individual residents and households with life events, commuting, unemployment, migration; resident and household inspector. |
-| S5 | Production | Goods chains, storage, seasons, shortages affecting happiness. |
+| S5 | Production | Goods chains, storage, seasons, shortages affecting happiness; construction consumes materials (logs, planks, stone). |
 | S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. |
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. |
 | S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. |

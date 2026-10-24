@@ -1,6 +1,8 @@
 import { LANDS } from "../world/landcover";
+import { BUILDINGS } from "./buildings";
+import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { emptyRoads, ROAD_KINDS } from "./roads";
-import type { City, Field, RoadEdge, RoadGraph, RoadNode, SaveV3, TerrainInfo, ZoneBlock, ZoneCell, ZoneState } from "./types";
+import type { Building, City, Field, RoadEdge, RoadGraph, RoadNode, SaveV3, TerrainInfo, ZoneBlock, ZoneCell, ZoneState, ZoneType } from "./types";
 import { emptyZones } from "./zones";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -103,6 +105,62 @@ function parseZones(v: unknown): ZoneState | null {
   return { cells, fields, terrain, rev: v.rev as number };
 }
 
+const STATES = ["planned", "building", "active"];
+
+function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> | null {
+  if (!isRecord(v) || !Number.isInteger(nextId) || (nextId as number) < 1) return null;
+  const out: Record<number, Building> = {};
+  for (const [key, raw] of Object.entries(v)) {
+    if (!isRecord(raw) || !Number.isInteger(raw.id) || String(raw.id) !== key) return null;
+    const id = raw.id as number;
+    if (id < 1 || id >= (nextId as number)) return null;
+    if (typeof raw.template !== "string" || !Object.hasOwn(BUILDINGS, raw.template)) return null;
+    if (raw.zone !== BUILDINGS[raw.template].zone) return null;
+    if (raw.side !== 1 && raw.side !== -1) return null;
+    const lot = raw.lot;
+    if (!isRecord(lot) || !isNum(lot.cx) || !isNum(lot.cy) || !isNum(lot.angle)) return null;
+    if (!Number.isInteger(lot.w) || !Number.isInteger(lot.d) || (lot.w as number) < 1 || (lot.d as number) < 1) return null;
+    if (!Array.isArray(raw.footprint) || raw.footprint.length !== 4 || !raw.footprint.every(isPoint)) return null;
+    if (!isNum(raw.height) || raw.height <= 0) return null;
+    if (typeof raw.state !== "string" || !STATES.includes(raw.state)) return null;
+    if (!isNum(raw.labor) || raw.labor <= 0 || !isNum(raw.done) || raw.done < 0 || raw.done > raw.labor) return null;
+    if (!isNum(raw.created)) return null;
+    out[id] = {
+      id,
+      template: raw.template,
+      zone: raw.zone as ZoneType,
+      lot: { cx: lot.cx, cy: lot.cy, angle: lot.angle, w: lot.w as number, d: lot.d as number },
+      side: raw.side,
+      footprint: (raw.footprint as [number, number][]).map((p) => [p[0], p[1]]),
+      height: raw.height,
+      state: raw.state as Building["state"],
+      labor: raw.labor,
+      done: raw.done,
+      created: raw.created,
+    };
+  }
+  return out;
+}
+
+// Saves from before growth have none of these fields: defaults, not an error. Broken buildings
+// reset the buildings only; a broken generator state or spawn clock is replaced by a default.
+function parseGrowth(sim: Record<string, unknown>, city: City) {
+  const g = emptyGrowth(seedOf(city.foundedAt));
+  if (sim.buildings !== undefined) {
+    const b = parseBuildings(sim.buildings, sim.nextBuildingId);
+    if (b) {
+      g.buildings = b;
+      g.nextBuildingId = sim.nextBuildingId as number;
+    }
+  }
+  if (Number.isInteger(sim.rng) && (sim.rng as number) >= 0 && (sim.rng as number) < 2 ** 32) g.rng = sim.rng as number;
+  const ls = sim.lastSpawn;
+  if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
+    g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };
+  } else g.lastSpawn = { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN };
+  return g;
+}
+
 export function parseSaveV3(value: unknown, now: number): SaveV3 | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
@@ -118,7 +176,7 @@ export function parseSaveV3(value: unknown, now: number): SaveV3 | null {
   // Cells are rebuilt from roads on load, so broken zone data only costs the paint,
   // never the whole town (a rejected save would send the player back to founding).
   const zones = parseZones(sim.zones) ?? emptyZones();
-  return { version: 3, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones } };
+  return { version: 3, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...parseGrowth(sim, city) } };
 }
 
 // Old localStorage saves (v1, v2): keep the city, start a fresh village.
@@ -134,5 +192,5 @@ export function migrateLegacy(raw: string, now: number): SaveV3 | null {
   if (o.version !== 1 && o.version !== 2) return null;
   const city = parseCity(o.city);
   if (!city) return null;
-  return { version: 3, city, sim: { realTime: now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() } };
+  return { version: 3, city, sim: { realTime: now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(city.foundedAt)) } };
 }

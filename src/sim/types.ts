@@ -67,11 +67,32 @@ export interface ZoneState {
   rev: number; // bumped on every change of cells, fields or terrain
 }
 
+export type BuildingState = "planned" | "building" | "active";
+
+export interface Building {
+  id: number;
+  template: string; // key of BUILDINGS
+  zone: ZoneType;
+  // Local meters; centre of the lot rectangle, angle = road direction.
+  lot: { cx: number; cy: number; angle: number; w: number; d: number };
+  side: 1 | -1; // side of the road, as in ZoneCell
+  footprint: [number, number][]; // 4 corners, counter-clockwise
+  height: number; // m
+  state: BuildingState;
+  labor: number; // person-hours
+  done: number;
+  created: number; // gameMinutes
+}
+
 export interface SimState {
   realTime: number; // epoch ms simulated up to
   gameMinutes: number; // since founding
   roads: RoadGraph;
   zones: ZoneState;
+  buildings: Record<number, Building>;
+  nextBuildingId: number;
+  rng: number; // uint32 state of the growth generator
+  lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
 }
 
 // What the worker streams every tick; zones travel separately, only when `rev` changed.

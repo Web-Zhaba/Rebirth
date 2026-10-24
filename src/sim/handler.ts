@@ -1,4 +1,5 @@
 import { advanceTo } from "./clock";
+import { emptyGrowth, reconcile, seedOf } from "./growth";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSaveV3 } from "./save";
@@ -46,7 +47,7 @@ export class Handler {
           const save: SaveV3 = {
             version: 3,
             city: msg.city,
-            sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() },
+            sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(msg.city.foundedAt)) },
           };
           this.setSave(save);
           await this.storage.put(save);
@@ -88,7 +89,8 @@ export class Handler {
     const gameMinutes = sim.gameMinutes - save.sim.gameMinutes;
     // Cells are derived data: rebuild them so saves without zones (or with stale ones) are consistent.
     const z = sim.zones;
-    save = { ...save, sim: { ...sim, zones: { ...z, cells: regenerateCells(sim.roads, z.cells, z.fields, z.terrain) } } };
+    const cells = regenerateCells(sim.roads, z.cells, z.fields, z.terrain);
+    save = { ...save, sim: { ...sim, zones: { ...z, cells }, buildings: reconcile(sim.buildings, sim.roads, cells) } };
     this.setSave(save);
     await this.storage.put(save);
     const away = realMs > AWAY_MIN_MS ? { realMs, gameMinutes } : null;
@@ -162,7 +164,8 @@ export class Handler {
           if (Object.keys(got).length === 0) continue;
           const z = cur.sim.zones;
           const zones = this.rezone({ ...z, terrain: { ...z.terrain, ...got } }, cur.sim.roads, z.fields);
-          this.save = { ...cur, sim: { ...cur.sim, zones } };
+          const buildings = reconcile(cur.sim.buildings, cur.sim.roads, zones.cells);
+          this.save = { ...cur, sim: { ...cur.sim, zones, buildings } };
           this.postSnapshot();
           try {
             await this.storage.put(this.save);
@@ -212,7 +215,8 @@ export class Handler {
       } else {
         return reject("Неизвестная команда");
       }
-      this.save = { ...this.save, sim: { ...sim, roads: next, zones } };
+      const buildings = reconcile(sim.buildings, next, zones.cells);
+      this.save = { ...this.save, sim: { ...sim, roads: next, zones, buildings } };
       this.postSnapshot();
       try {
         await this.storage.put(this.save);

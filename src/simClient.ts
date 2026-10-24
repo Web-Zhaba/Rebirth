@@ -9,6 +9,9 @@ export const city = signal<City | null>(null);
 export const state = signal<SimState | null>(null);
 export const roads = computed(() => state.value?.roads ?? null);
 export const zones = computed(() => state.value?.zones ?? null);
+export const buildings = computed(() => state.value?.buildings ?? null);
+// Changes only when buildings appear or vanish (lots never move), not on every construction tick.
+export const buildingSet = computed(() => Object.keys(state.value?.buildings ?? {}).join(","));
 export const frame = computed(() => (city.value ? makeFrame(city.value.lat, city.value.lng) : null));
 export const away = signal<Away | null>(null);
 

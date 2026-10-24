@@ -40,7 +40,11 @@ export function RoadTools() {
   const msg = toolMsg.value;
   return (
     <div class="road-tools panel">
-      {msg ? <div class="road-msg">{msg}</div> : active && <div class="road-hint">{HINT[active]}</div>}
+      {msg ? (
+        <div class="road-msg">{msg}</div>
+      ) : (
+        <div class="road-hint">{active ? HINT[active] : "Правая кнопка — наклон"}</div>
+      )}
       <div class="tool-groups">
         {GROUPS.map((g) => (
           <div class="road-buttons" key={g.title} role="group" aria-label={g.title}>

@@ -2,6 +2,7 @@ import "./style.css";
 import { render, h } from "preact";
 import { effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
+import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachRoadLayer } from "./map/roadLayer";
 import { attachRoadTool } from "./map/roadTool";
@@ -16,6 +17,7 @@ const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
 attachZoneLayer(map); // zones beneath everything else we add
 attachRoadLayer(map); // before the city marker so roads draw beneath it
+attachBuildingLayer(map);
 attachCityMarker(map);
 attachRoadTool(map);
 attachZoneTool(map);

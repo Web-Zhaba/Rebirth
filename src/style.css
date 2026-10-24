@@ -240,3 +240,65 @@ body {
 .road-hint {
   text-align: center;
 }
+
+.demand {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0;
+}
+
+.demand-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #7a8468;
+}
+
+.demand-label {
+  width: 56px;
+}
+
+.demand-track {
+  flex: 1;
+  min-width: 90px;
+  height: 6px;
+  border-radius: 3px;
+  background: #e3e7d3;
+  overflow: hidden;
+}
+
+.demand-fill {
+  display: block;
+  height: 100%;
+}
+
+.building-panel {
+  position: absolute;
+  right: 12px;
+  top: 120px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.building-name {
+  font-weight: 600;
+  font-size: 15px;
+  padding-right: 20px;
+}
+
+.building-panel .close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  color: #7a8468;
+  cursor: pointer;
+}

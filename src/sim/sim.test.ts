@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, daylight, OFFLINE_CAP, TICK_MS } from "./clock";
 import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
+import { emptyGrowth, seedOf } from "./growth";
 import { emptyRoads } from "./roads";
 import { emptyZones } from "./zones";
 import { migrateLegacy, parseSaveV3 } from "./save";
@@ -9,6 +10,7 @@ import type { City, RoadGraph, SaveV3 } from "./types";
 
 const NOW = 1_800_000_000_000;
 const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
+const growth = () => emptyGrowth(seedOf(city.foundedAt));
 
 // Two connected edges starting at the founding point, plus one isolated edge.
 const roadsInProgress = (): RoadGraph => ({
@@ -29,7 +31,7 @@ const roadsInProgress = (): RoadGraph => ({
 
 describe("clock", () => {
   it("one-shot equals many increasing calls", () => {
-    const start = { realTime: NOW, gameMinutes: 0, roads: roadsInProgress(), zones: emptyZones() };
+    const start = { realTime: NOW, gameMinutes: 0, roads: roadsInProgress(), zones: emptyZones(), ...growth() };
     let t = NOW;
     let s = start;
     let seed = 7;
@@ -42,11 +44,11 @@ describe("clock", () => {
     expect(s.roads.edges[6].done).toBeGreaterThan(0); // construction really ran
   });
   it("runs whole ticks only", () => {
-    const s = advanceTo({ realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() }, NOW + 25_000);
-    expect(s).toEqual({ realTime: NOW + 2 * TICK_MS, gameMinutes: 2 * BASE_TICK, roads: emptyRoads(), zones: emptyZones() });
+    const s = advanceTo({ realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() }, NOW + 25_000);
+    expect(s).toEqual({ realTime: NOW + 2 * TICK_MS, gameMinutes: 2 * BASE_TICK, roads: emptyRoads(), zones: emptyZones(), ...growth() });
   });
   it("caps offline gap", () => {
-    const s = advanceTo({ realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() }, NOW + 3 * OFFLINE_CAP);
+    const s = advanceTo({ realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() }, NOW + 3 * OFFLINE_CAP);
     expect(s.gameMinutes).toBe((OFFLINE_CAP / 1000) * 1);
     expect(s.realTime).toBe(NOW + 3 * OFFLINE_CAP);
   });
@@ -70,13 +72,13 @@ describe("clock", () => {
 });
 
 describe("save", () => {
-  const valid: SaveV3 = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50, roads: roadsInProgress(), zones: emptyZones() } };
+  const valid: SaveV3 = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50, roads: roadsInProgress(), zones: emptyZones(), ...growth() } };
   it("accepts valid", () => {
     expect(parseSaveV3(valid, NOW)).toEqual(valid);
   });
   it("accepts a v3 save without roads as an empty graph", () => {
     const old = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50 } };
-    expect(parseSaveV3(old, NOW)).toEqual({ ...old, sim: { ...old.sim, roads: emptyRoads(), zones: emptyZones() } });
+    expect(parseSaveV3(old, NOW)).toEqual({ ...old, sim: { ...old.sim, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
   });
   it("rejects broken roads", () => {
     const withRoads = (roads: unknown) => ({ ...valid, sim: { ...valid.sim, roads } });
@@ -105,7 +107,7 @@ describe("save", () => {
     for (const version of [1, 2]) {
       const raw = JSON.stringify({ version, city: legacyCity, economy: { food: 5 } });
       const s = migrateLegacy(raw, NOW)!;
-      expect(s).toEqual({ version: 3, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() } });
+      expect(s).toEqual({ version: 3, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
       expect(s.city).not.toHaveProperty("cell");
     }
   });
@@ -151,7 +153,7 @@ describe("handler", () => {
     expect((get() as SaveV3).version).toBe(3);
   });
   it("load existing reports away", async () => {
-    const saved: SaveV3 = { version: 3, city, sim: { realTime: NOW - 3_600_000, gameMinutes: 100, roads: emptyRoads(), zones: emptyZones() } };
+    const saved: SaveV3 = { version: 3, city, sim: { realTime: NOW - 3_600_000, gameMinutes: 100, roads: emptyRoads(), zones: emptyZones(), ...growth() } };
     const { h, out, get } = setup(saved);
     await h.handle({ t: "load", legacy: null, now: NOW });
     const m = out[0] as Extract<FromWorker, { t: "loaded" }>;
@@ -169,7 +171,7 @@ describe("handler", () => {
     const { h, out, get } = setup();
     await h.handle({ t: "found", city, now: NOW });
     expect(out[0]).toMatchObject({ t: "loaded", migrated: false, away: null });
-    expect(get()).toEqual({ version: 3, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones() } });
+    expect(get()).toEqual({ version: 3, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
   });
   it("tick posts snapshot only when time advanced", async () => {
     const { h, out } = setup();
@@ -179,7 +181,7 @@ describe("handler", () => {
     h.tick(NOW + 5000);
     expect(out).toEqual([]);
     h.tick(NOW + 10_000);
-    expect(out).toEqual([{ t: "snapshot", sim: { realTime: NOW + 10_000, gameMinutes: 10, roads: emptyRoads() } }]);
+    expect(out).toEqual([{ t: "snapshot", sim: { realTime: NOW + 10_000, gameMinutes: 10, roads: emptyRoads(), ...growth() } }]);
     h.tick(NOW + 12_000);
     expect(out.length).toBe(1);
   });

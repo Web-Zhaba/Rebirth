@@ -28,3 +28,5 @@ const EQUATOR_M = 40075016.686;
 export const mapMpp = (lat: number, zoom: number) => (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
 export const ZONE_COLORS: Record<ZoneType, string> = { res: "#6fb35a", craft: "#d99a3b", trade: "#4f8fd0" };
+
+export const BUILDING_COLORS: Record<ZoneType, string> = { res: "#9b7653", craft: "#7f7466", trade: "#a8784f" };

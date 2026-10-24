@@ -1,0 +1,290 @@
+import { BUILDINGS, FRONT_SETBACK, templatesOf, type BuildingTemplate } from "./buildings";
+import { distToEdge, ROAD_KINDS } from "./roads";
+import type { Building, RoadEdge, RoadGraph, SimState, ZoneCell, ZoneType } from "./types";
+import { CELL_SIZE } from "./zones";
+
+export const FOUNDERS = 10; // founding party: tents and the first work party
+export const SPAWN_INTERVAL = 60; // game minutes between new buildings of one zone type
+export const NO_SPAWN = -SPAWN_INTERVAL; // lastSpawn value that allows a spawn at once
+
+// All demand tuning lives here.
+export const DEMAND = {
+  basePop: 30,
+  popPerJob: 2,
+  houseSize: 5, // residents per household, for the res demand count
+  craftShare: 0.25, // craft jobs wanted per resident
+  craftJobs: 3, // jobs per workshop, for the craft demand count
+  tradeShare: 0.08,
+  tradeJobs: 2,
+};
+
+const ZONE_ORDER: ZoneType[] = ["res", "craft", "trade"];
+const EPS = 1e-9;
+const BUCKET = 32; // m, spatial hash
+const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occupancy
+const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
+const KEEP_SHARE = 0.6;
+
+type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn">;
+
+export const emptyGrowth = (seed: number): Growth => ({
+  buildings: {},
+  nextBuildingId: 1,
+  rng: seed >>> 0,
+  lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
+});
+
+export const seedOf = (foundedAt: number): number => (Math.floor(foundedAt) ^ 0x9e3779b9) >>> 0;
+
+// mulberry32: returns the next value in [0, 1) and the next state.
+export function nextRandom(state: number): [number, number] {
+  const s = (state + 0x6d2b79f5) >>> 0;
+  let t = Math.imul(s ^ (s >>> 15), s | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return [((t ^ (t >>> 14)) >>> 0) / 4294967296, s];
+}
+
+// ---------- stats and demand ----------
+
+export interface TownStats {
+  housing: number; // capacity of finished houses
+  houseCap: number; // capacity of all houses, finished or not
+  pop: number;
+  craftJobs: number; // over all craft buildings, finished or not
+  tradeJobs: number;
+}
+
+export function townStats(buildings: Record<number, Building>): TownStats {
+  let housing = 0;
+  let houseCap = 0;
+  let craftJobs = 0;
+  let tradeJobs = 0;
+  for (const b of Object.values(buildings)) {
+    const t = BUILDINGS[b.template];
+    if (!t) continue;
+    if (b.zone === "res") {
+      houseCap += t.residents;
+      if (b.state === "active") housing += t.residents;
+    } else if (b.zone === "craft") craftJobs += t.jobs;
+    else tradeJobs += t.jobs;
+  }
+  // Placeholder until residents exist (S4): houses are assumed full.
+  return { housing, houseCap, pop: FOUNDERS + housing, craftJobs, tradeJobs };
+}
+
+export interface Demand {
+  res: number;
+  craft: number;
+  trade: number;
+}
+
+// Wanted new buildings per zone type (may be negative).
+export function demand(s: { buildings: Record<number, Building> }): Demand {
+  const st = townStats(s.buildings);
+  const targetPop = DEMAND.basePop + DEMAND.popPerJob * (st.craftJobs + st.tradeJobs);
+  return {
+    res: (targetPop - (FOUNDERS + st.houseCap)) / DEMAND.houseSize,
+    craft: (DEMAND.craftShare * st.pop - st.craftJobs) / DEMAND.craftJobs,
+    trade: (DEMAND.tradeShare * st.pop - st.tradeJobs) / DEMAND.tradeJobs,
+  };
+}
+
+// Work party: the founders plus one hand per finished house (until residents work, S4).
+export function workforce(buildings: Record<number, Building>): number {
+  let n = FOUNDERS;
+  for (const b of Object.values(buildings)) if (b.zone === "res" && b.state === "active") n++;
+  return n;
+}
+
+// ---------- geometry ----------
+
+const bucketKey = (bx: number, by: number) => bx * 65536 + by;
+const bucketOf = (v: number) => Math.floor(v / BUCKET);
+
+// Is (x, y) inside the building's lot rectangle expanded by `margin`?
+function inLot(b: Building, x: number, y: number, margin: number): boolean {
+  const { cx, cy, angle, w, d } = b.lot;
+  const dx = x - cx;
+  const dy = y - cy;
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return Math.abs(dx * c + dy * s) <= (CELL_SIZE * w) / 2 + margin && Math.abs(-dx * s + dy * c) <= (CELL_SIZE * d) / 2 + margin;
+}
+
+function hashBy<T>(items: Iterable<T>, pos: (t: T) => [number, number]): Map<number, T[]> {
+  const m = new Map<number, T[]>();
+  for (const it of items) {
+    const [x, y] = pos(it);
+    const k = bucketKey(bucketOf(x), bucketOf(y));
+    const list = m.get(k);
+    if (list) list.push(it);
+    else m.set(k, [it]);
+  }
+  return m;
+}
+
+function near<T>(h: Map<number, T[]>, x: number, y: number): T[] {
+  const out: T[] = [];
+  const bx = bucketOf(x);
+  const by = bucketOf(y);
+  for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) out.push(...(h.get(bucketKey(bx + ox, by + oy)) ?? []));
+  return out;
+}
+
+// A cell is occupied when its centre lies in a building's lot rectangle (+1 m).
+function occupancy(buildings: Record<number, Building>): (x: number, y: number) => boolean {
+  const list = Object.values(buildings);
+  if (list.length === 0) return () => false;
+  const h = hashBy(list, (b) => [b.lot.cx, b.lot.cy]);
+  return (x, y) => near(h, x, y).some((b) => inLot(b, x, y, LOT_MARGIN));
+}
+
+export function occupiedKeys(cells: readonly ZoneCell[], buildings: Record<number, Building>): Set<string> {
+  const occ = occupancy(buildings);
+  const out = new Set<string>();
+  for (const c of cells) if (!c.block && c.zone !== "none" && occ(c.cx, c.cy)) out.add(c.key);
+  return out;
+}
+
+// Unit vector pointing away from the road on `side`.
+const away = (angle: number, side: 1 | -1): [number, number] => [-Math.sin(angle) * side, Math.cos(angle) * side];
+
+function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id: number, now: number): Building {
+  const { side, angle } = c0;
+  const cx = (c0.cx + c1.cx) / 2;
+  const cy = (c0.cy + c1.cy) / 2;
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  const [vx, vy] = away(angle, side);
+  const v0 = -(CELL_SIZE * t.d) / 2 + FRONT_SETBACK;
+  const v1 = v0 + t.deep;
+  const h = t.along / 2;
+  const at = (u: number, v: number): [number, number] => [cx + ux * u + vx * v, cy + uy * u + vy * v];
+  const pts: [number, number][] = [at(-h, v0), at(h, v0), at(h, v1), at(-h, v1)];
+  // (u, v) is right-handed on the left side of the road only.
+  const footprint = side === 1 ? pts : pts.reverse();
+  return {
+    id,
+    template: t.id,
+    zone: t.zone,
+    lot: { cx, cy, angle, w: t.w, d: t.d },
+    side,
+    footprint,
+    height: t.height,
+    state: "planned",
+    labor: t.labor,
+    done: 0,
+    created: now,
+  };
+}
+
+// ---------- spawning ----------
+
+interface Lot {
+  c0: ZoneCell;
+  fits: [BuildingTemplate, ZoneCell][]; // template and the far corner cell of its lot
+}
+
+function findLots(s: SimState, zone: ZoneType): Lot[] {
+  const built = new Set<number>();
+  for (const e of Object.values(s.roads.edges)) if (e.done >= e.labor) built.add(e.id);
+  const occ = occupancy(s.buildings);
+  const free = new Map<string, ZoneCell>();
+  for (const c of s.zones.cells) {
+    if (c.zone === zone && !c.block && built.has(c.edge) && !occ(c.cx, c.cy)) free.set(c.key, c);
+  }
+  const starts = [...free.values()].filter((c) => c.depth === 0);
+  starts.sort((p, q) => p.edge - q.edge || q.side - p.side || p.i - q.i);
+  const tpls = templatesOf(zone);
+  const lots: Lot[] = [];
+  for (const c0 of starts) {
+    const fits: Lot["fits"] = [];
+    for (const t of tpls) {
+      let ok = true;
+      for (let a = 0; a < t.w && ok; a++) {
+        for (let b = 0; b < t.d && ok; b++) ok = free.has(`${c0.edge}:${c0.side}:${c0.i + a}:${b}`);
+      }
+      if (ok) fits.push([t, free.get(`${c0.edge}:${c0.side}:${c0.i + t.w - 1}:${t.d - 1}`)!]);
+    }
+    if (fits.length > 0) lots.push({ c0, fits });
+  }
+  return lots;
+}
+
+// At most one new building per zone type per game hour, when demand asks for it.
+export function spawnBuildings(s: SimState): SimState {
+  let cur = s;
+  for (const zone of ZONE_ORDER) {
+    if (cur.gameMinutes - cur.lastSpawn[zone] < SPAWN_INTERVAL) continue;
+    if (demand(cur)[zone] < 1) continue;
+    const lots = findLots(cur, zone);
+    if (lots.length === 0) continue;
+    const [r1, rng1] = nextRandom(cur.rng);
+    const [r2, rng2] = nextRandom(rng1);
+    const lot = lots[Math.min(lots.length - 1, Math.floor(r1 * lots.length))];
+    const [t, far] = lot.fits[Math.min(lot.fits.length - 1, Math.floor(r2 * lot.fits.length))];
+    const id = cur.nextBuildingId;
+    cur = {
+      ...cur,
+      rng: rng2,
+      nextBuildingId: id + 1,
+      buildings: { ...cur.buildings, [id]: makeBuilding(t, lot.c0, far, id, cur.gameMinutes) },
+      lastSpawn: { ...cur.lastSpawn, [zone]: cur.gameMinutes },
+    };
+  }
+  return cur;
+}
+
+// ---------- construction ----------
+
+// Spends person-hours FIFO (lowest id first); returns the same record when nothing changed.
+export function advanceBuildings(buildings: Record<number, Building>, personHours: number): Record<number, Building> {
+  let out = buildings;
+  let left = personHours;
+  for (const key of Object.keys(buildings)) {
+    if (left <= EPS) break;
+    const b = buildings[Number(key)];
+    if (b.state === "active") continue;
+    const remain = b.labor - b.done;
+    const spend = Math.max(0, Math.min(left, remain));
+    left -= spend;
+    const done = spend >= remain - EPS ? b.labor : b.done + spend;
+    if (out === buildings) out = { ...buildings };
+    out[b.id] = { ...b, done, state: done >= b.labor ? "active" : "building" };
+  }
+  return out;
+}
+
+// ---------- reconcile ----------
+
+// Drops buildings whose road or zoned ground is gone (no refund). Returns the same record when all survive.
+export function reconcile(buildings: Record<number, Building>, roads: RoadGraph, cells: readonly ZoneCell[]): Record<number, Building> {
+  const list = Object.values(buildings);
+  if (list.length === 0) return buildings;
+  const edges = Object.values(roads.edges);
+  const hash = hashBy(cells, (c) => [c.cx, c.cy]);
+  let out = buildings;
+  for (const b of list) {
+    if (!survives(b, edges, roads, hash)) {
+      if (out === buildings) out = { ...buildings };
+      delete out[b.id];
+    }
+  }
+  return out;
+}
+
+function survives(b: Building, edges: RoadEdge[], roads: RoadGraph, hash: Map<number, ZoneCell[]>): boolean {
+  const [vx, vy] = away(b.lot.angle, b.side);
+  const front = (CELL_SIZE * b.lot.d) / 2;
+  const fx = b.lot.cx - vx * front;
+  const fy = b.lot.cy - vy * front;
+  if (!edges.some((e) => distToEdge(roads, e, fx, fy) <= ROAD_KINDS[e.kind].width / 2 + ROAD_SLACK)) return false;
+  let total = 0;
+  let good = 0;
+  for (const c of near(hash, b.lot.cx, b.lot.cy)) {
+    if (!inLot(b, c.cx, c.cy, LOT_MARGIN)) continue;
+    total++;
+    if (!c.block && c.zone === b.zone) good++;
+  }
+  return total > 0 && good / total >= KEEP_SHARE - EPS;
+}

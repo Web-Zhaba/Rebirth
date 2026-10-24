@@ -2,7 +2,8 @@ import type maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
 import { cellCorners } from "../sim/zones";
-import { frame, zones } from "../simClient";
+import { occupiedKeys } from "../sim/growth";
+import { buildingSet, frame, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { isBrushTool, MIN_ZONE_ZOOM, tool, ZONE_COLORS } from "./tools";
 
@@ -65,7 +66,7 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       type: "fill",
       source: "zone-cells",
       minzoom: MIN_ZONE_ZOOM,
-      paint: { "fill-color": FILL_COLOR as never, "fill-opacity": 0.45 },
+      paint: { "fill-color": FILL_COLOR as never, "fill-opacity": ["case", ["get", "occ"], 0.2, 0.45] as never },
     });
     map.addLayer({
       id: "zones-grid",
@@ -105,12 +106,14 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       const z = zones.value;
       const f = frame.value;
       const preview = paintPreview.value;
+      buildingSet.value; // re-run when lots change; lots are drawn fainter, as plots
       if (!z || !f) return;
+      const occupied = occupiedKeys(z.cells, state.peek()?.buildings ?? {});
       const features: GeoJSON.Feature[] = [];
       for (const c of z.cells) {
         if (c.block) continue;
         const zone = preview?.get(c.key) ?? c.zone;
-        if (zone !== "none") features.push(polygon(ringOf(c, f), { zone }));
+        if (zone !== "none") features.push(polygon(ringOf(c, f), { zone, occ: occupied.has(c.key) }));
       }
       source("zone-cells")?.setData({ type: "FeatureCollection", features });
       if (ringCache.size > z.cells.length * 3 + 1000) {
