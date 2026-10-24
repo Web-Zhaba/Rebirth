@@ -1,6 +1,7 @@
 import { newTally, observe, summarize, type Tally } from "./away";
 import { advanceTo, BASE_TICK, capGap, MS_PER_GAME_MINUTE, TICK_MS } from "./clock";
 import { BUILDINGS } from "./buildings";
+import { digInfos, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, demand, emptyGrowth, placeBuilding, reconcile, seedOf } from "./growth";
@@ -28,10 +29,10 @@ const CHUNK_TICKS = 144; // one game day per chunk
 
 // What the main thread sees: aggregates instead of individual residents.
 export function toSnapshot(sim: SimState): SimSnapshot {
-  const { zones: _z, chronicle: _c, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, ...rest } = sim;
+  const { zones: _z, chronicle: _c, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, finds: _f, ...rest } = sim;
   const houseMood: Record<number, number> = {};
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
-  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood };
+  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -347,6 +348,15 @@ export class Handler {
         if (!ok.ok) return reject(ok.reason);
         const placed = placeBuilding(sim, t, cmd.edge, cmd.side, cmd.i, cmd.site);
         this.save = { ...this.save, sim: placed };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "recordFinds") {
+        const r = recordFinds(sim, cmd);
+        if (!r.ok) return reject(r.reason);
+        if (r.sim === sim) {
+          this.post({ t: "cmdResult", id, ok: true }); // nothing new: no save
+          return;
+        }
+        this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");

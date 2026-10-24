@@ -105,7 +105,7 @@ Each milestone ends with something playable in the browser.
 | S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. **Done** (section 9). |
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. **Done** (section 10). Worker posts a cosmetic `life` message per game day and on load (up to 300 walkers, carts per load capped at 6 per producer, traffic over all commuters, lights); nothing of it is in `SimState` or saves; the «движение» overlay joins the S6 switch. |
 | S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. **Done** (section 11). Catch-up runs in one-day chunks with `progress` messages (commands queue until it ends); `SimState.chronicle` (cap 1000, `addChronicle` in `sim/chronicle.ts` for E1) is saved and sent in snapshots only when it grows; the `Away` summary is counted step by step in `sim/away.ts`; a full 24 h catch-up of ~165 people took ~0.6 s in Node. |
-| E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. |
+| E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. **Done** (section 12). The disc grows 40 m² × PACE = 160 m² per digger-hour from 15 to 120 m (about 8 days with 3 diggers); the main thread reports finds with `recordFinds` (saved in `SimState.finds`), and a rebuild on a foundation skips stone and saves 25 % labor. |
 | E2 | Notebook | Real Wikipedia entries tied to excavated places, plus the town chronicle. |
 
 ## 8. S5 design: production
@@ -296,7 +296,7 @@ selected service is drawn as its covered road edges.
 ## 12. E1 design: excavation
 
 - **Dig site (Раскоп):** placed building, 6 × 6 m, lot 1 × 1, 3 diggers. The revealed disc
-  grows by 40 m² per digger-hour (paced) from 15 m up to 120 m radius around the dig.
+  grows by 40 m² × PACE = 160 m² per digger-hour from 15 m up to 120 m radius around the dig.
   The simulation only knows the discs (centre, radius).
 - **Old world data:** the main thread reads OpenFreeMap z14 tiles (`building`,
   `transportation`, `transportation_name`, `poi`) and keeps the features inside revealed

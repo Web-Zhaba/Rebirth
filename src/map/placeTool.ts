@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { effect, untracked } from "@preact/signals";
 import { BUILDINGS, type BuildingTemplate } from "../sim/buildings";
+import { DIG } from "../sim/excavation";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
 import { canPlace, makeBuilding } from "../sim/growth";
 import { lotFront } from "../sim/people";
@@ -229,7 +230,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
       ],
     });
     // Circle of the site: woodcutter and fisher reach, and the fields a farmstead can work.
-    const r = id === "gumno" ? FIELD.radius : id === "woodcutter" || id === "fisher" ? v.radius : undefined;
+    const r = id === "gumno" ? FIELD.radius : id === "woodcutter" || id === "fisher" ? v.radius : id === "dig" ? DIG.startRadius : undefined;
     if (r === undefined) {
       source("place-radius")?.setData(empty());
       return;

@@ -127,7 +127,8 @@ export function attachRuinsLayer(
         source: SRC_STREETS,
         minzoom: 12,
         layout: { "line-cap": "butt", "line-join": "round" },
-        paint: { "line-color": "#b89a5c", "line-width": realWidth(k), "line-opacity": 0.55, "line-dasharray": [2, 2] },
+        // Solid and faint: at real width, dashes read as rows of small houses.
+        paint: { "line-color": "#b89a5c", "line-width": realWidth(k), "line-opacity": 0.3 },
       },
       beneath,
     );

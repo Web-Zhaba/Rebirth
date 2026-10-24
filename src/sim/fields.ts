@@ -1,4 +1,5 @@
 import { BUILDINGS } from "./buildings";
+import { digDone } from "./excavation";
 import { calendar } from "./time";
 import type { Building, Field, FieldWork, Resident, SimState, Stock, Window } from "./types";
 
@@ -116,6 +117,7 @@ function blockedWorkshops(s: Pick<Idle, "buildings" | "stock" | "prod">): Set<nu
   for (const b of Object.values(s.buildings)) {
     const good = WORKSHOP_INPUT[b.template];
     if (good && b.state === "active" && s.stock[good] <= 1e-9 && (s.prod.yesterday[b.id] ?? 0) <= 1e-9) out.add(b.id);
+    if (digDone(b)) out.add(b.id); // nothing left to reveal
   }
   return out;
 }

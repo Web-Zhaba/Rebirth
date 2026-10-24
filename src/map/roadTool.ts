@@ -2,6 +2,8 @@ import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { addRoad, cutOffEdges, distToEdge, ROAD_KINDS, segmentCost, snapPoint, type Snap } from "../sim/roads";
 import { frame, roads, sendCmd } from "../simClient";
+import { oldWorld } from "./excavation";
+import { snapToOldStreets } from "../world/oldStreets";
 import { sampleProfile } from "../world/profile";
 import { flash, isRoadTool, mapMpp, tool, type RoadTool } from "./tools";
 
@@ -39,6 +41,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
   let pendingCost: { a: Snap; b: Snap } | null = null;
   let verdict: { ok: boolean; text: string } | null = null;
   let lastEvent: maplibregl.MapMouseEvent | null = null;
+  let streetHint = ""; // " · по старой улице X" while the snap is on a named old street
 
   const source = (id: string) => map.getSource(id) as maplibregl.GeoJSONSource | undefined;
 
@@ -81,7 +84,8 @@ export function attachRoadTool(map: maplibregl.Map): void {
     return ready;
   };
 
-  const setLabel = (text: string | null) => {
+  const setLabel = (raw: string | null) => {
+    const text = raw === null ? (streetHint ? streetHint.slice(3) : null) : raw + streetHint;
     if (text === null || !cursor) {
       label.hidden = true;
       return;
@@ -98,6 +102,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
     pendingCost = null;
     verdict = null;
     hoverEdge = null;
+    streetHint = "";
     if (!ready) return;
     source("road-preview")?.setData(empty());
     source("road-hover")?.setData(empty());
@@ -114,10 +119,19 @@ export function attachRoadTool(map: maplibregl.Map): void {
     });
   };
 
-  const setSnap = (s: Snap | null) => {
+  // Existing road nodes and edges first; when none is near, the revealed old streets (vertices, then segments).
+  const resolve = (g: NonNullable<typeof roads.value>, p: { x: number; y: number }, tol: number): { snap: Snap; guide: boolean; name?: string } => {
+    const snap = snapPoint(g, p, tol);
+    if (snap.kind !== "free") return { snap, guide: true };
+    const old = snapToOldStreets(p, oldWorld.value?.streets ?? [], tol);
+    if (!old) return { snap, guide: false };
+    return { snap: { x: old.x, y: old.y, kind: "free" }, guide: true, name: old.name };
+  };
+
+  const setSnap = (s: Snap | null, guide = true) => {
     const f = frame.value;
     const pt: GeoJSON.Feature[] =
-      s && f && s.kind !== "free"
+      s && f && guide
         ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: f.toLngLat(s.x, s.y) } }]
         : [];
     source("road-snap")?.setData({ type: "FeatureCollection", features: pt });
@@ -208,8 +222,10 @@ export function attachRoadTool(map: maplibregl.Map): void {
       setLabel(`${ROAD_KINDS[edge.kind].name} · ${Math.round(edge.length)} м · ${pct >= 100 ? "построено" : `${pct} %`}`);
       return;
     }
-    const snap = snapPoint(g, { x, y }, tol);
-    setSnap(snap);
+    const r = resolve(g, { x, y }, tol);
+    const snap = r.snap;
+    streetHint = r.name ? ` · по старой улице ${r.name}` : "";
+    setSnap(snap, r.guide);
     if (!start) {
       setLabel(null);
       return;
@@ -245,7 +261,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       });
       return;
     }
-    const snap = snapPoint(g, { x, y }, tol);
+    const snap = resolve(g, { x, y }, tol).snap;
     if (!start) {
       start = snap;
       return;

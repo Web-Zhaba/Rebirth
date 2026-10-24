@@ -38,6 +38,7 @@ const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: strin
       { id: "chapel", label: "Часовня", color: PLACED_COLORS.chapel },
       { id: "school", label: "Школа", color: PLACED_COLORS.school },
       { id: "healer", label: "Лекарь", color: PLACED_COLORS.healer },
+      { id: "dig", label: "Раскоп", color: PLACED_COLORS.dig },
     ],
   },
 ];
@@ -66,6 +67,7 @@ const HINT: Record<Tool, string> = {
   chapel: `${PLACE_HINT}. Подсветка дорог — охват 1000 м, нужен работник`,
   school: `${PLACE_HINT}. Подсветка дорог — охват 800 м, нужны работники`,
   healer: `${PLACE_HINT}. Подсветка дорог — охват 1000 м, нужен работник`,
+  dig: `${PLACE_HINT}. Круг — первое вскрытие (15 м), потом растёт до 120 м`,
   field: "Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить",
 };
 

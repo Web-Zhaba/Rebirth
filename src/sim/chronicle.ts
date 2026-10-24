@@ -23,6 +23,7 @@ const FIRST_BUILT: Record<string, string> = {
   chapel: "Построена первая часовня",
   school: "Построена первая школа",
   healer: "Построена первая лечебница",
+  dig: "Заложен первый раскоп",
 };
 
 // Appends an entry (oldest dropped beyond the cap). E1 adds excavation finds through this.

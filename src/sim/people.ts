@@ -794,6 +794,7 @@ const WORK_TEXT: Record<string, string> = {
   chapel: "служит в Часовне",
   school: "учитель — Школа",
   healer: "лекарь",
+  dig: "землекоп — Раскоп",
 };
 
 function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: Set<number>): string {

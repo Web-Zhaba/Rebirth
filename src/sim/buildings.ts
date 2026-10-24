@@ -71,6 +71,8 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   chapel: T("chapel", "Часовня", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6]),
   school: T("school", "Школа", "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3]),
   healer: T("healer", "Лекарь", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1]),
+  // Excavation (PLAN.md section 12).
+  dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0]),
 };
 
 // Rebuilding an izba into level 2 (PLAN.md section 9): taken like construction, the family stays.

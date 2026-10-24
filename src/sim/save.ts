@@ -1,6 +1,7 @@
 import { LANDS } from "../world/landcover";
 import { BUILDINGS, UPGRADE } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
+import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
@@ -179,6 +180,9 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       streak: nonNegInt(raw.streak) ? raw.streak : 0,
     };
     if (site) out[id].site = site;
+    // Saves from before excavation: a dig site starts at its first radius.
+    if (raw.template === DIG.template) out[id].radius = isNum(raw.radius) && raw.radius >= DIG.startRadius ? Math.min(DIG.maxRadius, raw.radius) : DIG.startRadius;
+    if (raw.onRuins === true) out[id].onRuins = true;
     const up = raw.upgrade;
     if (up !== undefined && raw.state === "active" && isRecord(up) && isNum(up.labor) && up.labor > 0 && isNum(up.done) && up.done >= 0 && up.done <= up.labor) {
       const upgrade: Upgrade = { labor: up.labor, done: up.done, paid: up.paid === true };
@@ -355,6 +359,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.coverage = numRecord(sim.coverage); // derived: rebuilt on load and every day
   g.landValue = numRecord(sim.landValue);
   g.chronicle = parseChronicle(sim.chronicle);
+  g.finds = parseFinds(sim.finds);
   const ls = sim.lastSpawn;
   if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
     g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };

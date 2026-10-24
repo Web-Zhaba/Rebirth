@@ -4,12 +4,12 @@ import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 export type RoadTool = RoadKind | "bulldoze";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
 export type ZoneTool = BrushTool | "field";
-export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "barn" | ServiceId;
+export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "barn" | "dig" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "path" || t === "dirt" || t === "bulldoze";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
-export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "barn", "well", "market", "chapel", "school", "healer"];
+export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "barn", "dig", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
@@ -42,6 +42,7 @@ export const PLACED_COLORS: Record<PlaceTool, string> = {
   quarry: "#8d9096",
   fisher: "#4f86a8",
   barn: "#a2573f",
+  dig: "#8b6f47",
   well: "#5aa0c8",
   market: "#d08a3c",
   chapel: "#9a78bd",

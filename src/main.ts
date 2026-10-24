@@ -4,9 +4,11 @@ import { effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCityMarker } from "./map/cityLayer";
+import { attachExcavation, oldWorld } from "./map/excavation";
 import { attachPlaceTool } from "./map/placeTool";
 import { attachReachLayer } from "./map/reachLayer";
 import { attachRoadLayer } from "./map/roadLayer";
+import { attachRuinsLayer } from "./map/ruinsLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachLifeLayer } from "./map/lifeLayer";
 import { attachTrafficLayer } from "./map/trafficLayer";
@@ -20,6 +22,8 @@ import { App } from "./ui/App";
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
 attachZoneLayer(map); // zones beneath everything else we add
+attachRuinsLayer(map, oldWorld, frame); // old foundations and streets, beneath the roads
+attachExcavation();
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
 attachTrafficLayer(map);

@@ -13,7 +13,15 @@ export type Cmd =
   | { type: "removeField"; id: number }
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
-  | { type: "demolish"; id: number };
+  | { type: "demolish"; id: number }
+  // New finds of a dig site: foundations in local meters, named places and one entry per street name.
+  | {
+      type: "recordFinds";
+      digId: number;
+      foundations: { id: string; ring: [number, number][]; area: number }[];
+      pois: { id: string; name: string; cls: string; x: number; y: number }[];
+      streets: { id: string; name: string }[];
+    };
 
 export type ToWorker =
   | { t: "load"; legacy: string | null; now: number }

@@ -1,5 +1,6 @@
 import { BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE } from "./buildings";
 import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, windowAt, workOf } from "./fields";
+import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScale } from "./people";
 import { covers, SERVICE, serviceMood } from "./services";
 import { calendar, dayOf } from "./time";
@@ -70,7 +71,12 @@ function workersByJob(residents: Record<number, Resident>): Workers {
 
 // Takes the materials of buildings that receive their first person-hour in this spending, lowest id
 // first as advanceBuildings serves them. What the stock lacks is made by hand and added to the labor.
-export function payMaterials(buildings: Record<number, Building>, stock: Stock, personHours: number): { buildings: Record<number, Building>; stock: Stock } {
+export function payMaterials(
+  buildings: Record<number, Building>,
+  stock: Stock,
+  personHours: number,
+  foundations: readonly { ring: [number, number][] }[] = [],
+): { buildings: Record<number, Building>; stock: Stock } {
   let out = buildings;
   let st = stock;
   let left = personHours;
@@ -85,18 +91,22 @@ export function payMaterials(buildings: Record<number, Building>, stock: Stock, 
     const done = up ? up.done : b.done;
     if (!paid) {
       const m = up ? UPGRADE.materials : BUILDINGS[b.template]?.materials;
+      // A new building whose footprint overlaps an old foundation needs no stone and 25 % less labor.
+      const ruins = !up && onOldFoundation(b.footprint, foundations);
       let hand = 0;
       const next = { ...st };
       if (m) {
         for (const g of ["logs", "planks", "stone"] as const) {
-          const take = Math.min(next[g], m[g]);
+          const want = ruins && g === "stone" ? 0 : m[g];
+          const take = Math.min(next[g], want);
           next[g] -= take;
-          hand += (m[g] - take) * HAND_HOURS[g];
+          hand += (want - take) * HAND_HOURS[g];
         }
       }
       st = next;
       labor += hand;
-      b = up ? { ...b, upgrade: { ...up, paid: true, labor } } : { ...b, paid: true, labor };
+      if (ruins) labor *= 1 - DIG.laborCut;
+      b = up ? { ...b, upgrade: { ...up, paid: true, labor } } : { ...b, paid: true, labor, ...(ruins ? { onRuins: true } : {}) };
       if (out === buildings) out = { ...buildings };
       out[b.id] = b;
     }
@@ -118,6 +128,7 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
   let flags = flagsFor(s.prod.flags, cal.year);
   let fields = s.prod.fields;
   let events = s.events;
+  let buildings = s.buildings;
   const cap = foodCapacity(s.buildings);
   const addFood = (kg: number) => {
     const take = Math.max(0, Math.min(kg, cap - stock.food));
@@ -183,6 +194,14 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
         made(b.id, q);
         break;
       }
+      case "dig": {
+        const r0 = radiusOf(b);
+        const r = growDig(r0, h);
+        if (r === r0) break;
+        if (buildings === s.buildings) buildings = { ...buildings };
+        buildings[b.id] = { ...b, radius: r };
+        break;
+      }
       case "gumno": {
         if (win === null) break;
         assign ??= assignFields(s.zones.fields, s.buildings);
@@ -235,7 +254,7 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
       events = say(events, s.gameMinutes, "farm", `Урожай собран: ${tonnes(got)}`);
     }
   }
-  return { ...s, stock, events, prod: { ...s.prod, fields, today, flags } };
+  return { ...s, stock, events, buildings, prod: { ...s.prod, fields, today, flags } };
 }
 
 // ---------- daily ----------

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "preact/hooks";
 import { BUILDINGS, houseCapacity } from "../sim/buildings";
+import { DIG, revealedArea } from "../sim/excavation";
 import { SERVICES } from "../sim/services";
 import { familyGenitive } from "../sim/people";
 import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
 import { flash, tool } from "../map/tools";
-import { buildings, queryBuilding, sendCmd } from "../simClient";
+import { buildings, digs, queryBuilding, sendCmd } from "../simClient";
 
 const REFRESH_MS = 4000;
 
@@ -93,6 +94,7 @@ export function BuildingPanel() {
   const b = id === null ? undefined : buildings.value?.[id];
   const t = b ? BUILDINGS[b.template] : undefined;
   const shown = !!b && !!t && !tool.value;
+  const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const info = useResidents(id, shown && b?.state === "active");
   if (!b || !t || !shown) return null;
   const status =
@@ -126,6 +128,20 @@ export function BuildingPanel() {
         {t.along} × {t.deep} м, высота {b.height} м
       </div>
       {b.zone === "res" && b.state === "active" && <div>Уровень {b.level}</div>}
+      {b.onRuins && <div class="people-note">{b.state === "active" ? "Стоит на старом фундаменте" : "Строится на старом фундаменте"}</div>}
+      {dig && (
+        <div class="prod">
+          <div>
+            Радиус вскрытия: {Math.round(dig.r)} м из {DIG.maxRadius} м
+          </div>
+          <div>Вскрыто: {Math.round(revealedArea(dig.r))} м²</div>
+          <div>
+            Находки: {dig.foundations} {plural(dig.foundations, "фундамент", "фундамента", "фундаментов")}, {dig.pois}{" "}
+            {plural(dig.pois, "место", "места", "мест")}, {dig.streets} {plural(dig.streets, "улица", "улицы", "улиц")}
+          </div>
+          {dig.r >= DIG.maxRadius - 1e-6 && <div class="prod-warn">Раскоп завершён</div>}
+        </div>
+      )}
       {b.upgrade && <div class="people-note">Перестраивается: {Math.floor((b.upgrade.done / b.upgrade.labor) * 100)} %</div>}
       {info?.kind === "house" && (
         <>

@@ -1,3 +1,4 @@
+import { DIG, emptyFinds } from "./excavation";
 import { BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate } from "./buildings";
 import { jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
@@ -30,7 +31,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -45,6 +46,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     coverage: {},
     landValue: {},
     chronicle: [],
+    finds: emptyFinds(),
     ...f.people,
   };
 }
@@ -181,6 +183,7 @@ export function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id
     streak: 0,
   };
   if (site) b.site = site;
+  if (t.id === DIG.template) b.radius = DIG.startRadius;
   return b;
 }
 

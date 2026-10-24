@@ -27,7 +27,7 @@ export function step(s: SimState): SimState {
     // which take their materials from the stock when work on them starts.
     const r = spendOnRoads(s.roads, (builderCount(s) * BASE_TICK) / 60);
     roads = r.roads;
-    const paid = payMaterials(s.buildings, s.stock, r.left);
+    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations);
     buildings = advanceBuildings(paid.buildings, r.left);
     stock = paid.stock;
   }

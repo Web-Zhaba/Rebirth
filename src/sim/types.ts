@@ -87,6 +87,8 @@ export interface Building {
   level: number; // 1, or 2 for an izba rebuilt after the upgrade
   streak: number; // days in a row a house met the upgrade conditions
   upgrade?: Upgrade; // the rebuild into level 2 in progress; the house stays active meanwhile
+  radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
+  onRuins?: boolean; // started on an old foundation: no stone, less labor
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -143,6 +145,43 @@ export interface ChronicleEntry {
   text: string;
 }
 
+// Excavation finds (PLAN.md section 12); coordinates are local meters.
+export interface FoundFoundation {
+  id: string;
+  ring: [number, number][];
+  area: number; // m2
+  digId: number;
+  at: number; // gameMinutes
+}
+
+// A named place (kind = OSM class) or street (kind "street", no position) found by a dig.
+export interface FoundPlace {
+  id: string;
+  name: string;
+  kind: string;
+  digId: number;
+  at: number;
+  x?: number;
+  y?: number;
+}
+
+export interface Finds {
+  foundations: FoundFoundation[];
+  pois: FoundPlace[];
+  streets: FoundPlace[];
+}
+
+// A finished dig site as the snapshot shows it.
+export interface DigInfo {
+  id: number;
+  x: number;
+  y: number;
+  r: number; // revealed radius, m
+  foundations: number;
+  pois: number;
+  streets: number;
+}
+
 export interface PeopleState {
   residents: Record<number, Resident>;
   households: Record<number, Household>;
@@ -192,6 +231,7 @@ export interface SimState extends PeopleState {
   roads: RoadGraph;
   zones: ZoneState;
   chronicle: ChronicleEntry[]; // oldest first, capped at 1000
+  finds: Finds;
   buildings: Record<number, Building>;
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
@@ -244,7 +284,8 @@ export interface Demand {
 
 // What the worker streams every tick: no individual residents, only aggregates.
 // Zones and the chronicle travel separately, only when they changed.
-export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod"> & {
+export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod" | "finds"> & {
+  digs: DigInfo[]; // finished dig sites with their discs and find counts
   people: PeopleStats & { demand: Demand };
   economy: EconomyStats;
   services: ServiceStats;
