@@ -4,6 +4,7 @@ import { BUILDINGS } from "./buildings";
 import { demand, emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import {
+  builderCount,
   constructionWork,
   createFounders,
   dailyStep,
@@ -56,6 +57,7 @@ function building(id: number, template: string, x: number, state: Building["stat
     labor: t.labor,
     done: state === "active" ? t.labor : 0,
     created: 0,
+    paid: true,
   };
 }
 
@@ -94,7 +96,7 @@ function custom(s: SimState, specs: HSpec[]): SimState {
       };
       members.push(id);
     }
-    households[hid] = { id: hid, last: "Тестов", home: sp.home, members, arrived: 0 };
+    households[hid] = { id: hid, last: "Тестов", home: sp.home, members, arrived: 0, mood: 60 };
   });
   return { ...s, residents, households, nextPersonId: pid, nextHouseholdId: specs.length + 1, events: [] };
 }
@@ -326,11 +328,15 @@ describe("jobs", () => {
     expect(st.employed).toBe(4);
     expect(st.avgCommute).toBeCloseTo((near.commute! * 3 + far.commute!) / 4, 5);
   });
-  it("tents commute from the founding point", () => {
-    const s = custom(town([building(1, "smithy", 200)]), [adults(1, null)]);
-    const r = day(s).residents[1];
-    expect(r.job).toBe(1);
-    expect(r.commute).toBeCloseTo((0 + 200 + 3) / WALK, 1);
+  it("households in tents take no regular jobs (they build their homes); once housed they do", () => {
+    const s = custom(town([building(1, "smithy", 200), building(2, "izba", 100)]), [adults(1, null), adults(1, 2)]);
+    const r = day(s).residents;
+    expect(r[1]).toMatchObject({ job: null, commute: null });
+    expect(r[2].job).toBe(1);
+    // a tent worker who had a job loses it
+    const busy = custom(town([building(1, "smithy", 200)]), [{ home: null, people: [{ job: 1 }] }]);
+    expect(day(busy).residents[1].job).toBeNull();
+    expect(builderCount(day(busy))).toBe(1);
   });
   it("leaves people unemployed when the workplace is beyond 45 minutes", () => {
     const bs = () => [building(1, "izba", 100), building(2, "smithy", 3200)];

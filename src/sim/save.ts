@@ -1,20 +1,26 @@
 import { LANDS } from "../world/landcover";
 import { BUILDINGS } from "./buildings";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
-import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS } from "./people";
+import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
+import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
 import type {
   Building,
   City,
   EventKind,
   Field,
+  FieldWork,
   Household,
   PeopleState,
+  ProdFlags,
+  ProdState,
   Resident,
   RoadEdge,
   RoadGraph,
   RoadNode,
   SaveV3,
+  Site,
+  Stock,
   TerrainInfo,
   TownEvent,
   ZoneBlock,
@@ -144,6 +150,13 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (typeof raw.state !== "string" || !STATES.includes(raw.state)) return null;
     if (!isNum(raw.labor) || raw.labor <= 0 || !isNum(raw.done) || raw.done < 0 || raw.done > raw.labor) return null;
     if (!isNum(raw.created)) return null;
+    let site: Site | undefined;
+    if (raw.site !== undefined) {
+      const q = raw.site;
+      const share = (v: unknown): v is number => isNum(v) && v >= 0 && v <= 1;
+      if (!isRecord(q) || !share(q.forest) || !share(q.water) || !share(q.rock)) return null;
+      site = { forest: q.forest, water: q.water, rock: q.rock };
+    }
     out[id] = {
       id,
       template: raw.template,
@@ -156,12 +169,15 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       labor: raw.labor,
       done: raw.done,
       created: raw.created,
+      // Saves from before production: finished and started buildings were built without materials.
+      paid: typeof raw.paid === "boolean" ? raw.paid : raw.state !== "planned",
     };
+    if (site) out[id].site = site;
   }
   return out;
 }
 
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food"];
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
 
 // Structurally broken people data gives null (the caller starts over with founders). References to
@@ -222,7 +238,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
         homes.add(home);
       }
     }
-    households[id] = { id, last: h.last, home, members, arrived: h.arrived };
+    const mood = isNum(h.mood) ? Math.min(100, Math.max(0, h.mood)) : MOOD_START;
+    households[id] = { id, last: h.last, home, members, arrived: h.arrived, mood };
   }
   if (seen.size !== Object.keys(residents).length) return null; // a resident in no household
   for (const r of Object.values(residents)) {
@@ -247,6 +264,45 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
   return { residents, households, nextPersonId: nextPerson, nextHouseholdId: nextHouse, events: events.slice(-MAX_EVENTS) };
 }
 
+// A stock with any broken figure gives back the founding stock.
+function parseStock(v: unknown): Stock {
+  const keys = ["food", "logs", "planks", "stone", "wares"] as const;
+  if (!isRecord(v) || !keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0)) return emptyStock();
+  return { food: v.food as number, logs: v.logs as number, planks: v.planks as number, stone: v.stone as number, wares: v.wares as number };
+}
+
+const numRecord = (v: unknown): Record<number, number> => {
+  const out: Record<number, number> = {};
+  if (!isRecord(v)) return out;
+  for (const [k, n] of Object.entries(v)) if (Number.isInteger(Number(k)) && isNum(n) && n >= 0) out[Number(k)] = n;
+  return out;
+};
+
+// Progress of fields and event flags; whatever is broken starts empty (the fields start the year over).
+function parseProd(v: unknown): ProdState {
+  const out = emptyProd();
+  if (!isRecord(v)) return out;
+  if (isRecord(v.fields)) {
+    const fields: Record<number, FieldWork> = {};
+    for (const [k, raw] of Object.entries(v.fields)) {
+      if (!Number.isInteger(Number(k)) || !isRecord(raw)) continue;
+      if (!Number.isInteger(raw.year) || !isNum(raw.sowH) || !isNum(raw.harvH) || !isNum(raw.reaped)) continue;
+      if (raw.sowH < 0 || raw.harvH < 0 || raw.reaped < 0) continue;
+      fields[Number(k)] = { year: raw.year as number, sowH: raw.sowH, harvH: raw.harvH, reaped: raw.reaped };
+    }
+    out.fields = fields;
+  }
+  const f = v.flags;
+  if (isRecord(f) && Number.isInteger(f.year) && isNum(f.rot) && f.rot >= 0) {
+    const flag = (k: string) => f[k] === true;
+    const flags: ProdFlags = { ...emptyFlags(f.year as number), sowing: flag("sowing"), harvest: flag("harvest"), done: flag("done"), closed: flag("closed"), hungry: flag("hungry"), rot: f.rot };
+    out.flags = flags;
+  }
+  out.today = numRecord(v.today);
+  out.yesterday = numRecord(v.yesterday);
+  return out;
+}
+
 // Saves from before growth have none of these fields: defaults, not an error. Broken buildings
 // reset the buildings only; a broken generator state or spawn clock is replaced by a default.
 // Saves without (or with broken) residents get the founders back.
@@ -269,6 +325,8 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   }
   g.rng = rng;
   Object.assign(g, people);
+  g.stock = parseStock(sim.stock);
+  g.prod = parseProd(sim.prod);
   const ls = sim.lastSpawn;
   if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
     g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };

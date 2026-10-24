@@ -1,10 +1,12 @@
 import { advanceTo } from "./clock";
-import { demand, emptyGrowth, reconcile, seedOf } from "./growth";
+import { BUILDINGS } from "./buildings";
+import { canPlace, demand, emptyGrowth, placeBuilding, reconcile, seedOf } from "./growth";
 import { peopleStats, queryBuilding, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
+import { economyStats, productionInfo } from "./production";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSaveV3 } from "./save";
-import type { ClientSave, Field, RoadGraph, SaveV3, SimSnapshot, SimState, TerrainInfo, ZoneState } from "./types";
+import type { BuildingQuery, ClientSave, Field, RoadGraph, SaveV3, Site, SimSnapshot, SimState, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 
@@ -19,8 +21,18 @@ const PERSIST_MINUTES = 60; // game minutes between saves while ticking
 
 // What the main thread sees: aggregates instead of individual residents.
 export function toSnapshot(sim: SimState): SimSnapshot {
-  const { zones: _z, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, ...rest } = sim;
-  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) } };
+  const { zones: _z, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, ...rest } = sim;
+  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) }, economy: economyStats(sim) };
+}
+
+// Who lives or works in a building, with production details for producers.
+function inspect(sim: SimState, id: number): BuildingQuery | null {
+  const q = queryBuilding(sim, id);
+  if (q?.kind === "workplace") {
+    const production = productionInfo(sim, sim.buildings[id]);
+    if (production) q.production = production;
+  }
+  return q;
 }
 
 const toClientSave = (save: SaveV3): ClientSave => ({ version: 3, city: save.city, sim: { ...toSnapshot(save.sim), zones: save.sim.zones } });
@@ -65,7 +77,7 @@ export class Handler {
           return;
         }
         case "query":
-          this.post({ t: "queryResult", id: msg.id, data: this.save && msg.q?.type === "building" ? queryBuilding(this.save.sim, msg.q.id) : null });
+          this.post({ t: "queryResult", id: msg.id, data: this.save && msg.q?.type === "building" ? inspect(this.save.sim, msg.q.id) : null });
           return;
         case "cmd":
           return await this.command(msg.id, msg.cmd);
@@ -226,22 +238,44 @@ export class Handler {
       } else if (cmd.type === "removeField") {
         if (!z.fields.some((f) => f.id === cmd.id)) return reject("Поле уже убрано");
         zones = this.rezone(z, roads, z.fields.filter((f) => f.id !== cmd.id));
+      } else if (cmd.type === "placeBuilding") {
+        const t = typeof cmd.template === "string" && Object.hasOwn(BUILDINGS, cmd.template) ? BUILDINGS[cmd.template] : null;
+        if (!t || t.zone !== "placed") return reject("Это здание нельзя поставить");
+        if (!Number.isInteger(cmd.edge) || !Number.isInteger(cmd.i) || (cmd.side !== 1 && cmd.side !== -1) || !validSite(cmd.site)) {
+          return reject("Некорректное место");
+        }
+        const ok = canPlace(sim, t, cmd.edge, cmd.side, cmd.i, cmd.site);
+        if (!ok.ok) return reject(ok.reason);
+        const placed = placeBuilding(sim, t, cmd.edge, cmd.side, cmd.i, cmd.site);
+        this.save = { ...this.save, sim: placed };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "demolish") {
+        if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");
+        const rest = { ...sim.buildings };
+        delete rest[cmd.id];
+        this.save = { ...this.save, sim: syncPeople({ ...sim, buildings: rest }) };
+        return await this.finishCommand(id);
       } else {
         return reject("Неизвестная команда");
       }
       const buildings = reconcile(sim.buildings, next, zones.cells);
       this.save = { ...this.save, sim: syncPeople({ ...sim, roads: next, zones, buildings }) };
-      this.postSnapshot();
-      try {
-        await this.storage.put(this.save);
-      } catch (e) {
-        this.post({ t: "error", message: String(e) });
-      }
-      this.post({ t: "cmdResult", id, ok: true });
-      this.enrich();
+      await this.finishCommand(id);
     } catch (e) {
       reject(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  // Posts, persists and acknowledges a command that already changed this.save.
+  private async finishCommand(id: number): Promise<void> {
+    this.postSnapshot();
+    try {
+      await this.storage.put(this.save!);
+    } catch (e) {
+      this.post({ t: "error", message: String(e) });
+    }
+    this.post({ t: "cmdResult", id, ok: true });
+    this.enrich();
   }
 
   // Called by the worker timer every second.
@@ -260,6 +294,8 @@ export class Handler {
 }
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const validSite = (v: unknown): v is Site =>
+  typeof v === "object" && v !== null && ["forest", "water", "rock"].every((k) => finite((v as Record<string, unknown>)[k]) && (v as Record<string, number>)[k] >= 0 && (v as Record<string, number>)[k] <= 1);
 
 // The message crossed a thread boundary, so check the shape at runtime.
 function validateAddRoad(cmd: Extract<Cmd, { type: "addRoad" }>): string | null {

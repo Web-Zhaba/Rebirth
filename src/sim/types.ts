@@ -72,7 +72,7 @@ export type BuildingState = "planned" | "building" | "active";
 export interface Building {
   id: number;
   template: string; // key of BUILDINGS
-  zone: ZoneType;
+  zone: ZoneType | "placed"; // "placed": put down by the player, not grown on a zone
   // Local meters; centre of the lot rectangle, angle = road direction.
   lot: { cx: number; cy: number; angle: number; w: number; d: number };
   side: 1 | -1; // side of the road, as in ZoneCell
@@ -82,6 +82,15 @@ export interface Building {
   labor: number; // person-hours
   done: number;
   created: number; // gameMinutes
+  paid: boolean; // materials taken from the stock (done when construction starts)
+  site?: Site; // terrain shares measured when a placed building was put down
+}
+
+// Shares 0..1 of forest, water and rock/sand around a placed building.
+export interface Site {
+  forest: number;
+  water: number;
+  rock: number;
 }
 
 export interface Resident {
@@ -103,9 +112,10 @@ export interface Household {
   home: number | null; // building id; null = tents at the founding point
   members: number[];
   arrived: number; // gameMinutes
+  mood: number; // 0..100
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein";
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food";
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -121,7 +131,42 @@ export interface PeopleState {
   events: TownEvent[]; // ring buffer, last 50
 }
 
+export interface Stock {
+  food: number; // kg of grain equivalent
+  logs: number; // m3
+  planks: number; // m3
+  stone: number; // t
+  wares: number; // pieces
+}
+
+// A field's progress in one year (rye is sown in spring and reaped in autumn of the same year).
+export interface FieldWork {
+  year: number;
+  sowH: number; // person-hours of sowing done
+  harvH: number; // person-hours of harvest done
+  reaped: number; // kg
+}
+
+export interface ProdFlags {
+  year: number; // year the four event flags below belong to
+  sowing: boolean; // "sowing started" was announced
+  harvest: boolean;
+  done: boolean;
+  closed: boolean; // harvest window already settled (lost grain announced)
+  hungry: boolean; // food ran out and no recovery since
+  rot: number; // kg of food lost to full barns since the last announcement
+}
+
+export interface ProdState {
+  fields: Record<number, FieldWork>;
+  flags: ProdFlags;
+  today: Record<number, number>; // building id -> units made since 00:00 (kg of grain for a gumno)
+  yesterday: Record<number, number>;
+}
+
 export interface SimState extends PeopleState {
+  stock: Stock;
+  prod: ProdState;
   realTime: number; // epoch ms simulated up to
   gameMinutes: number; // since founding
   roads: RoadGraph;
@@ -130,6 +175,17 @@ export interface SimState extends PeopleState {
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
   lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
+}
+
+export type Window = "sowing" | "harvest" | null;
+
+export interface EconomyStats {
+  foodCap: number;
+  foodPerDay: number;
+  foodDays: number; // Infinity is sent as 999
+  yesterday: Stock; // production per good (food includes the harvest)
+  fields: { count: number; ha: number; assignedHa: number; sown: number; reaped: number; expected: number; window: Window };
+  avgMood: number;
 }
 
 export interface PeopleStats {
@@ -152,8 +208,9 @@ export interface Demand {
 
 // What the worker streams every tick: no individual residents, only aggregates.
 // Zones travel separately, only when `rev` changed.
-export type SimSnapshot = Omit<SimState, "zones" | "residents" | "households" | "nextPersonId" | "nextHouseholdId"> & {
+export type SimSnapshot = Omit<SimState, "zones" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod"> & {
   people: PeopleStats & { demand: Demand };
+  economy: EconomyStats;
 };
 
 // What the main thread keeps.
@@ -180,9 +237,18 @@ export interface WorkerInfo {
   commute: number | null;
 }
 
+export interface ProductionInfo {
+  good: keyof Stock | null; // what the building makes; null for a barn
+  yesterday: number; // units made yesterday (kg of grain for a gumno)
+  site?: Site;
+  missing?: string; // input the workshop lacks
+  storage?: number; // kg of food a barn holds
+  fields?: { count: number; ha: number; sown: number; reaped: number; expected: number };
+}
+
 export type BuildingQuery =
-  | { kind: "house"; households: { id: number; last: string; people: PersonInfo[] }[] }
-  | { kind: "workplace"; capacity: number; workers: WorkerInfo[] };
+  | { kind: "house"; households: { id: number; last: string; mood: number; people: PersonInfo[] }[] }
+  | { kind: "workplace"; capacity: number; workers: WorkerInfo[]; production?: ProductionInfo };
 
 export interface SaveV3 {
   version: 3;

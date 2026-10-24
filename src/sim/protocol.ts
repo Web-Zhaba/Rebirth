@@ -1,4 +1,4 @@
-import type { BuildingQuery, City, ClientSave, RoadKind, SimSnapshot, ZoneState, ZoneType } from "./types";
+import type { BuildingQuery, City, ClientSave, RoadKind, SimSnapshot, Site, ZoneState, ZoneType } from "./types";
 
 export type Cmd =
   // pts and labor are local meters / person-hours; labor has one entry per segment.
@@ -6,7 +6,10 @@ export type Cmd =
   | { type: "removeRoad"; edgeId: number }
   | { type: "paintZones"; keys: string[]; zone: "none" | ZoneType }
   | { type: "addField"; pts: [number, number][] }
-  | { type: "removeField"; id: number };
+  | { type: "removeField"; id: number }
+  // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
+  | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
+  | { type: "demolish"; id: number };
 
 export type ToWorker =
   | { t: "load"; legacy: string | null; now: number }

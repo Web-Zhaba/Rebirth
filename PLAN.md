@@ -108,13 +108,93 @@ Each milestone ends with something playable in the browser.
 | E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. |
 | E2 | Notebook | Real Wikipedia entries tied to excavated places, plus the town chronicle. |
 
-## 8. Out of scope for now
+## 8. S5 design: production
+
+**Pace.** Construction and building materials run `PACE = 4` times faster than history
+(already true for construction labor since S3), so a village grows within days of play.
+Food, wares and seasons stay real: people eat real amounts, fields yield once a year.
+
+**Stock.** One town-wide stock, no haulage yet (carts come in S7):
+
+| Good | Unit | Storage |
+|---|---|---|
+| food (провизия) | kg of grain equivalent | 3 t at the camp + 30 t per barn; any surplus rots (event) |
+| logs (брёвна) | m³ | unlimited (log piles) |
+| planks (доски) | m³ | unlimited |
+| stone (камень) | t | unlimited |
+| wares (утварь) | pieces | unlimited |
+
+Founders bring 1 750 kg of food (enough for 10 people until the first harvest) and 20 wares.
+Immigrants bring 60 days of their own food.
+
+**Player-placed buildings** (new category `placed`; lots beside built roads, w × d cells like
+grown buildings; painted zone under them is cleared; never removed by zone changes, only
+with their road or by demolition):
+
+| Building | Footprint | Lot (cells) | Labor (person-h) | Jobs | Output (per worker-hour, 07–19) | Site |
+|---|---|---|---|---|---|---|
+| Гумно (farmstead) | 8 × 10 m | 1 × 2 | 120 | ⌈fields ha / 2.5⌉, ≤ 16 | works the fields assigned to it | fields within 400 m (centroid), nearest farmstead wins |
+| Лесоруб (woodcutter) | 4 × 4 m | 1 × 1 | 40 | 2 | 0.25 m³ logs × PACE × forest share | forest ≥ 10 % within 150 m |
+| Пильня (sawpit) | 6 × 4 m | 1 × 1 | 50 | 2 | 0.02 m³ planks × PACE, eats 1.6 m³ logs per m³ | — |
+| Каменоломня (quarry) | 8 × 8 m | 1 × 2 | 70 | 3 | 0.15 t stone × PACE × (0.4 + 0.6 × rock/sand share) | not on water/wetland |
+| Рыбак (fisher) | 4 × 4 m | 1 × 1 | 40 | 2 | 0.2 kg food, × 0.5 in winter | water ≥ 5 % within 100 m |
+| Амбар (barn) | 6 × 6 m | 1 × 1 | 100 | 0 | +30 t food storage | — |
+
+Site shares are sampled on the main thread when placing (as road labor is) and stored on
+the building.
+
+**Fields.** 400 kg/ha/year net of seed (rye, three-field rotation averaged). Sowing: any time
+in spring, 50 h/ha; `sown` = done / needed. Harvest window: the first 45 days of autumn;
+200 h/ha × sown, each farmer-hour reaps 2 kg into the stock; whatever is left at the end of
+the window is lost. Farmers work only in these windows, and only while their gumno has work
+left in the open window; otherwise they join the construction party.
+
+**Workshops** (grown craft buildings) make wares: pottery 0.025 pcs/h (no input), smithy
+0.015 pcs/h (0.05 m³ logs per piece, charcoal), carpentry 0.015 pcs/h (0.03 m³ planks per
+piece). **Shops and taverns** hand wares out: households want 0.05 pcs per person per day;
+each employed trade worker serves 12 households a day.
+
+**Food.** Daily at 00:00: adults 0.7 kg, children 0.45 kg. A shortage feeds everyone the same
+fraction. A household that emigrates takes its share of the food (food × members / population).
+
+**Tents.** Households living in tents take no regular jobs: their adults are builders and put
+up homes first. Once housed they take jobs normally.
+
+**Mood** (per household, 0–100, starts at 60). Daily target = 10 + 60 × fed + 15 × wares
+supplied + 15 × has a house; mood moves a quarter of the way to it. Households in houses with
+mood < 35 leave (10 % a day). Immigration is scaled by min(1, food days / 30) and by average
+mood.
+
+**Construction materials.** Taken from the stock when construction starts; any shortfall is
+made by hand and added to the labor (per unit, already divided by PACE): logs 4 h/m³, planks
+12 h/m³, stone 2 h/t.
+
+| Template | Logs m³ | Planks m³ | Stone t |
+|---|---|---|---|
+| izba | 25 | 2 | 2 |
+| izba5 | 40 | 4 | 3 |
+| smithy | 10 | 1 | 5 |
+| carpentry | 22 | 3 | 2 |
+| pottery | 10 | 1 | 4 |
+| shop | 14 | 2 | 1 |
+| tavern | 90 | 10 | 8 |
+| farmstead | 30 | 4 | 3 |
+| woodcutter | 6 | 0.5 | 0 |
+| sawpit | 5 | 1 | 0 |
+| quarry | 4 | 0.5 | 0 |
+| fisher | 6 | 1 | 0 |
+| barn | 20 | 6 | 2 |
+
+Deferred: the mill and bakery (households grind and bake at home in the village era), firewood,
+hunting and foraging, clearing forest for logs.
+
+## 9. Out of scope for now
 
 Later eras (manufactories, industry, modern utilities), bridges and water transport,
 multiple towns, the shared world archive, accounts and server saves, sound, mobile
 polish.
 
-## 9. Risks
+## 10. Risks
 
 - **Scope.** A deep city sim is months of work; short playable milestones keep it
   moving.

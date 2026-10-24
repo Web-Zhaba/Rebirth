@@ -1,4 +1,5 @@
-import { BUILDINGS } from "./buildings";
+import { BUILDINGS, foodCapacity } from "./buildings";
+import { idleFarmers, jobsOf, assignFields } from "./fields";
 import { nextRandom } from "./rng";
 import { workableEdges } from "./roads";
 import { dayOf, dayStart, YEAR_MIN } from "./time";
@@ -20,7 +21,12 @@ export const RATES = {
   maxMarriagesPerDay: 3,
   immigrationDay: 0.5, // per vacant house, times attractiveness
   emigrationDay: 0.2, // per household whose adults are all idle
+  moodLeaveDay: 0.1, // per household in a house with mood below MOOD_LEAVE
 };
+export const MOOD_START = 60;
+export const MOOD_LEAVE = 35;
+// Food: kg a day per person, and the days of it that immigrants bring along.
+export const FOOD = { adult: 0.7, child: 0.45, immigrantDays: 60 };
 // Annual death probability by age band.
 const DEATH_BANDS: [number, number][] = [
   [5, 0.03],
@@ -98,7 +104,7 @@ function addPerson(w: W, first: string, last: string, sex: "m" | "f", age: numbe
 function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: number, home: number | null): Household {
   const last = pick(SURNAMES, rand);
   const id = w.nextHouseholdId++;
-  const h: Household = { id, last, home, members: [], arrived: w.now };
+  const h: Household = { id, last, home, members: [], arrived: w.now, mood: MOOD_START };
   w.households[id] = h;
   const hAge = ageMin + rand() * (ageMax - ageMin);
   const wAge = ageMin + rand() * (ageMax - ageMin);
@@ -326,12 +332,21 @@ export function countResidents(residents: Record<number, Resident>, now: number)
   return c;
 }
 
-// Hands available to the construction artel: every adult without a regular job.
-export const builderCount = (s: Pick<SimState, "residents" | "gameMinutes">): number => countResidents(s.residents, s.gameMinutes).jobless;
+// Hands available to the construction artel: every adult without a regular job, plus farmers
+// while the land has no work for them.
+export const builderCount = (s: Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod">): number =>
+  countResidents(s.residents, s.gameMinutes).jobless + idleFarmers(s);
 
-export function peopleStats(s: Pick<SimState, "residents" | "households" | "buildings" | "roads" | "gameMinutes">): PeopleStats {
+// Kg of food the town eats in a day.
+export function foodPerDay(residents: Record<number, Resident>, now: number): number {
+  const c = countResidents(residents, now);
+  return c.adults * FOOD.adult + c.children * FOOD.child;
+}
+
+export function peopleStats(s: Pick<SimState, "residents" | "households" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod">): PeopleStats {
   const c = countResidents(s.residents, s.gameMinutes);
   const work = constructionWork(s.buildings, s.roads);
+  const hands = c.jobless + idleFarmers(s);
   let tents = 0;
   let households = 0;
   for (const h of Object.values(s.households)) {
@@ -343,8 +358,8 @@ export function peopleStats(s: Pick<SimState, "residents" | "households" | "buil
     adults: c.adults,
     children: c.children,
     employed: c.employed,
-    builders: work ? c.jobless : 0,
-    unemployed: work ? 0 : c.jobless,
+    builders: work ? hands : 0,
+    unemployed: work ? 0 : hands,
     tents,
     avgCommute: c.employed > 0 ? c.commuteSum / c.employed : 0,
     households,
@@ -395,10 +410,11 @@ function jobsStep(w: W, s: SimState, work: boolean): void {
   const limit = MAX_COMMUTE * WALK_SPEED;
   const cap = new Map<number, number>();
   const wps: Building[] = [];
+  const assign = assignFields(s.zones.fields, buildings);
   for (const b of Object.values(buildings)) {
     if (!isWorkplace(b)) continue;
     wps.push(b);
-    cap.set(b.id, BUILDINGS[b.template]?.jobs ?? 0);
+    cap.set(b.id, jobsOf(b, s, assign));
   }
   const workers = new Map<number, number>();
   const lose = (r: Resident) => {
@@ -411,7 +427,7 @@ function jobsStep(w: W, s: SimState, work: boolean): void {
       r.job = null;
       r.commute = null;
     } else if (r.job !== null) {
-      if (cap.has(r.job)) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
+      if (cap.has(r.job) && (workers.get(r.job) ?? 0) < cap.get(r.job)!) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
       else {
         r.job = null;
         r.commute = null;
@@ -451,7 +467,8 @@ function jobsStep(w: W, s: SimState, work: boolean): void {
         const [x, y] = lotFront(home);
         l = locate(-2 - home.id, x, y);
       } else l = origin;
-      if (l) groups.push({ node: l.node, off: l.off, h });
+      if (h.home === null) for (const m of adults) lose(w.residents[m]); // the tent camp builds its homes first
+      else if (l) groups.push({ node: l.node, off: l.off, h });
       else for (const m of adults) lose(w.residents[m]);
     }
     groups.sort((p, q) => p.node - q.node || p.h.id - q.h.id);
@@ -502,6 +519,7 @@ function jobsStep(w: W, s: SimState, work: boolean): void {
 export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   const w = cloneW(s, s.gameMinutes);
   const { buildings } = s;
+  let stock = s.stock;
   let rng = s.rng;
   const rand: Rand =
     opts.rand ??
@@ -574,7 +592,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
         detach(w, woman);
         const home = vacant.shift()!;
         const id = w.nextHouseholdId++;
-        w.households[id] = { id, last: man.last, home, members: [man.id, woman.id], arrived: now };
+        w.households[id] = { id, last: man.last, home, members: [man.id, woman.id], arrived: now, mood: MOOD_START };
         man.household = id;
         woman.household = id;
         man.spouse = woman.id;
@@ -608,13 +626,24 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       if (r.job === null) jobless++;
     }
     const unemployment = adults > 0 && !work ? jobless / adults : 0;
-    const attractive = Math.min(1, Math.max(0, 1 - unemployment * 2));
+    const need = foodPerDay(w.residents, now);
+    const foodDays = need > 0 ? stock.food / need : Infinity;
+    let moodSum = 0;
+    for (const h of Object.values(w.households)) moodSum += h.mood;
+    const hs = Object.keys(w.households).length;
+    const avgMood = hs > 0 ? moodSum / hs : MOOD_START;
+    const attractive =
+      Math.min(1, Math.max(0, 1 - unemployment * 2)) * Math.min(1, foodDays / 30) * Math.min(1, Math.max(0, avgMood / 100));
     for (const b of vacantHouses(buildings, w.households)) {
       if (!(rand() < RATES.immigrationDay * attractive)) continue;
       const room = Math.max(0, houseCap(buildings[b]) - 2);
       const kids = Math.floor(rand() * (Math.min(3, room) + 1));
       const h = makeFamily(w, rand, 18, 45, kids, b);
       say(w, "arrival", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`);
+      // They bring 60 days of their own food, as far as the barns can hold it.
+      let eat = 0;
+      for (const m of h.members) eat += ageOf(w.residents[m].born, now) < ADULT_MIN ? FOOD.child : FOOD.adult;
+      stock = { ...stock, food: Math.min(foodCapacity(buildings), stock.food + eat * FOOD.immigrantDays) };
     }
   }
 
@@ -623,9 +652,13 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     for (const h of Object.values(w.households)) {
       if (h.home === null) continue;
       const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, now)));
-      if (adults.length === 0 || !adults.every((r) => r.idleDays >= IDLE_LEAVE_DAYS)) continue;
-      if (!(rand() < RATES.emigrationDay)) continue;
+      const idle = adults.length > 0 && adults.every((r) => r.idleDays >= IDLE_LEAVE_DAYS);
+      const p = Math.max(idle ? RATES.emigrationDay : 0, h.mood < MOOD_LEAVE ? RATES.moodLeaveDay : 0);
+      if (p === 0 || !(rand() < p)) continue;
       const n = h.members.length;
+      // They take their share of the food along.
+      const pop = Object.keys(w.residents).length;
+      stock = { ...stock, food: stock.food * (1 - n / pop) };
       for (const m of h.members) delete w.residents[m];
       delete w.households[h.id];
       say(w, "departure", `Семья ${familyGenitive(h.last)} (${n} чел.) покинула поселение`);
@@ -638,6 +671,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   return {
     ...s,
     rng,
+    stock,
     residents: w.residents,
     households: w.households,
     nextPersonId: w.nextPersonId,
@@ -676,6 +710,11 @@ const WORK_TEXT: Record<string, string> = {
   pottery: "гончар — Гончарня",
   shop: "работает в Лавке",
   tavern: "работает в Постоялом дворе",
+  gumno: "земледелец — Гумно",
+  woodcutter: "лесоруб",
+  sawpit: "пильщик — Пильня",
+  quarry: "каменотёс — Каменоломня",
+  fisher: "рыбак",
 };
 
 function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean): string {
@@ -702,6 +741,7 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
       .map((h) => ({
         id: h.id,
         last: h.last,
+        mood: Math.round(h.mood),
         people: h.members
           .map((m) => s.residents[m])
           .filter((r): r is Resident => !!r)
@@ -715,5 +755,5 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
   const workers = Object.values(s.residents)
     .filter((r) => r.job === id)
     .map((r) => ({ id: r.id, name: fullName(r), age: Math.floor(ageOf(r.born, now)), commute: r.commute }));
-  return { kind: "workplace", capacity: t.jobs, workers };
+  return { kind: "workplace", capacity: jobsOf(b, s), workers };
 }

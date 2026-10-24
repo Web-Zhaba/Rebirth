@@ -1,9 +1,11 @@
 import { BUILDINGS, FRONT_SETBACK, templatesOf, type BuildingTemplate } from "./buildings";
+import { jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
+import { emptyProd, emptyStock } from "./production";
 import { nextRandom } from "./rng";
 import { distToEdge, ROAD_KINDS } from "./roads";
-import type { Building, Demand, PeopleState, RoadEdge, RoadGraph, SimState, ZoneCell, ZoneType } from "./types";
-import { CELL_SIZE } from "./zones";
+import type { Building, Demand, PeopleState, RoadEdge, RoadGraph, Site, SimState, ZoneCell, ZoneType } from "./types";
+import { CELL_SIZE, paintCells, qkey } from "./zones";
 
 export { nextRandom };
 export type { Demand };
@@ -28,7 +30,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -38,6 +40,8 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     nextBuildingId: 1,
     rng: f.rng,
     lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
+    stock: emptyStock(),
+    prod: emptyProd(),
     ...f.people,
   };
 }
@@ -54,7 +58,8 @@ export interface TownStats {
   jobsFinished: number; // jobs in finished workplaces
 }
 
-export function townStats(buildings: Record<number, Building>): TownStats {
+// `jobs` overrides the template's job count (a gumno's depends on its fields).
+export function townStats(buildings: Record<number, Building>, jobs: (b: Building) => number = (b) => BUILDINGS[b.template]?.jobs ?? 0): TownStats {
   let houseCap = 0;
   let unfinishedHouses = 0;
   let craftJobs = 0;
@@ -67,17 +72,18 @@ export function townStats(buildings: Record<number, Building>): TownStats {
       houseCap += t.residents;
       if (b.state !== "active") unfinishedHouses++;
     } else {
-      if (b.zone === "craft") craftJobs += t.jobs;
-      else tradeJobs += t.jobs;
-      if (b.state === "active") jobsFinished += t.jobs;
+      const n = jobs(b);
+      if (b.zone === "craft") craftJobs += n;
+      else if (b.zone === "trade") tradeJobs += n;
+      if (b.state === "active") jobsFinished += n;
     }
   }
   return { houseCap, unfinishedHouses, craftJobs, tradeJobs, jobsFinished };
 }
 
 // Wanted new buildings per zone type (may be negative).
-export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes">): Demand {
-  const st = townStats(s.buildings);
+export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes" | "zones" | "prod">): Demand {
+  const st = townStats(s.buildings, (b) => jobsOf(b, s));
   const ps = peopleStats(s);
   const vacant = vacantHouses(s.buildings, s.households).length;
   const jobVacancies = st.jobsFinished - ps.employed;
@@ -141,7 +147,7 @@ export function occupiedKeys(cells: readonly ZoneCell[], buildings: Record<numbe
 // Unit vector pointing away from the road on `side`.
 const away = (angle: number, side: 1 | -1): [number, number] => [-Math.sin(angle) * side, Math.cos(angle) * side];
 
-function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id: number, now: number): Building {
+function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id: number, now: number, site?: Site): Building {
   const { side, angle } = c0;
   const cx = (c0.cx + c1.cx) / 2;
   const cy = (c0.cy + c1.cy) / 2;
@@ -155,7 +161,7 @@ function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id: numbe
   const pts: [number, number][] = [at(-h, v0), at(h, v0), at(h, v1), at(-h, v1)];
   // (u, v) is right-handed on the left side of the road only.
   const footprint = side === 1 ? pts : pts.reverse();
-  return {
+  const b: Building = {
     id,
     template: t.id,
     zone: t.zone,
@@ -167,7 +173,10 @@ function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id: numbe
     labor: t.labor,
     done: 0,
     created: now,
+    paid: false,
   };
+  if (site) b.site = site;
+  return b;
 }
 
 // ---------- spawning ----------
@@ -227,6 +236,76 @@ export function spawnBuildings(s: SimState): SimState {
   return cur;
 }
 
+// ---------- placed buildings ----------
+
+export type PlaceCheck = { ok: true } | { ok: false; reason: string };
+
+const NO_PLACE = (reason: string): PlaceCheck => ({ ok: false, reason });
+export const PLACE_MIN = { forest: 0.1, water: 0.05 }; // site shares the woodcutter and the fisher need
+
+const BLOCK_REASON: Record<string, string> = {
+  road: "Здесь дорога",
+  overlap: "Здесь дорога",
+  field: "Здесь поле",
+  water: "Здесь вода",
+  steep: "Слишком крутой склон",
+  pending: "Местность ещё изучается",
+};
+
+// Can `t` stand on the lot whose depth-0 start cell is (edge, side, i)? The lot is t.w x t.d cells.
+// Shared by the worker (which enforces it) and the placement tool (which previews it).
+export function canPlace(
+  s: Pick<SimState, "roads" | "zones" | "buildings">,
+  t: BuildingTemplate,
+  edge: number,
+  side: 1 | -1,
+  i: number,
+  site: Site,
+): PlaceCheck {
+  if (t.zone !== "placed") return NO_PLACE("Это здание строится само");
+  const e = s.roads.edges[edge];
+  if (!e) return NO_PLACE("Нет такой дороги");
+  if (e.done < e.labor) return NO_PLACE("Дорога ещё не построена");
+  const byKey = new Map<string, ZoneCell>();
+  for (const c of s.zones.cells) if (c.edge === edge && c.side === side) byKey.set(c.key, c);
+  const occ = occupancy(s.buildings);
+  const cells: ZoneCell[] = [];
+  for (let a = 0; a < t.w; a++) {
+    for (let d = 0; d < t.d; d++) {
+      const c = byKey.get(`${edge}:${side}:${i + a}:${d}`);
+      if (!c) return NO_PLACE("Не хватает места вдоль дороги");
+      if (c.block) return NO_PLACE(BLOCK_REASON[c.block] ?? "Место занято");
+      if (occ(c.cx, c.cy)) return NO_PLACE("Место занято зданием");
+      cells.push(c);
+    }
+  }
+  if (t.id === "woodcutter" && site.forest < PLACE_MIN.forest) return NO_PLACE("Рядом мало леса (нужно от 10 %)");
+  if (t.id === "fisher" && site.water < PLACE_MIN.water) return NO_PLACE("Рядом нет воды (нужно от 5 %)");
+  if (t.id === "quarry") {
+    for (const c of cells) {
+      const land = s.zones.terrain[qkey(c.cx, c.cy)]?.land;
+      if (land === "water" || land === "wetland") return NO_PLACE("Каменоломню нельзя ставить на воде и болоте");
+    }
+  }
+  return { ok: true };
+}
+
+// Adds a planned building on the lot and clears the painted zone under it. Call canPlace first.
+export function placeBuilding(s: SimState, t: BuildingTemplate, edge: number, side: 1 | -1, i: number, site: Site): SimState {
+  const key = (a: number, d: number) => `${edge}:${side}:${i + a}:${d}`;
+  const c0 = s.zones.cells.find((c) => c.key === key(0, 0))!;
+  const far = s.zones.cells.find((c) => c.key === key(t.w - 1, t.d - 1))!;
+  const keys: string[] = [];
+  for (let a = 0; a < t.w; a++) for (let d = 0; d < t.d; d++) keys.push(key(a, d));
+  const id = s.nextBuildingId;
+  return {
+    ...s,
+    nextBuildingId: id + 1,
+    buildings: { ...s.buildings, [id]: makeBuilding(t, c0, far, id, s.gameMinutes, site) },
+    zones: { ...s.zones, cells: paintCells(s.zones.cells, keys, "none"), rev: s.zones.rev + 1 },
+  };
+}
+
 // ---------- construction ----------
 
 // Spends person-hours FIFO (lowest id first); returns the same record when nothing changed.
@@ -271,6 +350,7 @@ function survives(b: Building, edges: RoadEdge[], roads: RoadGraph, hash: Map<nu
   const fx = b.lot.cx - vx * front;
   const fy = b.lot.cy - vy * front;
   if (!edges.some((e) => distToEdge(roads, e, fx, fy) <= ROAD_KINDS[e.kind].width / 2 + ROAD_SLACK)) return false;
+  if (b.zone === "placed") return true; // kept until its road goes or it is demolished
   let total = 0;
   let good = 0;
   for (const c of near(hash, b.lot.cx, b.lot.cy)) {
