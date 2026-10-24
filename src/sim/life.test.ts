@@ -263,7 +263,7 @@ describe("handler: life message", () => {
     const again = setup(get());
     await again.h.handle({ t: "load", legacy: null, now: NOW + 1_300_000 });
     const msgs = again.out.map((m) => m.t);
-    expect(msgs.indexOf("loaded")).toBe(0);
+    expect(msgs.slice(0, msgs.indexOf("loaded")).every((t) => t === "progress")).toBe(true);
     expect(msgs).toContain("life");
     expect(msgs.indexOf("life")).toBeGreaterThan(msgs.indexOf("loaded"));
   });

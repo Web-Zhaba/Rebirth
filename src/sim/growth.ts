@@ -30,7 +30,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -44,6 +44,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     prod: emptyProd(),
     coverage: {},
     landValue: {},
+    chronicle: [],
     ...f.people,
   };
 }

@@ -104,7 +104,7 @@ Each milestone ends with something playable in the browser.
 | S5 | Production | Goods chains, storage, seasons, shortages affecting happiness; construction consumes materials (logs, planks, stone). **Done** (section 8). |
 | S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. **Done** (section 9). |
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. **Done** (section 10). Worker posts a cosmetic `life` message per game day and on load (up to 300 walkers, carts per load capped at 6 per producer, traffic over all commuters, lights); nothing of it is in `SimState` or saves; the «движение» overlay joins the S6 switch. |
-| S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. |
+| S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. **Done** (section 11). Catch-up runs in one-day chunks with `progress` messages (commands queue until it ends); `SimState.chronicle` (cap 1000, `addChronicle` in `sim/chronicle.ts` for E1) is saved and sent in snapshots only when it grows; the `Away` summary is counted step by step in `sim/away.ts`; a full 24 h catch-up of ~165 people took ~0.6 s in Node. |
 | E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. |
 | E2 | Notebook | Real Wikipedia entries tied to excavated places, plus the town chronicle. |
 

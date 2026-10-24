@@ -20,7 +20,10 @@ export const stock = computed(() => state.value?.stock ?? null);
 export const economy = computed(() => state.value?.economy ?? null);
 export const services = computed(() => state.value?.services ?? null);
 export const events = computed(() => state.value?.events ?? []);
+export const chronicle = computed(() => state.value?.chronicle ?? []);
 export const away = signal<Away | null>(null);
+// Catch-up progress in game minutes while the worker advances the town; null otherwise.
+export const catchUp = signal<{ done: number; total: number } | null>(null);
 
 // Visual life of the current game day (cosmetic, from the worker; see PLAN.md section 10).
 export const lifeTrips = signal<Trip[]>([]);
@@ -77,11 +80,20 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       city.value = m.save?.city ?? null;
       state.value = m.save?.sim ?? null;
       away.value = m.away;
+      catchUp.value = null;
+      break;
+    case "progress":
+      catchUp.value = { done: m.done, total: m.total };
+      break;
+    case "away":
+      away.value = m.away;
+      catchUp.value = null;
       break;
     case "snapshot": {
-      // Zones ride along only when they changed; otherwise keep the ones we have.
+      // Zones and the chronicle ride along only when they changed; otherwise keep the ones we have.
       const z = m.zones ?? state.value?.zones;
-      if (z) state.value = { ...m.sim, zones: z };
+      const c = m.chronicle ?? state.value?.chronicle;
+      if (z && c) state.value = { ...m.sim, zones: z, chronicle: c };
       break;
     }
     case "cmdResult": {

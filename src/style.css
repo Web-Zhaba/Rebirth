@@ -206,6 +206,46 @@ body {
   cursor: pointer;
 }
 
+.offline-wide {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  text-align: left;
+}
+
+.offline-wide .offline-title {
+  text-align: center;
+}
+
+.offline-body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.offline-sub {
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.offline-chronicle {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.progress {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #a3c088;
+}
+
 .night-tint {
   position: absolute;
   inset: 0;

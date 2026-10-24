@@ -1,11 +1,13 @@
 import { LANDS } from "../world/landcover";
 import { BUILDINGS, UPGRADE } from "./buildings";
+import { CHRONICLE_CAP } from "./chronicle";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
 import type {
   Building,
+  ChronicleEntry,
   City,
   EventKind,
   Field,
@@ -316,6 +318,16 @@ function parseProd(v: unknown): ProdState {
   return out;
 }
 
+// Broken entries are dropped, never the whole chronicle.
+function parseChronicle(v: unknown): ChronicleEntry[] {
+  if (!Array.isArray(v)) return [];
+  const out: ChronicleEntry[] = [];
+  for (const e of v) {
+    if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && typeof e.text === "string") out.push({ at: e.at, kind: e.kind, text: e.text });
+  }
+  return out.slice(-CHRONICLE_CAP);
+}
+
 // Saves from before growth have none of these fields: defaults, not an error. Broken buildings
 // reset the buildings only; a broken generator state or spawn clock is replaced by a default.
 // Saves without (or with broken) residents get the founders back.
@@ -342,6 +354,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.prod = parseProd(sim.prod);
   g.coverage = numRecord(sim.coverage); // derived: rebuilt on load and every day
   g.landValue = numRecord(sim.landValue);
+  g.chronicle = parseChronicle(sim.chronicle);
   const ls = sim.lastSpawn;
   if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
     g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };

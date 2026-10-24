@@ -156,9 +156,9 @@ describe("handler", () => {
     const saved: SaveV3 = { version: 3, city, sim: { realTime: NOW - 3_600_000, gameMinutes: 100, roads: emptyRoads(), zones: emptyZones(), ...growth() } };
     const { h, out, get } = setup(saved);
     await h.handle({ t: "load", legacy: null, now: NOW });
-    const m = out[0] as Extract<FromWorker, { t: "loaded" }>;
+    const m = out.find((x) => x.t === "loaded") as Extract<FromWorker, { t: "loaded" }>;
     expect(m.migrated).toBe(false);
-    expect(m.away).toEqual({ realMs: 3_600_000, gameMinutes: 3600 });
+    expect(m.away).toMatchObject({ realMs: 3_600_000, gameMinutes: 3600 });
     expect(m.save?.sim.gameMinutes).toBe(3700);
     expect((get() as SaveV3).sim.gameMinutes).toBe(3700);
   });

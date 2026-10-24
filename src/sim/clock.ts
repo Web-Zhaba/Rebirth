@@ -1,3 +1,4 @@
+import { recordChronicle } from "./chronicle";
 import { dailyServices } from "./coverage";
 import { advanceBuildings, spawnBuildings } from "./growth";
 import { builderCount, dailyStep, productionScale } from "./people";
@@ -34,14 +35,20 @@ export function step(s: SimState): SimState {
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScale(s));
   let next: SimState = { ...cur, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK };
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
-  return spawnBuildings(next);
+  return recordChronicle(s, spawnBuildings(next));
 }
 
-// Caps the gap to `cap` real ms, then runs whole ticks up to `now`.
-export function advanceTo(s: SimState, now: number, cap = OFFLINE_CAP): SimState {
-  let cur = s;
-  if (now - cur.realTime > cap) cur = { ...cur, realTime: now - cap };
-  while (cur.realTime + TICK_MS <= now) cur = step(cur);
+// Moves the simulated time up so that at most `cap` real ms are left to catch up on.
+export const capGap = (s: SimState, now: number, cap = OFFLINE_CAP): SimState => (now - s.realTime > cap ? { ...s, realTime: now - cap } : s);
+
+// Caps the gap to `cap` real ms, then runs whole ticks up to `now`. `onStep` sees every tick (prev, next).
+export function advanceTo(s: SimState, now: number, cap = OFFLINE_CAP, onStep?: (prev: SimState, next: SimState) => void): SimState {
+  let cur = capGap(s, now, cap);
+  while (cur.realTime + TICK_MS <= now) {
+    const next = step(cur);
+    onStep?.(cur, next);
+    cur = next;
+  }
   return cur;
 }
 

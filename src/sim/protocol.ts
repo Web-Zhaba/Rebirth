@@ -1,5 +1,8 @@
 import type { Light, Trip } from "../map/lifeLayer";
-import type { BuildingQuery, City, ClientSave, RoadKind, SimSnapshot, Site, ZoneState, ZoneType } from "./types";
+import type { Away } from "./away";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, RoadKind, SimSnapshot, Site, ZoneState, ZoneType } from "./types";
+
+export type { Away };
 
 export type Cmd =
   // pts and labor are local meters / person-hours; labor has one entry per segment.
@@ -20,11 +23,6 @@ export type ToWorker =
   | { t: "flush" }
   | { t: "reset" };
 
-export interface Away {
-  realMs: number;
-  gameMinutes: number;
-}
-
 export interface CmdResult {
   ok: boolean;
   reason?: string;
@@ -32,8 +30,12 @@ export interface CmdResult {
 
 export type FromWorker =
   | { t: "loaded"; save: ClientSave | null; migrated: boolean; away: Away | null }
-  // zones only when their rev changed since the previous snapshot
-  | { t: "snapshot"; sim: SimSnapshot; zones?: ZoneState }
+  // zones only when their rev changed, the chronicle only when it grew since the previous snapshot
+  | { t: "snapshot"; sim: SimSnapshot; zones?: ZoneState; chronicle?: ChronicleEntry[] }
+  // catch-up in progress (game minutes); no snapshots or life messages until it ends
+  | { t: "progress"; done: number; total: number }
+  // the summary of a catch-up after the tab was hidden (a catch-up at load reports it in "loaded")
+  | { t: "away"; away: Away }
   | ({ t: "cmdResult"; id: number } & CmdResult)
   | { t: "queryResult"; id: number; data: BuildingQuery | null }
   // cosmetic, once per game day and on load, never during catch-up; not part of the sim state or saves

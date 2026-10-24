@@ -136,6 +136,13 @@ export interface TownEvent {
   text: string;
 }
 
+// Notable moments kept forever (PLAN.md section 11); `kind` is a machine key, `text` the Russian line.
+export interface ChronicleEntry {
+  at: number; // gameMinutes
+  kind: string;
+  text: string;
+}
+
 export interface PeopleState {
   residents: Record<number, Resident>;
   households: Record<number, Household>;
@@ -184,6 +191,7 @@ export interface SimState extends PeopleState {
   gameMinutes: number; // since founding
   roads: RoadGraph;
   zones: ZoneState;
+  chronicle: ChronicleEntry[]; // oldest first, capped at 1000
   buildings: Record<number, Building>;
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
@@ -235,8 +243,8 @@ export interface Demand {
 }
 
 // What the worker streams every tick: no individual residents, only aggregates.
-// Zones travel separately, only when `rev` changed.
-export type SimSnapshot = Omit<SimState, "zones" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod"> & {
+// Zones and the chronicle travel separately, only when they changed.
+export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod"> & {
   people: PeopleStats & { demand: Demand };
   economy: EconomyStats;
   services: ServiceStats;
@@ -244,7 +252,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "residents" | "households" | 
 };
 
 // What the main thread keeps.
-export type ClientState = SimSnapshot & { zones: ZoneState };
+export type ClientState = SimSnapshot & { zones: ZoneState; chronicle: ChronicleEntry[] };
 
 export interface ClientSave {
   version: 3;
