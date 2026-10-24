@@ -4,6 +4,7 @@ import { effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCityMarker } from "./map/cityLayer";
+import { attachPlaceTool } from "./map/placeTool";
 import { attachRoadLayer } from "./map/roadLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachZoneLayer } from "./map/zoneLayer";
@@ -21,6 +22,7 @@ attachBuildingLayer(map);
 attachCityMarker(map);
 attachRoadTool(map);
 attachZoneTool(map);
+attachPlaceTool(map);
 let centred = false;
 effect(() => {
   const c = city.value;

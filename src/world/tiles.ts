@@ -81,7 +81,7 @@ function tileTemplate(): Promise<string> {
 }
 
 // A missing tile (404/204) means no features there, e.g. open ocean.
-async function loadVector(z: number, x: number, y: number): Promise<VectorTile | null> {
+export async function loadVector(z: number, x: number, y: number): Promise<VectorTile | null> {
   const url = (await tileTemplate()).replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
   const res = await fetch(url);
   if (res.status === 404 || res.status === 204) return null;

@@ -3,7 +3,7 @@ import { calendar } from "../sim/clock";
 import { cutOffEdges, WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
 import { ZONE_COLORS } from "../map/tools";
-import { events, people, reset, roads, zones } from "../simClient";
+import { economy, events, people, reset, roads, stock, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -12,6 +12,10 @@ const plural = (n: number) => {
   if (m >= 11 && m <= 14) return "участков";
   return n % 10 === 1 ? "участок" : n % 10 >= 2 && n % 10 <= 4 ? "участка" : "участков";
 };
+// Tons with one decimal, comma as the separator: 1600 -> "1,6", 33000 -> "33".
+const tons = (kg: number) => (Math.round(kg / 100) / 10).toString().replace(".", ",");
+const amount = (v: number) => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toString().replace(".", ",");
+const LOW_FOOD_DAYS = 30;
 const pad = (n: number) => String(n).padStart(2, "0");
 
 export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
@@ -53,6 +57,13 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
     }
     for (const f of z.fields) fieldArea += f.area;
   }
+  const st = stock.value;
+  const eco = economy.value;
+  let fieldLine: string | null = null;
+  if (eco && eco.fields.assignedHa > 0) {
+    if (eco.fields.window === "sowing") fieldLine = `Сев: ${Math.round(eco.fields.sown * 100)} %`;
+    else if (eco.fields.window === "harvest") fieldLine = `Жатва: ${tons(eco.fields.reaped)} из ${tons(eco.fields.expected)} т`;
+  }
   const ga = (fieldArea / 10000).toFixed(1).replace(".", ",");
   return (
     <div class="hud panel">
@@ -68,11 +79,31 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
           <div class="hud-date">
             Работают: {p.employed} · на стройке: {p.builders} · без работы: {p.unemployed}
           </div>
+        </>
+      )}
+      {st && eco && (
+        <div class="stock">
+          <div class={eco.foodDays < LOW_FOOD_DAYS && eco.foodPerDay > 0 ? "hud-date stock-low" : "hud-date"}>
+            Провизия {tons(st.food)} из {tons(eco.foodCap)} т
+            {eco.foodPerDay > 0 && ` · на ${eco.foodDays >= 999 ? "999+" : Math.floor(eco.foodDays)} дн.`}
+          </div>
+          <div class="hud-date">
+            Брёвна {amount(st.logs)} м³ · доски {amount(st.planks)} м³ · камень {amount(st.stone)} т · утварь {Math.floor(st.wares)} шт
+          </div>
+          {fieldLine && <div class="hud-date">{fieldLine}</div>}
+          {eco.avgMood > 0 && <div class="hud-date">Настроение: {Math.round(eco.avgMood)}</div>}
+        </div>
+      )}
+      <details class="hud-more">
+        <summary>Подробнее</summary>
+        {p && (
           <div class="hud-date">
             Дорога на работу: {p.employed > 0 ? `~${Math.round(p.avgCommute)} мин` : "—"} · стройка {pad(WORK_START)}–{pad(WORK_END)}
           </div>
-        </>
-      )}
+        )}
+        <div class="hud-date">
+          Зоны: жильё {res} · ремесло {craft} · торговля {trade} · поля {ga} га
+        </div>
       <div class="demand" title="Спрос на новые здания">
         {bars.map((b) => (
           <div class="demand-row" key={b.label}>
@@ -83,9 +114,7 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
           </div>
         ))}
       </div>
-      <div class="hud-date">
-        Зоны: жильё {res} · ремесло {craft} · торговля {trade} · поля {ga} га
-      </div>
+      </details>
       {queue > 0 && (
         <div class="hud-date">
           В очереди: {queue} {plural(queue)} · {p && p.builders > 0 ? `~${Math.ceil(remaining / p.builders)} ч работы` : "некому строить"}

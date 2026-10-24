@@ -86,6 +86,29 @@ body {
   top: 12px;
   left: 12px;
   max-width: calc(100vw - 80px);
+  max-height: calc(100vh - 220px); /* keep clear of the toolbar */
+  overflow-y: auto;
+}
+
+.stock {
+  margin: 4px 0;
+  padding: 4px 0;
+  border-top: 1px solid #e3e7d3;
+  border-bottom: 1px solid #e3e7d3;
+}
+
+.stock-low {
+  color: #b0302a;
+  font-weight: 600;
+}
+
+.hud-more {
+  font-size: 13px;
+  color: #7a8468;
+}
+
+.hud-more summary {
+  cursor: pointer;
 }
 
 .hud-name {
@@ -189,9 +212,15 @@ body {
   gap: 6px;
 }
 
+.road-buttons {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .road-buttons button {
   font: inherit;
-  padding: 8px 14px;
+  font-size: 13px;
+  padding: 6px 10px;
   border: 1px solid #c9d1b0;
   border-radius: 8px;
   background: #fff;
@@ -292,6 +321,8 @@ body {
   right: 12px;
   top: 120px;
   width: 220px;
+  max-height: calc(100vh - 330px); /* above the toolbar */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -342,4 +373,26 @@ body {
 .person-role {
   color: #7a8468;
   font-size: 12px;
+}
+
+.prod {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prod-warn {
+  color: #b0302a;
+  font-size: 12px;
+}
+
+.building-panel .demolish {
+  margin-top: 6px;
+  font: inherit;
+  padding: 5px 10px;
+  border: 1px solid #d9b2a8;
+  border-radius: 8px;
+  background: #fff;
+  color: #9c3a28;
+  cursor: pointer;
 }

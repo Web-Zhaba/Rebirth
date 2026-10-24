@@ -147,7 +147,7 @@ export function occupiedKeys(cells: readonly ZoneCell[], buildings: Record<numbe
 // Unit vector pointing away from the road on `side`.
 const away = (angle: number, side: 1 | -1): [number, number] => [-Math.sin(angle) * side, Math.cos(angle) * side];
 
-function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id: number, now: number, site?: Site): Building {
+export function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id: number, now: number, site?: Site): Building {
   const { side, angle } = c0;
   const cx = (c0.cx + c1.cx) / 2;
   const cy = (c0.cy + c1.cy) / 2;

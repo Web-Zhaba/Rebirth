@@ -1,4 +1,4 @@
-import { toolMsg, tool, type Tool } from "../map/tools";
+import { PLACED_COLORS, toolMsg, tool, type Tool } from "../map/tools";
 
 const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: string }[] }[] = [
   {
@@ -19,10 +19,23 @@ const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: strin
       { id: "clear", label: "Снять зону" },
     ],
   },
+  {
+    title: "Постройки",
+    buttons: [
+      { id: "gumno", label: "Гумно", color: PLACED_COLORS.gumno },
+      { id: "woodcutter", label: "Лесоруб", color: PLACED_COLORS.woodcutter },
+      { id: "sawpit", label: "Пильня", color: PLACED_COLORS.sawpit },
+      { id: "quarry", label: "Каменоломня", color: PLACED_COLORS.quarry },
+      { id: "fisher", label: "Рыбак", color: PLACED_COLORS.fisher },
+      { id: "barn", label: "Амбар", color: PLACED_COLORS.barn },
+    ],
+  },
 ];
 
 const ROAD_HINT = "Клик — точка, ПКМ или Esc — закончить";
 const BRUSH_HINT = "Тяните — закрасить, Shift+клик — вся сторона дороги, Пробел — двигать карту, Esc — выйти";
+
+const PLACE_HINT = "Клик — поставить у дороги, ПКМ или Esc — выйти";
 
 const HINT: Record<Tool, string> = {
   path: ROAD_HINT,
@@ -32,6 +45,12 @@ const HINT: Record<Tool, string> = {
   craft: BRUSH_HINT,
   trade: BRUSH_HINT,
   clear: `${BRUSH_HINT}. Клик по полю — убрать поле`,
+  gumno: `${PLACE_HINT}. Круг — досягаемость полей (400 м)`,
+  woodcutter: `${PLACE_HINT}. Круг — лес вокруг (150 м)`,
+  sawpit: PLACE_HINT,
+  quarry: PLACE_HINT,
+  fisher: `${PLACE_HINT}. Круг — вода рядом (100 м)`,
+  barn: PLACE_HINT,
   field: "Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить",
 };
 

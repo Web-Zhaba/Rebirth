@@ -101,7 +101,7 @@ Each milestone ends with something playable in the browser.
 | S2 | Zones | Zone cells generated along roads, blocked correctly by water/steep land/other roads; paint and unpaint zones; fields as areas. |
 | S3 | Growth | Demand model, buildings grow on lots from templates, construction by the work party (labor only), 2.5D buildings at real size. **Done.** Population is a placeholder (houses assumed full, work party = 10 + 1 per house) until S4; materials move to S5. |
 | S4 | Residents | Individual residents and households with life events, commuting, unemployment, migration; resident and household inspector. **Done.** Jobs by walking time on built roads (4 km/h, ≤ 45 min); jobless adults form the construction party; snapshots carry aggregates, the inspector queries the worker. Education, health and happiness come with S5–S6. |
-| S5 | Production | Goods chains, storage, seasons, shortages affecting happiness; construction consumes materials (logs, planks, stone). |
+| S5 | Production | Goods chains, storage, seasons, shortages affecting happiness; construction consumes materials (logs, planks, stone). **Done** (section 8). |
 | S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. |
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. |
 | S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. |
@@ -188,13 +188,102 @@ made by hand and added to the labor (per unit, already divided by PACE): logs 4 
 Deferred: the mill and bakery (households grind and bake at home in the village era), firewood,
 hunting and foraging, clearing forest for logs.
 
-## 9. Out of scope for now
+## 9. S6 design: services
+
+Services are placed buildings (same tool and lot rules as S5). Coverage is network distance
+along built roads, from the service's lot front to a house's lot front (plus both offsets
+to the nearest node), and counts only while the service is finished and, if it has jobs,
+staffed by at least one worker.
+
+| Service | Footprint | Lot | Jobs | Reach | Effect on covered households |
+|---|---|---|---|---|---|
+| Колодец (well) | 2 × 2 m | 1 × 1 | 0 | 150 m | water: mood +8 |
+| Рынок (market) | 12 × 12 m | 2 × 2 | 4 | 800 m | +5 mood; each market worker hands out wares to 20 households a day |
+| Часовня (chapel) | 6 × 8 m | 1 × 2 | 1 | 1000 m | +7 mood |
+| Школа (school) | 8 × 10 m | 1 × 2 | 2 | 800 m | children 7–14 attend; a child who attended ≥ 2 years becomes literate at 15; +3 mood for families with children |
+| Лекарь (healer) | 6 × 6 m | 1 × 1 | 1 | 1000 m | death rates × 0.6; +2 mood |
+
+Mood target becomes 10 + 45 × fed + 10 × wares + 10 × house + well 8 + market 5 + chapel 7
++ school 3 + healer 2 (max 100). Emigration below 35 stays.
+
+**Land value** of a house lot (0–100): 20 + 12 per covered service + 0.3 × (mood of the
+households within 100 m − 50), clamped. **House upgrade:** an izba whose land value ≥ 60 and
+whose household mood ≥ 70 for 10 days in a row rebuilds into level 2 (+2 residents, +1.5 m
+height; 60 h labor, 10 m³ logs, 2 m³ planks, taken like construction).
+
+**Literacy:** residents get `literate`; the HUD shows the literate share of adults. Literate
+workers make workshops and shops 20 % more productive.
+
+**Overlays:** a map overlay switch (none, water, market, chapel, school, healer, land value,
+mood) tints houses by coverage (yes/no) or value (gradient); the reach of a hovered or
+selected service is drawn as its covered road edges.
+
+## 10. S7 design: visible life
+
+- **Walkers:** once per game day the worker picks up to 300 commuters and sends their walking
+  paths (polylines in local meters along built roads, home ↔ work). The main thread animates
+  dots at 4 km/h of game time: to work departing 06:00–07:00, home 19:00–20:00, so each
+  arrives on time for 07–19.
+- **Carts:** every producer sends one cart per load (logs 5 m³, planks 2 m³, stone 3 t, food
+  500 kg, wares 20 pcs) to the camp along the road network; visual only, drawn as a larger
+  dot.
+- **Night lights:** when daylight < 0.4, occupied houses glow (blurred warm circle at the
+  footprint centre); workshops glow until 21:00.
+- **Overlays:** traffic (commuters per road edge per day, line width and colour) joins the
+  S6 overlay switch.
+- Everything visual is skipped while the tab is hidden and never touches the simulation.
+
+## 11. S8 design: idle and chronicle
+
+- **Catch-up with progress:** on load the worker advances in chunks of one game day and posts
+  progress between chunks; the UI shows "Пока вас не было…" with a progress bar; commands
+  wait until catch-up ends.
+- **Chronicle:** `SimState.chronicle` keeps notable entries forever (cap 1000): population
+  milestones (25, 50, 100, 250, 500, 1000), first house, first finished building of each
+  template, each harvest with tonnes, famines (food ran out / ended), new year, first
+  literate resident, excavation finds (E1).
+- **While you were away:** on return the notice lists: game time passed, population change
+  with births, deaths, arrivals and departures, buildings finished, goods produced, and the
+  chronicle entries of that period.
+
+## 12. E1 design: excavation
+
+- **Dig site (Раскоп):** placed building, 6 × 6 m, lot 1 × 1, 3 diggers. The revealed disc
+  grows by 40 m² per digger-hour (paced) from 15 m up to 120 m radius around the dig.
+  The simulation only knows the discs (centre, radius).
+- **Old world data:** the main thread reads OpenFreeMap z14 tiles (`building`,
+  `transportation`, `transportation_name`, `poi`) and keeps the features inside revealed
+  discs: building footprints as foundations, street lines clipped to the discs, named streets
+  and POIs.
+- **Rendering:** foundations as low grey-stone walls (0.6 m fill-extrusion outlines), old
+  streets as faint dashed lines with their names, POI names as small labels.
+- **Finds:** the main thread reports newly revealed foundations and POIs to the worker
+  (`recordFinds`); each foundation yields salvaged stone (0.05 t per m² of footprint,
+  capped at 20 t each). Recorded finds are saved so the notebook and rewards never repeat.
+- **Rebuild on old foundations:** a building whose footprint overlaps a recorded foundation
+  needs no stone and 25 % less labor.
+- **Old streets suggest roads:** the road tool also snaps to revealed old street lines
+  (vertices and nearest point), shown as guides.
+
+## 13. E2 design: notebook
+
+- A "Записная книжка" panel with three tabs:
+  - **Находки:** named POIs and streets found, counts of foundations per dig, with the date.
+  - **История:** Wikipedia articles unlocked when their coordinates fall inside a revealed
+    disc (+ 50 m). Query `list=geosearch` around each dig (radius = disc + 300 m) in ru, en as
+    fallback, then `prop=extracts` (intro, plain text). Each entry keeps title, extract (≤ 800
+    chars), link, language, coordinates, and shows "Википедия, CC BY-SA 4.0" with the link.
+    Unlocked entries are saved with the town so they stay offline.
+  - **Летопись:** the chronicle (S8).
+- New entries raise a small badge on the notebook button.
+
+## 14. Out of scope for now
 
 Later eras (manufactories, industry, modern utilities), bridges and water transport,
 multiple towns, the shared world archive, accounts and server saves, sound, mobile
 polish.
 
-## 10. Risks
+## 15. Risks
 
 - **Scope.** A deep city sim is months of work; short playable milestones keep it
   moving.

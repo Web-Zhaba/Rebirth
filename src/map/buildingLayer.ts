@@ -4,7 +4,7 @@ import type { Building } from "../sim/types";
 import { pointInPolygon } from "../sim/zones";
 import { buildings, frame } from "../simClient";
 import type { Frame } from "../world/frame";
-import { BUILDING_COLORS, tool } from "./tools";
+import { BUILDING_COLORS, PLACED_COLORS, tool } from "./tools";
 
 const SRC = "buildings";
 
@@ -29,7 +29,9 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
 
   const setup = () => {
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    const color = ["match", ["get", "zone"], "res", BUILDING_COLORS.res, "craft", BUILDING_COLORS.craft, BUILDING_COLORS.trade];
+    const byZone = ["match", ["get", "zone"], "res", BUILDING_COLORS.res, "craft", BUILDING_COLORS.craft, BUILDING_COLORS.trade];
+    // Placed buildings have a colour of their own per template.
+    const color = ["match", ["get", "template"], ...Object.entries(PLACED_COLORS).flat(), byZone];
     map.addLayer({
       id: "buildings-active",
       type: "fill-extrusion",
@@ -81,6 +83,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
           properties: {
             id: b.id,
             zone: b.zone,
+            template: b.template,
             state: b.state,
             h: b.height,
             hp: Math.max(0.5, b.height * progress),
