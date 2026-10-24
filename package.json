@@ -9,7 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "maplibre-gl": "^5.0.0"
+    "@preact/signals": "^2.11.3",
+    "h3-js": "^4.5.0",
+    "maplibre-gl": "^5.0.0",
+    "preact": "^11.0.2"
   },
   "devDependencies": {
     "typescript": "^5.0.0",

@@ -8,6 +8,8 @@
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
     "types": ["vite/client"]
   },
   "include": ["src"]

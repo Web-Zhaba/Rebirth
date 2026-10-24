@@ -4,9 +4,107 @@ html,
 body {
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #3b4331;
 }
 
 #map {
-  width: 100vw;
+  width: 100%;
   height: 100vh;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.panel {
+  pointer-events: auto;
+  background: rgba(255, 252, 240, 0.88);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(60, 70, 40, 0.18);
+  padding: 10px 14px;
+  box-sizing: border-box;
+}
+
+.hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  pointer-events: none;
+}
+
+.found {
+  position: absolute;
+  left: 50%;
+  bottom: 44px; /* clear the attribution bar */
+  transform: translateX(-50%);
+  width: min(320px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.coords {
+  font-size: 13px;
+  color: #7a8468;
+}
+
+.found input {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid #c9d1b0;
+  border-radius: 8px;
+  background: #fff;
+  min-width: 0;
+}
+
+.found button {
+  font: inherit;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #a3c088;
+  color: #2f3a24;
+  cursor: pointer;
+}
+
+.found button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  max-width: calc(100vw - 80px);
+}
+
+.hud-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.hud-date {
+  font-size: 13px;
+  color: #7a8468;
+}
+
+.hud .link {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: #8a7a5a;
+  text-decoration: underline;
+  cursor: pointer;
 }

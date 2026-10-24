@@ -5,9 +5,9 @@ export function createMap(container: string): maplibregl.Map {
   const map = new maplibregl.Map({
     container,
     style: rewildedStyle(),
-    center: [30.3141, 59.9386], // Saint Petersburg, used when the URL has no hash
-    zoom: 13,
-    hash: true,
+    center: [15, 50], // Europe, globe overview
+    zoom: 1.8,
+    hash: import.meta.env.DEV,
     attributionControl: false,
   });
   map.addControl(new maplibregl.NavigationControl(), "top-right");
