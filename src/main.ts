@@ -1,4 +1,6 @@
 import "./style.css";
 import { createMap } from "./map/mapView";
 
-createMap("map");
+const map = createMap("map");
+// Handle for poking at the map from devtools during development.
+if (import.meta.env.DEV) Object.assign(window, { map });
