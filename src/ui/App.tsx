@@ -12,7 +12,7 @@ export function App({ map }: { map: maplibregl.Map }) {
   const c = city.value;
   return (
     <>
-      {c ? <Hud city={c} /> : <FoundCity map={map} />}
+      {c ? <Hud city={c} map={map} /> : <FoundCity map={map} />}
       {c && <NightTint />}
       {c && <TerrainInspector map={map} />}
       {c && <RoadTools />}

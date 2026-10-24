@@ -3,6 +3,7 @@ import { advanceTo, BASE_TICK, TICK_MS } from "./clock";
 import {
   addRoad,
   advanceConstruction,
+  cutOffEdges,
   emptyRoads,
   removeEdge,
   segmentCost,
@@ -197,12 +198,14 @@ describe("construction", () => {
     let g = add(emptyRoads(), [[0, 0], [50, 0]], [5]);
     g = add(g, [[500, 500], [550, 500]], [5]); // far from the founding point
     expect(workableEdges(g)).toEqual([edges(g)[0].id]);
+    expect([...cutOffEdges(g)]).toEqual([edges(g)[1].id]);
     let a = advanceConstruction(g, 100);
     expect(edges(a)[0].done).toBe(5);
     expect(edges(a)[1].done).toBe(0);
     // connect it with a bridge road: now the whole network gets built
     a = add(a, [[50, 0], [500, 500]], [20]);
     expect(workableEdges(a)).toHaveLength(1); // the bridge; the far edge unlocks once it is built
+    expect(cutOffEdges(a).size).toBe(0); // waiting, but no longer cut off
     a = advanceConstruction(a, 100);
     expect(edges(a).every((e) => e.done === e.labor)).toBe(true);
   });

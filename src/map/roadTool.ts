@@ -1,6 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
-import { addRoad, distToEdge, ROAD_KINDS, segmentCost, snapPoint, type Snap } from "../sim/roads";
+import { addRoad, cutOffEdges, distToEdge, ROAD_KINDS, segmentCost, snapPoint, type Snap } from "../sim/roads";
 import { frame, roads, sendCmd } from "../simClient";
 import { sampleProfile } from "../world/profile";
 import { flash, isRoadTool, mapMpp, tool, type RoadTool } from "./tools";
@@ -260,7 +260,8 @@ export function attachRoadTool(map: maplibregl.Map): void {
         if (lastEvent) onMove(lastEvent);
       }
     };
-    const local = addRoad(g, [[a.x, a.y], [snap.x, snap.y]], t, tol, [0]);
+    // Nonzero labor keeps the new edge unfinished, so the cut-off check below sees it as planned.
+    const local = addRoad(g, [[a.x, a.y], [snap.x, snap.y]], t, tol, [1]);
     if (!local.ok) {
       flash(local.reason);
       finish(false);
@@ -281,6 +282,9 @@ export function attachRoadTool(map: maplibregl.Map): void {
           labor: [c.labor],
         }).then((r) => {
           if (!r.ok) flash(r.reason ?? "Не удалось проложить");
+          else if (cutOffEdges(local.graph).size > cutOffEdges(g).size) {
+            flash("Дорога не связана с лагерем — её не построят. Ведите её от лагеря или от готовой дороги");
+          }
           return r.ok;
         });
       })

@@ -314,6 +314,34 @@ export function workableEdges(g: RoadGraph): number[] {
     .sort((p, q) => p - q);
 }
 
+// Unfinished edges no work party can ever reach: their part of the network touches neither the
+// founding camp nor a finished road.
+export function cutOffEdges(g: RoadGraph): Set<number> {
+  const adj = new Map<number, number[]>();
+  const link = (p: number, q: number) => {
+    const l = adj.get(p);
+    if (l) l.push(q);
+    else adj.set(p, [q]);
+  };
+  for (const e of Object.values(g.edges)) {
+    link(e.a, e.b);
+    link(e.b, e.a);
+  }
+  const seen = reachedNodes(g);
+  const stack = [...seen];
+  while (stack.length > 0) {
+    for (const m of adj.get(stack.pop()!) ?? []) {
+      if (!seen.has(m)) {
+        seen.add(m);
+        stack.push(m);
+      }
+    }
+  }
+  const out = new Set<number>();
+  for (const e of Object.values(g.edges)) if (unfinished(e) && !seen.has(e.a)) out.add(e.id);
+  return out;
+}
+
 // Spends person-hours FIFO on workable edges; leftovers carry to the next one.
 // Returns the graph and the person-hours nobody could use (no reachable work).
 export function spendOnRoads(g: RoadGraph, personHours: number): { roads: RoadGraph; left: number } {

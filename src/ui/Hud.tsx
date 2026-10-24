@@ -1,5 +1,6 @@
+import type maplibregl from "maplibre-gl";
 import { calendar } from "../sim/clock";
-import { WORK_END, WORK_START } from "../sim/roads";
+import { cutOffEdges, WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
 import { ZONE_COLORS } from "../map/tools";
 import { events, people, reset, roads, zones } from "../simClient";
@@ -13,17 +14,18 @@ const plural = (n: number) => {
 };
 const pad = (n: number) => String(n).padStart(2, "0");
 
-export function Hud({ city }: { city: City }) {
+export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
   const cal = calendar(useGameMinutes());
   const onReset = () => {
     if (confirm("Удалить поселение и начать заново?")) reset();
   };
   const g = roads.value;
+  const cut = g ? cutOffEdges(g) : new Set<number>();
   let queue = 0;
   let remaining = 0;
   if (g) {
     for (const e of Object.values(g.edges)) {
-      if (e.done < e.labor) {
+      if (e.done < e.labor && !cut.has(e.id)) {
         queue++;
         remaining += e.labor - e.done;
       }
@@ -87,6 +89,14 @@ export function Hud({ city }: { city: City }) {
       {queue > 0 && (
         <div class="hud-date">
           В очереди: {queue} {plural(queue)} · {p && p.builders > 0 ? `~${Math.ceil(remaining / p.builders)} ч работы` : "некому строить"}
+        </div>
+      )}
+      {cut.size > 0 && (
+        <div class="hud-warn">
+          Отрезано от лагеря: {cut.size} {plural(cut.size)} дорог. Их не построят — ведите дорогу от лагеря или от готовой дороги.{" "}
+          <button class="link" onClick={() => map.flyTo({ center: [city.lng, city.lat], zoom: Math.max(map.getZoom(), 16) })}>
+            К лагерю
+          </button>
         </div>
       )}
       <details class="events">

@@ -111,6 +111,19 @@ body {
   cursor: pointer;
 }
 
+.hud-warn {
+  margin-top: 4px;
+  max-width: 260px;
+  font-size: 13px;
+  color: #b04a32;
+}
+
+.hud-warn .link {
+  display: inline;
+  margin-top: 0;
+  color: inherit;
+}
+
 .cell-panel {
   position: absolute;
   left: 12px;
