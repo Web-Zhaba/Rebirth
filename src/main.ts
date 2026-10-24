@@ -3,6 +3,8 @@ import { render, h } from "preact";
 import { effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
 import { attachCityMarker } from "./map/cityLayer";
+import { attachRoadLayer } from "./map/roadLayer";
+import { attachRoadTool } from "./map/roadTool";
 import { city, load } from "./simClient";
 import { App } from "./ui/App";
 
@@ -10,7 +12,9 @@ import { App } from "./ui/App";
 // Read it before creating the map, which writes its own hash on construction.
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
+attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachCityMarker(map);
+attachRoadTool(map);
 let centred = false;
 effect(() => {
   const c = city.value;

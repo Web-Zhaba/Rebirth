@@ -4,6 +4,7 @@ import { AwayNotice } from "./AwayNotice";
 import { FoundCity } from "./FoundCity";
 import { Hud } from "./Hud";
 import { NightTint } from "./NightTint";
+import { RoadTools } from "./RoadTools";
 import { TerrainInspector } from "./TerrainInspector";
 
 export function App({ map }: { map: maplibregl.Map }) {
@@ -13,6 +14,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c ? <Hud city={c} /> : <FoundCity map={map} />}
       {c && <NightTint />}
       {c && <TerrainInspector map={map} />}
+      {c && <RoadTools />}
       <AwayNotice />
     </>
   );

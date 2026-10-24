@@ -1,15 +1,29 @@
-import { signal } from "@preact/signals";
-import type { Away, FromWorker, ToWorker } from "./sim/protocol";
+import { computed, signal } from "@preact/signals";
+import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { City, SimState } from "./sim/types";
+import { makeFrame } from "./world/frame";
 
 const LEGACY_KEY = "rebirth.save";
 
 export const city = signal<City | null>(null);
-export const sim = signal<SimState | null>(null);
+export const state = signal<SimState | null>(null);
+export const roads = computed(() => state.value?.roads ?? null);
+export const frame = computed(() => (city.value ? makeFrame(city.value.lat, city.value.lng) : null));
 export const away = signal<Away | null>(null);
 
 const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module" });
 const send = (msg: ToWorker) => worker.postMessage(msg);
+
+let nextCmdId = 1;
+const pending = new Map<number, (r: CmdResult) => void>();
+
+export function sendCmd(cmd: Cmd): Promise<CmdResult> {
+  return new Promise((resolve) => {
+    const id = nextCmdId++;
+    pending.set(id, resolve);
+    send({ t: "cmd", id, cmd });
+  });
+}
 
 worker.onmessage = (e: MessageEvent<FromWorker>) => {
   const m = e.data;
@@ -23,12 +37,18 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
         }
       }
       city.value = m.save?.city ?? null;
-      sim.value = m.save?.sim ?? null;
+      state.value = m.save?.sim ?? null;
       away.value = m.away;
       break;
     case "snapshot":
-      sim.value = m.sim;
+      state.value = m.sim;
       break;
+    case "cmdResult": {
+      const done = pending.get(m.id);
+      pending.delete(m.id);
+      done?.({ ok: m.ok, reason: m.reason });
+      break;
+    }
     case "resetDone":
       location.reload();
       break;

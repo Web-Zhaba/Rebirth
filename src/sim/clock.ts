@@ -1,3 +1,4 @@
+import { advanceConstruction, WORKERS, WORK_END, WORK_START } from "./roads";
 import type { SimState } from "./types";
 
 // 1 real second = 1 game minute.
@@ -9,7 +10,10 @@ export const START_MINUTE_OF_DAY = 6 * 60; // founding at 06:00 on day 1
 export const DAYS_PER_SEASON = 90;
 
 export function step(s: SimState): SimState {
-  return { realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK };
+  const hour = calendar(s.gameMinutes).hour;
+  const working = hour >= WORK_START && hour < WORK_END;
+  const roads = working ? advanceConstruction(s.roads, (WORKERS * BASE_TICK) / 60) : s.roads;
+  return { realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK, roads };
 }
 
 // Caps the gap to `cap` real ms, then runs whole ticks up to `now`.
