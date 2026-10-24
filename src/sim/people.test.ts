@@ -1,0 +1,609 @@
+import { describe, expect, it } from "vitest";
+import { advanceTo, step } from "./clock";
+import { BUILDINGS } from "./buildings";
+import { demand, emptyGrowth, seedOf } from "./growth";
+import { Handler, type Storage } from "./handler";
+import {
+  constructionWork,
+  createFounders,
+  dailyStep,
+  deathRate,
+  familyGenitive,
+  FEMALE_NAMES,
+  MALE_NAMES,
+  peopleStats,
+  queryBuilding,
+  SURNAMES,
+  surnameFor,
+  syncPeople,
+  vacantHouses,
+  type RuleOpts,
+} from "./people";
+import type { FromWorker } from "./protocol";
+import { addRoad, emptyRoads } from "./roads";
+import { parseSaveV3 } from "./save";
+import { YEAR_MIN } from "./time";
+import type { Building, City, Household, Resident, RoadGraph, SaveV3, SimState, TerrainInfo } from "./types";
+import { emptyZones, qkey, regenerateCells } from "./zones";
+
+const NOW = 1_800_000_000_000;
+const MIDNIGHT = 1080; // 00:00 of game day 2
+const always = () => 0; // every probabilistic rule succeeds
+const never = () => 0.999999; // none does
+const WALK = 4000 / 60;
+
+const road = (pts: [number, number][], labor = 0): RoadGraph => {
+  const r = addRoad(emptyRoads(), pts, "dirt", 1, pts.slice(1).map(() => labor));
+  if (!r.ok) throw new Error(r.reason);
+  return r.graph;
+};
+// A road along the x axis with a node every 100 m; built unless `labor` > 0.
+const roadAlong = (len = 3000, labor = 0): RoadGraph =>
+  road(Array.from({ length: Math.floor(len / 100) + 1 }, (_, i): [number, number] => [i * 100, 0]), labor);
+
+// A building whose door (lot front) is at (x, 3), right beside the road.
+function building(id: number, template: string, x: number, state: Building["state"] = "active"): Building {
+  const t = BUILDINGS[template];
+  return {
+    id,
+    template,
+    zone: t.zone,
+    lot: { cx: x, cy: 3 + 4 * t.d, angle: 0, w: t.w, d: t.d },
+    side: 1,
+    footprint: [[x, 5], [x + 1, 5], [x + 1, 6], [x, 6]],
+    height: t.height,
+    state,
+    labor: t.labor,
+    done: state === "active" ? t.labor : 0,
+    created: 0,
+  };
+}
+
+function town(bs: Building[], roads: RoadGraph = roadAlong(), gm = MIDNIGHT): SimState {
+  const buildings: Record<number, Building> = {};
+  for (const b of bs) buildings[b.id] = b;
+  return { realTime: NOW, gameMinutes: gm, roads, zones: emptyZones(), ...emptyGrowth(7, gm), buildings, nextBuildingId: bs.length + 1 };
+}
+
+interface HSpec {
+  home: number | null;
+  people: { sex?: "m" | "f"; age?: number; job?: number }[];
+}
+
+// Replaces the founders with exactly these households (nobody married).
+function custom(s: SimState, specs: HSpec[]): SimState {
+  const residents: Record<number, Resident> = {};
+  const households: Record<number, Household> = {};
+  let pid = 1;
+  specs.forEach((sp, i) => {
+    const hid = i + 1;
+    const members: number[] = [];
+    for (const p of sp.people) {
+      const id = pid++;
+      residents[id] = {
+        id,
+        first: "Иван",
+        last: "Тестов",
+        sex: p.sex ?? "m",
+        born: s.gameMinutes - (p.age ?? 30) * YEAR_MIN,
+        household: hid,
+        spouse: null,
+        job: p.job ?? null,
+        commute: p.job === undefined ? null : 5,
+        idleDays: 0,
+      };
+      members.push(id);
+    }
+    households[hid] = { id: hid, last: "Тестов", home: sp.home, members, arrived: 0 };
+  });
+  return { ...s, residents, households, nextPersonId: pid, nextHouseholdId: specs.length + 1, events: [] };
+}
+
+// One game day with only the deterministic rules (moving in, jobs) unless told otherwise.
+const day = (s: SimState, opts: RuleOpts = { only: [] }) => dailyStep(s, opts);
+const ages = (s: SimState) => Object.values(s.residents).map((r) => (s.gameMinutes - r.born) / YEAR_MIN);
+const houses = (n: number) => Array.from({ length: n }, (_, i) => building(i + 1, "izba", 100 + i * 100));
+const kinds = (s: SimState) => s.events.map((e) => e.kind);
+
+describe("names", () => {
+  it("has enough names and handles feminine surnames", () => {
+    expect(MALE_NAMES.length).toBeGreaterThanOrEqual(25);
+    expect(FEMALE_NAMES.length).toBeGreaterThanOrEqual(25);
+    expect(SURNAMES.length).toBeGreaterThanOrEqual(40);
+    expect(surnameFor("Смирнов", "f")).toBe("Смирнова");
+    expect(surnameFor("Васильев", "f")).toBe("Васильева");
+    expect(surnameFor("Ильин", "f")).toBe("Ильина");
+    expect(surnameFor("Седых", "f")).toBe("Седых");
+    expect(surnameFor("Смирнов", "m")).toBe("Смирнов");
+    expect(familyGenitive("Смирнов")).toBe("Смирновых");
+    expect(familyGenitive("Седых")).toBe("Седых");
+    expect(surnameFor("Королёв", "f")).toBe("Королёва");
+    expect(familyGenitive("Королёв")).toBe("Королёвых");
+  });
+  it("death rates follow the age bands", () => {
+    expect([2, 10, 30, 55, 65, 80].map(deathRate)).toEqual([0.03, 0.005, 0.008, 0.02, 0.05, 0.15]);
+  });
+});
+
+describe("founders", () => {
+  it("are exactly 10 people in 3 married households in tents", () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      const { people } = createFounders(seed, 0);
+      const rs = Object.values(people.residents);
+      const hs = Object.values(people.households);
+      expect(rs).toHaveLength(10);
+      expect(hs).toHaveLength(3);
+      for (const h of hs) {
+        expect(h.home).toBeNull();
+        const m = h.members.map((id) => people.residents[id]);
+        const adults = m.filter((r) => -r.born / YEAR_MIN >= 20);
+        expect(adults).toHaveLength(2);
+        const [a, b] = adults;
+        expect(a.spouse).toBe(b.id);
+        expect(b.spouse).toBe(a.id);
+        expect(new Set(adults.map((r) => r.sex))).toEqual(new Set(["m", "f"]));
+        expect(adults.every((r) => -r.born / YEAR_MIN <= 40)).toBe(true);
+        expect(m.length - 2).toBeLessThanOrEqual(2);
+        for (const r of m) expect(r.last).toBe(surnameFor(h.last, r.sex));
+      }
+      expect(people.nextPersonId).toBe(11);
+    }
+  });
+  it("a new town starts with them", () => {
+    const g = emptyGrowth(5);
+    expect(Object.keys(g.residents)).toHaveLength(10);
+    expect(g.events).toEqual([]);
+  });
+});
+
+describe("moving in", () => {
+  it("tent households take vacant finished houses, lowest id first, one per house", () => {
+    const s = town([building(1, "izba", 100), building(2, "izba", 200), building(3, "izba", 300, "planned")]);
+    const a = day(s);
+    const h = Object.values(a.households).sort((p, q) => p.id - q.id);
+    expect(h.map((x) => x.home)).toEqual([1, 2, null]);
+    expect(kinds(a)).toEqual(["movein", "movein"]);
+    expect(vacantHouses(a.buildings, a.households)).toEqual([]);
+  });
+  it("a household that does not fit waits for a bigger house", () => {
+    const big = custom(town([building(1, "izba", 100), building(2, "izba5", 200)]), [{ home: null, people: Array(6).fill({}) }]);
+    expect(day(big).households[1].home).toBe(2);
+    const small = custom(town([building(1, "izba", 100)]), [{ home: null, people: Array(6).fill({}) }]);
+    expect(day(small).households[1].home).toBeNull();
+  });
+  it("a removed house sends its household back to the tents", () => {
+    const a = day(town(houses(3)));
+    expect(Object.values(a.households).every((h) => h.home !== null)).toBe(true);
+    const { 2: _gone, ...rest } = a.buildings;
+    const b = syncPeople({ ...a, buildings: rest });
+    expect(Object.values(b.households).filter((h) => h.home === null)).toHaveLength(1);
+    expect(syncPeople(b)).toBe(b);
+  });
+});
+
+describe("immigration", () => {
+  // 3 founding households move into houses 1-3 and house 4 stays vacant
+  const settled = (extra: Building[]) => day(town([...houses(3), building(4, "izba", 400), ...extra]));
+  const jobs = () => [building(5, "smithy", 500), building(6, "carpentry", 600)]; // 7 jobs for 6 adults
+
+  it("fills a vacant house when attractive", () => {
+    const s = settled(jobs());
+    expect(peopleStats(s).unemployed).toBe(0);
+    const a = day(s, { rand: always, only: ["immigration"] });
+    const fam = Object.values(a.households).find((h) => h.home === 4)!;
+    expect(fam).toBeDefined();
+    expect(fam.members.length).toBeGreaterThanOrEqual(2);
+    expect(fam.members.length).toBeLessThanOrEqual(5);
+    expect(a.events.at(-1)).toMatchObject({ kind: "arrival" });
+    expect(a.events.at(-1)!.text).toContain("приехала в поселение");
+    const adults = fam.members.map((id) => a.residents[id]).filter((r) => (a.gameMinutes - r.born) / YEAR_MIN >= 18);
+    expect(adults).toHaveLength(2);
+    expect(adults[0].spouse).toBe(adults[1].id);
+  });
+  it("does not when everybody is unemployed", () => {
+    const s = settled([]); // no workplaces and no construction: all adults idle
+    expect(peopleStats(s)).toMatchObject({ unemployed: 6, builders: 0 });
+    const a = day(s, { rand: always, only: ["immigration"] });
+    expect(Object.keys(a.households)).toHaveLength(3);
+    expect(vacantHouses(a.buildings, a.households)).toEqual([4]);
+  });
+  it("does not when the draw fails", () => {
+    const s = settled(jobs());
+    expect(Object.keys(day(s, { rand: never, only: ["immigration"] }).households)).toHaveLength(3);
+  });
+  it("arrivals always fit the house", () => {
+    const s = custom(town([building(1, "izba", 100)]), []);
+    for (let i = 1; i <= 40; i++) {
+      const a = dailyStep({ ...s, rng: i }, { only: ["immigration"] });
+      for (const h of Object.values(a.households)) expect(h.members.length).toBeLessThanOrEqual(5);
+    }
+  });
+});
+
+describe("births", () => {
+  it("only married women with room, in housed households", () => {
+    const s = day(town(houses(3)));
+    const before = Object.keys(s.residents).length;
+    const a = day(s, { rand: always, only: ["birth"] });
+    expect(Object.keys(a.residents).length).toBe(before + 3);
+    expect(kinds(a).filter((k) => k === "birth")).toHaveLength(3);
+    const kid = Object.values(a.residents).find((r) => r.born === a.gameMinutes)!;
+    expect(kid.last).toBe(surnameFor(a.households[kid.household].last, kid.sex));
+    expect(a.households[kid.household].members).toContain(kid.id);
+    // a full house stops births: an izba holds 5
+    let c = a;
+    for (let i = 0; i < 3; i++) c = day(c, { rand: always, only: ["birth"] });
+    for (const h of Object.values(c.households)) expect(h.members).toHaveLength(5);
+  });
+  it("not in tents, not for unmarried women", () => {
+    expect(Object.keys(day(town([]), { rand: always, only: ["birth"] }).residents)).toHaveLength(10);
+    const s = day(town(houses(3)));
+    const wife = Object.values(s.residents).find((r) => r.sex === "f" && r.spouse !== null && r.household === 1)!;
+    const husband = s.residents[wife.spouse!];
+    const widowed = { ...s, residents: { ...s.residents, [wife.id]: { ...wife, spouse: null }, [husband.id]: { ...husband, spouse: null } } };
+    const a = day(widowed, { rand: always, only: ["birth"] });
+    expect(a.households[1].members).toHaveLength(s.households[1].members.length);
+    expect(a.households[2].members).toHaveLength(s.households[2].members.length + 1);
+  });
+});
+
+describe("deaths", () => {
+  it("remove people and free the house when a household empties", () => {
+    const s = day(town(houses(3)));
+    const h1 = s.households[1];
+    let n = 0;
+    // draws go in id order; household 1 holds ids 1..k
+    const killHousehold1 = () => (n++ < h1.members.length ? 0 : 0.999999);
+    const a = day(s, { rand: killHousehold1, only: ["death"] });
+    expect(a.households[1]).toBeUndefined();
+    expect(h1.members.every((id) => !a.residents[id])).toBe(true);
+    expect(Object.keys(a.households)).toHaveLength(2);
+    expect(vacantHouses(a.buildings, a.households)).toEqual([1]);
+    expect(kinds(a).filter((k) => k === "death")).toHaveLength(h1.members.length);
+  });
+  it("a death widows the spouse", () => {
+    const s = day(town(houses(3)));
+    let n = 0;
+    const a = day(s, { rand: () => (n++ === 0 ? 0 : 0.999999), only: ["death"] });
+    const victim = s.residents[1];
+    expect(a.residents[1]).toBeUndefined();
+    expect(a.residents[victim.spouse!].spouse).toBeNull();
+    expect(a.households[1].members).not.toContain(1);
+    expect(a.events.at(-1)!.text).toMatch(/^Умер(ла)? /);
+  });
+  it("nobody dies on a failing draw", () => {
+    expect(Object.keys(day(town([]), { rand: never, only: ["death"] }).residents)).toHaveLength(10);
+  });
+});
+
+describe("marriage", () => {
+  const pair = (bs: Building[]) =>
+    custom(town(bs), [
+      { home: null, people: [{ sex: "m", age: 25 }, { sex: "f", age: 45 }] },
+      { home: null, people: [{ sex: "f", age: 24 }, { sex: "m", age: 50 }] },
+    ]);
+  it("a man and a woman from different households wed into a vacant house", () => {
+    const a = day(pair([building(1, "izba", 100)]), { rand: always, only: ["marriage"] });
+    const man = a.residents[1];
+    const woman = a.residents[3];
+    expect(man.spouse).toBe(3);
+    expect(woman.spouse).toBe(1);
+    expect(woman.household).toBe(man.household);
+    const h = a.households[man.household];
+    expect(h.home).toBe(1);
+    expect([...h.members].sort()).toEqual([1, 3]);
+    expect(kinds(a)).toContain("marriage");
+    expect(woman.last).toBe(surnameFor(man.last, "f"));
+    expect(a.households[1].members).toEqual([2]);
+  });
+  it("needs a vacant house", () => {
+    const a = day(pair([]), { rand: always, only: ["marriage"] });
+    expect(a.residents[1].spouse).toBeNull();
+    expect(a.residents[3].spouse).toBeNull();
+    expect(kinds(a)).not.toContain("marriage");
+  });
+  it("not when the draw fails or when they share a household", () => {
+    expect(day(pair([building(1, "izba", 100)]), { rand: never, only: ["marriage"] }).residents[1].spouse).toBeNull();
+    const together = custom(town([building(1, "izba", 100)]), [{ home: null, people: [{ sex: "m", age: 25 }, { sex: "f", age: 24 }] }]);
+    expect(day(together, { rand: always, only: ["marriage"] }).residents[1].spouse).toBeNull();
+  });
+});
+
+describe("jobs", () => {
+  const adults = (n: number, home: number | null = 1): HSpec => ({ home, people: Array(n).fill({}) });
+
+  it("assigns the nearest reachable workplace, then the next one when it is full", () => {
+    const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "smithy", 1000)]), [adults(4)]);
+    const a = day(s);
+    const rs = Object.values(a.residents);
+    expect(rs.filter((r) => r.job === 2)).toHaveLength(3); // the smithy holds 3
+    expect(rs.filter((r) => r.job === 3)).toHaveLength(1);
+    const near = rs.find((r) => r.job === 2)!;
+    const far = rs.find((r) => r.job === 3)!;
+    expect(near.commute).toBeCloseTo((3 + 300 + 3) / WALK, 1);
+    expect(far.commute).toBeCloseTo((3 + 900 + 3) / WALK, 1);
+    const st = peopleStats(a);
+    expect(st.employed).toBe(4);
+    expect(st.avgCommute).toBeCloseTo((near.commute! * 3 + far.commute!) / 4, 5);
+  });
+  it("tents commute from the founding point", () => {
+    const s = custom(town([building(1, "smithy", 200)]), [adults(1, null)]);
+    const r = day(s).residents[1];
+    expect(r.job).toBe(1);
+    expect(r.commute).toBeCloseTo((0 + 200 + 3) / WALK, 1);
+  });
+  it("leaves people unemployed when the workplace is beyond 45 minutes", () => {
+    const bs = () => [building(1, "izba", 100), building(2, "smithy", 3200)];
+    expect(day(custom(town(bs()), [adults(1)])).residents[1].job).toBeNull();
+    // and a worker whose workplace became unreachable loses the job
+    const employed = custom(town(bs()), [{ home: 1, people: [{ job: 2 }] }]);
+    expect(day(employed).residents[1]).toMatchObject({ job: null, commute: null });
+  });
+  it("leaves people unemployed when the road is not built", () => {
+    const unbuilt = roadAlong(3000, 100);
+    const a = day(custom(town([building(1, "izba", 100), building(2, "smithy", 400)], unbuilt), [adults(2)]));
+    expect(Object.values(a.residents).every((r) => r.job === null)).toBe(true);
+  });
+  it("children and the old do not work; planned buildings give no jobs", () => {
+    const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "shop", 500, "planned")]), [
+      { home: 1, people: [{ age: 10 }, { age: 70 }, { age: 30 }] },
+    ]);
+    const a = day(s);
+    expect(a.residents[1].job).toBeNull();
+    expect(a.residents[2].job).toBeNull();
+    expect(a.residents[3].job).toBe(2);
+  });
+  it("jobs of a removed workplace are dropped", () => {
+    const s = day(custom(town([building(1, "izba", 100), building(2, "smithy", 400)]), [adults(2)]));
+    expect(Object.values(s.residents).every((r) => r.job === 2)).toBe(true);
+    const { 2: _gone, ...rest } = s.buildings;
+    const t = syncPeople({ ...s, buildings: rest });
+    expect(Object.values(t.residents).every((r) => r.job === null && r.commute === null)).toBe(true);
+    expect(syncPeople(t)).toBe(t);
+    const u = day({ ...s, buildings: rest });
+    expect(Object.values(u.residents).every((r) => r.job === null)).toBe(true);
+  });
+  it("idle days count up without work, not while construction is pending, and reset with a job", () => {
+    const calm = custom(town([building(1, "izba", 100)]), [adults(1)]);
+    expect(day(day(calm)).residents[1].idleDays).toBe(2);
+    const busy = custom(town([building(1, "izba", 100), building(2, "izba", 200, "planned")]), [adults(1)]);
+    expect(constructionWork(busy.buildings, busy.roads)).toBe(true);
+    expect(day(day(busy)).residents[1].idleDays).toBe(0);
+    const worked = custom(town([building(1, "izba", 100), building(2, "smithy", 300)]), [adults(1)]);
+    const w2 = { ...worked, residents: { 1: { ...worked.residents[1], idleDays: 4 } } };
+    expect(day(w2).residents[1]).toMatchObject({ job: 2, idleDays: 0 });
+  });
+});
+
+describe("builders and unemployment", () => {
+  it("jobless adults build while there is construction work, otherwise they are unemployed", () => {
+    const planned = town([...houses(2), building(3, "izba", 300, "planned")]);
+    expect(peopleStats(planned)).toMatchObject({ pop: 10, adults: 6, children: 4, builders: 6, unemployed: 0, tents: 3, households: 3 });
+    expect(peopleStats(town(houses(2)))).toMatchObject({ builders: 0, unemployed: 6 });
+  });
+  it("demand counts vacancies, vacant and unfinished houses and tents", () => {
+    const s = town([building(1, "izba", 100), building(2, "izba", 200), building(3, "smithy", 300)]);
+    // 3 tents, 2 vacant houses, 3 open jobs: 1.5 + 3 / 2 - 2 + 3
+    expect(demand(s).res).toBeCloseTo(4);
+    const t = day(s);
+    // two families moved in, one is still in tents, and the smithy has staff
+    const employed = peopleStats(t).employed;
+    expect(demand(t).res).toBeCloseTo(1.5 + (3 - employed) / 2 + 1);
+  });
+});
+
+describe("emigration", () => {
+  // n daily steps in a town of three houses and no work: every adult has n idle days
+  const idle = (n: number) => {
+    let s = town(houses(3));
+    for (let i = 0; i < n; i++) s = day(s);
+    return s;
+  };
+  it("idle families stay before 5 days", () => {
+    const s = idle(4);
+    expect(Object.values(s.residents).filter((r) => r.idleDays === 4).length).toBeGreaterThanOrEqual(6);
+    expect(Object.keys(day(s, { rand: always, only: ["emigration"] }).households)).toHaveLength(3);
+  });
+  it("leave after 5 idle days with the draw, vacating the house", () => {
+    const s = idle(5);
+    const a = day(s, { rand: always, only: ["emigration"] });
+    expect(Object.keys(a.households)).toHaveLength(0);
+    expect(Object.keys(a.residents)).toHaveLength(0);
+    expect(kinds(a).filter((k) => k === "departure")).toHaveLength(3);
+    expect(a.events.at(-1)!.text).toContain("покинула поселение");
+    expect(vacantHouses(a.buildings, a.households)).toEqual([1, 2, 3]);
+    expect(Object.keys(day(s, { rand: never, only: ["emigration"] }).households)).toHaveLength(3);
+  });
+  it("founders in tents never leave", () => {
+    let s = town([]);
+    for (let i = 0; i < 8; i++) s = day(s);
+    expect(Math.max(...Object.values(s.residents).map((r) => r.idleDays))).toBe(8);
+    expect(Object.keys(day(s, { rand: always, only: ["emigration"] }).households)).toHaveLength(3);
+  });
+});
+
+describe("determinism", () => {
+  it("one advanceTo equals many random-sized calls, people included", () => {
+    const g = road([[0, 0], [160, 0]]);
+    const terrain: Record<string, TerrainInfo> = {};
+    for (const c of regenerateCells(g, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
+    const cells = regenerateCells(g, [], [], terrain).map((c) =>
+      c.block ? c : { ...c, zone: c.side === 1 ? (c.i < 10 ? ("res" as const) : ("craft" as const)) : ("trade" as const) },
+    );
+    const start: SimState = { realTime: NOW, gameMinutes: 0, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(42) };
+    const end = NOW + 40 * 24 * 60 * 1000; // 40 game days
+    let t = NOW;
+    let s = start;
+    let seed = 3;
+    while (t < end) {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      t += seed % 5000;
+      s = advanceTo(s, t);
+    }
+    const once = advanceTo(start, t);
+    expect(s).toEqual(once);
+    expect(once.events.length).toBeGreaterThan(0);
+    expect(once.events.length).toBeLessThanOrEqual(50);
+    expect(Object.keys(once.buildings).length).toBeGreaterThan(0);
+    expect(start.residents).toEqual(emptyGrowth(42).residents); // the input was not touched
+  });
+  it("the daily step runs when a tick crosses 00:00 and not otherwise", () => {
+    const before = town([], roadAlong(), MIDNIGHT - 20);
+    const mid = step(before);
+    expect(mid.rng).toBe(before.rng);
+    expect(mid.residents).toBe(before.residents);
+    const after = step(mid); // 23:50 -> 00:00
+    expect(after.rng).not.toBe(mid.rng); // deaths drew numbers
+    expect(after.residents).not.toBe(mid.residents);
+  });
+});
+
+describe("save", () => {
+  const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
+  const wrap = (sim: Record<string, unknown>) => ({ version: 3, city, sim: { realTime: NOW, gameMinutes: 200, roads: emptyRoads(), ...sim } });
+
+  it("the user's save without residents gets the founders", () => {
+    const s = parseSaveV3(wrap({ rng: 12345, buildings: {}, nextBuildingId: 1, lastSpawn: { res: -60, craft: -60, trade: -60 } }), NOW)!;
+    expect(Object.keys(s.sim.residents)).toHaveLength(10);
+    expect(Object.values(s.sim.households).every((h) => h.home === null)).toBe(true);
+    const f = createFounders(12345, 200);
+    expect(s.sim.residents).toEqual(f.people.residents);
+    expect(s.sim.rng).toBe(f.rng);
+    for (const a of ages(s.sim)) expect(a).toBeGreaterThanOrEqual(0);
+  });
+  it("round-trips people", () => {
+    const sim = day(town(houses(3)));
+    const raw = JSON.parse(JSON.stringify(sim));
+    const s = parseSaveV3({ version: 3, city, sim: { ...raw, roads: sim.roads, realTime: NOW } }, NOW)!;
+    expect(s.sim.residents).toEqual(sim.residents);
+    expect(s.sim.households).toEqual(sim.households);
+    expect(s.sim.events).toEqual(sim.events);
+    expect(s.sim.nextPersonId).toBe(sim.nextPersonId);
+    expect(s.sim.nextHouseholdId).toBe(sim.nextHouseholdId);
+  });
+  it("broken people data resets to founders, the town survives", () => {
+    const sim = day(town(houses(3)));
+    const raw = JSON.parse(JSON.stringify(sim));
+    const keep = { ...raw, roads: sim.roads, realTime: NOW };
+    const bad: Record<string, unknown>[] = [
+      { ...keep, residents: [] },
+      { ...keep, residents: { ...keep.residents, 1: { ...keep.residents[1], sex: "x" } } },
+      { ...keep, residents: { ...keep.residents, 1: { ...keep.residents[1], household: 99 } } },
+      { ...keep, residents: { ...keep.residents, 1: { ...keep.residents[1], spouse: 9 } } },
+      { ...keep, residents: { ...keep.residents, 1: { ...keep.residents[1], born: "old" } } },
+      { ...keep, households: { ...keep.households, 1: { ...keep.households[1], members: [1, 77] } } },
+      { ...keep, households: { ...keep.households, 1: { ...keep.households[1], members: [] } } },
+      { ...keep, nextPersonId: 2 },
+      { ...keep, households: "x" },
+    ];
+    for (const b of bad) {
+      const s = parseSaveV3({ version: 3, city, sim: b }, NOW)!;
+      expect(s).not.toBeNull();
+      const hs = Object.values(s.sim.households);
+      expect(Object.keys(s.sim.residents)).toHaveLength(10);
+      expect(hs).toHaveLength(3);
+      expect(hs.every((h) => h.home === null)).toBe(true);
+      expect(s.sim.roads).toEqual(sim.roads);
+      expect(Object.keys(s.sim.buildings)).toHaveLength(3); // buildings are untouched
+    }
+  });
+  it("repairs references to missing buildings", () => {
+    const sim = day(custom(town([building(1, "izba", 100), building(2, "smithy", 400)]), [{ home: 1, people: [{}, {}] }]));
+    expect(Object.values(sim.residents).every((r) => r.job === 2)).toBe(true);
+    const raw = JSON.parse(JSON.stringify(sim));
+    const s = parseSaveV3({ version: 3, city, sim: { ...raw, roads: sim.roads, realTime: NOW, buildings: {}, nextBuildingId: 3 } }, NOW)!;
+    expect(Object.keys(s.sim.residents)).toHaveLength(2);
+    expect(s.sim.households[1].home).toBeNull();
+    expect(Object.values(s.sim.residents).every((r) => r.job === null && r.commute === null)).toBe(true);
+  });
+});
+
+describe("query", () => {
+  const base = () => {
+    const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "izba", 500, "planned")]), [
+      { home: 1, people: [{ sex: "m", age: 30 }, { sex: "f", age: 28 }, { sex: "m", age: 5 }, { sex: "m", age: 70 }, { sex: "f", age: 65 }] },
+    ]);
+    return { ...s, residents: { ...s.residents, 1: { ...s.residents[1], job: 2, commute: 4.6 } } };
+  };
+  it("lists a household and the occupation of each member", () => {
+    const s = base();
+    const q = queryBuilding(s, 1)!;
+    expect(q.kind).toBe("house");
+    if (q.kind !== "house") return;
+    expect(q.households).toHaveLength(1);
+    expect(q.households[0].people.map((p) => p.role)).toEqual(["кузнец — Кузница", "на стройке", "ребёнок", "старик", "старуха"]);
+    expect(q.households[0].people[0]).toMatchObject({ name: "Иван Тестов", age: 30, sex: "m" });
+    const { 3: _planned, ...finished } = s.buildings;
+    const calm = queryBuilding({ ...s, buildings: finished }, 1)!;
+    if (calm.kind === "house") expect(calm.households[0].people[1].role).toBe("без работы");
+  });
+  it("lists the workers of a workplace with their commute", () => {
+    expect(queryBuilding(base(), 2)).toEqual({ kind: "workplace", capacity: 3, workers: [{ id: 1, name: "Иван Тестов", age: 30, commute: 4.6 }] });
+    expect(queryBuilding(town([building(1, "shop", 100)]), 1)).toMatchObject({ kind: "workplace", capacity: 2, workers: [] });
+  });
+  it("an empty house and a missing building", () => {
+    expect(queryBuilding(town(houses(1)), 1)).toEqual({ kind: "house", households: [] });
+    expect(queryBuilding(town([]), 5)).toBeNull();
+  });
+});
+
+describe("handler: persistence and query channel", () => {
+  const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
+  function setup(initial?: unknown) {
+    let stored: unknown = initial;
+    let puts = 0;
+    const storage: Storage = {
+      get: async () => stored,
+      put: async (s) => {
+        stored = s;
+        puts++;
+      },
+      clear: async () => {
+        stored = undefined;
+      },
+    };
+    const out: FromWorker[] = [];
+    const h = new Handler(storage, (m) => out.push(m));
+    return { h, out, puts: () => puts, get: () => stored as SaveV3 };
+  }
+
+  it("saves once per game hour while ticking, not every tick", async () => {
+    const { h, puts } = setup();
+    await h.handle({ t: "found", city, now: NOW });
+    const before = puts();
+    for (let k = 1; k <= 12; k++) h.tick(NOW + k * 10_000); // 120 game minutes
+    expect(puts() - before).toBe(2);
+    await h.handle({ t: "flush" });
+    expect(puts() - before).toBe(3);
+  });
+  it("sends aggregates, not residents, in `loaded`", async () => {
+    const { h, out } = setup();
+    await h.handle({ t: "found", city, now: NOW });
+    const m = out[0] as Extract<FromWorker, { t: "loaded" }>;
+    expect(m.save?.sim.people).toMatchObject({ pop: 10, households: 3, tents: 3, adults: 6, children: 4 });
+    expect(m.save?.sim).not.toHaveProperty("residents");
+  });
+  it("answers building queries", async () => {
+    const g = roadAlong(160);
+    const terrain: Record<string, TerrainInfo> = {};
+    for (const c of regenerateCells(g, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
+    const cells = regenerateCells(g, [], [], terrain).map((c) => (c.block ? c : { ...c, zone: "res" as const }));
+    let s: SimState = { realTime: NOW, gameMinutes: 0, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(seedOf(city.foundedAt)) };
+    s = step(s); // spawns a house
+    const b = Object.values(s.buildings)[0];
+    expect(b).toBeDefined();
+    s = { ...s, buildings: { [b.id]: { ...b, state: "active", done: b.labor } } };
+    s = { ...s, households: { ...s.households, 1: { ...s.households[1], home: b.id } } };
+    const { h, out } = setup({ version: 3, city, sim: s });
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    out.length = 0;
+    await h.handle({ t: "query", id: 5, q: { type: "building", id: b.id } });
+    const hit = out[0] as Extract<FromWorker, { t: "queryResult" }>;
+    expect(hit.t).toBe("queryResult");
+    expect(hit.id).toBe(5);
+    expect(hit.data?.kind).toBe("house");
+    if (hit.data?.kind === "house") expect(hit.data.households[0].people).toHaveLength(s.households[1].members.length);
+    await h.handle({ t: "query", id: 6, q: { type: "building", id: 999 } });
+    expect(out[1]).toEqual({ t: "queryResult", id: 6, data: null });
+  });
+});

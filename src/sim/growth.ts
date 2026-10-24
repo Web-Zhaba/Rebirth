@@ -1,20 +1,23 @@
 import { BUILDINGS, FRONT_SETBACK, templatesOf, type BuildingTemplate } from "./buildings";
+import { createFounders, peopleStats, vacantHouses } from "./people";
+import { nextRandom } from "./rng";
 import { distToEdge, ROAD_KINDS } from "./roads";
-import type { Building, RoadEdge, RoadGraph, SimState, ZoneCell, ZoneType } from "./types";
+import type { Building, Demand, PeopleState, RoadEdge, RoadGraph, SimState, ZoneCell, ZoneType } from "./types";
 import { CELL_SIZE } from "./zones";
 
-export const FOUNDERS = 10; // founding party: tents and the first work party
+export { nextRandom };
+export type { Demand };
 export const SPAWN_INTERVAL = 60; // game minutes between new buildings of one zone type
 export const NO_SPAWN = -SPAWN_INTERVAL; // lastSpawn value that allows a spawn at once
 
 // All demand tuning lives here.
 export const DEMAND = {
-  basePop: 30,
-  popPerJob: 2,
-  houseSize: 5, // residents per household, for the res demand count
-  craftShare: 0.25, // craft jobs wanted per resident
+  resBase: 1.5,
+  resPerVacancy: 0.5, // per unfilled job
+  craftShare: 0.2, // craft jobs wanted per resident
   craftJobs: 3, // jobs per workshop, for the craft demand count
-  tradeShare: 0.08,
+  craftPerUnemployed: 1 / 6,
+  tradeShare: 0.07,
   tradeJobs: 2,
 };
 
@@ -25,75 +28,64 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn">;
+type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn"> & PeopleState;
 
-export const emptyGrowth = (seed: number): Growth => ({
-  buildings: {},
-  nextBuildingId: 1,
-  rng: seed >>> 0,
-  lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
-});
+// A fresh village at game minute `now`: the founders already live in their tents.
+export function emptyGrowth(seed: number, now = 0): Growth {
+  const f = createFounders(seed >>> 0, now);
+  return {
+    buildings: {},
+    nextBuildingId: 1,
+    rng: f.rng,
+    lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
+    ...f.people,
+  };
+}
 
 export const seedOf = (foundedAt: number): number => (Math.floor(foundedAt) ^ 0x9e3779b9) >>> 0;
-
-// mulberry32: returns the next value in [0, 1) and the next state.
-export function nextRandom(state: number): [number, number] {
-  const s = (state + 0x6d2b79f5) >>> 0;
-  let t = Math.imul(s ^ (s >>> 15), s | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return [((t ^ (t >>> 14)) >>> 0) / 4294967296, s];
-}
 
 // ---------- stats and demand ----------
 
 export interface TownStats {
-  housing: number; // capacity of finished houses
   houseCap: number; // capacity of all houses, finished or not
-  pop: number;
+  unfinishedHouses: number;
   craftJobs: number; // over all craft buildings, finished or not
   tradeJobs: number;
+  jobsFinished: number; // jobs in finished workplaces
 }
 
 export function townStats(buildings: Record<number, Building>): TownStats {
-  let housing = 0;
   let houseCap = 0;
+  let unfinishedHouses = 0;
   let craftJobs = 0;
   let tradeJobs = 0;
+  let jobsFinished = 0;
   for (const b of Object.values(buildings)) {
     const t = BUILDINGS[b.template];
     if (!t) continue;
     if (b.zone === "res") {
       houseCap += t.residents;
-      if (b.state === "active") housing += t.residents;
-    } else if (b.zone === "craft") craftJobs += t.jobs;
-    else tradeJobs += t.jobs;
+      if (b.state !== "active") unfinishedHouses++;
+    } else {
+      if (b.zone === "craft") craftJobs += t.jobs;
+      else tradeJobs += t.jobs;
+      if (b.state === "active") jobsFinished += t.jobs;
+    }
   }
-  // Placeholder until residents exist (S4): houses are assumed full.
-  return { housing, houseCap, pop: FOUNDERS + housing, craftJobs, tradeJobs };
-}
-
-export interface Demand {
-  res: number;
-  craft: number;
-  trade: number;
+  return { houseCap, unfinishedHouses, craftJobs, tradeJobs, jobsFinished };
 }
 
 // Wanted new buildings per zone type (may be negative).
-export function demand(s: { buildings: Record<number, Building> }): Demand {
+export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes">): Demand {
   const st = townStats(s.buildings);
-  const targetPop = DEMAND.basePop + DEMAND.popPerJob * (st.craftJobs + st.tradeJobs);
+  const ps = peopleStats(s);
+  const vacant = vacantHouses(s.buildings, s.households).length;
+  const jobVacancies = st.jobsFinished - ps.employed;
   return {
-    res: (targetPop - (FOUNDERS + st.houseCap)) / DEMAND.houseSize,
-    craft: (DEMAND.craftShare * st.pop - st.craftJobs) / DEMAND.craftJobs,
-    trade: (DEMAND.tradeShare * st.pop - st.tradeJobs) / DEMAND.tradeJobs,
+    res: DEMAND.resBase + DEMAND.resPerVacancy * jobVacancies - vacant - st.unfinishedHouses + ps.tents,
+    craft: (DEMAND.craftShare * ps.pop - st.craftJobs) / DEMAND.craftJobs + DEMAND.craftPerUnemployed * ps.unemployed,
+    trade: (DEMAND.tradeShare * ps.pop - st.tradeJobs) / DEMAND.tradeJobs,
   };
-}
-
-// Work party: the founders plus one hand per finished house (until residents work, S4).
-export function workforce(buildings: Record<number, Building>): number {
-  let n = FOUNDERS;
-  for (const b of Object.values(buildings)) if (b.zone === "res" && b.state === "active") n++;
-  return n;
 }
 
 // ---------- geometry ----------

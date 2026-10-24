@@ -1,13 +1,16 @@
-import { advanceBuildings, spawnBuildings, workforce } from "./growth";
+import { advanceBuildings, spawnBuildings } from "./growth";
+import { builderCount, dailyStep } from "./people";
 import { spendOnRoads, WORK_END, WORK_START } from "./roads";
+import { dayOf, START_MINUTE_OF_DAY } from "./time";
 import type { SimState } from "./types";
+
+export { START_MINUTE_OF_DAY };
 
 // 1 real second = 1 game minute.
 export const MS_PER_GAME_MINUTE = 1000;
 export const BASE_TICK = 10; // game minutes
 export const TICK_MS = BASE_TICK * MS_PER_GAME_MINUTE;
 export const OFFLINE_CAP = 24 * 3600 * 1000; // real ms
-export const START_MINUTE_OF_DAY = 6 * 60; // founding at 06:00 on day 1
 export const DAYS_PER_SEASON = 90;
 
 export function step(s: SimState): SimState {
@@ -16,12 +19,13 @@ export function step(s: SimState): SimState {
   let roads = s.roads;
   let buildings = s.buildings;
   if (working) {
-    // One work party: roads first, whatever hands are left go to buildings.
-    const r = spendOnRoads(s.roads, (workforce(s.buildings) * BASE_TICK) / 60);
+    // The artel (every adult without a regular job): roads first, whatever hands are left go to buildings.
+    const r = spendOnRoads(s.roads, (builderCount(s) * BASE_TICK) / 60);
     roads = r.roads;
     buildings = advanceBuildings(s.buildings, r.left);
   }
-  const next = { ...s, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK, roads, buildings };
+  let next: SimState = { ...s, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK, roads, buildings };
+  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyStep(next); // a tick crossed 00:00
   return spawnBuildings(next);
 }
 

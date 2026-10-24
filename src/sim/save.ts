@@ -1,8 +1,27 @@
 import { LANDS } from "../world/landcover";
 import { BUILDINGS } from "./buildings";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
+import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS } from "./people";
 import { emptyRoads, ROAD_KINDS } from "./roads";
-import type { Building, City, Field, RoadEdge, RoadGraph, RoadNode, SaveV3, TerrainInfo, ZoneBlock, ZoneCell, ZoneState, ZoneType } from "./types";
+import type {
+  Building,
+  City,
+  EventKind,
+  Field,
+  Household,
+  PeopleState,
+  Resident,
+  RoadEdge,
+  RoadGraph,
+  RoadNode,
+  SaveV3,
+  TerrainInfo,
+  TownEvent,
+  ZoneBlock,
+  ZoneCell,
+  ZoneState,
+  ZoneType,
+} from "./types";
 import { emptyZones } from "./zones";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -142,10 +161,97 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
   return out;
 }
 
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein"];
+const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+
+// Structurally broken people data gives null (the caller starts over with founders). References to
+// buildings that do not exist are repaired instead: such households go back to tents, such workers
+// lose the job. Missing people data (older saves) also gives null.
+function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Building>): PeopleState | null {
+  const { residents: rawR, households: rawH } = sim;
+  if (!isRecord(rawR) || !isRecord(rawH)) return null;
+  if (!Number.isInteger(sim.nextPersonId) || (sim.nextPersonId as number) < 1) return null;
+  if (!Number.isInteger(sim.nextHouseholdId) || (sim.nextHouseholdId as number) < 1) return null;
+  const nextPerson = sim.nextPersonId as number;
+  const nextHouse = sim.nextHouseholdId as number;
+  const residents: Record<number, Resident> = {};
+  for (const [key, r] of Object.entries(rawR)) {
+    if (!isRecord(r) || !Number.isInteger(r.id) || String(r.id) !== key) return null;
+    const id = r.id as number;
+    if (id < 1 || id >= nextPerson) return null;
+    if (typeof r.first !== "string" || typeof r.last !== "string" || r.first === "" || r.last === "") return null;
+    if (r.sex !== "m" && r.sex !== "f") return null;
+    if (!isNum(r.born)) return null;
+    if (!Number.isInteger(r.household) || (r.spouse !== null && !Number.isInteger(r.spouse))) return null;
+    if (r.job !== null && !Number.isInteger(r.job)) return null;
+    if (r.commute !== null && (!isNum(r.commute) || r.commute < 0)) return null;
+    if (!nonNegInt(r.idleDays)) return null;
+    residents[id] = {
+      id,
+      first: r.first,
+      last: r.last,
+      sex: r.sex,
+      born: r.born,
+      household: r.household as number,
+      spouse: r.spouse as number | null,
+      job: r.job as number | null,
+      commute: r.commute as number | null,
+      idleDays: r.idleDays,
+    };
+  }
+  const households: Record<number, Household> = {};
+  const homes = new Set<number>();
+  const seen = new Set<number>();
+  for (const [key, h] of Object.entries(rawH)) {
+    if (!isRecord(h) || !Number.isInteger(h.id) || String(h.id) !== key) return null;
+    const id = h.id as number;
+    if (id < 1 || id >= nextHouse) return null;
+    if (typeof h.last !== "string" || h.last === "" || !isNum(h.arrived)) return null;
+    if (!Array.isArray(h.members) || h.members.length === 0) return null;
+    const members: number[] = [];
+    for (const m of h.members) {
+      if (!Number.isInteger(m) || !residents[m as number] || residents[m as number].household !== id || seen.has(m as number)) return null;
+      seen.add(m as number);
+      members.push(m as number);
+    }
+    let home: number | null = null;
+    if (h.home !== null) {
+      if (!Number.isInteger(h.home)) return null;
+      if (isFinishedHouse(buildings[h.home as number]) && !homes.has(h.home as number)) {
+        home = h.home as number;
+        homes.add(home);
+      }
+    }
+    households[id] = { id, last: h.last, home, members, arrived: h.arrived };
+  }
+  if (seen.size !== Object.keys(residents).length) return null; // a resident in no household
+  for (const r of Object.values(residents)) {
+    if (!households[r.household]) return null;
+    if (r.spouse !== null) {
+      const sp = residents[r.spouse];
+      if (!sp || sp.spouse !== r.id || sp.household !== r.household) return null;
+    }
+    if (r.job !== null && !isWorkplace(buildings[r.job])) {
+      r.job = null;
+      r.commute = null;
+    }
+  }
+  const events: TownEvent[] = [];
+  if (Array.isArray(sim.events)) {
+    for (const e of sim.events) {
+      if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && EVENT_KINDS.includes(e.kind) && typeof e.text === "string") {
+        events.push({ at: e.at, kind: e.kind as EventKind, text: e.text });
+      }
+    }
+  }
+  return { residents, households, nextPersonId: nextPerson, nextHouseholdId: nextHouse, events: events.slice(-MAX_EVENTS) };
+}
+
 // Saves from before growth have none of these fields: defaults, not an error. Broken buildings
 // reset the buildings only; a broken generator state or spawn clock is replaced by a default.
-function parseGrowth(sim: Record<string, unknown>, city: City) {
-  const g = emptyGrowth(seedOf(city.foundedAt));
+// Saves without (or with broken) residents get the founders back.
+function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: number) {
+  const g = emptyGrowth(seedOf(city.foundedAt), gameMinutes);
   if (sim.buildings !== undefined) {
     const b = parseBuildings(sim.buildings, sim.nextBuildingId);
     if (b) {
@@ -153,7 +259,16 @@ function parseGrowth(sim: Record<string, unknown>, city: City) {
       g.nextBuildingId = sim.nextBuildingId as number;
     }
   }
-  if (Number.isInteger(sim.rng) && (sim.rng as number) >= 0 && (sim.rng as number) < 2 ** 32) g.rng = sim.rng as number;
+  const rngOk = Number.isInteger(sim.rng) && (sim.rng as number) >= 0 && (sim.rng as number) < 2 ** 32;
+  let rng = rngOk ? (sim.rng as number) : seedOf(city.foundedAt);
+  let people = parsePeople(sim, g.buildings);
+  if (!people) {
+    const f = createFounders(rng, gameMinutes);
+    people = f.people;
+    rng = f.rng;
+  }
+  g.rng = rng;
+  Object.assign(g, people);
   const ls = sim.lastSpawn;
   if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
     g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };
@@ -176,7 +291,7 @@ export function parseSaveV3(value: unknown, now: number): SaveV3 | null {
   // Cells are rebuilt from roads on load, so broken zone data only costs the paint,
   // never the whole town (a rejected save would send the player back to founding).
   const zones = parseZones(sim.zones) ?? emptyZones();
-  return { version: 3, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...parseGrowth(sim, city) } };
+  return { version: 3, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...parseGrowth(sim, city, sim.gameMinutes) } };
 }
 
 // Old localStorage saves (v1, v2): keep the city, start a fresh village.

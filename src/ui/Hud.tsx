@@ -1,9 +1,8 @@
 import { calendar } from "../sim/clock";
-import { demand, townStats, workforce } from "../sim/growth";
 import { WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
 import { ZONE_COLORS } from "../map/tools";
-import { buildings, reset, roads, zones } from "../simClient";
+import { events, people, reset, roads, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -30,10 +29,9 @@ export function Hud({ city }: { city: City }) {
       }
     }
   }
-  const bs = buildings.value ?? {};
-  const stats = townStats(bs);
-  const workers = workforce(bs);
-  const dem = demand({ buildings: bs });
+  const p = people.value;
+  const dem = p?.demand ?? { res: 0, craft: 0, trade: 0 };
+  const recent = events.value.slice(-5).reverse();
   const bars: { label: string; value: number; color: string }[] = [
     { label: "жильё", value: dem.res, color: ZONE_COLORS.res },
     { label: "ремесло", value: dem.craft, color: ZONE_COLORS.craft },
@@ -60,12 +58,19 @@ export function Hud({ city }: { city: City }) {
       <div class="hud-date">
         Год {cal.year} · {SEASON_RU[cal.season]}, день {cal.dayOfSeason} · {pad(cal.hour)}:{pad(cal.minute)}
       </div>
-      <div class="hud-date">
-        Население: {stats.pop} (из них в палатках: {Math.max(0, 10 - stats.housing)})
-      </div>
-      <div class="hud-date">
-        Строители: {workers} · работают {pad(WORK_START)}–{pad(WORK_END)}
-      </div>
+      {p && (
+        <>
+          <div class="hud-date">
+            Население: {p.pop} · семей {p.households} · в палатках {p.tents}
+          </div>
+          <div class="hud-date">
+            Работают: {p.employed} · на стройке: {p.builders} · без работы: {p.unemployed}
+          </div>
+          <div class="hud-date">
+            Дорога на работу: {p.employed > 0 ? `~${Math.round(p.avgCommute)} мин` : "—"} · стройка {pad(WORK_START)}–{pad(WORK_END)}
+          </div>
+        </>
+      )}
       <div class="demand" title="Спрос на новые здания">
         {bars.map((b) => (
           <div class="demand-row" key={b.label}>
@@ -81,9 +86,24 @@ export function Hud({ city }: { city: City }) {
       </div>
       {queue > 0 && (
         <div class="hud-date">
-          В очереди: {queue} {plural(queue)} · ~{Math.ceil(remaining / workers)} ч работы
+          В очереди: {queue} {plural(queue)} · {p && p.builders > 0 ? `~${Math.ceil(remaining / p.builders)} ч работы` : "некому строить"}
         </div>
       )}
+      <details class="events">
+        <summary>События</summary>
+        {recent.length === 0 && <div class="hud-date">Пока тихо</div>}
+        {recent.map((e) => {
+          const c = calendar(e.at);
+          return (
+            <div class="event" key={`${e.at}:${e.text}`}>
+              <span class="event-at">
+                г{c.year} д{c.dayOfYear}
+              </span>{" "}
+              {e.text}
+            </div>
+          );
+        })}
+      </details>
       <button class="link" onClick={onReset}>
         Начать заново
       </button>

@@ -302,3 +302,31 @@ body {
   color: #7a8468;
   cursor: pointer;
 }
+
+.events {
+  font-size: 13px;
+  color: #7a8468;
+}
+.events summary {
+  cursor: pointer;
+}
+.event-at {
+  color: #a3ab94;
+  font-size: 11px;
+}
+.people {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.people-title {
+  font-weight: 600;
+}
+.people-note,
+.person-role {
+  color: #7a8468;
+  font-size: 12px;
+}

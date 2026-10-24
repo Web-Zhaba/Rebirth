@@ -100,7 +100,7 @@ Each milestone ends with something playable in the browser.
 | S1 | Roads | Draw roads with snapping and intersection splitting, cost from terrain, rendered at real width; delete roads; graph persisted. Tests for graph editing and costs. |
 | S2 | Zones | Zone cells generated along roads, blocked correctly by water/steep land/other roads; paint and unpaint zones; fields as areas. |
 | S3 | Growth | Demand model, buildings grow on lots from templates, construction by the work party (labor only), 2.5D buildings at real size. **Done.** Population is a placeholder (houses assumed full, work party = 10 + 1 per house) until S4; materials move to S5. |
-| S4 | Residents | Individual residents and households with life events, commuting, unemployment, migration; resident and household inspector. |
+| S4 | Residents | Individual residents and households with life events, commuting, unemployment, migration; resident and household inspector. **Done.** Jobs by walking time on built roads (4 km/h, ≤ 45 min); jobless adults form the construction party; snapshots carry aggregates, the inspector queries the worker. Education, health and happiness come with S5–S6. |
 | S5 | Production | Goods chains, storage, seasons, shortages affecting happiness; construction consumes materials (logs, planks, stone). |
 | S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. |
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. |

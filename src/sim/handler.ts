@@ -1,9 +1,10 @@
 import { advanceTo } from "./clock";
-import { emptyGrowth, reconcile, seedOf } from "./growth";
+import { demand, emptyGrowth, reconcile, seedOf } from "./growth";
+import { peopleStats, queryBuilding, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSaveV3 } from "./save";
-import type { Field, RoadGraph, SaveV3, TerrainInfo, ZoneState } from "./types";
+import type { ClientSave, Field, RoadGraph, SaveV3, SimSnapshot, SimState, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 
@@ -14,6 +15,15 @@ export interface Storage {
 }
 
 const AWAY_MIN_MS = 60_000;
+const PERSIST_MINUTES = 60; // game minutes between saves while ticking
+
+// What the main thread sees: aggregates instead of individual residents.
+export function toSnapshot(sim: SimState): SimSnapshot {
+  const { zones: _z, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, ...rest } = sim;
+  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) } };
+}
+
+const toClientSave = (save: SaveV3): ClientSave => ({ version: 3, city: save.city, sim: { ...toSnapshot(save.sim), zones: save.sim.zones } });
 const ENRICH_BATCH = 32;
 const ENRICH_RETRY_MS = 30_000;
 
@@ -51,9 +61,12 @@ export class Handler {
           };
           this.setSave(save);
           await this.storage.put(save);
-          this.post({ t: "loaded", save, migrated: false, away: null });
+          this.post({ t: "loaded", save: toClientSave(save), migrated: false, away: null });
           return;
         }
+        case "query":
+          this.post({ t: "queryResult", id: msg.id, data: this.save && msg.q?.type === "building" ? queryBuilding(this.save.sim, msg.q.id) : null });
+          return;
         case "cmd":
           return await this.command(msg.id, msg.cmd);
         case "flush":
@@ -90,11 +103,11 @@ export class Handler {
     // Cells are derived data: rebuild them so saves without zones (or with stale ones) are consistent.
     const z = sim.zones;
     const cells = regenerateCells(sim.roads, z.cells, z.fields, z.terrain);
-    save = { ...save, sim: { ...sim, zones: { ...z, cells }, buildings: reconcile(sim.buildings, sim.roads, cells) } };
+    save = { ...save, sim: syncPeople({ ...sim, zones: { ...z, cells }, buildings: reconcile(sim.buildings, sim.roads, cells) }) };
     this.setSave(save);
     await this.storage.put(save);
     const away = realMs > AWAY_MIN_MS ? { realMs, gameMinutes } : null;
-    this.post({ t: "loaded", save, migrated, away });
+    this.post({ t: "loaded", save: toClientSave(save), migrated, away });
     this.enrich();
   }
 
@@ -109,7 +122,8 @@ export class Handler {
   // Zones are attached only when their rev moved since the last message that carried them.
   private postSnapshot(): void {
     if (!this.save) return;
-    const { zones, ...sim } = this.save.sim;
+    const { zones } = this.save.sim;
+    const sim = toSnapshot(this.save.sim);
     if (zones.rev !== this.postedRev) {
       this.postedRev = zones.rev;
       this.post({ t: "snapshot", sim, zones });
@@ -165,7 +179,7 @@ export class Handler {
           const z = cur.sim.zones;
           const zones = this.rezone({ ...z, terrain: { ...z.terrain, ...got } }, cur.sim.roads, z.fields);
           const buildings = reconcile(cur.sim.buildings, cur.sim.roads, zones.cells);
-          this.save = { ...cur, sim: { ...cur.sim, zones, buildings } };
+          this.save = { ...cur, sim: syncPeople({ ...cur.sim, zones, buildings }) };
           this.postSnapshot();
           try {
             await this.storage.put(this.save);
@@ -216,7 +230,7 @@ export class Handler {
         return reject("Неизвестная команда");
       }
       const buildings = reconcile(sim.buildings, next, zones.cells);
-      this.save = { ...this.save, sim: { ...sim, roads: next, zones, buildings } };
+      this.save = { ...this.save, sim: syncPeople({ ...sim, roads: next, zones, buildings }) };
       this.postSnapshot();
       try {
         await this.storage.put(this.save);
@@ -233,11 +247,15 @@ export class Handler {
   // Called by the worker timer every second.
   tick(now: number): void {
     if (!this.save) return;
+    const prev = this.save.sim.gameMinutes;
     const sim = advanceTo(this.save.sim, now);
-    if (sim.gameMinutes === this.save.sim.gameMinutes) return;
+    if (sim.gameMinutes === prev) return;
     this.save = { ...this.save, sim };
     this.postSnapshot();
-    this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));
+    // Persist once per game hour, not every tick (commands and flush save as well).
+    if (Math.floor(sim.gameMinutes / PERSIST_MINUTES) !== Math.floor(prev / PERSIST_MINUTES)) {
+      this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));
+    }
   }
 }
 

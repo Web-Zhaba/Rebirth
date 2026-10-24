@@ -10,7 +10,7 @@ import type { City, RoadGraph, SaveV3 } from "./types";
 
 const NOW = 1_800_000_000_000;
 const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
-const growth = () => emptyGrowth(seedOf(city.foundedAt));
+const growth = (now = 0) => emptyGrowth(seedOf(city.foundedAt), now);
 
 // Two connected edges starting at the founding point, plus one isolated edge.
 const roadsInProgress = (): RoadGraph => ({
@@ -72,13 +72,13 @@ describe("clock", () => {
 });
 
 describe("save", () => {
-  const valid: SaveV3 = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50, roads: roadsInProgress(), zones: emptyZones(), ...growth() } };
+  const valid: SaveV3 = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50, roads: roadsInProgress(), zones: emptyZones(), ...growth(50) } };
   it("accepts valid", () => {
     expect(parseSaveV3(valid, NOW)).toEqual(valid);
   });
   it("accepts a v3 save without roads as an empty graph", () => {
     const old = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50 } };
-    expect(parseSaveV3(old, NOW)).toEqual({ ...old, sim: { ...old.sim, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
+    expect(parseSaveV3(old, NOW)).toEqual({ ...old, sim: { ...old.sim, roads: emptyRoads(), zones: emptyZones(), ...growth(50) } });
   });
   it("rejects broken roads", () => {
     const withRoads = (roads: unknown) => ({ ...valid, sim: { ...valid.sim, roads } });
@@ -181,7 +181,11 @@ describe("handler", () => {
     h.tick(NOW + 5000);
     expect(out).toEqual([]);
     h.tick(NOW + 10_000);
-    expect(out).toEqual([{ t: "snapshot", sim: { realTime: NOW + 10_000, gameMinutes: 10, roads: emptyRoads(), ...growth() } }]);
+    expect(out).toHaveLength(1);
+    const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
+    expect(snap.sim).toMatchObject({ realTime: NOW + 10_000, gameMinutes: 10, roads: emptyRoads(), people: { pop: 10, households: 3, tents: 3 } });
+    // aggregates only: no individual residents cross the thread boundary
+    for (const k of ["residents", "households", "zones", "nextPersonId"]) expect(snap.sim).not.toHaveProperty(k);
     h.tick(NOW + 12_000);
     expect(out.length).toBe(1);
   });
