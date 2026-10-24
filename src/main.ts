@@ -4,12 +4,14 @@ import { createMap } from "./map/mapView";
 import { loadSave } from "./game/save";
 import { city } from "./game/state";
 import { drawCityCell } from "./map/cityLayer";
+import { attachCellHover } from "./map/cellLayers";
 import { App } from "./ui/App";
 
 const save = loadSave();
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
+attachCellHover(map);
 
 if (save) {
   city.value = save.city;

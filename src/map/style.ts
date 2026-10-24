@@ -1,4 +1,14 @@
 import type { StyleSpecification } from "maplibre-gl";
+import {
+  LANDCOVER_CLASSES,
+  NATURE_MAXZOOM,
+  OMT_TILEJSON_URL,
+  TERRAIN_URL,
+  TERRAIN_ZOOM,
+  WATERWAY_CLASSES,
+  WATER_EXCLUDED_CLASSES,
+  WILD_GRASS,
+} from "../world/nature";
 
 const C = {
   meadow: "#dfe6c3",
@@ -11,16 +21,10 @@ const C = {
   water: "#9fc9dc",
 };
 
-const OMT_URL = "https://tiles.openfreemap.org/planet";
 const OMT_ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ' +
   '<a href="https://www.openmaptiles.org/" target="_blank">&copy; OpenMapTiles</a> ' +
   'Data from <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>';
-const NATURE_MAXZOOM = 12;
-
-// Grass subclasses that are wild vegetation; lawns, flowerbeds, parks, gardens and
-// sports grounds are man-made and would outline the old city.
-const WILD_GRASS = ["grassland", "meadow", "scrub", "heath", "fell", "tundra", "wet_meadow"];
 
 // Rewilded Earth: only terrain and nature; built-up land is plain meadow.
 export function rewildedStyle(): StyleSpecification {
@@ -30,24 +34,24 @@ export function rewildedStyle(): StyleSpecification {
     sources: {
       terrain: {
         type: "raster-dem",
-        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        tiles: [TERRAIN_URL],
         encoding: "terrarium",
         tileSize: 256,
         // Higher zooms carry building/canopy heights (surface model) and would draw
         // a ghost of today's city; overzooming z11 keeps only the landform.
-        maxzoom: 11,
+        maxzoom: TERRAIN_ZOOM,
         attribution: "Terrain: Mapzen, AWS Open Data",
       },
       omt: {
         type: "vector",
-        url: OMT_URL,
+        url: OMT_TILEJSON_URL,
         attribution: OMT_ATTRIBUTION,
       },
       // Same tiles capped at a low zoom: generalized geometry drops lawns, courtyards
       // and park alleys, so nature reads as overgrown instead of tracing the city.
       nature: {
         type: "vector",
-        url: OMT_URL,
+        url: OMT_TILEJSON_URL,
         maxzoom: NATURE_MAXZOOM,
         attribution: OMT_ATTRIBUTION,
       },
@@ -61,7 +65,7 @@ export function rewildedStyle(): StyleSpecification {
         "source-layer": "landcover",
         filter: [
           "any",
-          ["in", ["get", "class"], ["literal", ["wood", "wetland", "sand", "rock", "ice"]]],
+          ["in", ["get", "class"], ["literal", LANDCOVER_CLASSES]],
           ["all", ["==", ["get", "class"], "grass"], ["in", ["get", "subclass"], ["literal", WILD_GRASS]]],
         ],
         paint: {
@@ -96,7 +100,7 @@ export function rewildedStyle(): StyleSpecification {
         "source-layer": "water",
         filter: [
           "all",
-          ["!", ["in", ["get", "class"], ["literal", ["swimming_pool", "dock"]]]],
+          ["!", ["in", ["get", "class"], ["literal", WATER_EXCLUDED_CLASSES]]],
           ["!=", ["get", "brunnel"], "tunnel"],
         ],
         paint: { "fill-color": C.water },
@@ -108,7 +112,7 @@ export function rewildedStyle(): StyleSpecification {
         "source-layer": "waterway",
         filter: [
           "all",
-          ["in", ["get", "class"], ["literal", ["river", "stream"]]],
+          ["in", ["get", "class"], ["literal", WATERWAY_CLASSES]],
           ["!=", ["get", "brunnel"], "tunnel"],
         ],
         paint: {
