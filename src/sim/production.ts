@@ -3,6 +3,7 @@ import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScale } from "./people";
 import { massText } from "./units";
+import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, SERVICE, serviceMood } from "./services";
 import { calendar, dayOf } from "./time";
 import type { Building, Clearing, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
@@ -353,6 +354,7 @@ export function dailyEconomy(s: SimState): SimState {
   // mood
   const households: Record<number, Household> = {};
   const idle = idleResidents(s);
+  const gather = gatherHouses(s); // evening gatherings: a tavern in reach or a chapel
   for (const h of Object.values(s.households)) {
     let adults = 0;
     let idlers = 0;
@@ -369,7 +371,7 @@ export function dailyEconomy(s: SimState): SimState {
       const age = r ? ageOf(r.born, now) : 0;
       return age >= SERVICE.schoolFrom && age < SERVICE.schoolTo;
     });
-    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) : 0;
+    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) : 0;
     const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless));
     households[h.id] = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep };
   }
@@ -453,6 +455,7 @@ export function economyStats(s: SimState): EconomyStats {
     avgMood: hs > 0 ? moods / hs : 0,
     forage: forageKg(s),
     outlook: foodOutlook(s),
+    eveningWares: eveningRate(s),
   };
 }
 

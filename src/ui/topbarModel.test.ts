@@ -12,6 +12,7 @@ const eco = (o: Partial<EconomyStats> = {}): EconomyStats => ({
   avgMood: 0,
   forage: 0,
   outlook: 1,
+  eveningWares: 0,
   ...o,
 });
 

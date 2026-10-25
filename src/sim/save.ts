@@ -13,6 +13,7 @@ import type {
   ChronicleEntry,
   Clearing,
   City,
+  DaySummary,
   EventKind,
   Field,
   FieldWork,
@@ -28,6 +29,7 @@ import type {
   SaveV4,
   Site,
   Stock,
+  SummaryLine,
   TerrainInfo,
   TownEvent,
   Upgrade,
@@ -331,6 +333,19 @@ function parseProd(v: unknown): ProdState {
   return out;
 }
 
+const SUMMARY_KINDS: readonly string[] = ["built", "arrived", "born", "made", "problem"];
+
+// The last day summary; a missing or broken one is null, broken lines are dropped.
+function parseSummary(v: unknown): DaySummary | null {
+  if (!isRecord(v) || !isNum(v.at) || !Array.isArray(v.lines)) return null;
+  const lines: SummaryLine[] = [];
+  for (const l of v.lines.slice(0, 40)) {
+    if (!isRecord(l) || typeof l.kind !== "string" || !SUMMARY_KINDS.includes(l.kind) || typeof l.text !== "string") continue;
+    lines.push({ kind: l.kind as SummaryLine["kind"], text: l.text.slice(0, 200), ...(isPoint(l.pos) ? { pos: [l.pos[0], l.pos[1]] as [number, number] } : {}) });
+  }
+  return { at: v.at, lines };
+}
+
 // Broken entries are dropped, never the whole chronicle.
 function parseChronicle(v: unknown): ChronicleEntry[] {
   if (!Array.isArray(v)) return [];
@@ -400,6 +415,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.clearings = parseClearings(sim.clearings);
   g.attract = isNum(sim.attract) ? Math.min(1, Math.max(0, sim.attract)) : 0;
   g.chronicle = parseChronicle(sim.chronicle);
+  g.summary = parseSummary(sim.summary);
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   const ls = sim.lastSpawn;

@@ -306,3 +306,26 @@
   border: var(--bw-hair) solid var(--rule);
   border-radius: var(--radius-sm);
 }
+
+/* «Итоги дня»: centre of the screen under the top bar (PLAN-ui.md section 5). */
+.day-summary {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, calc(100% - 32px));
+  z-index: var(--z-panel);
+  pointer-events: auto;
+}
+.day-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-1);
+}
+.day-summary-line {
+  display: block;
+  text-align: left;
+  padding: 2px 0;
+}

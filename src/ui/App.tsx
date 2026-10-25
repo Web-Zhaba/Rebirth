@@ -3,6 +3,7 @@ import { city } from "../simClient";
 import { AwayNotice } from "./AwayNotice";
 import { BuildBar } from "./BuildBar";
 import { BuildingPanel } from "./BuildingPanel";
+import { DaySummary } from "./DaySummary";
 import { FoundCity } from "./FoundCity";
 import { Hud } from "./Hud";
 import { NightTint } from "./NightTint";
@@ -18,6 +19,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <TerrainInspector map={map} />}
       {c && <BuildBar />}
       {c && <BuildingPanel />}
+      {c && <DaySummary map={map} />}
       {c && <NotebookHost />}
       <AwayNotice />
     </>

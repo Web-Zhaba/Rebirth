@@ -1,5 +1,7 @@
 import type { Light, Trip } from "../map/lifeLayer";
 import { BUILDINGS } from "./buildings";
+import { EVENING } from "./evening";
+import { WORKSHOP_INPUT } from "./fields";
 import { nodePath, polyline, polyLength, shortestTree } from "./paths";
 import { buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, nearestNode, WALK_SPEED } from "./people";
 import { GOOD } from "./production";
@@ -23,7 +25,9 @@ export const TO_WORK = 6 * 60; // earliest departure to work (06:00)
 export const HOME_AT = 19 * 60; // earliest departure home (19:00)
 export const WORK_FROM = 7 * 60;
 export const WORK_TO = 19 * 60;
+export const MAX_GUESTS = 12; // evening walkers to one tavern
 const CART_ID0 = 2 ** 30;
+const EVENING_ID0 = 2 ** 29;
 
 // Deterministic 32-bit mix of an id (and a salt), as a number in [0, 1).
 function unit(id: number, salt: number): number {
@@ -62,7 +66,8 @@ export function computeLife(s: SimState, day = 0): LifeData {
   const traffic: Record<number, number> = {};
   const lights: Light[] = [];
 
-  // lights: houses with a household, workplaces with at least one worker
+  // lights: houses with a household (vacant ones stay dark), workplaces with at least one worker (a workshop
+  // whose input is missing stays dark), taverns glow in the evening
   const worked = new Set<number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) worked.add(r.job);
   const lit = new Set<number>();
@@ -76,8 +81,10 @@ export function computeLife(s: SimState, day = 0): LifeData {
   }
   for (const b of Object.values(s.buildings)) {
     if (!isWorkplace(b) || !worked.has(b.id)) continue;
+    const input = WORKSHOP_INPUT[b.template];
+    if (input && s.stock[input] <= 1e-9) continue;
     const [x, y] = centre(b);
-    lights.push({ x, y, kind: "work" });
+    lights.push({ x, y, kind: b.template === "tavern" ? "tavern" : "work" });
   }
   if (net.adj.size === 0) return { day, trips, traffic, lights };
 
@@ -145,6 +152,34 @@ export function computeLife(s: SimState, day = 0): LifeData {
     const back = HOME_AT + unit(c.id, 3) * 60;
     trips.push({ id: c.id * 2, kind: "walk", pts, depart: out, speed: WALK_SPEED });
     trips.push({ id: c.id * 2 + 1, kind: "walk", pts: [...pts].reverse(), depart: back, speed: WALK_SPEED });
+  }
+
+  // evenings: up to MAX_GUESTS households from the homes within reach of each staffed tavern walk there at 19-21 and back at 21-22
+  let guest = 0;
+  const taverns = Object.values(s.buildings).filter((b) => b.template === "tavern" && isWorkplace(b) && worked.has(b.id));
+  const homes = new Map<number, number>(); // house id -> an adult's id of its household, for the hash
+  for (const h of Object.values(s.households)) if (h.home !== null && h.members.length > 0 && !homes.has(h.home)) homes.set(h.home, h.members[0]);
+  for (const t of taverns) {
+    const tl = locate(t);
+    if (!tl) continue;
+    const tree = shortestTree(net, tl.node, EVENING.tavernReach);
+    const cands: { who: number; house: Building }[] = [];
+    for (const [hid, who] of homes) if (isFinishedHouse(s.buildings[hid])) cands.push({ who, house: s.buildings[hid] });
+    cands.sort((p, q) => unit(p.who, 5) - unit(q.who, 5) || p.who - q.who);
+    let n = 0;
+    for (const c of cands) {
+      if (n >= MAX_GUESTS) break;
+      const hl = locate(c.house);
+      const path = hl && nodePath(tree, hl.node);
+      if (!hl || !path) continue;
+      const pts = round2(polyline(s.roads, [...path].reverse(), hl.at, tl.at));
+      if (polyLength(pts) < 5) continue;
+      const out = EVENING.from * 60 + unit(c.who, 6) * 90;
+      const back = 21 * 60 + unit(c.who, 7) * 45;
+      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts, depart: out, speed: WALK_SPEED });
+      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts: [...pts].reverse(), depart: back, speed: WALK_SPEED });
+      n++;
+    }
   }
 
   // carts: one per load of yesterday's output, producer -> camp

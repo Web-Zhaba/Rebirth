@@ -163,6 +163,7 @@ export function TopBar({ city }: { city: City }) {
                     <Row label="На складе" value={`${text(g.id)} ${GOOD_UNIT[g.id]}`} />
                     <Row label="Сделано вчера" value={`${made > 0 ? "+" : ""}${amount(made)} ${GOOD_UNIT[g.id]}`} />
                     {g.id === "logs" && clearing.length > 0 && <Row label="Вырубка уже дала" value={`+${amount(clearGot)} из ${amount(clearAll)} м³`} />}
+                    {g.id === "wares" && eco.eveningWares > 0 && <Row label="Посиделки, 19–22 ч" value={`+${eco.eveningWares.toFixed(2).replace(".", ",")} шт/ч`} />}
                   </>
                 }
               />

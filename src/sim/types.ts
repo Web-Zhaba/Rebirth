@@ -273,6 +273,19 @@ export interface SimState extends PeopleState {
   // Derived once per game day (and on load): bit i of coverage[house] is set when service i covers it.
   coverage: Record<number, number>;
   landValue: Record<number, number>; // house id -> 0..100
+  summary: DaySummary | null; // «Итоги дня» of the last 22:00
+}
+
+// One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
+export interface SummaryLine {
+  kind: "built" | "arrived" | "born" | "made" | "problem";
+  text: string;
+  pos?: [number, number];
+}
+
+export interface DaySummary {
+  at: number; // gameMinutes of the 22:00 it was assembled
+  lines: SummaryLine[];
 }
 
 export type Window = "sowing" | "harvest" | null;
@@ -286,6 +299,7 @@ export interface EconomyStats {
   avgMood: number;
   forage: number; // kg of food a day the idle adults gather
   outlook: number; // 0..1, can the food last to the end of the next harvest window
+  eveningWares: number; // pieces an hour the adults at home make at 19-22 (doubles in winter)
 }
 
 export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";
