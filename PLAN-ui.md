@@ -78,6 +78,15 @@ P8 tuning, U7–U8.
 Each milestone: `npm test`, `npm run build`, screenshots at the three sizes in the browser preview,
 and a check that the player's save is untouched (backup and restore IndexedDB, as before).
 
+**Final check (after U9 and the P8 tuning).** 637 tests and the build pass. On the test town (localhost):
+night with the map tint and lit occupied houses, building badges («нет людей», «76 %»), the day summary
+in the centre column, the goals tracker and the away card were checked on screenshots. Layout with the
+town panel open at 2560×1440, 1920×1080, 1280×720 and 1024×768: no overlaps between the top bar, left
+column, centre column, right panel, build bar and map controls, nothing off screen, no horizontal scroll
+(element rects plus scaled screenshots; the preview pane shrinks the larger sizes). At 375 px the right
+panel is a drawer over the hidden left column, as designed. The player's save (127.0.0.1) was only read:
+it loads with its 12 buildings and 41 residents and no errors.
+
 ## Glossary
 
 Player-visible text uses universal terms (internal ids and save fields are unchanged). Old -> new:
