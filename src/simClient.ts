@@ -25,6 +25,8 @@ export const services = computed(() => state.value?.services ?? null);
 export const events = computed(() => state.value?.events ?? []);
 // «Итоги дня» of the last 22:00 (see DaySummary.tsx).
 export const daySummary = computed(() => state.value?.summary ?? null);
+// The event waiting for an answer (see EventCard.tsx).
+export const pendingChoice = computed(() => state.value?.pending ?? null);
 export const chronicle = computed(() => state.value?.chronicle ?? []);
 export const finds = computed(() => state.value?.finds ?? null);
 export const articles = computed(() => state.value?.articles ?? []);

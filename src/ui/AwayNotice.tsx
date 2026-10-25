@@ -56,6 +56,16 @@ export function AwayNotice() {
         </div>
         <div class="offline-line">Достроено зданий: {a.built}</div>
         <div class="offline-line">Произведено: {goods.length > 0 ? goods.join(", ") : "ничего"}</div>
+        {a.choices.length > 0 && (
+          <>
+            <div class="offline-sub">События без вашего ответа</div>
+            <ul class="offline-chronicle">
+              {a.choices.map((t, i) => (
+                <li key={i}>{t}</li>
+              ))}
+            </ul>
+          </>
+        )}
         {a.chronicle.length > 0 && (
           <>
             <div class="offline-sub">Летопись</div>

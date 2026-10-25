@@ -3,6 +3,7 @@ import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed }
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
+import { resolveChoice } from "./events";
 import { goalViews, lockReason } from "./goals";
 import { callBlock, callSettlers, callToloka, setPriority, setRations, setSchedule } from "./leverCmds";
 import { digInfos, recordFinds } from "./excavation";
@@ -439,6 +440,11 @@ export class Handler {
           : callSettlers(sim);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "choose") {
+        if (!sim.pending || sim.pending.id !== cmd.id) return reject("Это событие уже решено");
+        if (cmd.option !== 0 && cmd.option !== 1) return reject("Некорректный ответ");
+        this.save = { ...this.save, sim: resolveChoice(sim, cmd.option, false) };
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");

@@ -4,6 +4,7 @@ import { AwayNotice } from "./AwayNotice";
 import { BuildBar } from "./BuildBar";
 import { BuildingPanel } from "./BuildingPanel";
 import { DaySummary } from "./DaySummary";
+import { EventCard } from "./EventCard";
 import { FoundCity } from "./FoundCity";
 import { Hud } from "./Hud";
 import { NightTint } from "./NightTint";
@@ -20,6 +21,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <BuildBar />}
       {c && <BuildingPanel />}
       {c && <DaySummary map={map} />}
+      {c && <EventCard map={map} />}
       {c && <NotebookHost />}
       <AwayNotice />
     </>
