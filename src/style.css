@@ -120,7 +120,7 @@ body {
 
 
 .event-at {
-  color: var(--pencil-faint);
+  color: var(--pencil);
   font-size: 11px;
 }
 .people {
@@ -163,8 +163,8 @@ body {
 }
 
 :focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
 }
 
 .speed button,

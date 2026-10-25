@@ -1,3 +1,4 @@
+import { flyOrJump } from "../map/motion";
 import { signal } from "@preact/signals";
 import type maplibregl from "maplibre-gl";
 import { useState } from "preact/hooks";
@@ -172,7 +173,7 @@ function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
       {cut.size > 0 && (
         <div class="hud-warn rs-warn">
           <Icon name="warning" size={16} /> Отрезано от лагеря: {cut.size} {plural(cut.size, "участок", "участка", "участков")} дорог. Их не построят: ведите дорогу от лагеря или от готовой дороги.{" "}
-          <button type="button" class="link" onClick={() => map.flyTo({ center: [city.lng, city.lat], zoom: Math.max(map.getZoom(), 16) })}>
+          <button type="button" class="link" onClick={() => flyOrJump(map, { center: [city.lng, city.lat], zoom: Math.max(map.getZoom(), 16) })}>
             К лагерю
           </button>
         </div>
@@ -228,7 +229,7 @@ function EventsTab({ map }: { map: maplibregl.Map }) {
               г{c.year} д{c.dayOfYear}
             </span>{" "}
             {pos && fl ? (
-              <button type="button" class="link event-go" title="Показать на карте" onClick={() => map.flyTo({ center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}>
+              <button type="button" class="link event-go" title="Показать на карте" onClick={() => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}>
                 {e.text}
               </button>
             ) : (

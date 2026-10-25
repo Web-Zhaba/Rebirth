@@ -1,3 +1,4 @@
+import { flyOrJump } from "../map/motion";
 import { useEffect, useRef, useState } from "preact/hooks";
 import maplibregl from "maplibre-gl";
 import { found as foundCity } from "../simClient";
@@ -64,7 +65,7 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
       const { lat, lng } = e.lngLat;
       if (marker.current) marker.current.setLngLat(e.lngLat);
       else marker.current = new maplibregl.Marker({ color: "#e0a050" }).setLngLat(e.lngLat).addTo(map);
-      map.flyTo({ center: e.lngLat, zoom: 14 });
+      flyOrJump(map, { center: e.lngLat, zoom: 14 });
       setPoint({ lat, lng });
     };
     map.on("click", onClick);

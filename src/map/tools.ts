@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import { mixHex, MAP_ONLY, PALETTE } from "../ui/palette";
+import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
 export type RoadTool = RoadKind | "bulldoze";
@@ -33,23 +33,10 @@ export const mapMpp = (lat: number, zoom: number) => (EQUATOR_M * Math.cos((lat 
 
 export const ZONE_COLORS: Record<ZoneType, string> = { res: PALETTE.ok, craft: PALETTE.warn, trade: PALETTE.info };
 
-export const BUILDING_COLORS: Record<ZoneType, string> = { res: "#a9865c", craft: "#857b6c", trade: "#b07d4c" };
+export const BUILDING_COLORS: Record<ZoneType, string> = BUILDING_ZONE_COLORS;
 
 // Colours of player-placed buildings, per template.
-export const PLACED_COLORS: Record<PlaceTool, string> = {
-  gumno: "#b8963f",
-  woodcutter: "#5c7342",
-  sawpit: "#a97d4d",
-  quarry: "#7d7f82",
-  fisher: "#4a7088",
-  barn: "#94503a",
-  dig: "#7d6340",
-  well: "#4f7f9c",
-  market: "#b9772f",
-  chapel: "#85689f",
-  school: "#3f8a6b",
-  healer: "#b24d46",
-};
+export const PLACED_COLORS: Record<PlaceTool, string> = PLACED_BUILDING_COLORS;
 
 // Map overlay: houses tinted by coverage of one service, or by a value; or roads by commuter traffic.
 export type Overlay = "none" | ServiceId | "value" | "mood" | "traffic";

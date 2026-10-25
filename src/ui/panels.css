@@ -16,12 +16,14 @@
 }
 
 .rs-panel .tabs {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   flex: none;
+  overflow-x: auto;
 }
 
 .rs-panel .tab {
-  padding: var(--sp-1) var(--sp-2);
+  flex: 1 1 auto;
+  padding: var(--sp-1) 3px;
   font-size: var(--fs-sm);
 }
 

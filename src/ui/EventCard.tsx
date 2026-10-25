@@ -1,3 +1,4 @@
+import { flyOrJump } from "../map/motion";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { frame, pendingChoice, sendCmd, setSpeed, speed } from "../simClient";
@@ -87,7 +88,7 @@ export function EventCard({ map }: { map: maplibregl.Map }) {
       </div>
       <p class="event-card-text">{c.text}</p>
       {pos && fl && (
-        <button class="link event-card-place" onClick={() => map.flyTo({ center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}>
+        <button class="link event-card-place" onClick={() => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}>
           <Icon name="find" size={14} /> Показать на карте
         </button>
       )}

@@ -3,6 +3,7 @@ import { state } from "../simClient";
 import type { GoalView } from "../sim/goals";
 import { num } from "./buildMenu";
 import { rewardParts } from "./goalsModel";
+import { compactScreen } from "../map/motion";
 import { Icon } from "./Icon";
 import { Panel, ProgressBar } from "./kit";
 import { goalFlash } from "./toastStore";
@@ -12,7 +13,8 @@ const figure = (g: GoalView) => `${num(g.value)} / ${num(g.target)}${g.unit ? ` 
 const KEY = "rebirth.goals.collapsed";
 const readCollapsed = (): boolean => {
   try {
-    return localStorage.getItem(KEY) === "1";
+    const v = localStorage.getItem(KEY);
+    return v === null ? compactScreen() : v === "1";
   } catch {
     return false;
   }

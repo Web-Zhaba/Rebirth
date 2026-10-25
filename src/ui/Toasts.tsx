@@ -1,3 +1,4 @@
+import { flyOrJump } from "../map/motion";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { frame } from "../simClient";
@@ -21,7 +22,7 @@ function ToastItem({ t, map }: { t: Toast; map: maplibregl.Map }) {
   }, [paused, t.id]);
   const fl = frame.value;
   const pos = t.pos;
-  const fly = pos && fl ? () => map.flyTo({ center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) }) : undefined;
+  const fly = pos && fl ? () => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) }) : undefined;
   const body = (
     <>
       <Icon name={KIND_ICON[t.kind]} size={16} />

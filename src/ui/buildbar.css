@@ -177,7 +177,7 @@ kbd {
 
 /* Tools closed until a goal pays them: dimmed, a lock in the corner, the goal in the hover card. */
 .build-btn.locked {
-  color: var(--pencil-faint);
+  color: var(--pencil);
   cursor: not-allowed;
 }
 
@@ -196,5 +196,5 @@ kbd {
   display: block;
   margin-bottom: var(--sp-1);
   font-weight: 700;
-  color: var(--warn);
+  color: var(--warn-text);
 }

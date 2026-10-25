@@ -14,10 +14,12 @@ export const PALETTE = {
   ruleDotted: "#b5a684",
   kbdBorder: "#8a7d63",
   ok: "#4a6136",
+  okText: "#3f5a2c",
   okFill: "#d5dfc4",
   warn: "#b07a1c",
+  warnText: "#7d5410",
   warnFill: "#efd9a6",
-  bad: "#9e3b22",
+  bad: "#94331b",
   badFill: "#ebc9bc",
   info: "#3a5a78",
   infoFill: "#d3dfe8",
@@ -49,6 +51,23 @@ export const MAP_ONLY = {
   badDeep: "#5e2314",
 } as const;
 
+// Building colors by category: houses/workshops/shops by zone, and the player-placed templates. Map only.
+export const BUILDING_ZONE_COLORS = { res: "#a9865c", craft: "#857b6c", trade: "#b07d4c" } as const;
+export const PLACED_BUILDING_COLORS = {
+  gumno: "#b8963f",
+  woodcutter: "#5c7342",
+  sawpit: "#a97d4d",
+  quarry: "#7d7f82",
+  fisher: "#4a7088",
+  barn: "#94503a",
+  dig: "#7d6340",
+  well: "#4f7f9c",
+  market: "#b9772f",
+  chapel: "#85689f",
+  school: "#3f8a6b",
+  healer: "#b24d46",
+} as const;
+
 export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();
 
 // "#rrggbb" mixed towards another by t (0..1).
@@ -56,4 +75,17 @@ export function mixHex(a: string, b: string, t: number): string {
   const p = (c: string, i: number) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
   const ch = (i: number) => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, "0");
   return `#${ch(0)}${ch(1)}${ch(2)}`;
+}
+
+// WCAG 2.x contrast ratio of two "#rrggbb" colors (1..21).
+export function contrast(a: string, b: string): number {
+  const lum = (h: string) => {
+    const ch = (i: number) => {
+      const c = parseInt(h.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * ch(0) + 0.7152 * ch(1) + 0.0722 * ch(2);
+  };
+  const [x, y] = [lum(a), lum(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }

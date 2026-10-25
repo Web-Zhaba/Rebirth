@@ -1,3 +1,4 @@
+import { flyOrJump } from "../map/motion";
 import type maplibregl from "maplibre-gl";
 import type { ComponentChildren } from "preact";
 import { useEffect } from "preact/hooks";
@@ -61,7 +62,7 @@ function BarStat({ title, tip, align, ...stat }: { title: string; tip: Component
         </>
       }
     >
-      <span class="bar-stat" tabIndex={0}>
+      <span class="bar-stat" tabIndex={0} role="group" aria-label={title}>
         <Stat {...stat} />
       </span>
     </Tooltip>
@@ -95,7 +96,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
       if (e.key === "h" || e.key === "H" || e.key === "Home") {
         if (map) {
           e.preventDefault();
-          map.flyTo({ center: [city.lng, city.lat], zoom: 16 });
+          flyOrJump(map, { center: [city.lng, city.lat], zoom: 16 });
         }
       }
     };
@@ -120,7 +121,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
             <button
               class="city-name-btn"
               type="button"
-              onClick={() => map.flyTo({ center: [city.lng, city.lat], zoom: 16 })}
+              onClick={() => flyOrJump(map, { center: [city.lng, city.lat], zoom: 16 })}
             >
               <span class="city-name">{city.name}</span>
             </button>

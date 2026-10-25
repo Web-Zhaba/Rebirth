@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { OVERLAY_COLORS, OVERLAYS, overlay, TRAFFIC_STOPS, type Overlay } from "../map/tools";
+import { compactScreen } from "../map/motion";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { IconButton, Tooltip } from "./kit";
@@ -64,7 +65,8 @@ function Legend({ id }: { id: Overlay }) {
 const STORE_KEY = "rebirth.layers.collapsed";
 const readCollapsed = (): boolean => {
   try {
-    return localStorage.getItem(STORE_KEY) === "1";
+    const v = localStorage.getItem(STORE_KEY);
+    return v === null ? compactScreen() : v === "1";
   } catch {
     return false;
   }

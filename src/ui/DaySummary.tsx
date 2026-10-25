@@ -1,3 +1,4 @@
+import { flyOrJump } from "../map/motion";
 import type maplibregl from "maplibre-gl";
 import { useState } from "preact/hooks";
 import { summaryShown } from "../sim/summary";
@@ -39,7 +40,7 @@ export function DaySummary({ map }: { map: maplibregl.Map }) {
             key={i}
             class="link day-summary-line"
             title="Показать на карте"
-            onClick={() => map.flyTo({ center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}
+            onClick={() => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}
           >
             {body}
           </button>

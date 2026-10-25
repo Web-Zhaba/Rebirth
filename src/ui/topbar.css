@@ -9,7 +9,7 @@
   left: 0;
   right: 0;
   top: 0;
-  height: var(--topbar-h);
+  min-height: 62px; /* --topbar-h is the measured height (layout.ts); it grows when the bar wraps */
   z-index: var(--z-panel);
   pointer-events: auto;
   display: flex;
@@ -48,12 +48,6 @@ button.city-name-btn {
 button.city-name-btn:hover .city-name {
   text-decoration: underline;
   text-decoration-thickness: 1.5px;
-}
-
-button.city-name-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
 }
 
 .city-name {
@@ -421,5 +415,5 @@ button.city-name-btn:focus-visible {
 
 .goal-hint {
   font-size: var(--fs-xs);
-  color: var(--warn);
+  color: var(--warn-text);
 }

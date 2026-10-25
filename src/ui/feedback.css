@@ -77,8 +77,8 @@ button.event-card-pause-btn:hover {
   border-color: var(--warn);
 }
 .event-card:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-hard), var(--focus-ring);
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
 }
 .event-card-title {
   display: flex;
@@ -302,8 +302,8 @@ button.toast-main:hover .toast-text {
   background: var(--paper);
 }
 .map-badge:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-hard-sm), var(--focus-ring);
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
 }
 .map-badge-bad {
   border-color: var(--bad);
