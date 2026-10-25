@@ -1,4 +1,5 @@
 import { BUILDINGS, foodCapacity, houseCapacity } from "./buildings";
+import { buildFloor, buildingPriority, capacityOf } from "./jobs";
 import { isCleared } from "./clearing";
 import { assignFields, expectedKg, FIELD, idleGumnos, FISH, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
@@ -78,7 +79,7 @@ interface W extends PeopleState {
 const pick = <T>(arr: readonly T[], rand: Rand): T => arr[Math.min(arr.length - 1, Math.floor(rand() * arr.length))];
 
 export const ageOf = (born: number, now: number): number => (now - born) / YEAR_MIN;
-const isAdultAge = (age: number): boolean => age >= ADULT_MIN && age < ADULT_MAX;
+export const isAdultAge = (age: number): boolean => age >= ADULT_MIN && age < ADULT_MAX;
 
 export const emptyPeople = (): PeopleState => ({ residents: {}, households: {}, nextPersonId: 1, nextHouseholdId: 1, events: [] });
 
@@ -359,9 +360,6 @@ export function idleResidents(s: ArtelState): Set<number> {
 // Kg of food the idle adults gather in a day right now.
 export const forageKg = (s: ArtelState): number => idleResidents(s).size * forageRate(s.gameMinutes);
 
-export const MIN_ARTEL_SHARE = 0.2;
-export const MIN_ARTEL_FLOOR = 3;
-
 type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock"> & { clearings?: Clearing[]; levers?: Levers };
 
 // The construction artel: every adult without a regular job, plus farmers while the land has no work
@@ -374,7 +372,7 @@ export function artel(s: ArtelState): { hands: number; drafted: number; employed
   const hands = c.jobless + idle;
   let drafted = 0;
   if (constructionWork(s.buildings, s.roads, s.clearings)) {
-    const min = Math.max(MIN_ARTEL_FLOOR, Math.ceil(MIN_ARTEL_SHARE * c.adults - 1e-9));
+    const min = buildFloor(c.adults, s.levers);
     drafted = Math.max(0, Math.min(min - hands, c.employed - idle));
   }
   return { hands, drafted, employed: c.employed };
@@ -386,7 +384,29 @@ export const builderCount = (s: ArtelState): number => {
   return a.hands + a.drafted;
 };
 
-// Share of the work that is done at the workplaces while some of their workers are drafted.
+// Share of the work done at the workplaces of each priority (index 0..3) while workers are drafted: the draft takes
+// the employed of the lowest-priority groups first, so the work of the high-priority groups is protected.
+export function productionScales(s: ArtelState): [number, number, number, number] {
+  if (tolokaActive(s.levers, s.gameMinutes)) return [0, 0, 0, 0]; // everybody is at the site
+  const a = artel(s);
+  const out: [number, number, number, number] = [1, 1, 1, 1];
+  if (a.drafted <= 0) return out;
+  const idle = idleWorkplaces(s); // their workers already count as hands
+  const n = [0, 0, 0, 0];
+  for (const r of Object.values(s.residents)) {
+    const b = r.job === null || idle.has(r.job) ? undefined : s.buildings[r.job];
+    if (b) n[buildingPriority(b, s.levers)]++;
+  }
+  let need = a.drafted;
+  for (let p = 0; p < 4 && need > 0; p++) {
+    const take = Math.min(need, n[p]);
+    if (n[p] > 0) out[p] = 1 - take / n[p];
+    need -= take;
+  }
+  return out;
+}
+
+// Share of the work that is done at the workplaces while some of their workers are drafted (all priorities together).
 export function productionScale(s: ArtelState): number {
   if (tolokaActive(s.levers, s.gameMinutes)) return 0; // everybody is at the site
   const a = artel(s);
@@ -498,16 +518,30 @@ function detach(w: W, r: Resident): void {
   if (h.members.length === 0) delete w.households[h.id];
 }
 
-function jobsStep(w: W, s: SimState, work: boolean): void {
+// Jobs (PLAN-ui.md, job priorities). A workplace hires up to `capacityOf`: its jobs, down to the staff limit, none while
+// its group has priority «нет». Employed adults keep a job they can still reach, those above the capacity are released
+// (the farthest first); then, house by house, the jobless take the reachable vacancy of the HIGHEST priority (nearest on
+// a tie) and employed adults move to a reachable vacancy of a strictly higher priority, up to a few rounds.
+// `work` is true/false on the daily step (idle days count); null for a rebalance between days (idle days untouched).
+const JOB_ROUNDS = 4;
+
+interface JobCand {
+  id: number;
+  m: number;
+}
+
+function jobsStep(w: W, s: SimState, work: boolean | null): void {
   const { buildings } = s;
   const limit = MAX_COMMUTE * WALK_SPEED;
   const cap = new Map<number, number>();
+  const pri = new Map<number, number>();
   const wps: Building[] = [];
   const assign = assignFields(s.zones.fields, buildings);
   for (const b of Object.values(buildings)) {
     if (!isWorkplace(b)) continue;
     wps.push(b);
-    cap.set(b.id, jobsOf(b, s, assign));
+    cap.set(b.id, capacityOf(b, s, assign));
+    pri.set(b.id, buildingPriority(b, s.levers));
   }
   const workers = new Map<number, number>();
   const lose = (r: Resident) => {
@@ -520,7 +554,7 @@ function jobsStep(w: W, s: SimState, work: boolean): void {
       r.job = null;
       r.commute = null;
     } else if (r.job !== null) {
-      if (cap.has(r.job) && (workers.get(r.job) ?? 0) < cap.get(r.job)!) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
+      if (cap.has(r.job)) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
       else {
         r.job = null;
         r.commute = null;
@@ -549,24 +583,28 @@ function jobsStep(w: W, s: SimState, work: boolean): void {
       if (list) list.push({ id: b.id, off: l.off });
       else workAt.set(l.node, [{ id: b.id, off: l.off }]);
     }
-    const groups: { node: number; off: number; h: Household }[] = [];
     const origin = locate(-1, 0, 0);
+    const groups: { node: number; off: number; h: Household; adults: Resident[]; cands: JobCand[] }[] = [];
     for (const h of Object.values(w.households)) {
-      const adults = h.members.filter((m) => isAdultAge(ageOf(w.residents[m].born, w.now)));
+      const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)));
       if (adults.length === 0) continue;
-      const home = h.home === null ? undefined : buildings[h.home];
+      if (h.home === null) {
+        for (const r of adults) lose(r); // the tent camp builds its homes first
+        continue;
+      }
+      const home = buildings[h.home];
       let l: { node: number; off: number } | null;
       if (home) {
         const [x, y] = lotFront(home);
         l = locate(-2 - home.id, x, y);
       } else l = origin;
-      if (h.home === null) for (const m of adults) lose(w.residents[m]); // the tent camp builds its homes first
-      else if (l) groups.push({ node: l.node, off: l.off, h });
-      else for (const m of adults) lose(w.residents[m]);
+      if (l) groups.push({ node: l.node, off: l.off, h, adults, cands: [] });
+      else for (const r of adults) lose(r);
     }
     groups.sort((p, q) => p.node - q.node || p.h.id - q.h.id);
+    // Workplaces within reach of each group, nearest first (shared by the households of one node).
     let curNode = Number.NaN;
-    let cands: { id: number; m: number }[] = [];
+    let cands: JobCand[] = [];
     let candMap = new Map<number, number>();
     for (const g of groups) {
       if (g.node !== curNode) {
@@ -578,33 +616,70 @@ function jobsStep(w: W, s: SimState, work: boolean): void {
         cands.sort((p, q) => p.m - q.m || p.id - q.id);
         candMap = new Map(cands.map((c) => [c.id, c.m]));
       }
-      const adults = g.h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)));
-      for (const r of adults) {
+      g.cands = cands;
+      for (const r of g.adults) {
         if (r.job === null) continue;
         const m = candMap.get(r.job);
         const t = m === undefined ? Infinity : (g.off + m) / WALK_SPEED;
         if (t <= MAX_COMMUTE) r.commute = Math.round(t * 10) / 10;
         else lose(r);
       }
-      for (const r of adults) {
-        if (r.job !== null) continue;
-        for (const c of cands) {
-          const t = (g.off + c.m) / WALK_SPEED;
-          if (t > MAX_COMMUTE) break;
-          if ((workers.get(c.id) ?? 0) >= (cap.get(c.id) ?? 0)) continue;
-          workers.set(c.id, (workers.get(c.id) ?? 0) + 1);
-          r.job = c.id;
-          r.commute = Math.round(t * 10) / 10;
-          break;
+    }
+    // Workplaces above their capacity release the farthest workers first.
+    const staff = new Map<number, Resident[]>();
+    for (const r of Object.values(w.residents)) {
+      if (r.job === null || (workers.get(r.job) ?? 0) <= (cap.get(r.job) ?? 0)) continue;
+      const list = staff.get(r.job);
+      if (list) list.push(r);
+      else staff.set(r.job, [r]);
+    }
+    for (const [id, list] of staff) {
+      list.sort((p, q) => (q.commute ?? 0) - (p.commute ?? 0) || q.id - p.id);
+      for (let i = 0; i < list.length && (workers.get(id) ?? 0) > (cap.get(id) ?? 0); i++) lose(list[i]);
+    }
+    // Fill: the best reachable vacancy of a strictly higher priority than the current job (any, for the jobless).
+    const round = (): boolean => {
+      let moved = false;
+      for (const g of groups) {
+        for (const r of g.adults) {
+          const had = r.job !== null;
+          let best: JobCand | null = null;
+          let bp = had ? pri.get(r.job!)! : -1;
+          if (bp >= 3) continue;
+          for (const c of g.cands) {
+            if ((g.off + c.m) / WALK_SPEED > MAX_COMMUTE) break;
+            const p = pri.get(c.id)!;
+            if (p <= bp || (workers.get(c.id) ?? 0) >= (cap.get(c.id) ?? 0)) continue;
+            best = c;
+            bp = p;
+            if (p >= 3) break;
+          }
+          if (!best) continue;
+          if (had) {
+            workers.set(r.job!, (workers.get(r.job!) ?? 1) - 1);
+            moved = true;
+          }
+          workers.set(best.id, (workers.get(best.id) ?? 0) + 1);
+          r.job = best.id;
+          r.commute = Math.round(((g.off + best.m) / WALK_SPEED) * 10) / 10;
         }
       }
-    }
+      return moved;
+    };
+    for (let i = 0; i < JOB_ROUNDS && round(); i++);
   }
   for (const r of Object.values(w.residents)) {
     if (!isAdultAge(ageOf(r.born, w.now))) continue;
     if (r.job !== null) r.idleDays = 0;
-    else if (!work) r.idleDays++;
+    else if (work === false) r.idleDays++;
   }
+}
+
+// Reassigns jobs right away (after a priority or staff change, or when a workplace is finished); pure.
+export function rebalanceJobs(s: SimState): SimState {
+  const w = cloneW(s, s.gameMinutes);
+  jobsStep(w, s, null);
+  return { ...s, residents: w.residents, households: w.households };
 }
 
 // One game day of life: deaths, births, marriages, moving in, migration, jobs. Pure; all randomness

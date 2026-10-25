@@ -5,7 +5,8 @@ import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { resolveChoice } from "./events";
 import { goalViews, lockReason } from "./goals";
-import { callBlock, callSettlers, callToloka, setPriority, setRations, setSchedule } from "./leverCmds";
+import { callBlock, callSettlers, callToloka, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
+import { jobReport } from "./jobReport";
 import { digInfos, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
@@ -43,7 +44,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), goalViews: goalViews(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), goalViews: goalViews(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -431,12 +432,14 @@ export class Handler {
         }
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
-      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "callSettlers") {
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff") {
         const r =
           cmd.type === "setPriority" ? setPriority(sim, cmd.key)
           : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
           : cmd.type === "setSchedule" ? setSchedule(sim, cmd.strada)
           : cmd.type === "setRations" ? setRations(sim, cmd.rations)
+          : cmd.type === "setJobPriority" ? setJobPriority(sim, cmd.group, cmd.priority)
+          : cmd.type === "setStaff" ? setStaff(sim, cmd.id, cmd.staff)
           : callSettlers(sim);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };

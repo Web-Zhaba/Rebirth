@@ -1,7 +1,8 @@
-import { BUILDINGS, remainingClearing, remainingLabor } from "./buildings";
+import { BUILDINGS, isJobKey, isPriority, remainingClearing, remainingLabor, type JobKey, type Priority } from "./buildings";
+import { jobsOf } from "./fields";
 import { withChronicle } from "./chronicle";
 import { CALL, RATIONS, TOLOKA_COOLDOWN, tolokaActive, workEndAt, workHours, isWorkHour, type Levers, type Rations } from "./levers";
-import { countResidents, vacantHouses } from "./people";
+import { countResidents, isWorkplace, rebalanceJobs, vacantHouses } from "./people";
 import { say } from "./production";
 import { nextRandom } from "./rng";
 import { calendar } from "./time";
@@ -64,6 +65,28 @@ export function setRations(s: SimState, rations: Rations): LeverResult {
   if (typeof rations !== "string" || !Object.hasOwn(RATIONS, rations)) return fail("Неизвестные нормы еды");
   if (s.levers.rations === rations) return { ok: true, sim: s };
   return done(set(s, { rations }), `Нормы еды: ${RATIONS[rations].name.toLowerCase()}`);
+}
+
+// Hiring priority of a job group (or of construction); the people are reassigned at once.
+export function setJobPriority(s: SimState, group: JobKey, priority: Priority): LeverResult {
+  if (!isJobKey(group)) return fail("Неизвестная группа работ");
+  if (!isPriority(priority)) return fail("Некорректный приоритет");
+  if (s.levers.jobs[group] === priority) return { ok: true, sim: s };
+  const next = set(s, { jobs: { ...s.levers.jobs, [group]: priority } });
+  return { ok: true, sim: rebalanceJobs(next) };
+}
+
+// Staff limit of a finished workplace: 0..jobs; all of its jobs clears the limit. The people are reassigned at once.
+export function setStaff(s: SimState, id: number, staff: number): LeverResult {
+  const b = Number.isInteger(id) ? s.buildings[id] : undefined;
+  if (!isWorkplace(b)) return fail("Здесь нет работы");
+  if (!Number.isInteger(staff) || staff < 0) return fail("Некорректное число работников");
+  const jobs = jobsOf(b, s);
+  if (staff > jobs) return fail("Мест меньше");
+  if (staff === (b.staff ?? jobs)) return { ok: true, sim: s };
+  const { staff: _old, ...rest } = b;
+  const nb = staff >= jobs ? rest : { ...rest, staff };
+  return { ok: true, sim: rebalanceJobs({ ...s, buildings: { ...s.buildings, [id]: nb } }) };
 }
 
 // Why a call for settlers cannot be made now, or null.

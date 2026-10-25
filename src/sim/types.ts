@@ -1,3 +1,4 @@
+import type { JobGroup } from "./buildings";
 import type { Levers } from "./levers";
 import type { GoalView } from "./goals";
 import type { Land } from "../world/landcover";
@@ -101,6 +102,7 @@ export interface Building {
   upgrade?: Upgrade; // the rebuild into level 2 in progress; the house stays active meanwhile
   radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
   onRuins?: boolean; // started on an old foundation: no stone, less labor
+  staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
 }
 
@@ -359,6 +361,26 @@ export interface PeopleStats {
   households: number;
 }
 
+// One job group in the work report: places are the capacity left by priority and staff limits.
+export interface JobGroupRow {
+  key: JobGroup;
+  workers: number;
+  places: number; // hiring capacity now
+  open: number; // places without a worker
+  closedByPriority: number; // jobs lost to priority «нет»
+  closedByStaff: number; // jobs lost to staff limits
+}
+
+export interface JobReport {
+  groups: JobGroupRow[];
+  adults: number;
+  jobless: number; // adults with no regular job
+  tentAdults: number; // adults of households in tents (they get no jobs)
+  construction: boolean; // is there construction work
+  floor: number; // builders the construction priority guarantees
+  drafted: number; // of them, taken from jobs
+}
+
 export interface Demand {
   res: number;
   craft: number;
@@ -373,7 +395,7 @@ export type GrowthAdvice = Record<ZoneType, GrowthWhy>;
 // Zones, the chronicle, finds and articles travel separately, only when they changed.
 export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod" | "finds" | "articles"> & {
   digs: DigInfo[]; // finished dig sites with their discs and find counts
-  people: PeopleStats & { demand: Demand; growth: GrowthAdvice };
+  people: PeopleStats & { demand: Demand; growth: GrowthAdvice; jobs: JobReport };
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay

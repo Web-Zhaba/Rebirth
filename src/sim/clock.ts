@@ -2,7 +2,7 @@ import { recordChronicle } from "./chronicle";
 import { dailyServices } from "./coverage";
 import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
-import { builderCount, dailyStep, immigrationStep, productionScale } from "./people";
+import { builderCount, dailyStep, immigrationStep, productionScales } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
 import { eventStep } from "./events";
 import { goalStep } from "./goals";
@@ -86,7 +86,7 @@ export function step(s: SimState): SimState {
     events = reportBuilt(s.buildings, buildings, events, s.gameMinutes);
   }
   let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, events }, clearUse);
-  if (working) cur = produceStep(cur, BASE_TICK / 60, productionScale(s));
+  if (working) cur = produceStep(cur, BASE_TICK / 60, productionScales(s));
   else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
   let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00

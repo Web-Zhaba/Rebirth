@@ -3,6 +3,7 @@ import type maplibregl from "maplibre-gl";
 import { useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { calendar } from "../sim/clock";
+import { JOB_GROUPS, JOB_NAMES, type JobKey, type Priority } from "../sim/buildings";
 import { CALL, RATIONS, workHours, type Rations } from "../sim/levers";
 import { SERVICE_LIST } from "../sim/services";
 import type { City, GrowthWhy, ZoneType } from "../sim/types";
@@ -11,7 +12,8 @@ import { ZONE_COLORS } from "../map/tools";
 import { economy, events, frame, incomingCount, people, reset, roads, services, state, zones } from "../simClient";
 import { Icon } from "./Icon";
 import { act, Line, plural } from "./InspectorParts";
-import { Button, Confirm, IconButton, ProgressBar, Tabs, type TabItem } from "./kit";
+import { jobNotes, JOB_ICON, PRIORITY_LONG, PRIORITY_SHORT } from "./jobsModel";
+import { Button, Confirm, IconButton, ProgressBar, Segmented, Tabs, type TabItem } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { amount, pad, roadQueue } from "./topbarModel";
 
@@ -19,7 +21,7 @@ type Tab = "people" | "work" | "services" | "events" | "orders";
 
 const TABS: TabItem<Tab>[] = [
   { id: "people", label: "Жители" },
-  { id: "work", label: "Работа и спрос" },
+  { id: "work", label: "Работа" },
   { id: "services", label: "Службы" },
   { id: "events", label: "События" },
   { id: "orders", label: "Распоряжения" },
@@ -28,6 +30,49 @@ const TABS: TabItem<Tab>[] = [
 const tab = signal<Tab>("people");
 
 const families = (n: number) => plural(n, "семья", "семьи", "семей");
+const PRIORITIES: Priority[] = [0, 1, 2, 3];
+const PRIORITY_OPTIONS = PRIORITIES.map((id) => ({ id, label: PRIORITY_SHORT[id], title: PRIORITY_LONG[id] }));
+
+// One job group: workers and places, and the hiring priority. Construction has no places: its priority sets the floor of builders.
+function JobRow({ k, text, hint }: { k: JobKey; text: string; hint?: string }) {
+  const value = state.value?.levers.jobs?.[k] ?? 2;
+  return (
+    <div class="job-row">
+      <div class="job-head">
+        <Icon name={JOB_ICON[k]} size={18} />
+        <span>{JOB_NAMES[k]}</span>
+        <span class="job-count">{text}</span>
+      </div>
+      <Segmented options={PRIORITY_OPTIONS} value={value} label={`Приоритет: ${JOB_NAMES[k].toLowerCase()}`} onChange={(priority) => act({ type: "setJobPriority", group: k, priority })} />
+      {hint && <div class="people-note">{hint}</div>}
+    </div>
+  );
+}
+
+// «Работа»: priorities of the job groups and of construction, who is without work and why places stay empty.
+function JobsBlock() {
+  const p = people.value;
+  const r = p?.jobs;
+  if (!p || !r) return null;
+  const notes = jobNotes(r);
+  const drafted = r.drafted > 0 ? `, из них ${r.drafted} сняты с работы` : "";
+  const floorHint = !r.construction ? "Строить пока нечего" : r.floor > 0 ? `Не меньше ${r.floor} ${plural(r.floor, "строителя", "строителей", "строителей")}${drafted}` : "Строят только те, у кого нет работы";
+  return (
+    <div class="rs-list" role="group" aria-label="Приоритеты работ">
+      {JOB_GROUPS.map((k) => {
+        const g = r.groups.find((x) => x.key === k)!;
+        return <JobRow key={k} k={k} text={`${g.workers} из ${g.places}${g.open > 0 ? `, свободно ${g.open}` : ""}`} />;
+      })}
+      <JobRow k="build" text={`строителей ${p.builders}`} hint={floorHint} />
+      {notes.map((n) => (
+        <div class="people-note" key={n}>
+          {n}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const RATION_IDS: Rations[] = ["reduced", "normal", "generous"];
 
 // Why a zone type is (not) growing, in words.
@@ -108,6 +153,8 @@ function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
   if (!p) return <div class="people-note">Пока нет данных</div>;
   return (
     <div class="rs-list">
+      <JobsBlock />
+      <h3 class="rs-sub">Занятость</h3>
       <Line label="Работают">{p.employed}</Line>
       <Line label="На стройке">{p.builders}</Line>
       <Line label="Без работы">{p.unemployed}</Line>

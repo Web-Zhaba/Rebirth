@@ -1,5 +1,5 @@
 import { LANDS } from "../world/landcover";
-import { BUILDINGS, UPGRADE } from "./buildings";
+import { BUILDINGS, isPriority, JOB_KEYS, UPGRADE } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
@@ -194,6 +194,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (raw.template === DIG.template) out[id].radius = isNum(raw.radius) && raw.radius >= DIG.startRadius ? Math.min(DIG.maxRadius, raw.radius) : DIG.startRadius;
     if (raw.onRuins === true) out[id].onRuins = true;
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
+    if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
     const up = raw.upgrade;
     if (up !== undefined && raw.state === "active" && isRecord(up) && isNum(up.labor) && up.labor > 0 && isNum(up.done) && up.done >= 0 && up.done <= up.labor) {
       const upgrade: Upgrade = { labor: up.labor, done: up.done, paid: up.paid === true };
@@ -349,6 +350,8 @@ function parseLevers(v: unknown): Levers {
   if (isNum(v.tolokaReady)) out.tolokaReady = v.tolokaReady;
   out.strada = v.strada === true;
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
+  const j = v.jobs;
+  if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
   return out;
 }
 

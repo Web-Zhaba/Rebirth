@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, houseCapacity, type Materials } from "../sim/buildings";
+import { BUILDINGS, houseCapacity, JOB_NAMES, type JobGroup, type Materials } from "../sim/buildings";
 import { queuedLabel } from "../sim/clock";
 import { handHours } from "../sim/production";
 import { DIG, revealedArea } from "../sim/excavation";
@@ -13,7 +13,8 @@ import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simC
 import { Icon } from "./Icon";
 import { act, InspectorHead, Line, num, plural, siteEta, SiteLevers } from "./InspectorParts";
 import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspectorModel";
-import { Button, Confirm, ProgressBar } from "./kit";
+import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
+import { Button, Confirm, IconButton, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 
 const REFRESH_MS = 4000;
@@ -56,7 +57,8 @@ function SiteMaterials({ template, paid, hand, st }: { template: string; paid: b
 const moodWord = (m: number) => (m >= 75 ? "отличное" : m >= 55 ? "хорошее" : m >= 35 ? "неважное" : "плохое");
 
 // Residents or workers of the selected building, fetched from the worker while the panel is open.
-function useResidents(id: number | null, active: boolean): BuildingQuery | null {
+// `bump` changes when something that moves the workers does (staff limit, priority), so the list is fetched again at once.
+function useResidents(id: number | null, active: boolean, bump: string): BuildingQuery | null {
   const [data, setData] = useState<{ id: number; q: BuildingQuery | null } | null>(null);
   useEffect(() => {
     if (id === null || !active) return;
@@ -71,7 +73,7 @@ function useResidents(id: number | null, active: boolean): BuildingQuery | null 
       alive = false;
       clearInterval(timer);
     };
-  }, [id, active]);
+  }, [id, active, bump]);
   return data && data.id === id ? data.q : null;
 }
 
@@ -105,6 +107,36 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
   );
 }
 
+// Group and priority of a workplace, and its staff limit with − / + (0 closes hiring).
+function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: JobGroup; jobs: number; workers: number; staff: number | undefined }) {
+  const priority = state.value?.levers.jobs?.[group] ?? 2;
+  const limit = staffLimit(staff, jobs);
+  const set = (next: number) => act({ type: "setStaff", id, staff: next });
+  return (
+    <div class="staff">
+      <Line icon={JOB_ICON[group]} label={`Группа: ${JOB_NAMES[group]}`}>
+        приоритет {PRIORITY_LONG[priority].toLowerCase()}
+      </Line>
+      <div class="insp-line">
+        <span class="people-title">Работники</span>
+        <span class="staff-ctl" role="group" aria-label="Лимит найма">
+          <IconButton icon="minus" size={14} label="Меньше работников" disabled={limit <= 0} onClick={() => set(limit - 1)} />
+          <b aria-live="polite">
+            {workers} из {limit}
+          </b>
+          <IconButton icon="plus" size={14} label="Больше работников" disabled={limit >= jobs} onClick={() => set(limit + 1)} />
+        </span>
+      </div>
+      {limit < jobs && (
+        <div class="people-note">
+          Мест {jobs}, найм ограничен до {limit}
+        </div>
+      )}
+      {priority === 0 && <div class="prod-warn">Найм закрыт: приоритет группы «Нет»</div>}
+    </div>
+  );
+}
+
 const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
 
 // Inspector of the selected building (right slot).
@@ -115,7 +147,8 @@ export function BuildingPanel() {
   const t = b ? BUILDINGS[b.template] : undefined;
   const shown = !!b && !!t && !tool.value && rightPanel.value === "inspector";
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
-  const info = useResidents(id, shown && b?.state === "active");
+  const group = t?.group ?? null;
+  const info = useResidents(id, shown && b?.state === "active", `${b?.staff ?? "-"}|${group ? (state.value?.levers.jobs?.[group] ?? 2) : "-"}`);
   useEffect(() => setConfirming(false), [id]);
   if (!b || !t || !shown) return null;
   const upgrading = b.state === "active" && !!b.upgrade;
@@ -227,9 +260,7 @@ export function BuildingPanel() {
         ))}
       {info?.kind === "workplace" && info.capacity > 0 && (
         <div class="people">
-          <div class="people-title">
-            Работники {info.workers.length} из {info.capacity}
-          </div>
+          {group ? <StaffControl id={b.id} group={group} jobs={info.capacity} workers={info.workers.length} staff={b.staff} /> : <div class="people-title">Работники {info.workers.length} из {info.capacity}</div>}
           {info.workers.map((w) => (
             <div class="person" key={w.id}>
               <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет")}

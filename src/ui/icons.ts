@@ -40,6 +40,9 @@ import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
 import PhCaretDown from "~icons/ph/caret-down-bold";
 import PhCaretUp from "~icons/ph/caret-up-bold";
+import PhHammer from "~icons/ph/hammer";
+import PhMinus from "~icons/ph/minus-bold";
+import PhPlus from "~icons/ph/plus-bold";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
 import PhInfo from "~icons/ph/info-bold";
@@ -81,6 +84,9 @@ export const ICONS = {
   info: PhInfo,
   // Inspector and town panel: priority, volunteers, waiting, the town button
   flag: PhFlag,
+  build: PhHammer,
+  minus: PhMinus,
+  plus: PhPlus,
   crowd: PhUsers,
   hourglass: PhHourglass,
   town: Village,

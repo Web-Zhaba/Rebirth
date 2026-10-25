@@ -1,6 +1,7 @@
 import type { Speed } from "./clock";
 import type { Light, Trip } from "../map/lifeLayer";
 import type { Away } from "./away";
+import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
@@ -35,6 +36,9 @@ export type Cmd =
   | { type: "setSchedule"; strada: boolean }
   | { type: "setRations"; rations: Rations }
   | { type: "callSettlers" }
+  // Jobs: hiring priority of a job group (or of construction), and the staff limit of a workplace.
+  | { type: "setJobPriority"; group: JobKey; priority: Priority }
+  | { type: "setStaff"; id: number; staff: number }
   // The answer to the pending event: its id and the option (0 or 1).
   | { type: "choose"; id: string; option: 0 | 1 }
   // Wikipedia articles found near the dig discs (validated, deduplicated by id and capped by the sim).

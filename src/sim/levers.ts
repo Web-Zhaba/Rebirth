@@ -1,3 +1,4 @@
+import { JOB_KEYS, type JobKey, type Priority } from "./buildings";
 import { dayStart } from "./time";
 
 // Player levers (PLAN-pace.md section 8). All of them are off by default, so a town that never uses them behaves as before.
@@ -10,9 +11,12 @@ export interface Levers {
   tolokaReady: number; // gameMinutes from which a new толока may be called
   strada: boolean; // «Долгий день»: the long workday
   rations: Rations;
+  jobs: Record<JobKey, Priority>; // hiring priority per job group, and the builders' floor ("build"); 2 = normal
 }
 
-export const emptyLevers = (): Levers => ({ priority: null, toloka: null, tolokaReady: 0, strada: false, rations: "normal" });
+export const emptyJobs = (): Record<JobKey, Priority> => Object.fromEntries(JOB_KEYS.map((k) => [k, 2])) as Record<JobKey, Priority>;
+
+export const emptyLevers = (): Levers => ({ priority: null, toloka: null, tolokaReady: 0, strada: false, rations: "normal", jobs: emptyJobs() });
 
 export const WORKDAY = { start: 7, end: 19 };
 export const STRADA = { start: 5, end: 21 };

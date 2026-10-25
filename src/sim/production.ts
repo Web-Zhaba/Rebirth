@@ -2,7 +2,8 @@ import { leverMood } from "./levers";
 import { allocateLabor, BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE, type Materials, type SiteLever } from "./buildings";
 import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
-import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScale } from "./people";
+import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
+import { buildingPriority } from "./jobs";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, SERVICE, serviceMood } from "./services";
@@ -149,8 +150,8 @@ export function payMaterials(
 // ---------- production (every work-hour tick) ----------
 
 // One tick of `dt` hours of work: producers, workshops and field work. Call during work hours only.
-// `scale` is the share of work left after workers were drafted into the artel (see people.ts).
-export function produceStep(s: SimState, dt: number, scale: number = productionScale(s)): SimState {
+// `scale` is the share of work left after workers were drafted into the artel (see people.ts): one for all, or by priority.
+export function produceStep(s: SimState, dt: number, scale: number | readonly number[] = productionScales(s)): SimState {
   const cal = calendar(s.gameMinutes);
   const workers = workersByJob(s.residents);
   const win = windowAt(s.gameMinutes);
@@ -178,7 +179,7 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
     if (n === 0) continue;
     // Literate hands make a workshop more productive.
     const eff = b.zone === "craft" ? n + SERVICE.literateBoost * (workers.lit.get(b.id) ?? 0) : n;
-    const h = eff * dt * scale;
+    const h = eff * dt * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
     switch (b.template) {
       case "woodcutter": {
         const q = h * RATE.logs * PACE * (b.site?.forest ?? 0);

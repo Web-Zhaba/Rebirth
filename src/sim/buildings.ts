@@ -19,7 +19,22 @@ export interface BuildingTemplate {
   residents: number; // capacity of a house
   jobs: number; // capacity of a workplace (a gumno's depends on its fields, see fields.ts)
   materials: Materials;
+  group: JobGroup | null; // job group of a workplace (houses: null); a new template must declare one
 }
+
+// Job groups: the player sets a hiring priority for each (PLAN-ui.md glossary). Construction is a key of its own,
+// but it has no buildings: its priority sets the builders' floor.
+export const JOB_GROUPS = ["food", "materials", "crafts", "trade", "services"] as const;
+export type JobGroup = (typeof JOB_GROUPS)[number];
+export type JobKey = JobGroup | "build";
+export const JOB_KEYS: readonly JobKey[] = [...JOB_GROUPS, "build"];
+export const JOB_NAMES: Record<JobKey, string> = { food: "Еда", materials: "Материалы", crafts: "Ремёсла", trade: "Торговля", services: "Услуги", build: "Стройка" };
+
+// 0 none, 1 low, 2 normal (default), 3 high.
+export type Priority = 0 | 1 | 2 | 3;
+export const PRIORITY_NAMES: readonly string[] = ["Нет", "Низкий", "Обычный", "Высокий"];
+export const isPriority = (v: unknown): v is Priority => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 3;
+export const isJobKey = (v: unknown): v is JobKey => typeof v === "string" && (JOB_KEYS as readonly string[]).includes(v);
 
 const T = (
   id: string,
@@ -33,6 +48,7 @@ const T = (
   labor: number,
   capacity: number,
   materials: [number, number, number],
+  group: JobGroup | null,
 ): BuildingTemplate => ({
   id,
   name,
@@ -46,33 +62,34 @@ const T = (
   residents: zone === "res" ? capacity : 0,
   jobs: zone === "res" ? 0 : capacity,
   materials: { logs: materials[0], planks: materials[1], stone: materials[2] },
+  group,
 });
 
 // Labor is paced for play, not history: a village raised houses together (толока), and an
 // izba should take about one game day of the founding party's work. Materials are m3 / m3 / t
 // (logs, planks, stone); the labor of placed buildings is not in the design table, chosen here.
 export const BUILDINGS: Record<string, BuildingTemplate> = {
-  izba: T("izba", "Дом", "res", 2, 3, 6, 7, 5, 100, 5, [25, 2, 2]),
-  izba5: T("izba5", "Большой дом", "res", 2, 4, 7, 9, 6, 150, 7, [40, 4, 3]),
-  smithy: T("smithy", "Кузница", "craft", 2, 2, 6, 5, 4, 90, 3, [10, 1, 5]),
-  carpentry: T("carpentry", "Столярная мастерская", "craft", 2, 3, 8, 6, 5, 110, 4, [22, 3, 2]),
-  pottery: T("pottery", "Гончарня", "craft", 2, 2, 6, 5, 4, 75, 3, [10, 1, 4]),
-  shop: T("shop", "Магазин", "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1]),
-  tavern: T("tavern", "Таверна", "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8]),
-  gumno: T("gumno", "Ферма", "placed", 1, 2, 8, 10, 6, 120, 0, [30, 4, 3]),
-  woodcutter: T("woodcutter", "Лесозаготовка", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 0.5, 0]),
-  sawpit: T("sawpit", "Лесопилка", "placed", 1, 1, 6, 4, 3, 50, 2, [5, 1, 0]),
-  quarry: T("quarry", "Карьер", "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0]),
-  fisher: T("fisher", "Рыболовный причал", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0]),
-  barn: T("barn", "Склад", "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2]),
+  izba: T("izba", "Дом", "res", 2, 3, 6, 7, 5, 100, 5, [25, 2, 2], null),
+  izba5: T("izba5", "Большой дом", "res", 2, 4, 7, 9, 6, 150, 7, [40, 4, 3], null),
+  smithy: T("smithy", "Кузница", "craft", 2, 2, 6, 5, 4, 90, 3, [10, 1, 5], "crafts"),
+  carpentry: T("carpentry", "Столярная мастерская", "craft", 2, 3, 8, 6, 5, 110, 4, [22, 3, 2], "crafts"),
+  pottery: T("pottery", "Гончарня", "craft", 2, 2, 6, 5, 4, 75, 3, [10, 1, 4], "crafts"),
+  shop: T("shop", "Магазин", "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1], "trade"),
+  tavern: T("tavern", "Таверна", "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8], "trade"),
+  gumno: T("gumno", "Ферма", "placed", 1, 2, 8, 10, 6, 120, 0, [30, 4, 3], "food"),
+  woodcutter: T("woodcutter", "Лесозаготовка", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 0.5, 0], "materials"),
+  sawpit: T("sawpit", "Лесопилка", "placed", 1, 1, 6, 4, 3, 50, 2, [5, 1, 0], "materials"),
+  quarry: T("quarry", "Карьер", "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0], "materials"),
+  fisher: T("fisher", "Рыболовный причал", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0], "food"),
+  barn: T("barn", "Склад", "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2], "services"),
   // Services (PLAN.md section 9); labor and materials chosen here, like the placed buildings above.
-  well: T("well", "Колодец", "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3]),
-  market: T("market", "Рынок", "placed", 2, 2, 12, 12, 4, 160, 4, [30, 6, 2]),
-  chapel: T("chapel", "Храм", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6]),
-  school: T("school", "Школа", "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3]),
-  healer: T("healer", "Лечебница", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1]),
+  well: T("well", "Колодец", "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3], "services"),
+  market: T("market", "Рынок", "placed", 2, 2, 12, 12, 4, 160, 4, [30, 6, 2], "trade"),
+  chapel: T("chapel", "Храм", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6], "services"),
+  school: T("school", "Школа", "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3], "services"),
+  healer: T("healer", "Лечебница", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1], "services"),
   // Excavation (PLAN.md section 12).
-  dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0]),
+  dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0], "services"),
 };
 
 // Rebuilding an izba into level 2 (PLAN.md section 9): taken like construction, the family stays.

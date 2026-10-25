@@ -232,3 +232,72 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+.seg {
+  display: flex;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--paper-raised);
+}
+
+.seg-btn {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-left: var(--bw-hair) solid var(--rule-soft);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.seg-btn:first-child {
+  border-left: 0;
+}
+
+.seg-btn:hover:not(.on) {
+  background: var(--paper-shade);
+}
+
+.seg-btn.on {
+  background: var(--ink);
+  color: var(--paper-raised);
+  font-weight: 700;
+}
+
+.seg-btn:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: -2px;
+}
+
+.job-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-1) 0;
+  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
+}
+
+.job-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 700;
+}
+
+.job-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.staff-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
