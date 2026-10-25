@@ -35,6 +35,9 @@ const PERSIST_MS = 10_000; // wall ms between saves while ticking
 const CATCHUP_MIN = 60; // game minutes: a longer catch-up reports progress
 const AWAY_GAP_MS = 70_000; // a longer gap between ticks is caught up in chunks with progress
 const HIDDEN_OFFLINE_MS = 5 * 60_000; // a tab hidden this long counts as offline
+
+// Errors go to the console of the main thread, which cannot see the worker's stack: send it along.
+const errorText = (e: unknown): string => (e instanceof Error ? (e.stack ?? e.message) : String(e));
 const CHUNK_TICKS = 144; // one game day per chunk
 
 // What the main thread sees: aggregates instead of individual residents.
@@ -151,7 +154,7 @@ export class Handler {
           return;
       }
     } catch (e) {
-      this.post({ t: "error", message: e instanceof Error ? e.message : String(e) });
+      this.post({ t: "error", message: errorText(e) });
     }
   }
 
@@ -202,7 +205,7 @@ export class Handler {
       this.post({ t: "away", away: summarize(tally, save.sim, sim, realMs) });
       await this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));
     } catch (e) {
-      this.post({ t: "error", message: e instanceof Error ? e.message : String(e) });
+      this.post({ t: "error", message: errorText(e) });
     } finally {
       await this.release();
     }
@@ -288,7 +291,7 @@ export class Handler {
       const { trips, traffic, lights } = computeLife(this.save.sim, day);
       this.post({ t: "life", day, trips, traffic, lights });
     } catch (e) {
-      this.post({ t: "error", message: e instanceof Error ? e.message : String(e) });
+      this.post({ t: "error", message: errorText(e) });
     }
   }
 
@@ -350,7 +353,7 @@ export class Handler {
         }
       }
     } catch (e) {
-      this.post({ t: "error", message: e instanceof Error ? e.message : String(e) });
+      this.post({ t: "error", message: errorText(e) });
     }
   }
 
