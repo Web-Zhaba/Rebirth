@@ -69,16 +69,16 @@ const T = (
 // izba should take about one game day of the founding party's work. Materials are m3 / m3 / t
 // (logs, planks, stone); the labor of placed buildings is not in the design table, chosen here.
 export const BUILDINGS: Record<string, BuildingTemplate> = {
-  izba: T("izba", "Дом", "res", 2, 3, 6, 7, 5, 100, 5, [25, 2, 2], null),
-  izba5: T("izba5", "Большой дом", "res", 2, 4, 7, 9, 6, 150, 7, [40, 4, 3], null),
+  izba: T("izba", "Дом", "res", 2, 3, 6, 7, 5, 26, 5, [15, 1.5, 1], null),
+  izba5: T("izba5", "Большой дом", "res", 2, 4, 7, 9, 6, 40, 7, [22, 2, 1.5], null),
   smithy: T("smithy", "Кузница", "craft", 2, 2, 6, 5, 4, 90, 3, [10, 1, 5], "crafts"),
   carpentry: T("carpentry", "Столярная мастерская", "craft", 2, 3, 8, 6, 5, 110, 4, [22, 3, 2], "crafts"),
   pottery: T("pottery", "Гончарня", "craft", 2, 2, 6, 5, 4, 75, 3, [10, 1, 4], "crafts"),
   shop: T("shop", "Магазин", "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1], "trade"),
   tavern: T("tavern", "Таверна", "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8], "trade"),
-  gumno: T("gumno", "Ферма", "placed", 1, 2, 8, 10, 6, 120, 0, [30, 4, 3], "food"),
-  woodcutter: T("woodcutter", "Лесозаготовка", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 0.5, 0], "materials"),
-  sawpit: T("sawpit", "Лесопилка", "placed", 1, 1, 6, 4, 3, 50, 2, [5, 1, 0], "materials"),
+  gumno: T("gumno", "Ферма", "placed", 1, 2, 8, 10, 6, 50, 0, [16, 2, 2], "food"),
+  woodcutter: T("woodcutter", "Лесозаготовка", "placed", 1, 1, 4, 4, 3, 24, 2, [6, 0.5, 0], "materials"),
+  sawpit: T("sawpit", "Лесопилка", "placed", 1, 1, 6, 4, 3, 30, 2, [5, 1, 0], "materials"),
   quarry: T("quarry", "Карьер", "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0], "materials"),
   fisher: T("fisher", "Рыболовный причал", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0], "food"),
   barn: T("barn", "Склад", "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2], "services"),
@@ -108,7 +108,7 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp
 export const BARN_CAP = 30_000; // kg per finished barn
-export const FOUNDING_STOCK: Stock = { food: 3000, logs: 60, planks: 8, stone: 6, wares: 20 };
+export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, wares: 20 };
 
 export function foodCapacity(buildings: Record<number, Building>): number {
   let cap = FOOD_CAMP_CAP;

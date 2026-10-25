@@ -1,7 +1,7 @@
 import { allUnlocked } from "./goals";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, step } from "./clock";
-import { BARN_CAP, BUILDINGS, foodCapacity, FOOD_CAMP_CAP } from "./buildings";
+import { BARN_CAP, BUILDINGS, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
 import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { Handler, type Storage } from "./handler";
@@ -381,9 +381,10 @@ describe("fields", () => {
 describe("construction materials", () => {
   const planned = (template = "izba") => ({ 1: bld(1, template, 50, "planned") });
   it("takes the materials from the stock when work starts", () => {
+    const M = BUILDINGS.izba.materials;
     const stock = { food: 0, logs: 30, planks: 5, stone: 4, wares: 0 };
     const r = payMaterials(planned(), stock, 1);
-    expect(r.stock).toEqual({ food: 0, logs: 5, planks: 3, stone: 2, wares: 0 });
+    expect(r.stock).toEqual({ food: 0, logs: 30 - M.logs, planks: 5 - M.planks, stone: 4 - M.stone, wares: 0 });
     expect(r.buildings[1].paid).toBe(true);
     expect(r.buildings[1].labor).toBe(BUILDINGS.izba.labor); // nothing missing
     // paid once only
@@ -392,12 +393,14 @@ describe("construction materials", () => {
     expect(payMaterials(planned(), stock, 0).stock).toEqual(stock);
   });
   it("makes the shortfall by hand and adds it to the labor", () => {
-    const stock = { food: 0, logs: 10, planks: 0, stone: 5, wares: 0 };
+    const M = BUILDINGS.izba.materials;
+    const stock = { food: 0, logs: M.logs - 5, planks: 0, stone: M.stone + 3, wares: 0 };
     const r = payMaterials(planned(), stock, 1);
-    // izba: 25 logs, 2 planks, 2 stone; short by 15 logs and 2 planks
-    expect(r.buildings[1].labor).toBeCloseTo(BUILDINGS.izba.labor + 15 * HAND_HOURS.logs + 2 * HAND_HOURS.planks);
+    // short by 5 m3 of logs and all the planks; the stone is there
+    const hand = 5 * HAND_HOURS.logs + M.planks * HAND_HOURS.planks;
+    expect(r.buildings[1].labor).toBeCloseTo(BUILDINGS.izba.labor + hand);
     expect(r.stock).toEqual({ food: 0, logs: 0, planks: 0, stone: 3, wares: 0 });
-    expect(r.buildings[1].hand).toBeCloseTo(15 * HAND_HOURS.logs + 2 * HAND_HOURS.planks); // kept for the building panel
+    expect(r.buildings[1].hand).toBeCloseTo(hand); // kept for the building panel
     expect(handHours(BUILDINGS.izba.materials, stock)).toBeCloseTo(r.buildings[1].hand!);
     expect(payMaterials(planned(), { food: 0, logs: 30, planks: 5, stone: 4, wares: 0 }, 1).buildings[1]).not.toHaveProperty("hand");
     expect(HAND_HOURS).toEqual({ logs: 4, planks: 12, stone: 2 });
@@ -412,7 +415,8 @@ describe("construction materials", () => {
   });
   it("a work tick pays and builds", () => {
     let s = folk(town(Object.values(planned()), { gm: NOON }), [{ home: null, adults: 6 }]);
-    s = { ...s, stock: { ...s.stock, logs: 25, planks: 2, stone: 2 } };
+    const M = BUILDINGS.izba.materials;
+    s = { ...s, stock: { ...s.stock, logs: M.logs, planks: M.planks, stone: M.stone } };
     const a = step(s);
     expect(a.stock).toMatchObject({ logs: 0, planks: 0, stone: 0 });
     expect(a.buildings[1].paid).toBe(true);
@@ -731,7 +735,7 @@ describe("save", () => {
     old.buildings[1].state = "planned";
     old.buildings[1].done = 0;
     const p = parseSave({ version: 4, city, sim: old }, NOW)!;
-    expect(p.sim.stock).toEqual({ food: 3000, logs: 60, planks: 8, stone: 6, wares: 20 });
+    expect(p.sim.stock).toEqual(FOUNDING_STOCK);
     expect(p.sim.prod).toEqual({ fields: {}, flags: { year: 1, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 }, today: {}, yesterday: {} });
     expect(p.sim.households[1].mood).toBe(60);
     expect(p.sim.buildings[1].paid).toBe(false); // still planned

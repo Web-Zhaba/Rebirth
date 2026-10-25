@@ -133,6 +133,12 @@ Food, wares and seasons stay real: people eat real amounts, fields yield once a 
 Founders bring 1 750 kg of food (enough for 10 people until the first harvest) and 20 wares.
 Immigrants bring 60 days of their own food.
 
+**Tuned values (PLAN-pace.md P8, final).** 14 founders with a cart of 3 t food, 100 m³ logs, 12 m³ planks,
+12 t stone and 20 wares; a house costs 26 person-h and 15 m³ logs, 1.5 m³ planks, 1 t stone (big house 40
+person-h); farm 50, woodcutter 24, sawpit 30 person-h; woodcutters cut 0.4 m³ per hour × PACE × forest share;
+paths 0.1 person-h per metre; sowing runs 4 days into summer at half credit. Harness at 1×: first house 0:01,
+first planks 0:06, 5 houses 0:20, 10 houses 0:39, first harvest 1:15, 100 residents 2:21, a feed event every 55 s.
+
 **Player-placed buildings** (new category `placed`; lots beside built roads, w × d cells like
 grown buildings; painted zone under them is cleared; never removed by zone changes, only
 with their road or by demolition):
