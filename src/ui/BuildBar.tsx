@@ -177,7 +177,7 @@ export function BuildBar() {
           <div class="road-msg">{msg}</div>
         ) : (
           <div class="road-hint">
-            {active ? HINT[active] : "Правая кнопка — наклон"}
+            {active ? HINT[active] : typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? "Два пальца — наклон" : "Правая кнопка — наклон"}
             {growth && <div>{growth}</div>}
           </div>
         )}

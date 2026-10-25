@@ -12,5 +12,9 @@ export function createMap(container: string): maplibregl.Map {
   });
   map.addControl(new maplibregl.NavigationControl(), "top-right");
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+  // On a phone the credits start folded behind the «i» button: MapLibre opens them when it mounts a wide map.
+  map.once("load", () => {
+    if (matchMedia("(max-width: 640px)").matches) map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
+  });
   return map;
 }

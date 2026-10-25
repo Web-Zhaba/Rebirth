@@ -240,6 +240,7 @@ button.event-card-pause-btn {
   .bb-tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
+    scrollbar-width: none; /* swipeable; the cut-off last tab shows there is more */
   }
 
   .bb-tabs .tab {
