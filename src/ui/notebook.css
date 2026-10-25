@@ -42,19 +42,32 @@
   text-align: center;
 }
 
+/* A field book page: ruled paper (lines scroll with the text), a red margin rule, ink headings. */
 .notebook .notebook-panel {
-  width: min(300px, calc(100vw - 20px));
-  max-height: min(480px, max(160px, calc(100vh - 372px)));
+  width: min(320px, calc(100vw - 20px));
+  max-height: min(500px, max(160px, calc(100vh - 372px)));
   display: flex;
   flex-direction: column;
   font-size: var(--fs-sm);
+  background: var(--paper-raised);
+}
+
+.notebook-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  border-bottom: var(--bw) solid var(--rule);
 }
 
 .notebook-title {
+  flex: 1;
+  margin: 0;
   font-family: var(--font-display);
   font-size: var(--fs-lg);
   font-weight: 700;
-  margin-bottom: 6px;
+  line-height: var(--lh-tight);
 }
 
 .notebook-tabs {
@@ -68,60 +81,80 @@
   padding: 4px 6px;
   border: var(--bw) solid var(--rule);
   border-radius: var(--radius);
-  background: transparent;
+  background: var(--paper);
   color: inherit;
   font: inherit;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .notebook-tab.active {
   background: var(--ink);
   color: var(--paper);
-  font-weight: 700;
+}
+
+.notebook-tab.active:hover:not(:disabled) {
+  background-color: var(--ink);
 }
 
 .notebook-body {
   overflow-y: auto;
   min-height: 0;
-  padding-right: 2px;
+  padding: 0 2px 0 34px;
+  background:
+    linear-gradient(90deg, transparent 26px, var(--bad-fill) 26px 28px, transparent 28px) local,
+    repeating-linear-gradient(to bottom, transparent 0 23px, var(--rule-soft) 23px 24px) local;
+  background-color: var(--paper-raised);
+  line-height: 24px;
 }
 
 .notebook-entry {
-  padding: 6px 0;
-  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
-}
-
-.notebook-entry:last-child {
-  border-bottom: 0;
-}
-
-.notebook-entry-title {
-  font-weight: 700;
+  position: relative;
+  padding: 0 0 24px;
 }
 
 .notebook-kind {
-  display: inline-flex;
-  vertical-align: middle;
+  position: absolute;
+  left: -32px;
+  top: 3px;
+  width: 22px;
+  display: flex;
+  justify-content: center;
   color: var(--bad);
 }
 
+.notebook-pen {
+  color: var(--pencil);
+}
+
+.notebook-entry-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
 .notebook-text {
-  margin-top: 2px;
-  line-height: 1.35;
+  line-height: 24px;
+}
+
+.notebook-ink {
+  font-family: var(--font-display);
 }
 
 .notebook-date {
-  margin-top: 2px;
   font-size: var(--fs-xs);
   color: var(--pencil);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
 }
 
 .notebook-date a {
   color: inherit;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .notebook-empty {
-  padding: 10px 0;
+  padding: 0;
   color: var(--pencil);
   font-family: var(--font-display);
   font-style: italic;

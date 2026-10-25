@@ -1,0 +1,248 @@
+/* Field-book cards: founding, «Пока вас не было», «Об игре». Opaque paper, ink rules, serif headings. */
+
+.found {
+  position: absolute;
+  left: 50%;
+  bottom: 64px; /* clear the attribution bar, which wraps on narrow screens */
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 32px));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  background: var(--paper-raised);
+}
+
+.found-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.found-head,
+.away-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--bw) solid var(--rule);
+}
+
+.found-head h2,
+.away-head h2,
+.about-sub {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+}
+
+.found-head h2,
+.away-head h2 {
+  font-size: var(--fs-lg);
+}
+
+.coords {
+  font-size: var(--fs-sm);
+  color: var(--pencil);
+  font-variant-numeric: tabular-nums;
+}
+
+.found-note {
+  color: var(--pencil);
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+.found-facts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--sp-3);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.found-facts dt {
+  color: var(--pencil);
+}
+
+.found-facts dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.found-facts dt,
+.found-facts dd {
+  padding: 2px 0;
+  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
+}
+
+.found-notes {
+  margin: var(--sp-2) 0 0;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  font-family: var(--font-display);
+}
+
+.found-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.chip-btn {
+  padding: 3px var(--sp-2);
+  border: var(--bw) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.chip-btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.chip-btn[aria-pressed="true"]:hover:not(:disabled) {
+  background-color: var(--ink);
+}
+
+.found input {
+  font: inherit;
+  padding: var(--sp-2) 10px;
+  border: var(--bw) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  min-width: 0;
+}
+
+.found .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* «Пока вас не было» */
+.offline,
+.away {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  z-index: var(--z-dialog);
+}
+
+.offline {
+  width: min(320px, calc(100vw - 32px));
+  text-align: center;
+}
+
+.offline-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.away {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: var(--sp-4);
+  background: var(--paper-raised);
+}
+
+.away-lead {
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.away-list,
+.away-problems,
+.away-chronicle {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.away-row {
+  display: grid;
+  grid-template-columns: 22px 92px 1fr;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: 5px 0;
+  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
+}
+
+.away-row > svg {
+  align-self: center;
+  color: var(--pencil);
+}
+
+.away-label {
+  color: var(--pencil);
+}
+
+.away-val {
+  font-weight: 700;
+}
+
+.away-sub {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+}
+
+.away-problems li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--bad);
+  font-weight: 700;
+}
+
+.away-chronicle {
+  padding-left: 18px;
+  list-style: disc;
+  font-family: var(--font-display);
+}
+
+.away-chronicle li {
+  padding: 2px 0;
+}
+
+/* «Об игре» */
+.about {
+  max-width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+}
+
+.about-lead {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-display);
+}
+
+.about-sub {
+  font-size: var(--fs-md);
+  margin-bottom: var(--sp-2);
+}
+
+.about-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+
+.about-list li {
+  padding: 2px 0;
+}
+
+.about-list a {
+  color: var(--info);
+  font-weight: 700;
+}

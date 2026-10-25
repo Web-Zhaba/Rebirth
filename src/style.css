@@ -49,47 +49,6 @@ body {
   pointer-events: none;
 }
 
-.found {
-  position: absolute;
-  left: 50%;
-  bottom: 44px; /* clear the attribution bar */
-  transform: translateX(-50%);
-  width: min(320px, calc(100vw - 32px));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.coords {
-  font-size: 13px;
-  color: var(--pencil);
-}
-
-.found input {
-  font: inherit;
-  padding: 8px 10px;
-  border: var(--bw) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--paper-raised);
-  min-width: 0;
-}
-
-.found button {
-  font: inherit;
-  padding: 8px 10px;
-  border: var(--bw) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--ink);
-  color: var(--paper);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.found button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .hud-more {
   font-size: 13px;
   color: var(--pencil);
@@ -142,74 +101,6 @@ body {
 .cell-land {
   font-weight: 700;
   font-size: 14px;
-}
-
-.offline {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(320px, calc(100vw - 32px));
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.offline-title {
-  font-weight: 700;
-}
-
-.offline button {
-  font: inherit;
-  padding: 8px 10px;
-  border: var(--bw) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--ink);
-  color: var(--paper);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.offline-wide {
-  width: min(460px, calc(100vw - 32px));
-  max-height: calc(100vh - 64px);
-  text-align: left;
-}
-
-.offline-wide .offline-title {
-  text-align: center;
-}
-
-.offline-body {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
-
-.offline-sub {
-  font-weight: 700;
-  margin-top: 6px;
-}
-
-.offline-chronicle {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.progress {
-  height: 10px;
-  border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--paper-sunk);
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--ok);
 }
 
 .night-tint {

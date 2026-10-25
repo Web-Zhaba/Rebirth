@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import "./notebook.css";
 import { Icon } from "./Icon";
+import { IconButton } from "./kit";
 import type { IconName } from "./icons";
 import { formatDate, newestFirst, unseenCount, type Article, type ChronicleEntry, type Find } from "./notebookLogic";
 
@@ -49,7 +50,11 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
       </button>
       {open && (
         <div class="notebook-panel panel">
-          <div class="notebook-title">Записная книжка</div>
+          <div class="notebook-head">
+            <Icon name="notebook" size={20} />
+            <h2 class="notebook-title">Записная книжка</h2>
+            <IconButton icon="close" size={16} label="Закрыть записную книжку" onClick={() => onOpenChange(false)} />
+          </div>
           <div class="notebook-tabs" role="tablist">
             {TABS.map(([id, label]) => (
               <button
@@ -70,14 +75,14 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
               ) : (
                 newestFirst(finds).map((f) => (
                   <div class="notebook-entry" key={f.id}>
-                    <div class="notebook-entry-title">
-                      <span class="notebook-kind">
-                        <Icon name={KIND_ICON[f.kind]} size={16} />
-                      </span>{" "}
-                      {f.title}
+                    <span class="notebook-kind">
+                      <Icon name={KIND_ICON[f.kind]} size={18} />
+                    </span>
+                    <div class="notebook-main">
+                      <div class="notebook-entry-title">{f.title}</div>
+                      {f.detail && <div class="notebook-text">{f.detail}</div>}
+                      <div class="notebook-date">{formatDate(f.at)}</div>
                     </div>
-                    {f.detail && <div class="notebook-text">{f.detail}</div>}
-                    <div class="notebook-date">{formatDate(f.at)}</div>
                   </div>
                 ))
               ))}
@@ -87,13 +92,18 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
               ) : (
                 newestFirst(articles).map((a) => (
                   <div class="notebook-entry" key={a.id}>
-                    <div class="notebook-entry-title">{a.title}</div>
-                    <div class="notebook-text">{a.extract}</div>
-                    <div class="notebook-date">
-                      {formatDate(a.at)} ·{" "}
-                      <a href={a.url} target="_blank" rel="noopener" lang={a.lang}>
-                        Википедия, CC BY-SA 4.0
-                      </a>
+                    <span class="notebook-kind">
+                      <Icon name="scroll" size={18} />
+                    </span>
+                    <div class="notebook-main">
+                      <div class="notebook-entry-title">{a.title}</div>
+                      <div class="notebook-text">{a.extract}</div>
+                      <div class="notebook-date">
+                        {formatDate(a.at)} ·{" "}
+                        <a href={a.url} target="_blank" rel="noopener" lang={a.lang}>
+                          Википедия, CC BY-SA 4.0
+                        </a>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -104,8 +114,13 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
               ) : (
                 newestFirst(chronicle).map((c, i) => (
                   <div class="notebook-entry" key={`${c.at}-${i}`}>
-                    <div class="notebook-date">{formatDate(c.at)}</div>
-                    <div class="notebook-text">{c.text}</div>
+                    <span class="notebook-kind notebook-pen">
+                      <Icon name="quill" size={18} />
+                    </span>
+                    <div class="notebook-main">
+                      <div class="notebook-date">{formatDate(c.at)}</div>
+                      <div class="notebook-text notebook-ink">{c.text}</div>
+                    </div>
                   </div>
                 ))
               ))}

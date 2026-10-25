@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { city } from "../simClient";
+import { AboutDialog } from "./AboutDialog";
 import { AwayNotice } from "./AwayNotice";
 import { BuildBar } from "./BuildBar";
 import { BuildingPanel } from "./BuildingPanel";
@@ -22,6 +23,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <DaySummary map={map} />}
       {c && <NotebookHost />}
       <AwayNotice />
+      <AboutDialog />
     </>
   );
 }

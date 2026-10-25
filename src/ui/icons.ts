@@ -24,6 +24,9 @@ import Wheat from "~icons/game-icons/wheat";
 import Coins from "~icons/game-icons/coins";
 import Jug from "~icons/game-icons/jug";
 import Log from "~icons/game-icons/log";
+import CampingTent from "~icons/game-icons/camping-tent";
+import QuillInk from "~icons/game-icons/quill-ink";
+import ScrollUnfurled from "~icons/game-icons/scroll-unfurled";
 import Moon from "~icons/game-icons/moon";
 import Person from "~icons/game-icons/person";
 import Planks from "~icons/game-icons/planks";
@@ -36,6 +39,7 @@ import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
+import PhInfo from "~icons/ph/info-bold";
 import PhFootprints from "~icons/ph/footprints";
 import PhPause from "~icons/ph/pause-fill";
 import PhProhibit from "~icons/ph/prohibit";
@@ -60,6 +64,11 @@ export const ICONS = {
   layerNone: PhProhibit,
   traffic: PhFootprints,
   mood: PhSmiley,
+  info: PhInfo,
+  // Journal (game-icons): chronicle entry, article, founding
+  quill: QuillInk,
+  scroll: ScrollUnfurled,
+  tent: CampingTent,
   // Top bar (game-icons): people, goods, day phases
   person: Person,
   food: Wheat,

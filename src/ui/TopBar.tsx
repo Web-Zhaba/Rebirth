@@ -7,7 +7,8 @@ import { tool } from "../map/tools";
 import { buildings, economy, incomingCount, people, roads, setSpeed, speed, state, stock } from "../simClient";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
-import { Stat, Tooltip } from "./kit";
+import { aboutOpen } from "./AboutDialog";
+import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
 import { useGameMinutes } from "./useGameMinutes";
 
@@ -179,20 +180,25 @@ export function TopBar({ city }: { city: City }) {
           />
         </div>
       )}
+      <IconButton class="tb-about" icon="info" size={16} label="Об игре" onClick={() => (aboutOpen.value = true)} />
     </header>
   );
 }
 
 // Problems as icon + text chips under the bar.
-export function Warnings() {
+export function currentWarnings() {
   const p = people.value;
   const st = stock.value;
   const eco = economy.value;
-  if (!p || !st || !eco) return null;
+  if (!p || !st || !eco) return [];
   const { queue } = roadQueue(roads.value);
   const b = buildings.value;
   const building = b ? Object.values(b).filter((x) => x.state === "building").length : 0;
-  const list = warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building });
+  return warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building });
+}
+
+export function Warnings() {
+  const list = currentWarnings();
   if (list.length === 0) return null;
   return (
     <ul class="warns" aria-label="Предупреждения">

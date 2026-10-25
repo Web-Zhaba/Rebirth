@@ -329,3 +329,13 @@
   text-align: left;
   padding: 2px 0;
 }
+
+/* «Об игре»: small, at the far right end; takes the free space itself when the resources are not shown yet. */
+.tb-about {
+  margin-left: auto;
+  flex: none;
+}
+
+.stats ~ .tb-about {
+  margin-left: var(--sp-2);
+}
