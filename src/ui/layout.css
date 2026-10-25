@@ -138,6 +138,29 @@ button.event-card-pause-btn {
 
 }
 
+/* Between 900 and 1099 px the resources do not fit beside the speed buttons: they take a second row. */
+@media (min-width: 900px) and (max-width: 1099px) {
+  .topbar {
+    flex-wrap: wrap;
+    row-gap: var(--sp-1);
+  }
+
+  .speed {
+    order: 2;
+  }
+
+  .tb-end {
+    order: 3;
+    margin-left: 0;
+  }
+
+  .stats {
+    order: 4;
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+}
+
 /* Room for the right slot: it takes 350 px from the right edge. */
 @media (min-width: 900px) and (max-width: 1099px) {
   #ui:has(.rs-panel, .notebook-panel) .centre-col {
@@ -271,6 +294,9 @@ button.event-card-pause-btn {
   right: 8px;
   bottom: var(--bb-bottom);
   z-index: var(--z-slot);
+  /* Grows upwards from the bottom line: never past the top bar; a long list scrolls. */
+  max-height: calc(100vh - var(--topbar-h) - var(--bb-reserve) - 16px);
+  overflow-y: auto;
 }
 /* Below ~1200 px the build bar (centred, ~640 px wide) reaches under the panel: the panel sits above it instead. */
 @media (max-width: 1199px) {

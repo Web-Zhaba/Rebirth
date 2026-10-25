@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import maplibregl from "maplibre-gl";
 import { selectedBuilding } from "../map/buildingLayer";
-import { flyOrJump } from "../map/motion";
+import { compactScreen, flyOrJump } from "../map/motion";
 import { etaRealMs, formatReal } from "../sim/buildEta";
 import { BUILDINGS } from "../sim/buildings";
 import { isCleared } from "../sim/clearing";
@@ -12,11 +12,13 @@ import { Panel, ProgressBar } from "./kit";
 
 const MAX_SHOWN = 6;
 const KEY = "rebirth.builders.collapsed";
+// Folded by default on a phone or tablet: the list would cover the map there.
 const readCollapsed = (): boolean => {
   try {
-    return localStorage.getItem(KEY) === "1";
+    const v = localStorage.getItem(KEY);
+    return v === null ? compactScreen() : v === "1";
   } catch {
-    return false;
+    return compactScreen();
   }
 };
 
