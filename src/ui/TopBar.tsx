@@ -10,6 +10,7 @@ import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { aboutOpen } from "./AboutDialog";
 import { hotkeysOpen } from "./HotkeysDialog";
+import { settingsOpen } from "./SettingsDialog";
 import { rightPanel, togglePanel } from "./panels";
 import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
@@ -215,6 +216,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
       <span class="tb-end">
         <IconButton icon="town" size={20} label="Город" aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")} />
         <IconButton icon="help" size={16} label="Горячие клавиши (?)" onClick={() => (hotkeysOpen.value = true)} />
+        <IconButton icon="settings" size={16} label="Настройки" onClick={() => (settingsOpen.value = true)} />
         <IconButton icon="info" size={16} label="Об игре" onClick={() => (aboutOpen.value = true)} />
       </span>
     </header>

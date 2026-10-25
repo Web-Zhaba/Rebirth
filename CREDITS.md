@@ -12,6 +12,10 @@ The in-game «Об игре» dialog (the info button at the right end of the to
 
 - PT Serif and PT Sans, by ParaType, SIL Open Font License 1.1, self-hosted through `@fontsource/pt-serif` and `@fontsource/pt-sans` (weights 400 and 700).
 
+## Sound
+
+- UI sounds are synthesized in the browser with the Web Audio API (`src/ui/sound.ts`): no audio files, no third-party assets. Off by default; switched on and the volume set in «Настройки».
+
 ## Map and text data
 
 - Map data: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL), served as vector tiles by [OpenFreeMap](https://openfreemap.org) in the [OpenMapTiles](https://www.openmaptiles.org/) schema (© OpenMapTiles).

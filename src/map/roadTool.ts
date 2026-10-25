@@ -1,3 +1,4 @@
+import { play } from "../ui/sound";
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
@@ -262,6 +263,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       setLabel(null);
       void sendCmd({ type: "removeRoad", edgeId: id }).then((r) => {
         if (!r.ok) flash(r.reason ?? "Не удалось снести");
+        else play("place");
       });
       return;
     }
@@ -304,7 +306,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
           if (!r.ok) flash(r.reason ?? "Не удалось проложить");
           else if (cutOffEdges(local.graph).size > cutOffEdges(g).size) {
             flash("Дорога не связана с лагерем — её не построят. Ведите её от лагеря или от готовой дороги");
-          }
+          } else play("place");
           return r.ok;
         });
       })

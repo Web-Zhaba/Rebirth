@@ -45,6 +45,7 @@ import PhMinus from "~icons/ph/minus-bold";
 import PhPlus from "~icons/ph/plus-bold";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
+import PhGear from "~icons/ph/gear";
 import PhInfo from "~icons/ph/info-bold";
 import PhFlag from "~icons/ph/flag-bold";
 import PhLock from "~icons/ph/lock-simple-fill";
@@ -82,6 +83,7 @@ export const ICONS = {
   traffic: PhFootprints,
   mood: PhSmiley,
   info: PhInfo,
+  settings: PhGear,
   // Inspector and town panel: priority, volunteers, waiting, the town button
   flag: PhFlag,
   build: PhHammer,

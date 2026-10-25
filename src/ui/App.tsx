@@ -1,4 +1,5 @@
 import type maplibregl from "maplibre-gl";
+import { useEffect } from "preact/hooks";
 import { city } from "../simClient";
 import { AboutDialog } from "./AboutDialog";
 import { AwayNotice } from "./AwayNotice";
@@ -10,11 +11,14 @@ import { FoundCity } from "./FoundCity";
 import { HotkeysDialog } from "./HotkeysDialog";
 import { Hud } from "./Hud";
 import { NotebookHost } from "./NotebookHost";
+import { SettingsDialog } from "./SettingsDialog";
+import { installClickSound } from "./sound";
 import { TerrainInspector } from "./TerrainInspector";
 import { TownPanel } from "./TownPanel";
 
 export function App({ map }: { map: maplibregl.Map }) {
   const c = city.value;
+  useEffect(installClickSound, []);
   return (
     <>
       {c ? <Hud city={c} map={map} /> : <FoundCity map={map} />}
@@ -28,6 +32,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       <AwayNotice />
       <AboutDialog />
       <HotkeysDialog />
+      <SettingsDialog />
     </>
   );
 }

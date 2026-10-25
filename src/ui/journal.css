@@ -246,3 +246,28 @@
   color: var(--info);
   font-weight: 700;
 }
+
+/* «Настройки» */
+.settings {
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.settings-body {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.settings-row input[type="range"] {
+  flex: 1;
+}
+
+.settings-val {
+  min-width: 3ch;
+  text-align: right;
+}
