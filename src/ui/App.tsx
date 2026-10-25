@@ -6,6 +6,7 @@ import { BuildBar } from "./BuildBar";
 import { BuildingPanel } from "./BuildingPanel";
 import { ClearingPanel } from "./ClearingPanel";
 import { DaySummary } from "./DaySummary";
+import { EventCard } from "./EventCard";
 import { FoundCity } from "./FoundCity";
 import { Hud } from "./Hud";
 import { NightTint } from "./NightTint";
@@ -25,6 +26,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <ClearingPanel />}
       {c && <TownPanel city={c} map={map} />}
       {c && <DaySummary map={map} />}
+      {c && <EventCard map={map} />}
       {c && <NotebookHost />}
       <AwayNotice />
       <AboutDialog />

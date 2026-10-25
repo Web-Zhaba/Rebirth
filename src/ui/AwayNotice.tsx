@@ -106,6 +106,16 @@ export function AwayNotice() {
           </ul>
         </>
       )}
+      {a.choices.length > 0 && (
+        <>
+          <h3 class="away-sub">События без вашего ответа</h3>
+          <ul class="away-chronicle">
+            {a.choices.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </>
+      )}
       {a.chronicle.length > 0 && (
         <>
           <h3 class="away-sub">Летопись</h3>

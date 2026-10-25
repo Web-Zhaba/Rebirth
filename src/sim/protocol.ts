@@ -35,6 +35,8 @@ export type Cmd =
   | { type: "setSchedule"; strada: boolean }
   | { type: "setRations"; rations: Rations }
   | { type: "callSettlers" }
+  // The answer to the pending event: its id and the option (0 or 1).
+  | { type: "choose"; id: string; option: 0 | 1 }
   // Wikipedia articles found near the dig discs (validated, deduplicated by id and capped by the sim).
   | { type: "addArticles"; articles: ArticleInput[] }
   // New finds of a dig site: foundations in local meters, named places and one entry per street name.

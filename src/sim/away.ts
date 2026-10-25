@@ -1,4 +1,5 @@
 import { newEvents } from "./chronicle";
+import { AUTO } from "./events";
 import type { ChronicleEntry, SimState, Stock } from "./types";
 
 // What happened while the player was away; counted step by step during the catch-up.
@@ -14,6 +15,7 @@ export interface Away {
   built: number; // buildings finished
   produced: Stock; // goods made (food from fields and fishing)
   chronicle: ChronicleEntry[];
+  choices: string[]; // events that resolved on their own, with the outcome
 }
 
 export interface Tally {
@@ -23,9 +25,10 @@ export interface Tally {
   departures: number;
   built: number;
   produced: Stock;
+  choices: string[];
 }
 
-export const newTally = (): Tally => ({ births: 0, deaths: 0, arrivals: 0, departures: 0, built: 0, produced: { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 } });
+export const newTally = (): Tally => ({ births: 0, deaths: 0, arrivals: 0, departures: 0, built: 0, produced: { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 }, choices: [] });
 
 const GOOD: Record<string, keyof Stock> = { woodcutter: "logs", sawpit: "planks", quarry: "stone", fisher: "food", gumno: "food", pottery: "wares", smithy: "wares", carpentry: "wares" };
 
@@ -39,6 +42,10 @@ export function observe(t: Tally, prev: SimState, next: SimState): void {
     else if (e.kind === "death") t.deaths++;
     else if (e.kind === "arrival") t.arrivals += people(e.text);
     else if (e.kind === "departure") t.departures += people(e.text);
+  }
+  if (next.chronicle !== prev.chronicle) {
+    const last = prev.chronicle[prev.chronicle.length - 1];
+    for (const e of next.chronicle.slice(last ? next.chronicle.lastIndexOf(last) + 1 : 0)) if (e.kind.startsWith("event:") && e.text.endsWith(AUTO)) t.choices.push(e.text);
   }
   if (next.buildings !== prev.buildings) {
     for (const b of Object.values(next.buildings)) {
@@ -69,5 +76,6 @@ export function summarize(t: Tally, start: SimState, end: SimState, realMs: numb
     built: t.built,
     produced: t.produced,
     chronicle: end.chronicle.filter((e) => e.at > start.gameMinutes),
+    choices: t.choices,
   };
 }

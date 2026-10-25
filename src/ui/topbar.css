@@ -398,3 +398,31 @@
   font-size: var(--fs-xs);
   color: var(--warn);
 }
+
+/* Event with two choices: under the top bar like the day summary, a little lower while that is shown. */
+.event-card {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(380px, calc(100% - 32px));
+  z-index: var(--z-panel);
+  pointer-events: auto;
+}
+.event-card-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  margin-bottom: var(--sp-1);
+}
+.event-card-option {
+  display: block;
+  width: 100%;
+  margin-top: var(--sp-2);
+  text-align: left;
+}
+.event-card-effect {
+  display: block;
+  font-weight: 400;
+  font-size: var(--fs-sm);
+}

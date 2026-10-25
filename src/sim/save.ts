@@ -4,6 +4,7 @@ import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
+import { parseEventLast, parsePending } from "./events";
 import { migrateGoals, parseGoals } from "./goals";
 import { emptyLevers, type Levers } from "./levers";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
@@ -202,7 +203,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
 }
 
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "event"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -432,6 +433,9 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.chronicle = parseChronicle(sim.chronicle);
   g.summary = parseSummary(sim.summary);
   g.levers = parseLevers(sim.levers);
+  g.pending = parsePending(sim.pending);
+  g.eventLast = parseEventLast(sim.eventLast);
+  if (isNum(sim.nextEvent)) g.nextEvent = sim.nextEvent; // else the default of a fresh town: three game days from now
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   const ls = sim.lastSpawn;

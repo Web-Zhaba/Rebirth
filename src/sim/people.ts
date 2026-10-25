@@ -472,6 +472,16 @@ function removePerson(w: W, r: Resident): void {
   delete w.residents[r.id];
 }
 
+// A resident dies outside the daily rules (an event): removed with the household if it was the last member.
+export function killResident(s: SimState, id: number): SimState {
+  const r = s.residents[id];
+  if (!r) return s;
+  const w = cloneW(s, s.gameMinutes);
+  say(w, "death", `${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`, homePos(s.buildings[s.households[r.household]?.home ?? -1]));
+  removePerson(w, w.residents[id]);
+  return { ...s, residents: w.residents, households: w.households, events: w.events.slice(-MAX_EVENTS) };
+}
+
 // Can `r` leave the household without leaving children behind with no adult?
 function canLeave(w: W, r: Resident): boolean {
   const h = w.households[r.household];

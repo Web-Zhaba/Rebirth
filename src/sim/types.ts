@@ -143,7 +143,7 @@ export interface Household {
   mood: number; // 0..100
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock";
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "event";
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -264,6 +264,25 @@ export interface Incoming {
   arrive: number; // gameMinutes
 }
 
+// One answer to an event; `effect` states what it does, in the card's words.
+export interface ChoiceOption {
+  label: string;
+  effect: string;
+}
+
+// An event waiting for the player's answer (PLAN-pace.md section 10; sim/events.ts holds the table).
+export interface TownChoice {
+  id: string; // event kind
+  at: number; // gameMinutes it was put
+  until: number; // gameMinutes after which it resolves with the safe option
+  title: string;
+  text: string;
+  options: [ChoiceOption, ChoiceOption];
+  safe: 0 | 1; // the option an unanswered event resolves with
+  arg: number; // event-specific parameter (a household id, a variant)
+  pos?: [number, number]; // local meters; the card flies the map here
+}
+
 export interface SimState extends PeopleState {
   stock: Stock;
   prod: ProdState;
@@ -287,6 +306,9 @@ export interface SimState extends PeopleState {
   summary: DaySummary | null; // «Итоги дня» of the last 22:00
   levers: Levers; // player levers (P5)
   goals: GoalsState; // goals and unlocks (P6)
+  pending: TownChoice | null; // the event waiting for an answer, one at a time (P7)
+  nextEvent: number; // gameMinutes from which the next event may be drawn
+  eventLast: Record<string, number>; // gameMinutes each event kind was last put
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
