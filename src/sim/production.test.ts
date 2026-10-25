@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { advanceTo, calendar, step } from "./clock";
+import { advanceTo, BASE_TICK, calendar, step } from "./clock";
 import { BARN_CAP, BUILDINGS, foodCapacity, FOOD_CAMP_CAP } from "./buildings";
 import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { Handler, type Storage } from "./handler";
-import { builderCount, dailyStep, foodPerDay, peopleStats, queryBuilding, RATES } from "./people";
-import { dailyEconomy, economyStats, HAND_HOURS, PACE, payMaterials, produceStep } from "./production";
+import { builderCount, dailyStep, foodPerDay, immigrationStep, peopleStats, queryBuilding, RATES } from "./people";
+import { dailyEconomy, economyStats, HAND_HOURS, handHours, PACE, payMaterials, produceStep } from "./production";
 import type { FromWorker } from "./protocol";
 import { massText } from "./units";
 import { addRoad, emptyRoads } from "./roads";
@@ -76,6 +76,7 @@ function town(bs: Building[], opts: { gm?: number; fields?: Field[]; roads?: Roa
     roads,
     zones: { cells, fields, terrain, rev: 1 },
     ...emptyGrowth(7, gm),
+    stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 }, // a bare camp, not the founding stock
     buildings,
     nextBuildingId: bs.length + 1,
   };
@@ -394,6 +395,9 @@ describe("construction materials", () => {
     // izba: 25 logs, 2 planks, 2 stone; short by 15 logs and 2 planks
     expect(r.buildings[1].labor).toBeCloseTo(BUILDINGS.izba.labor + 15 * HAND_HOURS.logs + 2 * HAND_HOURS.planks);
     expect(r.stock).toEqual({ food: 0, logs: 0, planks: 0, stone: 3, wares: 0 });
+    expect(r.buildings[1].hand).toBeCloseTo(15 * HAND_HOURS.logs + 2 * HAND_HOURS.planks); // kept for the building panel
+    expect(handHours(BUILDINGS.izba.materials, stock)).toBeCloseTo(r.buildings[1].hand!);
+    expect(payMaterials(planned(), { food: 0, logs: 30, planks: 5, stone: 4, wares: 0 }, 1).buildings[1]).not.toHaveProperty("hand");
     expect(HAND_HOURS).toEqual({ logs: 4, planks: 12, stone: 2 });
   });
   it("only the building that really receives hours pays", () => {
@@ -480,32 +484,29 @@ describe("mood", () => {
     const stay = dailyStep(s, { rand: () => 0.5, only: ["emigration"] });
     expect(stay.stock.food).toBe(800);
   });
-  it("immigration is scaled by the food outlook and by mood", () => {
+  it("attractiveness is scaled by the food outlook and by mood", () => {
     const base = folk(town([bld(1, "izba", 0), bld(2, "izba", 50), bld(3, "izba", 90, "planned")]), [{ home: 1, adults: 2, mood: 100 }]);
     const need = foodPerDay(base.residents, base.gameMinutes) * YEAR_DAYS; // a full year, no harvest or fishers
     // stock for an outlook of o: (stock / need - 0.9) / 0.3 = o
-    const run = (o: number, mood = 100, rand = 0.3) => {
+    const run = (o: number, mood = 100) => {
       const s = { ...base, stock: { ...base.stock, food: need * (0.9 + 0.3 * o) }, households: { 1: { ...base.households[1], mood } } };
-      return dailyStep(s, { rand: () => rand, only: ["immigration"] });
+      return dailyStep(s, { rand: () => 0.5, only: [] }).attract;
     };
-    // immigrationDay 0.5: with rand 0.3 a family comes only while the factors stay above 0.6
-    expect(Object.keys(run(1).households)).toHaveLength(2);
-    expect(Object.keys(run(0.5).households)).toHaveLength(1); // 0.5 x 0.5 = 0.25
-    expect(Object.keys(run(1, 50).households)).toHaveLength(1); // 0.5 x 0.5
-    expect(Object.keys(run(1, 100, 0.49).households)).toHaveLength(2);
-    expect(Object.keys(run(0.8, 100, 0.39).households)).toHaveLength(2); // 0.5 x 0.8 = 0.4
-    expect(Object.keys(run(0.8, 100, 0.41).households)).toHaveLength(1);
-    expect(Object.keys(run(0, 100, 0).households)).toHaveLength(1); // below 90 % of the need: nobody comes
+    expect(run(1)).toBeCloseTo(1);
+    expect(run(0.5)).toBeCloseTo(0.5);
+    expect(run(1, 50)).toBeCloseTo(0.5);
+    expect(run(0.8, 50)).toBeCloseTo(0.4);
+    expect(run(0, 100)).toBe(0); // below 90 % of the need: nobody comes
   });
   it("immigrants bring 60 days of their food, up to the capacity", () => {
     const base = folk(town([bld(1, "izba", 0), bld(2, "izba", 50), bld(3, "izba", 90, "planned")]), [{ home: 1, adults: 2, mood: 100 }]);
-    const s = { ...base, stock: { ...base.stock, food: 1000 } };
-    const d = dailyStep(s, { rand: () => 0, only: ["immigration"] });
+    const s = { ...base, attract: 0, incoming: [{ house: 2, arrive: base.gameMinutes }], stock: { ...base.stock, food: 1000 } };
+    const d = immigrationStep(s, BASE_TICK);
     const added = d.stock.food - 1000;
     const newcomers = Object.values(d.residents).filter((r) => r.household === 2);
     expect(added).toBeGreaterThanOrEqual(2 * 0.7 * 60 - 1e-9);
     expect(added).toBeCloseTo(newcomers.reduce((m, r) => m + (r.born > d.gameMinutes - 16 * YEAR_MIN ? 0.45 : 0.7), 0) * 60);
-    const full = dailyStep({ ...s, stock: { ...s.stock, food: FOOD_CAMP_CAP - 10 } }, { rand: () => 0, only: ["immigration"] });
+    const full = immigrationStep({ ...s, stock: { ...s.stock, food: FOOD_CAMP_CAP - 10 } }, BASE_TICK);
     expect(full.stock.food).toBe(FOOD_CAMP_CAP);
   });
 });
@@ -702,6 +703,22 @@ describe("save", () => {
     expect(parsed.sim.households[1].mood).toBe(73);
     expect(parsed.sim.buildings[1]).toEqual(s.buildings[1]);
   });
+  it("round-trips the families on their way and the hand-made hours; older saves have none", () => {
+    const s = full();
+    s.buildings[1] = { ...s.buildings[1], template: "izba", zone: "res", state: "active", hand: 42 };
+    const sim = { ...s, incoming: [{ house: 1, arrive: 400 }], attract: 0.7 };
+    const parsed = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW)!;
+    expect(parsed.sim.incoming).toEqual([{ house: 1, arrive: 400 }]);
+    expect(parsed.sim.attract).toBeCloseTo(0.7);
+    expect(parsed.sim.buildings[1].hand).toBe(42);
+    const old = JSON.parse(JSON.stringify({ version: 4, city, sim }));
+    delete old.sim.incoming;
+    delete old.sim.attract;
+    expect(parseSave(old, NOW)!.sim).toMatchObject({ incoming: [], attract: 0 });
+    // broken entries and entries for houses that are not finished are dropped
+    const bad = JSON.parse(JSON.stringify({ version: 4, city, sim: { ...sim, incoming: [{ house: 1, arrive: 400 }, { house: 9, arrive: 1 }, { house: 1, arrive: "x" }, null, { house: 1, arrive: 5 }] } }));
+    expect(parseSave(bad, NOW)!.sim.incoming).toEqual([{ house: 1, arrive: 400 }]);
+  });
   it("older saves get the founding stock, mood 60, empty progress and paid buildings", () => {
     const s = full();
     const old = JSON.parse(JSON.stringify(s));
@@ -712,7 +729,7 @@ describe("save", () => {
     old.buildings[1].state = "planned";
     old.buildings[1].done = 0;
     const p = parseSave({ version: 4, city, sim: old }, NOW)!;
-    expect(p.sim.stock).toEqual({ food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 });
+    expect(p.sim.stock).toEqual({ food: 3000, logs: 60, planks: 8, stone: 6, wares: 20 });
     expect(p.sim.prod).toEqual({ fields: {}, flags: { year: 1, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 }, today: {}, yesterday: {} });
     expect(p.sim.households[1].mood).toBe(60);
     expect(p.sim.buildings[1].paid).toBe(false); // still planned
@@ -726,7 +743,7 @@ describe("save", () => {
     s.prod = { fields: { 1: { year: 1, sowH: "x" } }, flags: 5, today: { a: 1, 2: -4 }, yesterday: null };
     s.households[1].mood = "high";
     const p = parseSave({ version: 4, city, sim: s }, NOW)!;
-    expect(p.sim.stock.food).toBe(1750);
+    expect(p.sim.stock.food).toBe(3000);
     expect(p.sim.prod.fields).toEqual({});
     expect(p.sim.prod.today).toEqual({});
     expect(p.sim.households[1].mood).toBe(60);
@@ -739,7 +756,7 @@ describe("save", () => {
     const p = parseSave({ version: 4, city, sim: s }, NOW)!;
     expect(p.sim.buildings).toEqual({});
     expect(Object.keys(p.sim.residents)).toHaveLength(2);
-    expect(parseSave(wrap({}), NOW)!.sim.stock.food).toBe(1750);
+    expect(parseSave(wrap({}), NOW)!.sim.stock.food).toBe(3000);
     const bad = JSON.parse(JSON.stringify(full()));
     bad.buildings[1].zone = "res"; // barn is a placed template
     expect(parseSave({ version: 4, city, sim: bad }, NOW)!.sim.buildings).toEqual({});

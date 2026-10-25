@@ -4,10 +4,10 @@ import { nextRandom } from "./rng";
 import { covers, SERVICE, servicesIn } from "./services";
 import { WORK_END, WORK_START, workableEdges } from "./roads";
 import { calendar, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
-import type { Building, BuildingQuery, Household, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
+import type { Building, BuildingQuery, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
 import { CELL_SIZE } from "./zones";
 
-export const FOUNDERS = 10; // founding party: 3 households in tents
+export const FOUNDERS = 14; // founding party: 4 households in tents
 export const ADULT_MIN = 16; // years
 export const ADULT_MAX = 60; // working age is [16, 60)
 export const WALK_SPEED = 4000 / 60; // m/min, 4 km/h
@@ -19,7 +19,7 @@ export const RATES = {
   birthYear: 0.3,
   marriageDay: 0.02, // per eligible woman per day
   maxMarriagesPerDay: 3,
-  immigrationDay: 0.5, // per vacant house, times attractiveness
+  immigrationDay: 1.0, // per vacant house per day, times attractiveness (a hazard checked every tick)
   moodLeaveDay: 0.1, // per household in a house with mood below MOOD_LEAVE
 };
 export const MOOD_START = 60;
@@ -121,10 +121,10 @@ function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: numb
   return h;
 }
 
-// Child counts of the three founding couples: 4 children in all, at most 2 per couple.
-const FOUNDER_KIDS = [[2, 2, 0], [2, 0, 2], [0, 2, 2], [2, 1, 1], [1, 2, 1], [1, 1, 2]];
+// Child counts of the four founding couples: 6 children in all, at most 2 per couple.
+const FOUNDER_KIDS = [[2, 2, 1, 1], [1, 2, 2, 1], [2, 1, 1, 2], [1, 1, 2, 2], [2, 2, 2, 0], [0, 2, 2, 2], [2, 0, 2, 2], [2, 2, 0, 2]];
 
-// 10 founders: 3 married couples (20-40) with 4 children between them, living in tents.
+// 14 founders: 4 married couples (20-40) with 6 children between them, living in tents.
 export function createFounders(rng: number, now: number): { people: PeopleState; rng: number } {
   let state = rng;
   const rand: Rand = () => {
@@ -134,7 +134,7 @@ export function createFounders(rng: number, now: number): { people: PeopleState;
   };
   const w: W = { ...emptyPeople(), now };
   const kids = pick(FOUNDER_KIDS, rand);
-  for (let i = 0; i < 3; i++) makeFamily(w, rand, 20, 40, kids[i], null, true);
+  for (let i = 0; i < 4; i++) makeFamily(w, rand, 20, 40, kids[i], null, true);
   const { now: _now, ...people } = w;
   return { people, rng: state };
 }
@@ -443,7 +443,7 @@ export function peopleStats(s: ArtelState & Pick<SimState, "households">): Peopl
 
 // ---------- daily step ----------
 
-export type Rule = "death" | "birth" | "marriage" | "immigration" | "emigration";
+export type Rule = "death" | "birth" | "marriage" | "emigration";
 
 // `rand` replaces the seeded generator (tests); `only` limits the random rules that run.
 export interface RuleOpts {
@@ -693,37 +693,6 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // 5. immigration into the remaining vacant houses
-  if (on("immigration")) {
-    let adults = 0;
-    let jobless = 0;
-    for (const r of Object.values(w.residents)) {
-      if (!isAdultAge(ageOf(r.born, now))) continue;
-      adults++;
-      if (r.job === null) jobless++;
-    }
-    const unemployment = adults > 0 && !work ? jobless / adults : 0;
-    const need = foodPerDay(w.residents, now);
-    const outlook = foodOutlook({ ...s, residents: w.residents, households: w.households, stock });
-    let moodSum = 0;
-    for (const h of Object.values(w.households)) moodSum += h.mood;
-    const hs = Object.keys(w.households).length;
-    const avgMood = hs > 0 ? moodSum / hs : MOOD_START;
-    const attractive =
-      Math.min(1, Math.max(0, 1 - unemployment * 2)) * outlook * Math.min(1, Math.max(0, avgMood / 100));
-    for (const b of vacantHouses(buildings, w.households)) {
-      if (!(rand() < RATES.immigrationDay * attractive)) continue;
-      const room = Math.max(0, houseCap(buildings[b]) - 2);
-      const kids = Math.floor(rand() * (Math.min(3, room) + 1));
-      const h = makeFamily(w, rand, 18, 45, kids, b);
-      say(w, "arrival", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`);
-      // They bring 60 days of their own food, as far as the barns can hold it.
-      let eat = 0;
-      for (const m of h.members) eat += ageOf(w.residents[m].born, now) < ADULT_MIN ? FOOD.child : FOOD.adult;
-      stock = { ...stock, food: Math.min(foodCapacity(buildings), stock.food + eat * FOOD.immigrantDays) };
-    }
-  }
-
   // 6. emigration of unhappy families (never the founding households, nor tents)
   if (on("emigration")) {
     for (const h of Object.values(w.households)) {
@@ -742,15 +711,89 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   // 7. jobs and idle days
   jobsStep(w, s, work);
 
+  // 8. how attractive the town is to newcomers (families are sent every tick, see immigrationStep)
+  const attract = (() => {
+    let adults = 0;
+    let jobless = 0;
+    for (const r of Object.values(w.residents)) {
+      if (!isAdultAge(ageOf(r.born, now))) continue;
+      adults++;
+      if (r.job === null) jobless++;
+    }
+    const unemployment = adults > 0 && !work ? jobless / adults : 0;
+    const outlook = foodOutlook({ ...s, residents: w.residents, households: w.households, stock });
+    let moodSum = 0;
+    for (const h of Object.values(w.households)) moodSum += h.mood;
+    const hs = Object.keys(w.households).length;
+    const avgMood = hs > 0 ? moodSum / hs : MOOD_START;
+    return Math.min(1, Math.max(0, 1 - unemployment * 2)) * outlook * Math.min(1, Math.max(0, avgMood / 100));
+  })();
+
   return {
     ...s,
     rng,
     stock,
+    attract,
     residents: w.residents,
     households: w.households,
     nextPersonId: w.nextPersonId,
     nextHouseholdId: w.nextHouseholdId,
     events: w.events.slice(-MAX_EVENTS),
+  };
+}
+
+// ---------- immigration ----------
+
+const ARRIVE_MIN = 6 * 60; // a family is on its way for 6-12 game hours
+const ARRIVE_SPAN = 6 * 60;
+
+// One tick of `dt` game minutes: the families due now arrive, then every vacant finished house nobody is
+// coming to may get a family on its way (daily rate immigrationDay x attract, as a per-tick hazard).
+// A family moves into the house promised to it, else into another vacant house, else into a tent.
+export function immigrationStep(s: SimState, dt: number): SimState {
+  const now = s.gameMinutes;
+  let rng = s.rng;
+  const rand: Rand = () => {
+    const [v, n] = nextRandom(rng);
+    rng = n;
+    return v;
+  };
+  let incoming = s.incoming;
+  let w: W | null = null;
+  let stock = s.stock;
+  if (incoming.some((f) => f.arrive <= now)) {
+    const wk = (w = cloneW(s, now));
+    const promised = new Set(incoming.map((f) => f.house));
+    for (const f of incoming) {
+      if (f.arrive > now) continue;
+      const free = vacantHouses(s.buildings, wk.households);
+      const house = free.includes(f.house) ? f.house : (free.find((id) => !promised.has(id)) ?? null);
+      const room = house === null ? 3 : Math.max(0, houseCap(s.buildings[house]) - 2);
+      const kids = Math.floor(rand() * (Math.min(3, room) + 1));
+      const h = makeFamily(wk, rand, 18, 45, kids, house);
+      say(wk, "arrival", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`);
+      // They bring 60 days of their own food, as far as the barns can hold it.
+      let eat = 0;
+      for (const m of h.members) eat += ageOf(wk.residents[m].born, now) < ADULT_MIN ? FOOD.child : FOOD.adult;
+      stock = { ...stock, food: Math.min(foodCapacity(s.buildings), stock.food + eat * FOOD.immigrantDays) };
+    }
+    incoming = incoming.filter((f) => f.arrive > now);
+  }
+  const p = 1 - (1 - Math.min(1, RATES.immigrationDay * s.attract)) ** (dt / 1440);
+  if (p > 0) {
+    const promised = new Set(incoming.map((f) => f.house));
+    for (const id of vacantHouses(s.buildings, w ? w.households : s.households)) {
+      if (promised.has(id) || !(rand() < p)) continue;
+      incoming = [...incoming, { house: id, arrive: now + ARRIVE_MIN + rand() * ARRIVE_SPAN } satisfies Incoming];
+    }
+  }
+  if (!w && incoming === s.incoming && rng === s.rng) return s;
+  return {
+    ...s,
+    rng,
+    stock,
+    incoming,
+    ...(w && { residents: w.residents, households: w.households, nextPersonId: w.nextPersonId, nextHouseholdId: w.nextHouseholdId, events: w.events.slice(-MAX_EVENTS) }),
   };
 }
 

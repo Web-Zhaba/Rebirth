@@ -66,35 +66,61 @@ it("pacing harness", async () => {
     const keys = st.zones.cells.filter(keep).map((c) => c.key);
     return send(`${what} (${keys.length} cells)`, { type: "paintZones", keys, zone });
   };
-  // First lot of `template` at or east of x on the given side of the road (side 1 = north).
-  const place = (template: string, side: 1 | -1, x: number, site: Site = NONE) => {
+  // First lot of `template` at or east of x on the given side of the road (side 1 = north), if one can be built now.
+  const lotFor = (template: string, side: 1 | -1, x: number, site: Site = NONE) => {
     const t = BUILDINGS[template];
     const starts = st.zones.cells.filter((c) => c.depth === 0 && c.side === side && c.cx >= x).sort((a, b) => a.cx - b.cx);
-    for (const c of starts) {
-      if (!canPlace(st, t, c.edge, c.side, c.i, site).ok) continue;
-      return send(`${template} at x=${Math.round(c.cx)}`, { type: "placeBuilding", template, edge: c.edge, side: c.side, i: c.i, site });
-    }
+    return starts.find((c) => canPlace(st, t, c.edge, c.side, c.i, site).ok);
+  };
+  const place = (template: string, side: 1 | -1, x: number, site: Site = NONE) => {
+    const c = lotFor(template, side, x, site);
+    if (c) return send(`${template} at x=${Math.round(c.cx)}`, { type: "placeBuilding", template, edge: c.edge, side: c.side, i: c.i, site });
     log.push(`${stamp()}  FAIL  ${template}: no lot east of x=${x}`);
     return Promise.resolve(false);
   };
   const roadBuilt = (x: number) => Object.values(st.roads.edges).every((e) => e.done >= e.labor || Math.min(st.roads.nodes[e.a].x, st.roads.nodes[e.b].x) > x);
   const houses = () => Object.values(st.buildings).filter(isFinishedHouse).length;
   const ready = (n: number) => houses() >= n && roadBuilt(200);
-  const freeResLots = () => {
-    const taken = new Set<string>();
-    for (const b of Object.values(st.buildings)) taken.add(`${Math.round(b.lot.cx)}:${Math.round(b.lot.cy)}`);
-    return st.zones.cells.filter((c) => c.depth === 0 && c.zone === "res" && !c.block && !taken.has(`${Math.round(c.cx)}:${Math.round(c.cy)}`)).length;
+  // Out of lots: residential demand has asked for a house for a whole game day and none has appeared.
+  let resCount = 0;
+  let resSince = 0;
+  const outOfLots = () => {
+    const n = Object.values(st.buildings).filter((b) => b.zone === "res").length;
+    if (n !== resCount || st.people.demand.res < 1) {
+      resCount = n;
+      resSince = st.gameMinutes;
+    }
+    return st.gameMinutes - resSince >= 1440;
+  };
+
+  // Fields of 2 ha (100 x 200 m, 4 m apart) north of the road, in slots 0, +1, -1, +2, ... east and west of the first one.
+  const FIELD_SLOTS = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6];
+  const fieldBox = (k: number): [number, number][] => {
+    const x0 = 60 + 104 * FIELD_SLOTS[k];
+    return [[x0, 40], [x0 + 100, 40], [x0 + 100, 240], [x0, 240]];
+  };
+  const gumnos: number[] = []; // x of the farmsteads that stand
+  let fields = 0;
+  // The first field and its gumno as soon as there is built road for the gumno; then 2 ha more per 2 finished houses,
+  // with a new gumno when the field lies beyond the reach of every one placed.
+  const tillMore = async () => {
+    while (fields < Math.min(FIELD_SLOTS.length, 1 + Math.floor(houses() / 2))) {
+      const cx = 110 + 104 * FIELD_SLOTS[fields];
+      const near = gumnos.some((gx) => Math.hypot(gx - cx, 150) < 330);
+      const gx = Math.max(30, cx - 60);
+      if (!near && !lotFor("gumno", -1, gx)) return; // wait for built road to put the farmstead on
+      const k = fields++;
+      if (!near && (await place("gumno", -1, gx))) gumnos.push(gx);
+      await send(`field ${k + 1} (2 ha)`, { type: "addField", pts: fieldBox(k) });
+    }
   };
 
   // ----- build order: short list of steps, each fired once when its trigger holds -----
-  const field: [number, number][] = [[60, 40], [210, 40], [210, 240], [60, 240]]; // 150 x 200 m = 3 ha
   const steps: { when: () => boolean; run: () => Promise<unknown> }[] = [
     { when: () => true, run: () => extendRoad(200) },
     { when: () => true, run: () => paint("residential zone 0-120 m", "res", (c) => c.cx <= 120 && c.zone === "none") },
     { when: () => roadBuilt(200), run: () => place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 }) },
     { when: () => ready(1), run: () => place("sawpit", -1, 140) },
-    { when: () => ready(1), run: () => send("fields 3 ha", { type: "addField", pts: field }) },
-    { when: () => ready(1), run: () => place("gumno", -1, 150) },
     { when: () => ready(2), run: () => place("well", -1, 170) },
     { when: () => ready(3), run: () => paint("craft zone 130-170 m", "craft", (c) => c.side === 1 && c.cx >= 130 && c.cx <= 170 && !c.block) },
     { when: () => ready(3), run: () => place("dig", -1, 190) },
@@ -104,7 +130,8 @@ it("pacing harness", async () => {
   // ----- milestones -----
   const marks: { label: string; hit: () => boolean; at?: { ms: number; day: number; pop: number } }[] = [
     { label: "First house finished", hit: () => houses() >= 1 },
-    { label: "First planks in stock", hit: () => st.stock.planks > 0 },
+    { label: "Sawpit finished", hit: () => Object.values(st.buildings).some((b) => b.template === "sawpit" && b.state === "active") },
+    { label: "Gumno finished", hit: () => Object.values(st.buildings).some((b) => b.template === "gumno" && b.state === "active") },
     { label: "5 houses finished", hit: () => houses() >= 5 },
     { label: "10 houses finished", hit: () => houses() >= 10 },
     { label: "Population 25", hit: () => st.people.pop >= 25 },
@@ -121,8 +148,9 @@ it("pacing harness", async () => {
         await steps[i].run();
       }
     }
+    await tillMore();
     // The zone ran out of lots: lengthen the road and zone the new stretch.
-    if (done.size === steps.length && freeResLots() < 4) {
+    if (done.size === steps.length && outOfLots()) {
       const from = roadEnd;
       await extendRoad(roadEnd + 50);
       await paint(`residential zone ${from}-${roadEnd} m`, "res", (c) => c.cx > from - 8 && c.zone === "none" && !c.block);

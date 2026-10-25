@@ -16,6 +16,7 @@ import type {
   Field,
   FieldWork,
   Household,
+  Incoming,
   PeopleState,
   ProdFlags,
   ProdState,
@@ -185,6 +186,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     // Saves from before excavation: a dig site starts at its first radius.
     if (raw.template === DIG.template) out[id].radius = isNum(raw.radius) && raw.radius >= DIG.startRadius ? Math.min(DIG.maxRadius, raw.radius) : DIG.startRadius;
     if (raw.onRuins === true) out[id].onRuins = true;
+    if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
     const up = raw.upgrade;
     if (up !== undefined && raw.state === "active" && isRecord(up) && isNum(up.labor) && up.labor > 0 && isNum(up.done) && up.done >= 0 && up.done <= up.labor) {
       const upgrade: Upgrade = { labor: up.labor, done: up.done, paid: up.paid === true };
@@ -334,6 +336,19 @@ function parseChronicle(v: unknown): ChronicleEntry[] {
   return out.slice(-CHRONICLE_CAP);
 }
 
+// Families on their way: entries with a broken shape or without a finished house to come to are dropped.
+function parseIncoming(v: unknown, buildings: Record<number, Building>): Incoming[] {
+  if (!Array.isArray(v)) return [];
+  const out: Incoming[] = [];
+  const seen = new Set<number>();
+  for (const f of v) {
+    if (!isRecord(f) || !Number.isInteger(f.house) || !isNum(f.arrive) || !isFinishedHouse(buildings[f.house as number]) || seen.has(f.house as number)) continue;
+    seen.add(f.house as number);
+    out.push({ house: f.house as number, arrive: f.arrive });
+  }
+  return out;
+}
+
 // Saves from before growth have none of these fields: defaults, not an error. Broken buildings
 // reset the buildings only; a broken generator state or spawn clock is replaced by a default.
 // Saves without (or with broken) residents get the founders back.
@@ -360,6 +375,8 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.prod = parseProd(sim.prod);
   g.coverage = numRecord(sim.coverage); // derived: rebuilt on load and every day
   g.landValue = numRecord(sim.landValue);
+  g.incoming = parseIncoming(sim.incoming, g.buildings);
+  g.attract = isNum(sim.attract) ? Math.min(1, Math.max(0, sim.attract)) : 0;
   g.chronicle = parseChronicle(sim.chronicle);
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);

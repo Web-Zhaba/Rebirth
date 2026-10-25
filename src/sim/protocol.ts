@@ -63,7 +63,7 @@ export type FromWorker =
   | { t: "away"; away: Away }
   | ({ t: "cmdResult"; id: number } & CmdResult)
   | { t: "queryResult"; id: number; data: BuildingQuery | null }
-  // cosmetic, once per game day and on load, never during catch-up; not part of the sim state or saves
+  // cosmetic, once per game day, whenever the families on their way change, and on load, never during catch-up; not part of the sim state or saves
   | { t: "life"; day: number; trips: Trip[]; traffic: Record<number, number>; lights: Light[] }
   | { t: "resetDone" }
   | { t: "error"; message: string };

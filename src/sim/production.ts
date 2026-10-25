@@ -1,4 +1,4 @@
-import { BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE } from "./buildings";
+import { allocateLabor, BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE, type Materials } from "./buildings";
 import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScale } from "./people";
@@ -69,48 +69,45 @@ function workersByJob(residents: Record<number, Resident>): Workers {
 
 // ---------- construction materials ----------
 
-// Takes the materials of buildings that receive their first person-hour in this spending, lowest id
-// first as advanceBuildings serves them. What the stock lacks is made by hand and added to the labor.
+// Person-hours of hand work that the stock's shortfall of `m` adds to a building (stone is free on old foundations).
+export function handHours(m: Materials, st: Stock, ruins = false): number {
+  let hours = 0;
+  for (const g of ["logs", "planks", "stone"] as const) hours += Math.max(0, (ruins && g === "stone" ? 0 : m[g]) - st[g]) * HAND_HOURS[g];
+  return hours;
+}
+
+// Takes the materials of the sites that receive their first person-hour in this spending (the same sites
+// advanceBuildings serves, see allocateLabor). What the stock lacks is made by hand and added to the labor.
 export function payMaterials(
   buildings: Record<number, Building>,
   stock: Stock,
   personHours: number,
   foundations: readonly { ring: [number, number][] }[] = [],
+  crewHours = Infinity, // no crew limit: sites are served one after another
 ): { buildings: Record<number, Building>; stock: Stock } {
   let out = buildings;
   let st = stock;
-  let left = personHours;
-  for (const key of Object.keys(buildings)) {
-    if (left <= EPS) break;
-    let b = out[Number(key)];
+  for (const id of allocateLabor(buildings, personHours, crewHours).keys()) {
+    let b = buildings[id];
     // A finished house being upgraded is served like a building under construction.
     const up = b.state === "active" ? b.upgrade : undefined;
-    if (b.state === "active" && !up) continue;
-    const paid = up ? up.paid : b.paid;
-    let labor = up ? up.labor : b.labor;
-    const done = up ? up.done : b.done;
-    if (!paid) {
-      const m = up ? UPGRADE.materials : BUILDINGS[b.template]?.materials;
-      // A new building whose footprint overlaps an old foundation needs no stone and 25 % less labor.
-      const ruins = !up && onOldFoundation(b.footprint, foundations);
-      let hand = 0;
-      const next = { ...st };
-      if (m) {
-        for (const g of ["logs", "planks", "stone"] as const) {
-          const want = ruins && g === "stone" ? 0 : m[g];
-          const take = Math.min(next[g], want);
-          next[g] -= take;
-          hand += (want - take) * HAND_HOURS[g];
-        }
-      }
-      st = next;
-      labor += hand;
-      if (ruins) labor *= 1 - DIG.laborCut;
-      b = up ? { ...b, upgrade: { ...up, paid: true, labor } } : { ...b, paid: true, labor, ...(ruins ? { onRuins: true } : {}) };
-      if (out === buildings) out = { ...buildings };
-      out[b.id] = b;
+    if (up ? up.paid : b.paid) continue;
+    const m = up ? UPGRADE.materials : BUILDINGS[b.template]?.materials;
+    // A new building whose footprint overlaps an old foundation needs no stone and 25 % less labor.
+    const ruins = !up && onOldFoundation(b.footprint, foundations);
+    let hand = 0;
+    const next = { ...st };
+    if (m) {
+      hand = handHours(m, st, ruins);
+      for (const g of ["logs", "planks", "stone"] as const) next[g] -= Math.min(next[g], ruins && g === "stone" ? 0 : m[g]);
     }
-    left -= Math.min(left, Math.max(0, labor - done));
+    st = next;
+    const cut = ruins ? 1 - DIG.laborCut : 1;
+    const labor = ((up ? up.labor : b.labor) + hand) * cut;
+    hand *= cut;
+    b = up ? { ...b, upgrade: { ...up, paid: true, labor } } : { ...b, paid: true, labor, ...(hand > 0 ? { hand } : {}), ...(ruins ? { onRuins: true } : {}) };
+    if (out === buildings) out = { ...buildings };
+    out[id] = b;
   }
   return { buildings: out, stock: st };
 }

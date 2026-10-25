@@ -1,7 +1,8 @@
 import { recordChronicle } from "./chronicle";
 import { dailyServices } from "./coverage";
+import { CREW } from "./buildings";
 import { advanceBuildings, spawnBuildings } from "./growth";
-import { builderCount, dailyStep, productionScale } from "./people";
+import { builderCount, dailyStep, immigrationStep, productionScale } from "./people";
 import { dailyEconomy, payMaterials, produceStep } from "./production";
 import { spendOnRoads, WORK_END, WORK_START } from "./roads";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
@@ -57,15 +58,16 @@ export function step(s: SimState): SimState {
     // which take their materials from the stock when work on them starts.
     const r = spendOnRoads(s.roads, (builderCount(s) * BASE_TICK) / 60);
     roads = r.roads;
-    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations);
-    buildings = advanceBuildings(paid.buildings, r.left);
+    const crew = (CREW * BASE_TICK) / 60; // person-hours of one crew in a tick
+    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations, crew);
+    buildings = advanceBuildings(paid.buildings, r.left, crew);
     stock = paid.stock;
   }
   let cur: SimState = { ...s, roads, buildings, stock };
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScale(s));
   let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
-  return recordChronicle(s, spawnBuildings(next));
+  return recordChronicle(s, spawnBuildings(immigrationStep(next, BASE_TICK)));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, houseCapacity } from "../sim/buildings";
+import { BUILDINGS, houseCapacity, type Materials } from "../sim/buildings";
+import { handHours } from "../sim/production";
 import { DIG, revealedArea } from "../sim/excavation";
 import { SERVICES } from "../sim/services";
 import { massText } from "../sim/units";
@@ -7,7 +8,7 @@ import { familyGenitive } from "../sim/people";
 import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
 import { flash, tool } from "../map/tools";
-import { buildings, digs, queryBuilding, sendCmd } from "../simClient";
+import { buildings, digs, queryBuilding, sendCmd, stock } from "../simClient";
 
 const REFRESH_MS = 4000;
 
@@ -31,6 +32,36 @@ const GOOD: Record<keyof Stock, { name: string; unit: string }> = {
 };
 
 const MISSING: Record<string, string> = { "брёвна": "Нет брёвен", "брёвна (на уголь)": "Нет брёвен (на уголь)", "доски": "Нет досок" };
+
+const MATERIALS: [keyof Materials, string, string][] = [
+  ["logs", "брёвна", "м³"],
+  ["planks", "доски", "м³"],
+  ["stone", "камень", "т"],
+];
+
+// What a site under construction takes from the stock, and the hand-made hours its shortfall adds.
+function SiteMaterials({ template, paid, hand, st }: { template: string; paid: boolean; hand?: number; st: Stock | null }) {
+  const m = BUILDINGS[template]?.materials;
+  if (!m) return null;
+  const need = MATERIALS.filter(([g]) => m[g] > 0)
+    .map(([g, name, unit]) => `${name} ${num(m[g])} ${unit}`)
+    .join(" · ");
+  const extra = paid ? (hand ?? 0) : st ? handHours(m, st) : 0;
+  return (
+    <div class="prod">
+      <div>
+        {paid ? "Взято" : "Потребуется"}: {need}
+      </div>
+      {extra > 0 ? (
+        <div class="prod-warn">
+          {paid ? "Не хватило на складе" : "Не хватает на складе"}: ещё {num(extra)} ч ручной работы
+        </div>
+      ) : (
+        <div class="people-note">{paid ? "Хватило запасов склада" : "Запасов склада хватает"}</div>
+      )}
+    </div>
+  );
+}
 
 const moodWord = (m: number) => (m >= 75 ? "отличное" : m >= 55 ? "хорошее" : m >= 35 ? "неважное" : "плохое");
 
@@ -143,6 +174,7 @@ export function BuildingPanel() {
           {dig.r >= DIG.maxRadius - 1e-6 && <div class="prod-warn">Раскоп завершён</div>}
         </div>
       )}
+      {b.state !== "active" && <SiteMaterials template={b.template} paid={b.paid} hand={b.hand} st={stock.value} />}
       {b.upgrade && <div class="people-note">Перестраивается: {Math.floor((b.upgrade.done / b.upgrade.labor) * 100)} %</div>}
       {info?.kind === "house" && (
         <>

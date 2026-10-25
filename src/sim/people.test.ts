@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceTo, step } from "./clock";
+import { advanceTo, BASE_TICK, step } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { demand, emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
@@ -13,6 +13,7 @@ import {
   deathRate,
   familyGenitive,
   FEMALE_NAMES,
+  immigrationStep,
   MALE_NAMES,
   peopleStats,
   queryBuilding,
@@ -134,13 +135,14 @@ describe("names", () => {
 });
 
 describe("founders", () => {
-  it("are exactly 10 people in 3 married households in tents", () => {
+  it("are exactly 14 people in 4 married households in tents", () => {
     for (let seed = 1; seed <= 25; seed++) {
       const { people } = createFounders(seed, 0);
       const rs = Object.values(people.residents);
       const hs = Object.values(people.households);
-      expect(rs).toHaveLength(10);
-      expect(hs).toHaveLength(3);
+      expect(rs).toHaveLength(14);
+      expect(hs).toHaveLength(4);
+      expect(rs.filter((r) => -r.born / YEAR_MIN < 16)).toHaveLength(6); // 8 adults, 6 children
       for (const h of hs) {
         expect(h.home).toBeNull();
         const m = h.members.map((id) => people.residents[id]);
@@ -154,12 +156,12 @@ describe("founders", () => {
         expect(m.length - 2).toBeLessThanOrEqual(2);
         for (const r of m) expect(r.last).toBe(surnameFor(h.last, r.sex));
       }
-      expect(people.nextPersonId).toBe(11);
+      expect(people.nextPersonId).toBe(15);
     }
   });
   it("a new town starts with them", () => {
     const g = emptyGrowth(5);
-    expect(Object.keys(g.residents)).toHaveLength(10);
+    expect(Object.keys(g.residents)).toHaveLength(14);
     expect(g.events).toEqual([]);
   });
 });
@@ -169,7 +171,7 @@ describe("moving in", () => {
     const s = town([building(1, "izba", 100), building(2, "izba", 200), building(3, "izba", 300, "planned")]);
     const a = day(s);
     const h = Object.values(a.households).sort((p, q) => p.id - q.id);
-    expect(h.map((x) => x.home)).toEqual([1, 2, null]);
+    expect(h.map((x) => x.home)).toEqual([1, 2, null, null]);
     expect(kinds(a)).toEqual(["movein", "movein"]);
     expect(vacantHouses(a.buildings, a.households)).toEqual([]);
   });
@@ -180,8 +182,8 @@ describe("moving in", () => {
     expect(day(small).households[1].home).toBeNull();
   });
   it("a removed house sends its household back to the tents", () => {
-    const a = day(town(houses(3)));
-    expect(Object.values(a.households).every((h) => h.home !== null)).toBe(true);
+    const a = day(town(houses(4)));
+    expect(Object.values(a.households).every((h) => h.home !== null)).toBe(true); // the four founders
     const { 2: _gone, ...rest } = a.buildings;
     const b = syncPeople({ ...a, buildings: rest });
     expect(Object.values(b.households).filter((h) => h.home === null)).toHaveLength(1);
@@ -190,55 +192,107 @@ describe("moving in", () => {
 });
 
 describe("immigration", () => {
-  // 3 founding households move into houses 1-3 and house 4 stays vacant
+  // the 4 founding households move into houses 1-4 and house 5 stays vacant
   // plenty of food: the outlook (a full year ahead) is 1
   const settled = (extra: Building[]) => {
-    const s = town([...houses(3), building(4, "izba", 400), ...extra]);
+    const s = town([...houses(4), building(5, "izba", 500), ...extra]);
     return day({ ...s, stock: { ...s.stock, food: 20000 } });
   };
-  const jobs = () => [building(5, "smithy", 500), building(6, "carpentry", 600)]; // 7 jobs for 6 adults
+  const jobs = () => [building(6, "smithy", 600), building(7, "carpentry", 700), building(8, "pottery", 800)]; // 10 jobs for 8 adults
 
-  it("fills a vacant house when attractive", () => {
+  it("the daily step stores how attractive the town is", () => {
     const s = settled(jobs());
     expect(peopleStats(s).unemployed).toBe(0);
-    const a = day(s, { rand: always, only: ["immigration"] });
-    const fam = Object.values(a.households).find((h) => h.home === 4)!;
+    expect(s.attract).toBeGreaterThan(0.5); // mood 60 x food outlook 1
+    expect(s.attract).toBeLessThanOrEqual(1);
+    expect(s.households[1].home).toBe(1); // but nobody arrives in the daily step
+    expect(s.incoming).toEqual([]);
+    expect(Object.keys(s.households)).toHaveLength(4);
+  });
+  it("is 0 when everybody is unemployed", () => {
+    const s = settled([]); // no workplaces and no construction: all adults idle
+    expect(peopleStats(s)).toMatchObject({ unemployed: 8, builders: 0 });
+    expect(s.attract).toBe(0);
+  });
+  it("sends a family to a vacant house, 6-12 game hours away, only once per house", () => {
+    const s = { ...settled(jobs()), attract: 1 };
+    const a = immigrationStep(s, BASE_TICK);
+    expect(a.incoming).toHaveLength(1);
+    expect(a.incoming[0].house).toBe(5);
+    expect(a.incoming[0].arrive - s.gameMinutes).toBeGreaterThanOrEqual(6 * 60);
+    expect(a.incoming[0].arrive - s.gameMinutes).toBeLessThanOrEqual(12 * 60);
+    expect(Object.keys(a.households)).toHaveLength(4); // not arrived yet
+    expect(immigrationStep(a, BASE_TICK).incoming).toBe(a.incoming); // the house is promised already
+    const calm = { ...s, attract: 0 };
+    expect(immigrationStep(calm, BASE_TICK)).toBe(calm);
+  });
+  it("the per-tick hazard adds up to the daily rate", () => {
+    const base: SimState = { ...settled(jobs()), attract: 0.5 };
+    let came = 0;
+    const days = 300;
+    for (let seed = 1; seed <= days; seed++) {
+      let s = { ...base, rng: seed };
+      for (let t = 0; t < 1440 / BASE_TICK && s.incoming.length === 0; t++) s = immigrationStep(s, BASE_TICK);
+      if (s.incoming.length > 0) came++;
+    }
+    expect(came / days).toBeGreaterThan(0.4); // 1 - (1 - 0.5)^1 = 0.5
+    expect(came / days).toBeLessThan(0.6);
+  });
+  it("the family arrives at its time into the promised house", () => {
+    const s = settled(jobs());
+    const gm = s.gameMinutes;
+    const wait = { ...s, attract: 0, incoming: [{ house: 5, arrive: gm + 1 }] };
+    expect(immigrationStep(wait, BASE_TICK)).toBe(wait); // not due yet
+    const a = immigrationStep({ ...wait, incoming: [{ house: 5, arrive: gm }] }, BASE_TICK);
+    const fam = Object.values(a.households).find((h) => h.home === 5)!;
     expect(fam).toBeDefined();
+    expect(fam.founder).toBe(false);
     expect(fam.members.length).toBeGreaterThanOrEqual(2);
     expect(fam.members.length).toBeLessThanOrEqual(5);
+    expect(a.incoming).toEqual([]);
     expect(a.events.at(-1)).toMatchObject({ kind: "arrival" });
     expect(a.events.at(-1)!.text).toContain("приехала в поселение");
     const adults = fam.members.map((id) => a.residents[id]).filter((r) => (a.gameMinutes - r.born) / YEAR_MIN >= 18);
     expect(adults).toHaveLength(2);
     expect(adults[0].spouse).toBe(adults[1].id);
   });
-  it("does not when everybody is unemployed", () => {
-    const s = settled([]); // no workplaces and no construction: all adults idle
-    expect(peopleStats(s)).toMatchObject({ unemployed: 6, builders: 0 });
-    const a = day(s, { rand: always, only: ["immigration"] });
-    expect(Object.keys(a.households)).toHaveLength(3);
-    expect(vacantHouses(a.buildings, a.households)).toEqual([4]);
+  it("goes into another vacant house when the promised one is gone, else into a tent", () => {
+    const s = { ...settled([building(9, "izba", 900)]), attract: 0 };
+    const due = (house: number) => [{ house, arrive: s.gameMinutes }];
+    const { 5: _gone, ...without5 } = s.buildings;
+    const other = immigrationStep({ ...s, buildings: without5, incoming: due(5) }, BASE_TICK);
+    expect(Object.values(other.households).filter((h) => !h.founder).map((h) => h.home)).toEqual([9]);
+    const { 9: _also, ...without9 } = without5;
+    const tent = immigrationStep({ ...s, buildings: without9, incoming: due(5) }, BASE_TICK);
+    expect(Object.values(tent.households).filter((h) => !h.founder).map((h) => h.home)).toEqual([null]);
+    expect(tent.incoming).toEqual([]);
+    // the tent family moves in through the daily step once a house stands
+    const settledTent = day({ ...tent, buildings: s.buildings });
+    expect(Object.values(settledTent.households).filter((h) => !h.founder).map((h) => h.home)).toEqual([5]);
   });
-  it("does not when the draw fails", () => {
-    const s = settled(jobs());
-    expect(Object.keys(day(s, { rand: never, only: ["immigration"] }).households)).toHaveLength(3);
+  it("does not take a house promised to another family", () => {
+    const s = { ...settled([building(9, "izba", 900)]), attract: 0 };
+    const a = immigrationStep({ ...s, incoming: [{ house: 5, arrive: s.gameMinutes - 1 }, { house: 9, arrive: s.gameMinutes + 600 }] }, BASE_TICK);
+    expect(Object.values(a.households).find((h) => !h.founder)!.home).toBe(5);
+    expect(a.incoming).toEqual([{ house: 9, arrive: s.gameMinutes + 600 }]);
   });
   it("arrivals always fit the house", () => {
     const s = custom(town([building(1, "izba", 100)]), []);
     for (let i = 1; i <= 40; i++) {
-      const a = dailyStep({ ...s, rng: i }, { only: ["immigration"] });
+      const a = immigrationStep({ ...s, rng: i, attract: 0, incoming: [{ house: 1, arrive: s.gameMinutes }] }, BASE_TICK);
       for (const h of Object.values(a.households)) expect(h.members.length).toBeLessThanOrEqual(5);
+      expect(Object.keys(a.households)).toHaveLength(1);
     }
   });
 });
 
 describe("births", () => {
   it("only married women with room, in housed households", () => {
-    const s = day(town(houses(3)));
+    const s = day(town(houses(4)));
     const before = Object.keys(s.residents).length;
     const a = day(s, { rand: always, only: ["birth"] });
-    expect(Object.keys(a.residents).length).toBe(before + 3);
-    expect(kinds(a).filter((k) => k === "birth")).toHaveLength(3);
+    expect(Object.keys(a.residents).length).toBe(before + 4);
+    expect(kinds(a).filter((k) => k === "birth")).toHaveLength(4);
     const kid = Object.values(a.residents).find((r) => r.born === a.gameMinutes)!;
     expect(kid.last).toBe(surnameFor(a.households[kid.household].last, kid.sex));
     expect(a.households[kid.household].members).toContain(kid.id);
@@ -248,8 +302,8 @@ describe("births", () => {
     for (const h of Object.values(c.households)) expect(h.members).toHaveLength(5);
   });
   it("not in tents, not for unmarried women", () => {
-    expect(Object.keys(day(town([]), { rand: always, only: ["birth"] }).residents)).toHaveLength(10);
-    const s = day(town(houses(3)));
+    expect(Object.keys(day(town([]), { rand: always, only: ["birth"] }).residents)).toHaveLength(14);
+    const s = day(town(houses(4)));
     const wife = Object.values(s.residents).find((r) => r.sex === "f" && r.spouse !== null && r.household === 1)!;
     const husband = s.residents[wife.spouse!];
     const widowed = { ...s, residents: { ...s.residents, [wife.id]: { ...wife, spouse: null }, [husband.id]: { ...husband, spouse: null } } };
@@ -261,7 +315,7 @@ describe("births", () => {
 
 describe("deaths", () => {
   it("remove people and free the house when a household empties", () => {
-    const s = day(town(houses(3)));
+    const s = day(town(houses(4)));
     const h1 = s.households[1];
     let n = 0;
     // draws go in id order; household 1 holds ids 1..k
@@ -269,12 +323,12 @@ describe("deaths", () => {
     const a = day(s, { rand: killHousehold1, only: ["death"] });
     expect(a.households[1]).toBeUndefined();
     expect(h1.members.every((id) => !a.residents[id])).toBe(true);
-    expect(Object.keys(a.households)).toHaveLength(2);
+    expect(Object.keys(a.households)).toHaveLength(3);
     expect(vacantHouses(a.buildings, a.households)).toEqual([1]);
     expect(kinds(a).filter((k) => k === "death")).toHaveLength(h1.members.length);
   });
   it("a death widows the spouse", () => {
-    const s = day(town(houses(3)));
+    const s = day(town(houses(4)));
     let n = 0;
     const a = day(s, { rand: () => (n++ === 0 ? 0 : 0.999999), only: ["death"] });
     const victim = s.residents[1];
@@ -284,7 +338,7 @@ describe("deaths", () => {
     expect(a.events.at(-1)!.text).toMatch(/^Умер(ла)? /);
   });
   it("nobody dies on a failing draw", () => {
-    expect(Object.keys(day(town([]), { rand: never, only: ["death"] }).residents)).toHaveLength(10);
+    expect(Object.keys(day(town([]), { rand: never, only: ["death"] }).residents)).toHaveLength(14);
   });
 });
 
@@ -394,31 +448,31 @@ describe("jobs", () => {
 describe("builders and unemployment", () => {
   it("jobless adults build while there is construction work, otherwise they are unemployed", () => {
     const planned = town([...houses(2), building(3, "izba", 300, "planned")]);
-    expect(peopleStats(planned)).toMatchObject({ pop: 10, adults: 6, children: 4, builders: 6, unemployed: 0, tents: 3, households: 3 });
-    expect(peopleStats(town(houses(2)))).toMatchObject({ builders: 0, unemployed: 6 });
+    expect(peopleStats(planned)).toMatchObject({ pop: 14, adults: 8, children: 6, builders: 8, unemployed: 0, tents: 4, households: 4 });
+    expect(peopleStats(town(houses(2)))).toMatchObject({ builders: 0, unemployed: 8 });
   });
   it("demand counts vacancies, vacant and unfinished houses and tents", () => {
     const s = town([building(1, "izba", 100), building(2, "izba", 200), building(3, "smithy", 300)]);
-    // 3 tents, 2 vacant houses, 3 open jobs: 1.5 + 3 / 2 - 2 + 3
-    expect(demand(s).res).toBeCloseTo(4);
+    // 4 tents, 2 vacant houses, 3 open jobs: 1.5 + 3 / 2 - 2 + 4
+    expect(demand(s).res).toBeCloseTo(5);
     const t = day(s);
-    // two families moved in, one is still in tents, and the smithy has staff
+    // two families moved in, two are still in tents, and the smithy has staff
     const employed = peopleStats(t).employed;
-    expect(demand(t).res).toBeCloseTo(1.5 + (3 - employed) / 2 + 1);
+    expect(demand(t).res).toBeCloseTo(1.5 + (3 - employed) / 2 + 2);
   });
 });
 
 describe("emigration", () => {
-  // n daily steps in a town of three houses and no work: every adult has n idle days
+  // n daily steps in a town of four houses and no work: every adult has n idle days
   const idle = (n: number) => {
-    let s = town(houses(3));
+    let s = town(houses(4));
     for (let i = 0; i < n; i++) s = day(s);
     return s;
   };
   it("idle families do not leave, however long they sit idle", () => {
     const s = idle(30);
-    expect(Object.values(s.residents).filter((r) => r.idleDays >= 30).length).toBeGreaterThanOrEqual(6);
-    expect(Object.keys(day(s, { rand: always, only: ["emigration"] }).households)).toHaveLength(3);
+    expect(Object.values(s.residents).filter((r) => r.idleDays >= 30).length).toBeGreaterThanOrEqual(8);
+    expect(Object.keys(day(s, { rand: always, only: ["emigration"] }).households)).toHaveLength(4);
     // immigrants (not founders) with good mood stay as well
     const imm = custom(town(houses(2)), [{ home: 1, people: [{ age: 30 }, { age: 28 }] }]);
     let t = imm;
@@ -438,16 +492,16 @@ describe("emigration", () => {
     expect(RATES.moodLeaveDay).toBe(0.1);
   });
   it("founding households never emigrate, even unhappy", () => {
-    const s = day(town(houses(3))); // the founders move in
+    const s = day(town(houses(4))); // the founders move in
     expect(Object.values(s.households).every((h) => h.founder && h.home !== null)).toBe(true);
     const sad = { ...s, households: Object.fromEntries(Object.values(s.households).map((h) => [h.id, { ...h, mood: 5 }])) };
-    expect(Object.keys(day(sad, { rand: () => 0.01, only: ["emigration"] }).households)).toHaveLength(3);
+    expect(Object.keys(day(sad, { rand: () => 0.01, only: ["emigration"] }).households)).toHaveLength(4);
   });
   it("founders in tents never leave", () => {
     let s = town([]);
     for (let i = 0; i < 8; i++) s = day(s);
     expect(Math.max(...Object.values(s.residents).map((r) => r.idleDays))).toBe(8);
-    expect(Object.keys(day(s, { rand: always, only: ["emigration"] }).households)).toHaveLength(3);
+    expect(Object.keys(day(s, { rand: always, only: ["emigration"] }).households)).toHaveLength(4);
   });
 });
 
@@ -493,7 +547,7 @@ describe("save", () => {
 
   it("the user's save without residents gets the founders", () => {
     const s = parseSave(wrap({ rng: 12345, buildings: {}, nextBuildingId: 1, lastSpawn: { res: -60, craft: -60, trade: -60 } }), NOW)!;
-    expect(Object.keys(s.sim.residents)).toHaveLength(10);
+    expect(Object.keys(s.sim.residents)).toHaveLength(14);
     expect(Object.values(s.sim.households).every((h) => h.home === null)).toBe(true);
     const f = createFounders(12345, 200);
     expect(s.sim.residents).toEqual(f.people.residents);
@@ -501,7 +555,7 @@ describe("save", () => {
     for (const a of ages(s.sim)) expect(a).toBeGreaterThanOrEqual(0);
   });
   it("round-trips people", () => {
-    const sim = day(town(houses(3)));
+    const sim = day(town(houses(4)));
     const raw = JSON.parse(JSON.stringify(sim));
     const s = parseSave({ version: 4, city, sim: { ...raw, roads: sim.roads, realTime: NOW } }, NOW)!;
     expect(s.sim.residents).toEqual(sim.residents);
@@ -511,7 +565,7 @@ describe("save", () => {
     expect(s.sim.nextHouseholdId).toBe(sim.nextHouseholdId);
   });
   it("a v3 save (360-day year) keeps every age, scales school days and keeps running", () => {
-    const sim = day(town(houses(3)));
+    const sim = day(town(houses(4)));
     const raw = JSON.parse(JSON.stringify(sim));
     const OLD_YEAR = 360 * 1440;
     const gm = 400 * 1440;
@@ -531,8 +585,17 @@ describe("save", () => {
     for (const r of Object.values(run.residents)) expect(Number.isFinite(r.born)).toBe(true);
     expect(Object.keys(run.residents).length).toBeGreaterThan(0);
   });
-  it("loading a v3 save keeps the original copy once, then writes v4", async () => {
+  it("a v4 save from before families on their way keeps its buildings and people", () => {
     const sim = day(town(houses(3)));
+    const { incoming: _i, attract: _a, ...raw } = JSON.parse(JSON.stringify(sim));
+    for (const b of Object.values(raw.buildings) as Record<string, unknown>[]) delete b.hand;
+    const loaded = parseSave({ version: 4, city, sim: { ...raw, roads: sim.roads, realTime: NOW } }, NOW)!.sim;
+    expect(Object.keys(loaded.buildings).sort()).toEqual(Object.keys(sim.buildings).sort());
+    expect(Object.keys(loaded.residents).length).toBe(Object.keys(sim.residents).length);
+    expect(loaded.incoming).toEqual([]);
+  });
+  it("loading a v3 save keeps the original copy once, then writes v4", async () => {
+    const sim = day(town(houses(4)));
     const v3 = { version: 3, city, sim: { ...JSON.parse(JSON.stringify(sim)), roads: sim.roads, realTime: NOW } };
     let current: unknown = v3;
     const kept: [unknown, number][] = [];
@@ -550,7 +613,7 @@ describe("save", () => {
     expect(kept.length).toBe(1); // a v4 save is not kept again
   });
   it("broken people data resets to founders, the town survives", () => {
-    const sim = day(town(houses(3)));
+    const sim = day(town(houses(4)));
     const raw = JSON.parse(JSON.stringify(sim));
     const keep = { ...raw, roads: sim.roads, realTime: NOW };
     const bad: Record<string, unknown>[] = [
@@ -568,11 +631,11 @@ describe("save", () => {
       const s = parseSave({ version: 4, city, sim: b }, NOW)!;
       expect(s).not.toBeNull();
       const hs = Object.values(s.sim.households);
-      expect(Object.keys(s.sim.residents)).toHaveLength(10);
-      expect(hs).toHaveLength(3);
+      expect(Object.keys(s.sim.residents)).toHaveLength(14);
+      expect(hs).toHaveLength(4);
       expect(hs.every((h) => h.home === null)).toBe(true);
       expect(s.sim.roads).toEqual(sim.roads);
-      expect(Object.keys(s.sim.buildings)).toHaveLength(3); // buildings are untouched
+      expect(Object.keys(s.sim.buildings)).toHaveLength(4); // buildings are untouched
     }
   });
   it("repairs references to missing buildings", () => {
@@ -649,7 +712,7 @@ describe("handler: persistence and query channel", () => {
     const { h, out } = setup();
     await h.handle({ t: "found", city, now: NOW });
     const m = out[0] as Extract<FromWorker, { t: "loaded" }>;
-    expect(m.save?.sim.people).toMatchObject({ pop: 10, households: 3, tents: 3, adults: 6, children: 4 });
+    expect(m.save?.sim.people).toMatchObject({ pop: 14, households: 4, tents: 4, adults: 8, children: 6 });
     expect(m.save?.sim).not.toHaveProperty("residents");
   });
   it("answers building queries", async () => {

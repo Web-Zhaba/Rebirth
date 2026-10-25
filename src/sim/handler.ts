@@ -76,6 +76,7 @@ export class Handler {
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private lifeDay = Number.NaN; // game day the main thread has visual life for
+  private lifeIncoming: SimState["incoming"] | null = null; // families on their way it was drawn for
   private speed: Speed = 1; // session setting
   private hiddenAt: number | null = null; // wall time the tab was hidden
   private persistedAt = 0; // wall time of the last save by tick()
@@ -236,6 +237,7 @@ export class Handler {
     this.postedFinds = save ? save.sim.finds : null;
     this.postedArticles = save ? save.sim.articles : null;
     this.lifeDay = Number.NaN;
+    this.lifeIncoming = null;
     this.speed = 1;
     this.hiddenAt = null;
     this.persistedAt = save?.sim.realTime ?? 0;
@@ -269,12 +271,13 @@ export class Handler {
     this.post(msg);
   }
 
-  // Walkers, carts, traffic and lights for the current game day; cosmetic, so a failure only costs the visuals.
+  // Walkers, carts, traffic and lights for the current game day and the families on their way; cosmetic, so a failure only costs the visuals.
   private postLife(): void {
     if (!this.save) return;
     try {
       const day = dayOf(this.save.sim.gameMinutes);
       this.lifeDay = day;
+      this.lifeIncoming = this.save.sim.incoming;
       const { trips, traffic, lights } = computeLife(this.save.sim, day);
       this.post({ t: "life", day, trips, traffic, lights });
     } catch (e) {
@@ -455,7 +458,7 @@ export class Handler {
     }
     this.save = { ...this.save, sim };
     this.postSnapshot();
-    if (dayOf(sim.gameMinutes) !== this.lifeDay) this.postLife();
+    if (dayOf(sim.gameMinutes) !== this.lifeDay || sim.incoming !== this.lifeIncoming) this.postLife();
     // Persist every few wall seconds, not every tick (commands and flush save as well).
     if (now - this.persistedAt >= PERSIST_MS) {
       this.persistedAt = now;

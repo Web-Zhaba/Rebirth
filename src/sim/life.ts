@@ -3,6 +3,7 @@ import { BUILDINGS } from "./buildings";
 import { nodePath, polyline, polyLength, shortestTree } from "./paths";
 import { buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, nearestNode, WALK_SPEED } from "./people";
 import { GOOD } from "./production";
+import { START_MINUTE_OF_DAY } from "./time";
 import type { Building, SimState, Stock } from "./types";
 
 // Visual life (PLAN.md section 10): derived from the state once per game day and never stored in it.
@@ -164,6 +165,20 @@ export function computeLife(s: SimState, day = 0): LifeData {
       for (let k = 0; k < loads; k++) {
         trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: WORK_FROM + ((k + 0.5) * (WORK_TO - WORK_FROM)) / loads, speed: CART_SPEED });
       }
+    }
+    // families on their way: a cart from the built node farthest from the camp to the promised house,
+    // timed to arrive when they do (the trip repeats daily, but the family is gone by then)
+    let far: number | null = null;
+    for (const [node, d] of tree.dist) if (far === null || d > tree.dist.get(far)! || (d === tree.dist.get(far) && node < far)) far = node;
+    const fromFar = far === null || s.incoming.length === 0 ? null : shortestTree(net, far, CART_RANGE);
+    for (const f of s.incoming) {
+      const house = s.buildings[f.house];
+      const l = fromFar && isFinishedHouse(house) ? locate(house) : null;
+      const path = l && fromFar && nodePath(fromFar, l.node);
+      if (!l || !path || far === null) continue;
+      const pts = round2(polyline(s.roads, path, [s.roads.nodes[far].x, s.roads.nodes[far].y], l.at));
+      const depart = f.arrive - polyLength(pts) / CART_SPEED;
+      trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: (((depart + START_MINUTE_OF_DAY) % 1440) + 1440) % 1440, speed: CART_SPEED });
     }
   }
   return { day, trips, traffic, lights };

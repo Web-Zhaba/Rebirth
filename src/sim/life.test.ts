@@ -6,9 +6,9 @@ import { CART_SPEED, computeLife, HOME_AT, LOAD, MAX_CARTS, MAX_WALKERS, TO_WORK
 import { WALK_SPEED } from "./people";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
-import { YEAR_MIN } from "./time";
-import type { Building, City, Household, Resident, RoadGraph, SimState } from "./types";
-import { emptyZones } from "./zones";
+import { START_MINUTE_OF_DAY, YEAR_MIN } from "./time";
+import type { Building, City, Household, Resident, RoadGraph, SimState, TerrainInfo } from "./types";
+import { emptyZones, qkey, regenerateCells } from "./zones";
 import type { Trip } from "../map/lifeLayer";
 
 const NOW = 1_800_000_000_000;
@@ -266,5 +266,47 @@ describe("handler: life message", () => {
     expect(msgs.slice(0, msgs.indexOf("loaded")).every((t) => t === "progress")).toBe(true);
     expect(msgs).toContain("life");
     expect(msgs.indexOf("life")).toBeGreaterThan(msgs.indexOf("loaded"));
+  });
+});
+
+describe("families on their way", () => {
+  const len = (t: Trip) => t.pts.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - t.pts[i][0], p[1] - t.pts[i][1]), 0);
+  it("a cart drives from the farthest built node to the promised house and arrives with the family", () => {
+    const arrive = GM + 600;
+    const s = { ...town([building(1, "izba", 500)], []), incoming: [{ house: 1, arrive }] };
+    const c = carts(computeLife(s).trips);
+    expect(c).toHaveLength(1);
+    expect(c[0].speed).toBeCloseTo(CART_SPEED, 9);
+    expect(c[0].pts[0]).toEqual([3000, 0]);
+    expect(c[0].pts.at(-1)![1]).toBeCloseTo(3, 6); // the door
+    const mod = (m: number) => ((m % 1440) + 1440) % 1440;
+    expect(mod(c[0].depart + len(c[0]) / c[0].speed)).toBeCloseTo(mod(arrive + START_MINUTE_OF_DAY), 3);
+  });
+  it("no cart for a house that is not finished, nor without a road", () => {
+    const planned = { ...town([building(1, "izba", 500, 0, "building")], []), incoming: [{ house: 1, arrive: GM + 600 }] };
+    expect(carts(computeLife(planned).trips)).toHaveLength(0);
+    const bare = { ...town([building(1, "izba", 500)], [], emptyRoads()), incoming: [{ house: 1, arrive: GM + 600 }] };
+    expect(carts(computeLife(bare).trips)).toHaveLength(0);
+  });
+  it("the handler posts the life again when the families on their way change", async () => {
+    const out: FromWorker[] = [];
+    const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
+    const base = town([building(1, "izba", 500)], []);
+    const terrain: Record<string, TerrainInfo> = {};
+    for (const c of regenerateCells(base.roads, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
+    const cells = regenerateCells(base.roads, [], [], terrain).map((c) => (c.block ? c : { ...c, zone: "res" as const }));
+    const s = { ...base, zones: { ...emptyZones(), cells, terrain, rev: 1 }, realTime: NOW, gameMinutes: 300, attract: 1 }; // mid-day, no daily step in sight
+    const mem: Storage = { get: async () => ({ version: 4, city, sim: JSON.parse(JSON.stringify(s)) }), put: async () => {}, clear: async () => {} };
+    const h = new Handler(mem, (m) => out.push(m));
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    out.length = 0;
+    h.tick(NOW + 2500); // the vacant house gets a family (attract 1)
+    expect(out.map((m) => m.t)).toEqual(["snapshot", "life"]);
+    const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
+    expect(snap.sim.incoming).toHaveLength(1);
+    expect(carts((out[1] as Extract<FromWorker, { t: "life" }>).trips)).toHaveLength(1);
+    out.length = 0;
+    h.tick(NOW + 5000); // nothing changed, same day
+    expect(out.map((m) => m.t)).toEqual(["snapshot"]);
   });
 });

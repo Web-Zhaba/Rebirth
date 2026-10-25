@@ -208,7 +208,7 @@ describe("catch-up", () => {
     const end = advanceTo(start, NOW, OFFLINE, Infinity, (p, n) => observe(tally, p, n));
     const a = summarize(tally, start, end, GAP);
     expect(a.gameMinutes).toBe(end.gameMinutes - start.gameMinutes);
-    expect(a.popBefore).toBe(10);
+    expect(a.popBefore).toBe(14);
     expect(a.popAfter).toBe(Object.keys(end.residents).length);
     // exact: every person is a founder, a birth or an arrival, minus deaths and departures
     expect(a.popAfter).toBe(a.popBefore + a.births + a.arrivals - a.deaths - a.departures);

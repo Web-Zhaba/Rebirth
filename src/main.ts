@@ -15,6 +15,7 @@ import { attachLifeLayer } from "./map/lifeLayer";
 import { attachTrafficLayer } from "./map/trafficLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
 import { attachZoneTool } from "./map/zoneTool";
+import * as simClient from "./simClient";
 import { city, frame, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
 import { App } from "./ui/App";
 
@@ -47,5 +48,6 @@ effect(() => {
 render(h(App, { map }), document.getElementById("ui")!);
 load();
 
-// Handle for poking at the map from devtools during development.
-if (import.meta.env.DEV) Object.assign(window, { map });
+// Handles for poking at the map and the sim from devtools during development. Use these instead of importing
+// simClient again: a second module instance would start a second worker writing the same save.
+if (import.meta.env.DEV) Object.assign(window, { map, simClient });

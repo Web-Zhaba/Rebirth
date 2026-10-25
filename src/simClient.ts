@@ -18,6 +18,8 @@ export const frame = computed(() => (city.value ? makeFrame(city.value.lat, city
 export const people = computed(() => state.value?.people ?? null);
 export const stock = computed(() => state.value?.stock ?? null);
 export const economy = computed(() => state.value?.economy ?? null);
+// Families on their way to the town.
+export const incomingCount = computed(() => state.value?.incoming.length ?? 0);
 export const digs = computed(() => state.value?.digs ?? []);
 export const services = computed(() => state.value?.services ?? null);
 export const events = computed(() => state.value?.events ?? []);

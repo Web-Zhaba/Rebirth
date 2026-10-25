@@ -89,6 +89,7 @@ export interface Building {
   upgrade?: Upgrade; // the rebuild into level 2 in progress; the house stays active meanwhile
   radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
   onRuins?: boolean; // started on an old foundation: no stone, less labor
+  hand?: number; // person-hours of hand-made materials added to the labor when it was paid
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -235,6 +236,12 @@ export interface ProdState {
   yesterday: Record<number, number>;
 }
 
+// A family that decided to come: the house is promised to them; the family itself is made on arrival.
+export interface Incoming {
+  house: number; // building id of the promised house
+  arrive: number; // gameMinutes
+}
+
 export interface SimState extends PeopleState {
   stock: Stock;
   prod: ProdState;
@@ -249,6 +256,8 @@ export interface SimState extends PeopleState {
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
   lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
+  incoming: Incoming[]; // families on their way, by arrival time
+  attract: number; // 0..1, how attractive the town is to newcomers; set at 00:00
   // Derived once per game day (and on load): bit i of coverage[house] is set when service i covers it.
   coverage: Record<number, number>;
   landValue: Record<number, number>; // house id -> 0..100

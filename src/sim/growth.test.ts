@@ -1,10 +1,11 @@
 import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
-import { BUILDINGS } from "./buildings";
+import { allocateLabor, BUILDINGS, CREW } from "./buildings";
 import { advanceBuildings, demand, emptyGrowth, nextRandom, reconcile, seedOf, townStats } from "./growth";
 import { builderCount, peopleStats } from "./people";
 import { addRoad, emptyRoads, removeEdge } from "./roads";
+import { payMaterials } from "./production";
 import { parseSave } from "./save";
 import type { Building, City, RoadGraph, SimState, TerrainInfo, ZoneCell, ZoneType } from "./types";
 import { emptyZones, paintCells, qkey, regenerateCells, signedArea } from "./zones";
@@ -65,23 +66,31 @@ describe("rng", () => {
 describe("demand", () => {
   it("founders in tents: houses wanted, no other buildings", () => {
     const s = world(emptyRoads(), () => "none");
-    expect(peopleStats(s)).toMatchObject({ pop: 10, tents: 3, households: 3 });
+    expect(peopleStats(s)).toMatchObject({ pop: 14, tents: 4, households: 4 });
     const d = demand(s);
-    expect(d.res).toBeCloseTo(1.5 + 3);
+    expect(d.res).toBeCloseTo(1.5 + 4);
     // nobody is busy building anything, so the founders count as unemployed
-    expect(d.craft).toBeCloseTo((0.2 * 10) / 3 + peopleStats(s).unemployed / 6);
+    expect(d.craft).toBeCloseTo((0.2 * 14) / 3 + peopleStats(s).unemployed / 6);
     expect(d.trade).toBeLessThan(1);
   });
   it("vacant and unfinished houses cut res demand, vacancies raise it", () => {
     const s = ticks(world(straight(), "res"), 1);
     const b = list(s)[0];
     const planned = demand(s);
-    expect(planned.res).toBeCloseTo(1.5 + 3 - 1); // one unfinished house
+    expect(planned.res).toBeCloseTo(1.5 + 4 - 1); // a planned house counts in full
+    const started = { ...s, buildings: { 1: { ...b, state: "building" as const } } };
+    expect(demand(started).res).toBeCloseTo(1.5 + 4 - 0.5); // a house under construction counts half
     const active = { ...s, buildings: { 1: { ...b, state: "active" as const } } };
-    expect(demand(active).res).toBeCloseTo(1.5 + 3 - 1); // one vacant house
+    expect(demand(active).res).toBeCloseTo(1.5 + 4 - 1); // one vacant house
     const shop = { ...b, id: 2, zone: "trade" as const, template: "shop", state: "active" as const };
-    expect(demand({ ...active, buildings: { ...active.buildings, 2: shop } }).res).toBeCloseTo(1.5 + 3 - 1 + 1); // 2 vacancies / 2
+    expect(demand({ ...active, buildings: { ...active.buildings, 2: shop } }).res).toBeCloseTo(1.5 + 4 - 1 + 1); // 2 vacancies / 2
     expect(townStats(active.buildings)).toMatchObject({ houseCap: BUILDINGS[b.template].residents, unfinishedHouses: 0 });
+  });
+  it("a house promised to a family on its way counts as occupied", () => {
+    const s = ticks(world(straight(), "res"), 1);
+    const active = { ...s, buildings: { 1: { ...s.buildings[1], state: "active" as const } } };
+    const promised = { ...active, incoming: [{ house: 1, arrive: active.gameMinutes + 400 }] };
+    expect(demand(promised).res).toBeCloseTo(demand(active).res + 1);
   });
 });
 
@@ -166,19 +175,20 @@ describe("spawning", () => {
 
 describe("construction", () => {
   const at7 = 60; // game minutes since 06:00 -> 07:00, work starts
-  it("roads first, then buildings FIFO", () => {
+  it("roads first, then buildings", () => {
     let s = ticks(world(straight(), "res"), 1);
     const g = road(s.roads, [[0, 0], [0, -40]], 10); // unbuilt, starts at the founding point
     const idB = Math.max(...Object.keys(g.edges).map(Number));
     s = { ...s, roads: g, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 } };
     const per = (builderCount(s) * BASE_TICK) / 60;
-    expect(builderCount(s)).toBe(6); // the adults of the founding households
+    expect(builderCount(s)).toBe(8); // the adults of the founding households
     s = ticks(s, 5);
     expect(s.roads.edges[idB].done).toBeCloseTo(5 * per);
     expect(s.buildings[1].done).toBe(0);
-    s = ticks(s, 12); // the road finishes during these ticks, the rest goes to the house
+    s = ticks(s, 12); // the road finishes during these ticks, the rest goes to the houses
     expect(s.roads.edges[idB].done).toBe(10);
-    expect(s.buildings[1].done).toBeCloseTo(17 * per - 10);
+    const done = list(s).reduce((sum, b) => sum + b.done, 0); // a crew takes one site, the rest of the hands the next
+    expect(done).toBeCloseTo(17 * per - 10);
     expect(s.buildings[1].state).toBe("building");
   });
   it("buildings are served lowest id first and become active when done", () => {
@@ -190,19 +200,43 @@ describe("construction", () => {
     expect(advanceBuildings(a, 0)).toBe(a);
     expect(advanceBuildings({ 1: { ...base, state: "active", done: base.labor } }, 5)).toEqual({ 1: { ...base, state: "active", done: base.labor } });
   });
+  it("a site takes one crew, the other hands go to the next site, the rest to the oldest", () => {
+    const base = ticks(world(straight(), "res"), 1).buildings[1];
+    const site = (id: number, labor = 100) => ({ ...base, id, labor });
+    const two = { 1: site(1), 2: site(2) };
+    expect([...allocateLabor(two, 8, CREW)]).toEqual([[1, 6], [2, 2]]);
+    expect([...allocateLabor(two, 20, CREW)]).toEqual([[1, 14], [2, 6]]); // both at the crew limit: 8 hands left go to the oldest
+    expect([...allocateLabor({ 1: site(1, 3), 2: site(2) }, 8, CREW)]).toEqual([[1, 3], [2, 5]]); // a nearly done site takes less
+    expect([...allocateLabor({ 1: { ...base, state: "active", done: base.labor }, 2: site(2) }, 8, CREW)]).toEqual([[2, 8]]); // finished: none
+    const upgrading = { ...base, state: "active" as const, done: base.labor, upgrade: { labor: 60, done: 0, paid: false } };
+    expect([...allocateLabor({ 1: upgrading, 2: site(2) }, 8, CREW)]).toEqual([[1, 6], [2, 2]]); // an upgrade is a site too
+  });
+  it("payMaterials and advanceBuildings serve the same sites", () => {
+    const base = ticks(world(straight(), "res"), 1).buildings[1];
+    const three = Object.fromEntries([1, 2, 3].map((id) => [id, { ...base, id, labor: 100, done: 0, paid: false, state: "planned" as const }]));
+    const stock = { food: 0, logs: 100, planks: 10, stone: 10, wares: 0 };
+    const crew = (CREW * BASE_TICK) / 60;
+    const hours = (8 * BASE_TICK) / 60; // 8 hands
+    const paid = payMaterials(three, stock, hours, [], crew);
+    expect(Object.values(paid.buildings).map((b) => b.paid)).toEqual([true, true, false]);
+    const out = advanceBuildings(paid.buildings, hours, crew);
+    expect(Object.values(out).map((b) => b.done > 0)).toEqual([true, true, false]);
+    expect(out[1].done).toBeCloseTo(crew);
+    expect(out[2].done).toBeCloseTo(hours - crew);
+  });
   it("construction speed follows the number of jobless adults", () => {
     let s = ticks(world(straight(), "res"), 1);
     const b = s.buildings[1];
     s = { ...s, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 }, buildings: { 1: b } };
-    expect(builderCount(s)).toBe(6);
-    expect(step(s).buildings[1].done).toBeCloseTo((6 * BASE_TICK) / 60);
+    expect(builderCount(s)).toBe(8);
+    expect(step(s).buildings[1].done).toBeCloseTo((8 * BASE_TICK) / 60);
     // two adults get regular jobs: fewer hands on the site
     const adults = Object.values(s.residents).filter((r) => r.born < -16 * YEAR_MIN + at7);
     const busy = { ...s.residents };
     for (const r of adults.slice(0, 2)) busy[r.id] = { ...r, job: 99, commute: 5 };
     const s2 = { ...s, residents: busy };
-    expect(builderCount(s2)).toBe(4);
-    expect(step(s2).buildings[1].done).toBeCloseTo((4 * BASE_TICK) / 60);
+    expect(builderCount(s2)).toBe(6);
+    expect(step(s2).buildings[1].done).toBeCloseTo((6 * BASE_TICK) / 60);
   });
 });
 
@@ -272,7 +306,7 @@ describe("save", () => {
   it("a save without growth fields loads with defaults", () => {
     const s = parseSave(withSim({}), NOW)!;
     expect(s.sim).toMatchObject(emptyGrowth(seedOf(city.foundedAt), 5));
-    expect(Object.keys(s.sim.residents)).toHaveLength(10);
+    expect(Object.keys(s.sim.residents)).toHaveLength(14);
     expect(s.sim.zones).toEqual(emptyZones());
   });
   it("round-trips buildings and the generator", () => {

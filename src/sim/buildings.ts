@@ -91,10 +91,48 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp
 export const BARN_CAP = 30_000; // kg per finished barn
-export const FOUNDING_STOCK: Stock = { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 };
+export const FOUNDING_STOCK: Stock = { food: 3000, logs: 60, planks: 8, stone: 6, wares: 20 };
 
 export function foodCapacity(buildings: Record<number, Building>): number {
   let cap = FOOD_CAMP_CAP;
   for (const b of Object.values(buildings)) if (b.template === "barn" && b.state === "active") cap += BARN_CAP;
   return cap;
+}
+
+// ---------- construction labor ----------
+
+export const CREW = 6; // hands a construction site can use at once
+
+const EPS = 1e-9;
+
+// Person-hours still to spend on a site: a building under construction, or a finished house being upgraded.
+export function remainingLabor(b: Building): number {
+  if (b.state !== "active") return Math.max(0, b.labor - b.done);
+  return b.upgrade ? Math.max(0, b.upgrade.labor - b.upgrade.done) : 0;
+}
+
+// Splits `personHours` between the open sites. Each takes at most one crew's work (`crewHours`), lowest id
+// first; what is left goes to the oldest sites that still have work, so labor is never wasted.
+export function allocateLabor(buildings: Record<number, Building>, personHours: number, crewHours: number): Map<number, number> {
+  const sites: [number, number][] = []; // id, remaining
+  for (const key of Object.keys(buildings)) {
+    const rem = remainingLabor(buildings[Number(key)]);
+    if (rem > EPS) sites.push([Number(key), rem]);
+  }
+  const out = new Map<number, number>();
+  let left = personHours;
+  for (const [id, rem] of sites) {
+    const take = Math.min(left, crewHours, rem);
+    if (take <= EPS) break;
+    out.set(id, take);
+    left -= take;
+  }
+  for (const [id, rem] of sites) {
+    if (left <= EPS) break;
+    const take = Math.min(left, rem - (out.get(id) ?? 0));
+    if (take <= EPS) continue;
+    out.set(id, (out.get(id) ?? 0) + take);
+    left -= take;
+  }
+  return out;
 }

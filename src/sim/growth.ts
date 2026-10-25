@@ -1,5 +1,5 @@
 import { DIG, emptyFinds } from "./excavation";
-import { BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate } from "./buildings";
+import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate } from "./buildings";
 import { jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
 import { emptyProd, emptyStock } from "./production";
@@ -31,7 +31,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -48,6 +48,8 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     chronicle: [],
     finds: emptyFinds(),
     articles: [],
+    incoming: [],
+    attract: 0,
     ...f.people,
   };
 }
@@ -59,6 +61,7 @@ export const seedOf = (foundedAt: number): number => (Math.floor(foundedAt) ^ 0x
 export interface TownStats {
   houseCap: number; // capacity of all houses, finished or not
   unfinishedHouses: number;
+  startedHouses: number; // unfinished houses the artel has begun
   craftJobs: number; // over all craft buildings, finished or not
   tradeJobs: number;
   jobsFinished: number; // jobs in finished workplaces
@@ -68,6 +71,7 @@ export interface TownStats {
 export function townStats(buildings: Record<number, Building>, jobs: (b: Building) => number = (b) => BUILDINGS[b.template]?.jobs ?? 0): TownStats {
   let houseCap = 0;
   let unfinishedHouses = 0;
+  let startedHouses = 0;
   let craftJobs = 0;
   let tradeJobs = 0;
   let jobsFinished = 0;
@@ -77,6 +81,7 @@ export function townStats(buildings: Record<number, Building>, jobs: (b: Buildin
     if (b.zone === "res") {
       houseCap += houseCapacity(b);
       if (b.state !== "active") unfinishedHouses++;
+      if (b.state === "building") startedHouses++;
     } else {
       const n = jobs(b);
       if (b.zone === "craft") craftJobs += n;
@@ -84,17 +89,22 @@ export function townStats(buildings: Record<number, Building>, jobs: (b: Buildin
       if (b.state === "active") jobsFinished += n;
     }
   }
-  return { houseCap, unfinishedHouses, craftJobs, tradeJobs, jobsFinished };
+  return { houseCap, unfinishedHouses, startedHouses, craftJobs, tradeJobs, jobsFinished };
 }
 
 // Wanted new buildings per zone type (may be negative).
-export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes" | "zones" | "prod" | "stock">): Demand {
+// A house under construction counts half against demand (a planned one in full, so the queue stays short),
+// a house promised to a family on its way counts as occupied.
+export const UNFINISHED_WEIGHT = 0.5;
+
+export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes" | "zones" | "prod" | "stock" | "incoming">): Demand {
   const st = townStats(s.buildings, (b) => jobsOf(b, s));
   const ps = peopleStats(s);
-  const vacant = vacantHouses(s.buildings, s.households).length;
+  const promised = new Set(s.incoming.map((f) => f.house));
+  const vacant = vacantHouses(s.buildings, s.households).filter((id) => !promised.has(id)).length;
   const jobVacancies = st.jobsFinished - ps.employed;
   return {
-    res: DEMAND.resBase + DEMAND.resPerVacancy * jobVacancies - vacant - st.unfinishedHouses + ps.tents,
+    res: DEMAND.resBase + DEMAND.resPerVacancy * jobVacancies - vacant - (st.unfinishedHouses - st.startedHouses) - UNFINISHED_WEIGHT * st.startedHouses + ps.tents,
     craft: (DEMAND.craftShare * ps.pop - st.craftJobs) / DEMAND.craftJobs + DEMAND.craftPerUnemployed * ps.unemployed,
     trade: (DEMAND.tradeShare * ps.pop - st.tradeJobs) / DEMAND.tradeJobs,
   };
@@ -317,32 +327,22 @@ export function placeBuilding(s: SimState, t: BuildingTemplate, edge: number, si
 
 // ---------- construction ----------
 
-// Spends person-hours FIFO (lowest id first); returns the same record when nothing changed.
-export function advanceBuildings(buildings: Record<number, Building>, personHours: number): Record<number, Building> {
+// Spends person-hours on the open sites as allocateLabor splits them (a crew of CREW hands each, oldest first);
+// returns the same record when nothing changed. `crewHours` is the work of one crew in this tick.
+export function advanceBuildings(buildings: Record<number, Building>, personHours: number, crewHours = Infinity): Record<number, Building> {
   let out = buildings;
-  let left = personHours;
-  for (const key of Object.keys(buildings)) {
-    if (left <= EPS) break;
-    const b = buildings[Number(key)];
-    if (b.state === "active") {
-      if (b.upgrade) {
-        const up = b.upgrade;
-        const rem = up.labor - up.done;
-        const use = Math.max(0, Math.min(left, rem));
-        left -= use;
-        const done = use >= rem - EPS ? up.labor : up.done + use;
-        if (out === buildings) out = { ...buildings };
-        const { upgrade: _u, ...rest } = b;
-        out[b.id] = done >= up.labor ? { ...rest, level: 2, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
-      }
-      continue;
-    }
-    const remain = b.labor - b.done;
-    const spend = Math.max(0, Math.min(left, remain));
-    left -= spend;
-    const done = spend >= remain - EPS ? b.labor : b.done + spend;
+  for (const [id, use] of allocateLabor(buildings, personHours, crewHours)) {
+    const b = buildings[id];
     if (out === buildings) out = { ...buildings };
-    out[b.id] = { ...b, done, state: done >= b.labor ? "active" : "building" };
+    if (b.state === "active") {
+      const up = b.upgrade!;
+      const done = use >= up.labor - up.done - EPS ? up.labor : up.done + use;
+      const { upgrade: _u, ...rest } = b;
+      out[id] = done >= up.labor ? { ...rest, level: 2, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
+    } else {
+      const done = use >= b.labor - b.done - EPS ? b.labor : b.done + use;
+      out[id] = { ...b, done, state: done >= b.labor ? "active" : "building" };
+    }
   }
   return out;
 }

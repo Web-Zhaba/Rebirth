@@ -184,7 +184,7 @@ describe("handler", () => {
     h.tick(NOW + 2500);
     expect(out.map((m) => m.t)).toEqual(["snapshot", "life"]); // the first tick of a day also brings the visual life
     const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
-    expect(snap.sim).toMatchObject({ realTime: NOW + 2500, gameMinutes: 10, roads: emptyRoads(), people: { pop: 10, households: 3, tents: 3 } });
+    expect(snap.sim).toMatchObject({ realTime: NOW + 2500, gameMinutes: 10, roads: emptyRoads(), people: { pop: 14, households: 4, tents: 4 } });
     // aggregates only: no individual residents cross the thread boundary
     for (const k of ["residents", "households", "zones", "nextPersonId"]) expect(snap.sim).not.toHaveProperty(k);
     h.tick(NOW + 3000);

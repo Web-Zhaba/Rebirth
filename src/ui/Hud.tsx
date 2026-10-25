@@ -6,7 +6,7 @@ import type { City } from "../sim/types";
 import { massText } from "../sim/units";
 import { SERVICE_LIST } from "../sim/services";
 import { OVERLAYS, overlay, tool, ZONE_COLORS, type Overlay } from "../map/tools";
-import { economy, events, people, reset, roads, services, setSpeed, speed, stock, zones } from "../simClient";
+import { economy, events, incomingCount, people, reset, roads, services, setSpeed, speed, stock, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -14,6 +14,11 @@ const plural = (n: number) => {
   const m = n % 100;
   if (m >= 11 && m <= 14) return "участков";
   return n % 10 === 1 ? "участок" : n % 10 >= 2 && n % 10 <= 4 ? "участка" : "участков";
+};
+const families = (n: number) => {
+  const m = n % 100;
+  if (m >= 11 && m <= 14) return "семей";
+  return n % 10 === 1 ? "семья" : n % 10 >= 2 && n % 10 <= 4 ? "семьи" : "семей";
 };
 // Tons with one decimal, comma as the separator: 1600 -> "1,6", 33000 -> "33".
 const tons = (kg: number) => (Math.round(kg / 100) / 10).toString().replace(".", ",");
@@ -113,6 +118,11 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
           <div class="hud-date">
             Население: {p.pop} · семей {p.households} · в палатках {p.tents}
           </div>
+          {incomingCount.value > 0 && (
+            <div class="hud-date">
+              в пути: {incomingCount.value} {families(incomingCount.value)}
+            </div>
+          )}
           <div class="hud-date">
             Работают: {p.employed} · на стройке: {p.builders} · без работы: {p.unemployed}
           </div>
