@@ -1,7 +1,8 @@
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
+import { queuedLabel } from "../sim/clock";
 import { addRoad, cutOffEdges, distToEdge, ROAD_KINDS, segmentCost, snapPoint, type Snap } from "../sim/roads";
-import { frame, roads, sendCmd, state } from "../simClient";
+import { frame, gameClock, roads, sendCmd, state } from "../simClient";
 import { oldWorld } from "./excavation";
 import { snapToOldStreets } from "../world/oldStreets";
 import { sampleProfile } from "../world/profile";
@@ -154,7 +155,8 @@ export function attachRoadTool(map: maplibregl.Map): void {
         .then((p) => {
           if (mine !== seq) return;
           const c = segmentCost(p, t);
-          verdict = c.ok ? { ok: true, text: costText(p.length, c.labor) } : { ok: false, text: c.reason ?? "Нельзя" };
+          const queued = queuedLabel(gameClock.peek());
+          verdict = c.ok ? { ok: true, text: costText(p.length, c.labor) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? "Нельзя" };
           drawPreview(req.a, req.b);
           setLabel(verdict.text);
         })

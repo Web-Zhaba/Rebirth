@@ -3,6 +3,8 @@ import { dailyServices } from "./coverage";
 import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
 import { builderCount, dailyStep, immigrationStep, productionScale } from "./people";
+import { EVENING, eveningStep, isEvening } from "./evening";
+import { daySummary } from "./summary";
 import { dailyEconomy, payMaterials, produceStep, reportShortages } from "./production";
 import { spendOnRoads, WORK_END, WORK_START } from "./roads";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
@@ -47,6 +49,12 @@ export function clockAt(gameMinutes: number, realTime: number, now: number, spee
   return gameMinutes + Math.min(Math.max(0, (now - realTime) / msPerMinute), BASE_TICK - 0.001);
 }
 
+// «начнут в 07:00» while the artel is off work (evening, night, early morning), else null; for queued roads and sites.
+export function queuedLabel(gameMinutes: number): string | null {
+  const h = calendar(gameMinutes).hour;
+  return h >= WORK_START && h < WORK_END ? null : `начнут в ${String(WORK_START).padStart(2, "0")}:00`;
+}
+
 export function step(s: SimState): SimState {
   const hour = calendar(s.gameMinutes).hour;
   const working = hour >= WORK_START && hour < WORK_END;
@@ -71,7 +79,9 @@ export function step(s: SimState): SimState {
   }
   let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, events }, clearUse);
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScale(s));
+  else if (isEvening(hour)) cur = eveningStep(cur, BASE_TICK / 60);
   let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
+  if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
   return recordChronicle(s, spawnBuildings(immigrationStep(next, BASE_TICK)));
 }

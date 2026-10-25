@@ -23,6 +23,8 @@ export const incomingCount = computed(() => state.value?.incoming.length ?? 0);
 export const digs = computed(() => state.value?.digs ?? []);
 export const services = computed(() => state.value?.services ?? null);
 export const events = computed(() => state.value?.events ?? []);
+// «Итоги дня» of the last 22:00 (see DaySummary.tsx).
+export const daySummary = computed(() => state.value?.summary ?? null);
 export const chronicle = computed(() => state.value?.chronicle ?? []);
 export const finds = computed(() => state.value?.finds ?? null);
 export const articles = computed(() => state.value?.articles ?? []);

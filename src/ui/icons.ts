@@ -26,6 +26,7 @@ import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
+import PhMoonStars from "~icons/ph/moon-stars";
 import PhPause from "~icons/ph/pause-fill";
 import PhStack from "~icons/ph/stack";
 import PhTrash from "~icons/ph/trash";
@@ -44,6 +45,7 @@ export const ICONS = {
   pause: PhPause,
   trash: PhTrash,
   eraser: PhEraser,
+  night: PhMoonStars,
   // Notebook entries (game-icons): point of interest, street, foundations
   find: MagnifyingGlass,
   street: Road,

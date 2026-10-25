@@ -13,7 +13,7 @@ export interface Trip {
 export interface Light {
   x: number;
   y: number;
-  kind: "house" | "work";
+  kind: "house" | "work" | "tavern";
 }
 export interface LifeOptions {
   trips: ReadonlySignal<Trip[]>;
@@ -30,6 +30,7 @@ const FRAME_MS = 50; // ~20 fps
 const MAX_EXTRAP = 15; // game minutes of extrapolation past the last clock update
 const DAY_MIN = 1440;
 const WORK_LIGHTS_END = 21; // workplaces are lit until 21:00
+const TAVERN_LIGHTS = [18, 24]; // taverns glow in the evening, from dusk to midnight
 
 // Position (local m) of a trip at `minuteOfDay` (may be fractional), or null when it is not under way.
 // The departure repeats daily, so a trip that left before midnight is still under way just after it.
@@ -56,11 +57,13 @@ export function positionAt(trip: Trip, minuteOfDay: number): [number, number] | 
   return pts[pts.length - 1];
 }
 
-// Opacity of night lights at an hour of the day (fractional): visible when daylight < 0.4, work lights only until 21:00.
-export function lightOpacity(kind: "house" | "work", hour: number): number {
+// Opacity of night lights at an hour of the day (fractional): visible when daylight < 0.4, work lights only until 21:00,
+// taverns from 18:00 to midnight (brighter than the houses).
+export function lightOpacity(kind: Light["kind"], hour: number): number {
   const h = ((hour % 24) + 24) % 24;
   const dark = Math.min(1, Math.max(0, (0.4 - daylight(h)) / 0.4));
   if (kind === "work" && !(h >= 12 && h < WORK_LIGHTS_END)) return 0;
+  if (kind === "tavern") return h >= TAVERN_LIGHTS[0] && h < TAVERN_LIGHTS[1] ? Math.max(dark, 0.5 * Math.min(1, (h - 17) / 1.5)) : 0;
   return dark * 0.85;
 }
 
@@ -82,7 +85,7 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
   let last = 0;
   let base = { gm: gameMinutes.peek(), at: performance.now() };
   const stops: (() => void)[] = [];
-  const shown = { house: -1, work: -1 };
+  const shown = { house: -1, work: -1, tavern: -1 };
 
   const nowGame = (): number => base.gm + Math.min(MAX_EXTRAP, (gameMinPerSec() * (performance.now() - base.at)) / 1000);
 
@@ -107,6 +110,7 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
       });
     glow("life-lights-house", "house", 5);
     glow("life-lights-work", "work", 8);
+    glow("life-lights-tavern", "tavern", 12);
     const dot = (id: string, kind: string, px: [number, number], color: string) =>
       map.addLayer({
         id,
@@ -141,7 +145,7 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
   };
 
   const drawDarkness = (minuteOfDay: number) => {
-    for (const kind of ["house", "work"] as const) {
+    for (const kind of ["house", "work", "tavern"] as const) {
       const o = lightOpacity(kind, minuteOfDay / 60);
       if (Math.abs(o - shown[kind]) < 0.01) continue;
       shown[kind] = o;

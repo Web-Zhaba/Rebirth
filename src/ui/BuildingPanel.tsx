@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { BUILDINGS, houseCapacity, type Materials } from "../sim/buildings";
+import { queuedLabel } from "../sim/clock";
 import { handHours } from "../sim/production";
 import { DIG, revealedArea } from "../sim/excavation";
 import { SERVICES } from "../sim/services";
@@ -8,7 +9,7 @@ import { familyGenitive } from "../sim/people";
 import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
 import { flash, tool } from "../map/tools";
-import { buildings, digs, queryBuilding, sendCmd, stock } from "../simClient";
+import { buildings, digs, gameClock, queryBuilding, sendCmd, stock } from "../simClient";
 import { Icon } from "./Icon";
 
 const REFRESH_MS = 4000;
@@ -130,8 +131,9 @@ export function BuildingPanel() {
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const info = useResidents(id, shown && b?.state === "active");
   if (!b || !t || !shown) return null;
+  const queued = b.state === "active" ? null : queuedLabel(gameClock.value); // «начнут в 07:00» outside work hours
   const status =
-    b.state === "active" ? "Готово" : b.state === "building" ? `Строится ${Math.floor((b.done / b.labor) * 100)} %` : "В планах";
+    (b.state === "active" ? "Готово" : b.state === "building" ? `Строится ${Math.floor((b.done / b.labor) * 100)} %` : "В планах") + (queued ? ` · ${queued}` : "");
   const jobs = info?.kind === "workplace" ? info.capacity : t.jobs;
   const capacity =
     t.residents > 0
