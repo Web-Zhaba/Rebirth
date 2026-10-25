@@ -4,9 +4,11 @@ import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
 import { builderCount, dailyStep, immigrationStep, productionScale } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
+import { settleLevers } from "./leverCmds";
 import { daySummary } from "./summary";
 import { dailyEconomy, payMaterials, produceStep, reportShortages } from "./production";
-import { spendOnRoads, WORK_END, WORK_START } from "./roads";
+import { isWorkHour, tolokaActive, workHours, type Levers } from "./levers";
+import { spendOnRoads } from "./roads";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
 import type { SimState } from "./types";
 
@@ -50,14 +52,14 @@ export function clockAt(gameMinutes: number, realTime: number, now: number, spee
 }
 
 // «начнут в 07:00» while the artel is off work (evening, night, early morning), else null; for queued roads and sites.
-export function queuedLabel(gameMinutes: number): string | null {
+export function queuedLabel(gameMinutes: number, levers?: Levers): string | null {
   const h = calendar(gameMinutes).hour;
-  return h >= WORK_START && h < WORK_END ? null : `начнут в ${String(WORK_START).padStart(2, "0")}:00`;
+  return isWorkHour(h, levers) ? null : `начнут в ${String(workHours(levers).start).padStart(2, "0")}:00`;
 }
 
 export function step(s: SimState): SimState {
   const hour = calendar(s.gameMinutes).hour;
-  const working = hour >= WORK_START && hour < WORK_END;
+  const working = isWorkHour(hour, s.levers);
   let roads = s.roads;
   let buildings = s.buildings;
   let stock = s.stock;
@@ -66,24 +68,28 @@ export function step(s: SimState): SimState {
   if (working) {
     // The artel (every adult without a regular job): roads first; the hands left go to buildings, which take their
     // materials from the stock when work on them starts, and to forest clearings, ahead of the buildings when logs run short.
-    const r = spendOnRoads(s.roads, (builderCount(s) * BASE_TICK) / 60);
+    // On a толока every hand goes to its site, none to the roads.
+    const toloka = tolokaActive(s.levers, s.gameMinutes);
+    const hours = (builderCount(s) * BASE_TICK) / 60;
+    const r = toloka ? { roads: s.roads, left: hours } : spendOnRoads(s.roads, hours);
     roads = r.roads;
+    const lever = { priority: s.levers.priority, focus: toloka ? s.levers.toloka!.site : null };
     const crew = (CREW * BASE_TICK) / 60; // person-hours of one crew in a tick
     const first = clearingsFirst(s.stock);
-    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations, crew, s.clearings, first);
-    clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first);
-    buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings, first);
+    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations, crew, s.clearings, first, lever);
+    clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first, lever);
+    buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings, first, lever);
     stock = paid.stock;
     events = reportShortages(s.buildings, paid.buildings, s.stock, events, s.gameMinutes);
     events = reportBuilt(s.buildings, buildings, events, s.gameMinutes);
   }
   let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, events }, clearUse);
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScale(s));
-  else if (isEvening(hour)) cur = eveningStep(cur, BASE_TICK / 60);
+  else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
   let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
-  return recordChronicle(s, spawnBuildings(immigrationStep(next, BASE_TICK)));
+  return recordChronicle(s, settleLevers(spawnBuildings(immigrationStep(next, BASE_TICK))));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.

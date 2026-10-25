@@ -1,13 +1,13 @@
 import { BASE_TICK, tickMs, type Speed } from "./clock";
 import { calendar } from "./time";
-import { WORK_END, WORK_START } from "./roads";
+import { isWorkHour, type Levers } from "./levers";
 
 const MAX_DAYS = 60;
 
 // Real milliseconds until `personHours` of work are done by `hands` builders, starting at `gameMinutes` and
-// running at `speed`. Builders work between WORK_START and WORK_END only; real time per game minute follows
+// running at `speed`. Builders work in the work hours of the schedule only (workHours); real time per game minute follows
 // tickMs (so night passes faster). Infinity when paused, nobody builds, or the job is beyond MAX_DAYS.
-export function etaRealMs(personHours: number, hands: number, gameMinutes: number, speed: Speed): number {
+export function etaRealMs(personHours: number, hands: number, gameMinutes: number, speed: Speed, levers?: Levers): number {
   if (personHours <= 0) return 0;
   if (speed === 0 || hands <= 0) return Infinity;
   let left = personHours;
@@ -18,7 +18,7 @@ export function etaRealMs(personHours: number, hands: number, gameMinutes: numbe
     const h = calendar(gm).hour;
     const msPerMin = tickMs(gm, { speed, offline: false }) / BASE_TICK;
     const step = 10; // game minutes
-    if (h >= WORK_START && h < WORK_END) {
+    if (isWorkHour(h, levers)) {
       const done = (perHour * step) / 60;
       if (done >= left) return real + (left / done) * step * msPerMin;
       left -= done;

@@ -1,5 +1,6 @@
 import { DIG, emptyFinds } from "./excavation";
-import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate } from "./buildings";
+import { emptyLevers } from "./levers";
+import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
 import { clearingLogs } from "./clearing";
@@ -32,7 +33,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -53,6 +54,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     incoming: [],
     attract: 0,
     summary: null,
+    levers: emptyLevers(),
     ...f.people,
   };
 }
@@ -351,9 +353,9 @@ export function placeBuilding(s: SimState, t: BuildingTemplate, edge: number, si
 
 // Spends person-hours on the open sites as allocateLabor splits them (a crew of CREW hands each, oldest first);
 // returns the same record when nothing changed. `crewHours` is the work of one crew in this tick.
-export function advanceBuildings(buildings: Record<number, Building>, personHours: number, crewHours = Infinity, clearings: readonly Clearing[] = [], first = false): Record<number, Building> {
+export function advanceBuildings(buildings: Record<number, Building>, personHours: number, crewHours = Infinity, clearings: readonly Clearing[] = [], first = false, lever?: SiteLever): Record<number, Building> {
   let out = buildings;
-  for (const [id, use] of allocateLabor(buildings, personHours, crewHours, clearings, first)) {
+  for (const [id, use] of allocateLabor(buildings, personHours, crewHours, clearings, first, lever)) {
     const b = buildings[id];
     if (out === buildings) out = { ...buildings };
     if (b.state === "active") {

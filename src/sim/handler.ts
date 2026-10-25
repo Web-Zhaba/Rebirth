@@ -3,6 +3,7 @@ import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed }
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
+import { callBlock, callSettlers, callToloka, setPriority, setRations, setSchedule } from "./leverCmds";
 import { digInfos, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
@@ -40,7 +41,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -422,6 +423,16 @@ export class Handler {
           this.post({ t: "cmdResult", id, ok: true }); // nothing new: no save
           return;
         }
+        this.save = { ...this.save, sim: r.sim };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "callSettlers") {
+        const r =
+          cmd.type === "setPriority" ? setPriority(sim, cmd.key)
+          : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
+          : cmd.type === "setSchedule" ? setSchedule(sim, cmd.strada)
+          : cmd.type === "setRations" ? setRations(sim, cmd.rations)
+          : callSettlers(sim);
+        if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {

@@ -9,8 +9,9 @@ import { familyGenitive } from "../sim/people";
 import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
 import { flash, tool } from "../map/tools";
-import { buildings, digs, gameClock, queryBuilding, sendCmd, stock } from "../simClient";
+import { buildings, digs, gameClock, queryBuilding, sendCmd, state, stock } from "../simClient";
 import { Icon } from "./Icon";
+import { Button } from "./kit";
 
 const REFRESH_MS = 4000;
 
@@ -61,6 +62,37 @@ function SiteMaterials({ template, paid, hand, st }: { template: string; paid: b
       ) : (
         <div class="people-note">{paid ? "Хватило запасов склада" : "Запасов склада хватает"}</div>
       )}
+    </div>
+  );
+}
+
+// Game time to wait, in words: «3 ч», «2 дн.».
+const waitText = (min: number) => (min >= 1440 ? `${Math.ceil(min / 1440)} дн.` : `${Math.max(1, Math.ceil(min / 60))} ч`);
+
+// Levers for a site that still needs work: served first, and a толока (all adults come, production stands).
+function SiteLevers({ id }: { id: number }) {
+  const lv = state.value?.levers;
+  if (!lv) return null;
+  const first = lv.priority === id;
+  const wait = Math.max(0, lv.tolokaReady - gameClock.value);
+  const running = !!lv.toloka && gameClock.value < lv.toloka.until;
+  const act = (cmd: Parameters<typeof sendCmd>[0]) =>
+    void sendCmd(cmd).then((r) => {
+      if (!r.ok) flash(r.reason ?? "Не удалось");
+    });
+  return (
+    <div class="site-levers">
+      <Button aria-label="В первую очередь" aria-pressed={first} variant={first ? "primary" : "default"} onClick={() => act({ type: "setPriority", key: first ? null : id })}>
+        {first ? "Первая очередь: снять" : "В первую очередь"}
+      </Button>
+      <Button
+        aria-label="Толока"
+        title="Все взрослые идут на эту стройку до конца рабочего дня, прочие дела стоят"
+        disabled={wait > 0 || running}
+        onClick={() => act({ type: "callToloka", key: id })}
+      >
+        {running ? "Толока идёт" : wait > 0 ? `Толока (через ${waitText(wait)})` : "Толока"}
+      </Button>
     </div>
   );
 }
@@ -131,7 +163,7 @@ export function BuildingPanel() {
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const info = useResidents(id, shown && b?.state === "active");
   if (!b || !t || !shown) return null;
-  const queued = b.state === "active" ? null : queuedLabel(gameClock.value); // «начнут в 07:00» outside work hours
+  const queued = b.state === "active" ? null : queuedLabel(gameClock.value, state.value?.levers); // «начнут в 07:00» outside work hours
   const status =
     (b.state === "active" ? "Готово" : b.state === "building" ? `Строится ${Math.floor((b.done / b.labor) * 100)} %` : "В планах") + (queued ? ` · ${queued}` : "");
   const jobs = info?.kind === "workplace" ? info.capacity : t.jobs;
@@ -177,6 +209,7 @@ export function BuildingPanel() {
           {dig.r >= DIG.maxRadius - 1e-6 && <div class="prod-warn">Раскоп завершён</div>}
         </div>
       )}
+      {(b.state !== "active" || !!b.upgrade) && <SiteLevers id={b.id} />}
       {b.state !== "active" && <SiteMaterials template={b.template} paid={b.paid} hand={b.hand} st={stock.value} />}
       {b.upgrade && <div class="people-note">Перестраивается: {Math.floor((b.upgrade.done / b.upgrade.labor) * 100)} %</div>}
       {info?.kind === "house" && (

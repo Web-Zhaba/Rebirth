@@ -3,7 +3,8 @@ import { isCleared } from "./clearing";
 import { assignFields, expectedKg, FIELD, idleGumnos, FISH, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
 import { covers, SERVICE, servicesIn } from "./services";
-import { WORK_END, WORK_START, workableEdges } from "./roads";
+import { workableEdges } from "./roads";
+import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
 import { CELL_SIZE } from "./zones";
@@ -361,7 +362,7 @@ export const forageKg = (s: ArtelState): number => idleResidents(s).size * forag
 export const MIN_ARTEL_SHARE = 0.2;
 export const MIN_ARTEL_FLOOR = 3;
 
-type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock"> & { clearings?: Clearing[] };
+type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock"> & { clearings?: Clearing[]; levers?: Levers };
 
 // The construction artel: every adult without a regular job, plus farmers while the land has no work
 // for them and the workers of workshops without inputs. While construction work exists it has at least
@@ -380,12 +381,14 @@ export function artel(s: ArtelState): { hands: number; drafted: number; employed
 }
 
 export const builderCount = (s: ArtelState): number => {
+  if (tolokaActive(s.levers, s.gameMinutes)) return countResidents(s.residents, s.gameMinutes).adults; // толока: every adult
   const a = artel(s);
   return a.hands + a.drafted;
 };
 
 // Share of the work that is done at the workplaces while some of their workers are drafted.
 export function productionScale(s: ArtelState): number {
+  if (tolokaActive(s.levers, s.gameMinutes)) return 0; // everybody is at the site
   const a = artel(s);
   return a.employed > 0 ? 1 - a.drafted / a.employed : 1;
 }
@@ -395,7 +398,7 @@ export function productionScale(s: ArtelState): number {
 // counts in full: the whole yield), otherwise next year's (the full yield of every field a gumno works).
 // need = today's consumption x YEAR_DAYS. 0 below 90 % of the need, 1 from 120 %.
 export function foodOutlook(s: ArtelState & { households: SimState["households"] }): number {
-  const need = foodPerDay(s.residents, s.gameMinutes);
+  const need = foodPerDay(s.residents, s.gameMinutes, s.levers);
   if (need <= 0) return 1;
   const cal = calendar(s.gameMinutes);
   const days = YEAR_DAYS;
@@ -411,15 +414,15 @@ export function foodOutlook(s: ArtelState & { households: SimState["households"]
   const fishers = new Map<number, number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) fishers.set(r.job, (fishers.get(r.job) ?? 0) + 1);
   let daily = 0;
-  for (const [id, n] of fishers) if (s.buildings[id]?.template === "fisher" && s.buildings[id].state === "active") daily += n * FISH.kgHour * (WORK_END - WORK_START) * (cal.season === 3 ? FISH.winter : 1);
+  for (const [id, n] of fishers) if (s.buildings[id]?.template === "fisher" && s.buildings[id].state === "active") daily += n * FISH.kgHour * workLength(s.levers) * (cal.season === 3 ? FISH.winter : 1);
   projected += (daily + forageKg(s)) * days;
   return Math.min(1, Math.max(0, (projected / (need * days) - 0.9) / 0.3));
 }
 
 // Kg of food the town eats in a day.
-export function foodPerDay(residents: Record<number, Resident>, now: number): number {
+export function foodPerDay(residents: Record<number, Resident>, now: number, levers?: Levers): number {
   const c = countResidents(residents, now);
-  return c.adults * FOOD.adult + c.children * FOOD.child;
+  return (c.adults * FOOD.adult + c.children * FOOD.child) * rationFood(levers);
 }
 
 export function peopleStats(s: ArtelState & Pick<SimState, "households">): PeopleStats {

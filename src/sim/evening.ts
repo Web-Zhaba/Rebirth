@@ -1,11 +1,12 @@
 import { ADULT_MAX, ADULT_MIN, ageOf, buildNet, isFinishedHouse, lotFront, nearestNode, reach } from "./people";
 import { covers } from "./services";
+import { workHours, type Levers } from "./levers";
 import { calendar } from "./time";
 import type { SimState } from "./types";
 
 // Evenings (PLAN-pace.md section 7): home crafts and gatherings between the end of work and the night.
 export const EVENING = {
-  from: 19, // hour: the workday is over
+  from: 19, // hour: the normal workday is over (see workHours for the «страда»)
   to: 22, // hour: the night begins and the day summary is made
   waresPerAdultHour: 0.01, // pieces an adult at home makes
   winter: 2, // multiplier of the winter evening
@@ -13,7 +14,8 @@ export const EVENING = {
   tavernReach: 600, // m of road from a staffed tavern
 };
 
-export const isEvening = (hour: number): boolean => hour >= EVENING.from && hour < EVENING.to;
+// The evening starts when work ends (19:00, or 21:00 in the «страда»).
+export const isEvening = (hour: number, levers?: Levers): boolean => hour >= workHours(levers).end && hour < EVENING.to;
 
 // Adults living in a finished house (tent dwellers have no hearth to sit at).
 export function adultsAtHome(s: Pick<SimState, "residents" | "households" | "buildings" | "gameMinutes">): number {

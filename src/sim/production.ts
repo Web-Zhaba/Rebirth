@@ -1,4 +1,5 @@
-import { allocateLabor, BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE, type Materials } from "./buildings";
+import { leverMood } from "./levers";
+import { allocateLabor, BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE, type Materials, type SiteLever } from "./buildings";
 import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScale } from "./people";
@@ -116,10 +117,11 @@ export function payMaterials(
   crewHours = Infinity, // no crew limit: sites are served one after another
   clearings: readonly Clearing[] = [],
   first = false, // the clearings take their crews before the buildings (see clearingsFirst)
+  lever?: SiteLever,
 ): { buildings: Record<number, Building>; stock: Stock } {
   let out = buildings;
   let st = stock;
-  for (const id of allocateLabor(buildings, personHours, crewHours, clearings, first).keys()) {
+  for (const id of allocateLabor(buildings, personHours, crewHours, clearings, first, lever).keys()) {
     let b = buildings[id];
     // A finished house being upgraded is served like a building under construction.
     const up = b.state === "active" ? b.upgrade : undefined;
@@ -301,7 +303,7 @@ export function dailyEconomy(s: SimState): SimState {
   stock.food += Math.max(0, Math.min(forageKg(s), foodCapacity(s.buildings) - stock.food));
 
   // food
-  const need = foodPerDay(s.residents, now);
+  const need = foodPerDay(s.residents, now, s.levers);
   const eaten = Math.min(stock.food, need);
   stock.food -= eaten;
   const fed = need > 0 ? eaten / need : 1;
@@ -372,7 +374,7 @@ export function dailyEconomy(s: SimState): SimState {
       return age >= SERVICE.schoolFrom && age < SERVICE.schoolTo;
     });
     const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) : 0;
-    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless));
+    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers)));
     households[h.id] = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep };
   }
 
@@ -415,7 +417,7 @@ export const GOOD: Record<string, keyof Stock> = {
 };
 
 export function economyStats(s: SimState): EconomyStats {
-  const need = foodPerDay(s.residents, s.gameMinutes);
+  const need = foodPerDay(s.residents, s.gameMinutes, s.levers);
   const yesterday: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
   for (const [key, n] of Object.entries(s.prod.yesterday)) {
     const b = s.buildings[Number(key)];

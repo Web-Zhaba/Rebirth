@@ -22,7 +22,7 @@ export function etaText(personHours: number): string {
   if (!s) return "";
   if (hands <= 0) return "некому строить";
   if (speed.value === 0) return `${n1(personHours / hands)} ч работы, время стоит`;
-  const ms = etaRealMs(personHours, hands, s.gameMinutes, speed.value);
+  const ms = etaRealMs(personHours, hands, s.gameMinutes, speed.value, s.levers);
   return Number.isFinite(ms) ? `${formatReal(ms)} (${hands} стр.)` : "очень долго";
 }
 
