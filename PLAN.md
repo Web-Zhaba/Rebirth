@@ -137,7 +137,7 @@ Immigrants bring 60 days of their own food.
 12 t stone and 20 wares; a house costs 26 person-h and 15 m³ logs, 1.5 m³ planks, 1 t stone (big house 40
 person-h); farm 50, woodcutter 24, sawpit 30 person-h; woodcutters cut 0.4 m³ per hour × PACE × forest share;
 paths 0.1 person-h per metre; sowing runs 4 days into summer at half credit. Harness at 1×: first house 0:01,
-first planks 0:06, 5 houses 0:20, 10 houses 0:39, first harvest 1:15, 100 residents 2:21, a feed event every 55 s.
+first planks 0:06, 5 houses 0:21, 10 houses 0:43, first harvest 1:15, 100 residents 1:57, a notice every 37 s.
 
 **Player-placed buildings** (new category `placed`; lots beside built roads, w × d cells like
 grown buildings; painted zone under them is cleared; never removed by zone changes, only

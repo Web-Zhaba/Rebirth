@@ -165,20 +165,27 @@ it("pacing harness", async () => {
     { label: "First harvest finished", hit: () => st.chronicle.some((e) => e.kind === "harvest") },
   ];
 
-  // Feed events that give the player something to watch or decide (built, arrival, goal, unlock, event): seen once each,
-  // stamped with the real time (speed 1x) they appeared. «Events per minute» is their count over a stretch of real time.
-  const FEED = new Set<string>(["built", "arrival", "goal", "unlock", "event"]);
+  // Feed events: each one becomes a notice on the player's screen (toasts show every kind). The player's own orders
+  // are left out. Seen once each, stamped with the real time (speed 1x) they appeared.
+  const isNotice = (kind: string) => kind !== "order";
   const seen = new Set<string>();
   const feedAt: number[] = [];
+  // Quiet stretches: real time with no new notice and no event card waiting for an answer (an open card is
+  // something to decide). Each one ends at the next notice.
+  const quiet: number[] = [];
+  let quietSince = 0;
   let planksMade = false;
   const watch = () => {
     for (const e of st.events) {
       const key = `${e.at}|${e.kind}|${e.text}`;
-      if (FEED.has(e.kind) && !seen.has(key)) {
+      if (isNotice(e.kind) && !seen.has(key)) {
         seen.add(key);
         feedAt.push(now - T0);
+        quiet.push(now - T0 - quietSince);
+        quietSince = now - T0;
       }
     }
+    if (st.pending) quietSince = now - T0;
     // planks are made when a sawpit has output (the houses may take them in the same tick, so the stock need not rise)
     const full = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
     if (Object.values(full.buildings).some((b) => b.template === "sawpit" && ((full.prod.today[b.id] ?? 0) > 0 || (full.prod.yesterday[b.id] ?? 0) > 0))) planksMade = true;
@@ -198,6 +205,11 @@ it("pacing harness", async () => {
       const from = roadEnd;
       await extendRoad(roadEnd + 50);
       await paint(`residential zone ${from}-${roadEnd} m`, "res", (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
+    }
+    // Logs run short while sites wait: one more woodcutter per five houses (a sensible player feeds the building sites).
+    const cutters = Object.values(st.buildings).filter((b) => b.template === "woodcutter").length;
+    if (done.size === steps.length && st.stock.logs < BUILDINGS.izba.materials.logs && cutters > 0 && cutters < 1 + Math.floor(houses() / 5)) {
+      await place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 });
     }
     // A house stands empty and there are wares to pay: call settlers (the wares of the founding cart pay for two calls).
     if (st.stock.wares >= 10 && dayOf(st.gameMinutes) > lastCallDay) {
@@ -226,7 +238,7 @@ it("pacing harness", async () => {
 
   const rows = marks.map((m) => `| ${m.label} | ${m.at ? hm(m.at.ms) : "—"} | ${m.at ? m.at.day : "—"} | ${m.at ? m.at.pop : "—"} |`);
   const cal = calendar(st.gameMinutes);
-  const gaps = feedAt.slice(1).map((t, i) => t - feedAt[i]);
+  const gaps = quiet.slice(1);
   const span = feedAt.length > 1 ? feedAt[feedAt.length - 1] - feedAt[0] : 0;
   const perMin = (a: number, b: number) => (feedAt.filter((t) => t >= a && t < b).length / ((b - a) / 60_000)).toFixed(2);
   const out = [
@@ -234,7 +246,7 @@ it("pacing harness", async () => {
     "|---|---|---|---|",
     ...rows,
     "",
-    `Feed events (built/arrival/goal/unlock/event): ${feedAt.length} in ${hm(span)} -> mean gap ${gaps.length ? Math.round(span / gaps.length / 1000) : "—"} s, longest ${gaps.length ? Math.round(Math.max(...gaps) / 1000) : "—"} s; per minute: 0-30 min ${perMin(0, 1_800_000)}, 30-60 min ${perMin(1_800_000, 3_600_000)}, 1-2 h ${perMin(3_600_000, 7_200_000)}.`,
+    `Notices (every feed event but the player's orders): ${feedAt.length} in ${hm(span)} -> mean gap ${feedAt.length > 1 ? Math.round(span / (feedAt.length - 1) / 1000) : "—"} s; quiet stretches (no notice, no card to answer): ${gaps.length ? Math.round((100 * gaps.filter((g) => g <= 60_000).length) / gaps.length) : "—"} % of gaps <= 60 s, 95th percentile ${gaps.length ? Math.round([...gaps].sort((a, b) => a - b)[Math.floor(gaps.length * 0.95)] / 1000) : "—"} s, longest ${gaps.length ? Math.round(Math.max(...gaps) / 1000) : "—"} s; per minute: 0-30 min ${perMin(0, 1_800_000)}, 30-60 min ${perMin(1_800_000, 3_600_000)}, 1-2 h ${perMin(3_600_000, 7_200_000)}.`,
     "",
     `End: game day ${dayOf(st.gameMinutes) + 1} (year ${cal.year}), ${houses()} houses finished, population ${st.people.pop}, road ${roadEnd} m.`,
     "",

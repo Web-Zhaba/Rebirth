@@ -14,11 +14,11 @@ import type { ChoiceOption, SimState, TownChoice } from "./types";
 // the kinds whose condition holds; two options, each with its effect in the text. An event nobody answers resolves with
 // its safe option one game day later (offline too). Everything the answer does uses the usual mechanisms.
 
-export const EVENT_GAP = { min: DAY_MIN / 2, span: DAY_MIN / 2 }; // game minutes between an event and the next draw (half a day to a day)
-export const FIRST_EVENT = DAY_MIN; // a new town: no event on the first day
+export const EVENT_GAP = { min: DAY_MIN, span: DAY_MIN }; // game minutes between an event and the next draw
+export const FIRST_EVENT = 3 * DAY_MIN; // a new town: no event for the first three days
 export const ANSWER_WITHIN = DAY_MIN; // an unanswered event resolves with the safe option after this long
 export const RETRY = 360; // nothing fit: look again in six game hours
-export const COOLDOWN = 2 * DAY_MIN; // the same kind does not come back sooner
+export const COOLDOWN = 4 * DAY_MIN; // the same kind does not come back sooner
 const HOURS = { from: 7, to: 21 }; // events are put during the day only
 
 export const AUTO = " (никто не ответил)"; // ends the outcome line of an event nobody answered
