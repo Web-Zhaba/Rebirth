@@ -460,7 +460,7 @@ function survives(b: Building, edges: RoadEdge[], roads: RoadGraph, hash: Map<nu
   for (const c of near(hash, b.lot.cx, b.lot.cy)) {
     if (!inLot(b, c.cx, c.cy, LOT_MARGIN)) continue;
     total++;
-    if (!c.block && c.zone === b.zone) good++;
+    if ((!c.block || c.block === "pending") && c.zone === b.zone) good++; // unsampled ground is not a reason to pull down
   }
   return total > 0 && good / total >= KEEP_SHARE - EPS;
 }

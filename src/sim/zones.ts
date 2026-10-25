@@ -292,7 +292,8 @@ export function regenerateCells(
     if (c.depth > 0 && !c.block && prev.block) c.block = prev.block;
   }
 
-  // Zones follow the nearest previously zoned cell within 4 m.
+  // Zones follow the nearest previously zoned cell within 4 m. A cell still waiting for its terrain sample keeps the
+  // zone too: a road that splits a street moves its cells onto new sample points, and that must not erase the zone.
   const zoned = new Map<number, ZoneCell[]>();
   for (const o of oldCells) {
     if (o.zone === "none") continue;
@@ -303,7 +304,7 @@ export function regenerateCells(
   }
   if (zoned.size > 0) {
     for (const c of cells) {
-      if (c.block) continue;
+      if (c.block && c.block !== "pending") continue;
       const bx = Math.floor(c.cx / 8);
       const by = Math.floor(c.cy / 8);
       let best = 4 + EPS;

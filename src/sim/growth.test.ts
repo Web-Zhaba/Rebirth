@@ -317,6 +317,16 @@ describe("reconcile", () => {
     const cells = regenerateCells(g, s.zones.cells, [], landFor(g));
     expect(reconcile(s.buildings, g, cells)).toBe(s.buildings);
   });
+  // The handler regenerates cells with the terrain it has; cells that moved wait for their sample.
+  it("keeps it and its zone while the moved cells wait for terrain", () => {
+    const s = grown();
+    const g = road(s.roads, [[61, -100], [61, 100]]); // off the 8 m grid: the cells of the zoned half move
+    const cells = regenerateCells(g, s.zones.cells, [], s.zones.terrain);
+    expect(reconcile(s.buildings, g, cells)).toBe(s.buildings);
+    const sampled = regenerateCells(g, cells, [], landFor(g)); // the samples arrive
+    expect(sampled.filter((c) => c.zone === "res").length).toBe(s.zones.cells.filter((c) => c.zone === "res").length);
+    expect(reconcile(s.buildings, g, sampled)).toBe(s.buildings);
+  });
 });
 
 describe("determinism", () => {
