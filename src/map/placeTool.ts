@@ -1,3 +1,4 @@
+import { play } from "../ui/sound";
 import type maplibregl from "maplibre-gl";
 import { effect, untracked } from "@preact/signals";
 import { BUILDINGS, type BuildingTemplate } from "../sim/buildings";
@@ -304,6 +305,7 @@ ${costText(t.labor, t.materials)}` };
         }
         return sendCmd({ type: "placeBuilding", template: id, edge: v.edge, side: v.side, i: v.i, site }).then((r) => {
           if (!r.ok) flash(r.reason ?? "Не удалось поставить здание");
+          else play("place");
         });
       })
       .catch(() => flash("Нет данных о местности"))

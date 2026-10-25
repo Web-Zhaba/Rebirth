@@ -11,6 +11,8 @@ import { FoundCity } from "./FoundCity";
 import { HotkeysDialog } from "./HotkeysDialog";
 import { Hud } from "./Hud";
 import { NotebookHost } from "./NotebookHost";
+import { SettingsDialog } from "./SettingsDialog";
+import { installClickSound } from "./sound";
 import { TerrainInspector } from "./TerrainInspector";
 import { trackLayout } from "./layout";
 import "./layout.css";
@@ -19,6 +21,7 @@ import { TownPanel } from "./TownPanel";
 export function App({ map }: { map: maplibregl.Map }) {
   const c = city.value;
   useEffect(() => (c ? trackLayout() : undefined), [!!c]);
+  useEffect(installClickSound, []);
   return (
     <>
       {c ? <Hud city={c} map={map} /> : <FoundCity map={map} />}
@@ -32,6 +35,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       <AwayNotice />
       <AboutDialog />
       <HotkeysDialog />
+      <SettingsDialog />
     </>
   );
 }

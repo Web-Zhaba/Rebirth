@@ -2,6 +2,7 @@ import { flyOrJump } from "../map/motion";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { frame, pendingChoice, sendCmd, setSpeed, speed } from "../simClient";
+import { play } from "./sound";
 import { Icon } from "./Icon";
 import { Button, Panel } from "./kit";
 import { hoursLeft } from "./toastModel";
@@ -34,6 +35,7 @@ export function EventCard({ map }: { map: maplibregl.Map }) {
   // Auto-pause when a new event arrives if autopause is enabled
   useEffect(() => {
     if (!c) return;
+    if (lastPausedId.current !== c.id) play("notify");
     if (autopause && lastPausedId.current !== c.id) {
       lastPausedId.current = c.id;
       if (speed.peek() > 0) {

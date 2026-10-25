@@ -1,3 +1,4 @@
+import { play } from "../ui/sound";
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
@@ -142,6 +143,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
       inflight--;
       if (inflight === 0 && !dragging) paintPreview.value = null; // the snapshot already arrived
       if (!r.ok) flash(r.reason ?? "Не удалось разметить");
+      else play("place");
     });
   };
 
@@ -201,6 +203,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
       if (field) {
         void sendCmd({ type: "removeField", id: field.id }).then((r) => {
           if (!r.ok) flash(r.reason ?? "Не удалось убрать поле");
+          else play("place");
         });
         return;
       }
@@ -208,6 +211,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
       if (clearing) {
         void sendCmd({ type: "removeClearing", id: clearing.id }).then((r) => {
           if (!r.ok) flash(r.reason ?? "Не удалось убрать вырубку");
+          else play("place");
         });
         return;
       }
@@ -353,6 +357,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
         const cmd = clearing ? ({ type: "addClearing", pts: poly, forest: a.forest } as const) : ({ type: "addField", pts: poly } as const);
         return sendCmd(cmd).then((r) => {
           if (!r.ok) flash(r.reason ?? (clearing ? "Не удалось создать вырубку" : "Не удалось создать поле"));
+          else play("place");
           return r.ok;
         });
       })

@@ -1,3 +1,4 @@
+import { play } from "../ui/sound";
 import { signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
@@ -20,6 +21,7 @@ export const toolMsg = signal<string | null>(null);
 
 let msgTimer = 0;
 export function flash(text: string): void {
+  play("error");
   toolMsg.value = text;
   clearTimeout(msgTimer);
   msgTimer = window.setTimeout(() => (toolMsg.value = null), 3500);
