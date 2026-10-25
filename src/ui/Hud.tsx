@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import type { City } from "../sim/types";
+import { GoalsTracker } from "./GoalsTracker";
 import { TopBar, Warnings } from "./TopBar";
 import { TownPanel } from "./TownPanel";
 
@@ -11,6 +12,7 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
       <div class="side-col">
         <Warnings />
         <TownPanel city={city} map={map} />
+        <GoalsTracker />
       </div>
     </>
   );

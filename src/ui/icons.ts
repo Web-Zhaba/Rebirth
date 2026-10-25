@@ -36,6 +36,7 @@ import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
+import PhLock from "~icons/ph/lock-simple-fill";
 import PhFootprints from "~icons/ph/footprints";
 import PhPause from "~icons/ph/pause-fill";
 import PhProhibit from "~icons/ph/prohibit";
@@ -58,6 +59,7 @@ export const ICONS = {
   trash: PhTrash,
   eraser: PhEraser,
   layerNone: PhProhibit,
+  lock: PhLock,
   traffic: PhFootprints,
   mood: PhSmiley,
   // Top bar (game-icons): people, goods, day phases

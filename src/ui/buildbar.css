@@ -174,3 +174,27 @@ kbd {
     width: 64px;
   }
 }
+
+/* Tools closed until a goal pays them: dimmed, a lock in the corner, the goal in the hover card. */
+.build-btn.locked {
+  color: var(--pencil-faint);
+  cursor: not-allowed;
+}
+
+.build-btn.locked .icon:not(.bb-lock) {
+  opacity: 0.55;
+}
+
+.bb-lock {
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+  color: var(--ink-2);
+}
+
+.bc-lock {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-weight: 700;
+  color: var(--warn);
+}

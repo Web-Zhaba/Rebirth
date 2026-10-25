@@ -3,6 +3,7 @@ import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed }
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
+import { goalViews, lockReason } from "./goals";
 import { callBlock, callSettlers, callToloka, setPriority, setRations, setSchedule } from "./leverCmds";
 import { digInfos, recordFinds } from "./excavation";
 import { computeLife } from "./life";
@@ -41,7 +42,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), goalViews: goalViews(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -376,6 +377,8 @@ export class Handler {
           return reject("Некорректные клетки");
         }
         if (cmd.zone !== "none" && cmd.zone !== "res" && cmd.zone !== "craft" && cmd.zone !== "trade") return reject("Неизвестная зона");
+        const locked = cmd.zone === "none" ? null : lockReason(sim, cmd.zone);
+        if (locked) return reject(locked);
         zones = { ...z, cells: paintCells(z.cells, cmd.keys, cmd.zone), rev: z.rev + 1 };
       } else if (cmd.type === "addField") {
         const v = validateField(cmd.pts, roads, z.fields);
@@ -399,6 +402,8 @@ export class Handler {
       } else if (cmd.type === "placeBuilding") {
         const t = typeof cmd.template === "string" && Object.hasOwn(BUILDINGS, cmd.template) ? BUILDINGS[cmd.template] : null;
         if (!t || t.zone !== "placed") return reject("Это здание нельзя поставить");
+        const locked = lockReason(sim, t.id);
+        if (locked) return reject(locked);
         if (!Number.isInteger(cmd.edge) || !Number.isInteger(cmd.i) || (cmd.side !== 1 && cmd.side !== -1) || !validSite(cmd.site)) {
           return reject("Некорректное место");
         }

@@ -1,4 +1,5 @@
 import type { Levers } from "./levers";
+import type { GoalView } from "./goals";
 import type { Land } from "../world/landcover";
 
 export interface City {
@@ -142,7 +143,7 @@ export interface Household {
   mood: number; // 0..100
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order";
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock";
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -248,6 +249,15 @@ export interface ProdState {
   yesterday: Record<number, number>;
 }
 
+// Goals and unlocks (PLAN-pace.md section 9; sim/goals.ts holds the table).
+export interface GoalsState {
+  done: string[]; // goal ids paid, in the order they finished
+  unlocks: string[]; // unlock keys: template ids, "zone:craft", "zone:trade", "upgrade"
+  families: number; // free families owed by goals that wait for a vacant house
+  notebook: boolean; // the dig goal was paid: the notebook's first article prompt is out
+  feast: boolean; // the harvest goal was paid: P7 turns this into the harvest feast event
+}
+
 // A family that decided to come: the house is promised to them; the family itself is made on arrival.
 export interface Incoming {
   house: number; // building id of the promised house
@@ -276,6 +286,7 @@ export interface SimState extends PeopleState {
   landValue: Record<number, number>; // house id -> 0..100
   summary: DaySummary | null; // «Итоги дня» of the last 22:00
   levers: Levers; // player levers (P5)
+  goals: GoalsState; // goals and unlocks (P6)
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
@@ -344,6 +355,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
+  goalViews: GoalView[]; // the active goals with progress
   callBlock: string | null; // why a call for settlers cannot be made now, or null
 };
 

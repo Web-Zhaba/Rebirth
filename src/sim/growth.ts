@@ -1,4 +1,5 @@
 import { DIG, emptyFinds } from "./excavation";
+import { initialGoals, isUnlocked, zoneKey } from "./goals";
 import { emptyLevers } from "./levers";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, jobsOf } from "./fields";
@@ -33,7 +34,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "goals"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -55,6 +56,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     attract: 0,
     summary: null,
     levers: emptyLevers(),
+    goals: initialGoals(),
     ...f.people,
   };
 }
@@ -260,6 +262,8 @@ export function spawnBuildings(s: SimState): SimState {
   let cur = s;
   for (const zone of ZONE_ORDER) {
     if (cur.gameMinutes - cur.lastSpawn[zone] < SPAWN_INTERVAL) continue;
+    const key = zoneKey(zone);
+    if (key && !isUnlocked(cur.goals, key)) continue; // a zone still locked does not grow
     if (demand(cur)[zone] < 1) continue;
     const lots = findLots(cur, zone);
     if (lots.length === 0) continue;

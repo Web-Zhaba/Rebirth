@@ -329,3 +329,55 @@
   text-align: left;
   padding: 2px 0;
 }
+
+/* Goals tracker, under the town panel. */
+.goals {
+  flex: none;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.goals-title {
+  margin-bottom: var(--sp-1);
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.goals-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.goal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.goal-name {
+  font-weight: 700;
+}
+
+.goal-fig {
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.goal-reward {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--ok-text);
+}
+
+.goal-hint {
+  font-size: var(--fs-xs);
+  color: var(--warn);
+}
