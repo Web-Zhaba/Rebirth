@@ -1,5 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import "./notebook.css";
+import { Icon } from "./Icon";
+import type { IconName } from "./icons";
 import { formatDate, newestFirst, unseenCount, type Article, type ChronicleEntry, type Find } from "./notebookLogic";
 
 export type { Article, ChronicleEntry, Find } from "./notebookLogic";
@@ -21,7 +23,7 @@ const TABS: [Tab, string][] = [
   ["history", "История"],
   ["chronicle", "Летопись"],
 ];
-const KIND_ICON: Record<Find["kind"], string> = { poi: "◉", street: "≡", foundations: "▫" };
+const KIND_ICON: Record<Find["kind"], IconName> = { poi: "find", street: "street", foundations: "foundations" };
 
 export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpenChange }: NotebookProps) {
   const [tab, setTab] = useState<Tab>("finds");
@@ -42,7 +44,7 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
       >
-        <span class="notebook-icon">📖</span>
+        <Icon name="notebook" size={22} />
         {unseen > 0 && !open && <span class="notebook-badge">{unseen > 99 ? "99+" : unseen}</span>}
       </button>
       {open && (
@@ -69,7 +71,10 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
                 newestFirst(finds).map((f) => (
                   <div class="notebook-entry" key={f.id}>
                     <div class="notebook-entry-title">
-                      <span class="notebook-kind">{KIND_ICON[f.kind]}</span> {f.title}
+                      <span class="notebook-kind">
+                        <Icon name={KIND_ICON[f.kind]} size={16} />
+                      </span>{" "}
+                      {f.title}
                     </div>
                     {f.detail && <div class="notebook-text">{f.detail}</div>}
                     <div class="notebook-date">{formatDate(f.at)}</div>

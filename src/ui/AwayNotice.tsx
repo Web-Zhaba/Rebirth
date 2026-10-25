@@ -49,7 +49,7 @@ export function AwayNotice() {
           Прошло {Math.floor(mins / 60)} ч {mins % 60} мин, в игре — {duration(a.gameMinutes)}
         </div>
         <div class="offline-line">
-          Население: {a.popBefore} → {a.popAfter} ({signed(a.popAfter - a.popBefore)})
+          Население: с {a.popBefore} до {a.popAfter} ({signed(a.popAfter - a.popBefore)})
         </div>
         <div class="offline-line">
           Родилось {a.births}, умерло {a.deaths}, приехало {a.arrivals}, уехало {a.departures}

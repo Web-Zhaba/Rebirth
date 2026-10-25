@@ -9,6 +9,7 @@ import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
 import { flash, tool } from "../map/tools";
 import { buildings, digs, queryBuilding, sendCmd, stock } from "../simClient";
+import { Icon } from "./Icon";
 
 const REFRESH_MS = 4000;
 
@@ -152,7 +153,7 @@ export function BuildingPanel() {
   return (
     <div class="building-panel panel">
       <button class="close" aria-label="Закрыть" onClick={() => (selectedBuilding.value = null)}>
-        ×
+        <Icon name="close" size={16} />
       </button>
       <div class="building-name">{t.name}</div>
       <div>{status}</div>
@@ -236,6 +237,7 @@ export function BuildingPanel() {
         </div>
       )}
       <button class="demolish" onClick={onDemolish}>
+        <Icon name="trash" size={16} />
         Снести
       </button>
     </div>

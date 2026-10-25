@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "jsx": "react-jsx",
     "jsxImportSource": "preact",
-    "types": ["vite/client"]
+    "types": ["vite/client", "unplugin-icons/types/preact"]
   },
   "include": ["src"]
 }

@@ -8,6 +8,7 @@ import { massText } from "../sim/units";
 import { SERVICE_LIST } from "../sim/services";
 import { OVERLAYS, overlay, tool, ZONE_COLORS, type Overlay } from "../map/tools";
 import { economy, events, frame, incomingCount, people, reset, roads, services, setSpeed, speed, state, stock, zones } from "../simClient";
+import { Icon } from "./Icon";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -161,6 +162,7 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
         </div>
       )}
       <label class="layers">
+        <Icon name="layers" size={16} />
         Слои
         <select value={overlay.value} onChange={(e) => (overlay.value = (e.currentTarget as HTMLSelectElement).value as Overlay)}>
           {OVERLAYS.map((o) => (
@@ -210,7 +212,7 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
       )}
       {cut.size > 0 && (
         <div class="hud-warn">
-          Отрезано от лагеря: {cut.size} {plural(cut.size)} дорог. Их не построят — ведите дорогу от лагеря или от готовой дороги.{" "}
+          <Icon name="warning" size={16} /> Отрезано от лагеря: {cut.size} {plural(cut.size)} дорог. Их не построят — ведите дорогу от лагеря или от готовой дороги.{" "}
           <button class="link" onClick={() => map.flyTo({ center: [city.lng, city.lat], zoom: Math.max(map.getZoom(), 16) })}>
             К лагерю
           </button>

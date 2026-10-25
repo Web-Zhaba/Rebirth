@@ -1,8 +1,34 @@
-import { PLACED_COLORS, toolMsg, tool, type Tool } from "../map/tools";
+import { toolMsg, tool, type Tool } from "../map/tools";
 import type { GrowthWhy } from "../sim/types";
 import { people } from "../simClient";
+import { Icon } from "./Icon";
+import type { IconName } from "./icons";
 
-const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: string }[] }[] = [
+const TOOL_ICON: Record<Tool, IconName> = {
+  path: "path",
+  dirt: "dirt",
+  bulldoze: "bulldoze",
+  res: "res",
+  craft: "craft",
+  trade: "trade",
+  field: "field",
+  clearing: "clearing",
+  clear: "eraser",
+  gumno: "gumno",
+  woodcutter: "woodcutter",
+  sawpit: "sawpit",
+  quarry: "quarry",
+  fisher: "fisher",
+  barn: "barn",
+  well: "well",
+  market: "market",
+  chapel: "chapel",
+  school: "school",
+  healer: "healer",
+  dig: "dig",
+};
+
+const GROUPS: { title: string; buttons: { id: Tool; label: string }[] }[] = [
   {
     title: "Дороги",
     buttons: [
@@ -14,34 +40,34 @@ const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: strin
   {
     title: "Зоны",
     buttons: [
-      { id: "res", label: "Жильё", color: "#6fb35a" },
-      { id: "craft", label: "Ремесло", color: "#d99a3b" },
-      { id: "trade", label: "Торговля", color: "#4f8fd0" },
-      { id: "field", label: "Поле", color: "#d9c26a" },
-      { id: "clearing", label: "Вырубка", color: "#a3c088" },
+      { id: "res", label: "Жильё" },
+      { id: "craft", label: "Ремесло" },
+      { id: "trade", label: "Торговля" },
+      { id: "field", label: "Поле" },
+      { id: "clearing", label: "Вырубка" },
       { id: "clear", label: "Снять зону" },
     ],
   },
   {
     title: "Постройки",
     buttons: [
-      { id: "gumno", label: "Гумно", color: PLACED_COLORS.gumno },
-      { id: "woodcutter", label: "Лесоруб", color: PLACED_COLORS.woodcutter },
-      { id: "sawpit", label: "Пильня", color: PLACED_COLORS.sawpit },
-      { id: "quarry", label: "Каменоломня", color: PLACED_COLORS.quarry },
-      { id: "fisher", label: "Рыбак", color: PLACED_COLORS.fisher },
-      { id: "barn", label: "Амбар", color: PLACED_COLORS.barn },
+      { id: "gumno", label: "Гумно" },
+      { id: "woodcutter", label: "Лесоруб" },
+      { id: "sawpit", label: "Пильня" },
+      { id: "quarry", label: "Каменоломня" },
+      { id: "fisher", label: "Рыбак" },
+      { id: "barn", label: "Амбар" },
     ],
   },
   {
     title: "Службы",
     buttons: [
-      { id: "well", label: "Колодец", color: PLACED_COLORS.well },
-      { id: "market", label: "Рынок", color: PLACED_COLORS.market },
-      { id: "chapel", label: "Часовня", color: PLACED_COLORS.chapel },
-      { id: "school", label: "Школа", color: PLACED_COLORS.school },
-      { id: "healer", label: "Лекарь", color: PLACED_COLORS.healer },
-      { id: "dig", label: "Раскоп", color: PLACED_COLORS.dig },
+      { id: "well", label: "Колодец" },
+      { id: "market", label: "Рынок" },
+      { id: "chapel", label: "Часовня" },
+      { id: "school", label: "Школа" },
+      { id: "healer", label: "Лекарь" },
+      { id: "dig", label: "Раскоп" },
     ],
   },
 ];
@@ -103,7 +129,7 @@ export function RoadTools() {
           <div class="road-buttons" key={g.title} role="group" aria-label={g.title}>
             {g.buttons.map((b) => (
               <button key={b.id} class={active === b.id ? "active" : ""} onClick={() => (tool.value = active === b.id ? null : b.id)}>
-                {b.color && <span class="swatch" style={{ background: b.color }} />}
+                <Icon name={TOOL_ICON[b.id]} size={16} />
                 {b.label}
               </button>
             ))}
