@@ -135,7 +135,7 @@ export const remainingClearing = (c: Clearing): number => Math.max(0, c.labor - 
 // than making them by hand on the sites. With logs in stock they come after, so they never delay the first houses.
 export const clearingsFirst = (stock: Stock): boolean => stock.logs < BUILDINGS.izba.materials.logs;
 
-// Splits `personHours` between the open sites: buildings by id and clearings, the clearings first or last (`first`).
+// Splits `personHours` between the open sites: buildings (workplaces first, then houses, each by id) and clearings, the clearings first or last (`first`).
 // Each takes at most one crew's work (`crewHours`), in that order; what is left goes to the same sites in the same
 // order while they still have work, so labor is never wasted.
 // Player levers that reorder the work: `priority` goes to the very front of both rounds; `focus` (толока) takes all the
@@ -149,10 +149,13 @@ function allocate(buildings: Record<number, Building>, clearings: readonly Clear
   const sites: [number, number][] = []; // key (building id, or -id of a clearing), remaining
   const fell = clearings.filter((c) => remainingClearing(c) > EPS).map((c): [number, number] => [-c.id, remainingClearing(c)]);
   if (first) sites.push(...fell);
-  for (const key of Object.keys(buildings)) {
-    const rem = remainingLabor(buildings[Number(key)]);
-    if (rem > EPS) sites.push([Number(key), rem]);
-  }
+  // Workplaces before houses (each in id order): a workshop or farm planned after a queue of houses is not left to the end.
+  for (const homes of [false, true])
+    for (const key of Object.keys(buildings)) {
+      const b = buildings[Number(key)];
+      const rem = remainingLabor(b);
+      if (rem > EPS && (b.zone === "res") === homes) sites.push([Number(key), rem]);
+    }
   if (!first) sites.push(...fell);
   const pi = lever?.priority != null ? sites.findIndex(([id]) => id === lever.priority) : -1;
   if (pi > 0) sites.unshift(...sites.splice(pi, 1));

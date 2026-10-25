@@ -1,6 +1,6 @@
 import { leverMood } from "./levers";
 import { allocateLabor, BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE, type Materials, type SiteLever } from "./buildings";
-import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, windowAt, workOf } from "./fields";
+import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
 import { buildingPriority } from "./jobs";
@@ -15,7 +15,7 @@ export const PACE = 4;
 
 // Rates are per worker-hour during work hours.
 export const RATE = {
-  logs: 0.25, // m3, times PACE and the forest share
+  logs: 0.4, // m3, times PACE and the forest share
   planks: 0.02, // m3, times PACE
   logsPerPlank: 1.6, // m3 of logs per m3 of planks
   stone: 0.15, // t, times PACE and (0.4 + 0.6 rock)
@@ -31,6 +31,8 @@ export const RATE = {
   householdsPerTrader: 12,
   moodStep: 0.25,
 };
+// A harvest window that closes with at most this share of the reaped grain still standing counts as a finished harvest.
+export const HARVEST_OK = 0.25;
 // Hours of hand work per unit when the stock lacks the materials of a building (already divided by PACE).
 export const HAND_HOURS = { logs: 4, planks: 12, stone: 2 };
 
@@ -243,7 +245,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         });
         const total = rem.reduce((m, r) => m + r, 0);
         if (total <= EPS) break;
-        const use = Math.min(h, total);
+        const use = Math.min(win === "sowing" ? h * sowCredit(s.gameMinutes) : h, total); // sowing progress; late hours count less
         if (fields === s.prod.fields) fields = { ...fields };
         mine.forEach((f, i) => {
           const part = (use * rem[i]) / total;
@@ -385,12 +387,19 @@ export function dailyEconomy(s: SimState): SimState {
   if (over && !flags.closed) {
     const assign = assignFields(s.zones.fields, s.buildings);
     let lost = 0;
+    let got = 0;
     for (const f of s.zones.fields) {
       if (!assign.has(f.id)) continue;
       const w = workOf(fields, f.id, cal.year);
       lost += Math.max(0, expectedKg(f, w) - w.reaped);
+      got += w.reaped;
     }
     flags = { ...flags, closed: true };
+    // Most of the grain in the barn counts as a harvest (the goal and the chronicle must not wait a year for the last sheaves).
+    if (flags.harvest && !flags.done && got > 0 && lost <= HARVEST_OK * got) {
+      flags = { ...flags, done: true };
+      events = say(events, now, "farm", `Урожай собран: ${massText(got)}`);
+    }
     if (lost >= 1) events = say(events, now, "farm", `Зерно осталось в поле и пропало: ${massText(lost)}`);
   }
   // progress of fields that are gone or of earlier years is dropped

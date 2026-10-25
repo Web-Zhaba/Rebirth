@@ -6,6 +6,7 @@ import {
   cutOffEdges,
   emptyRoads,
   removeEdge,
+  ROAD_KINDS,
   segmentCost,
   snapPoint,
   workableEdges,
@@ -154,7 +155,7 @@ describe("segmentCost", () => {
   it("applies land multipliers", () => {
     expect(segmentCost(flat(["meadow", "meadow"]), "dirt").labor).toBeCloseTo(20);
     expect(segmentCost(flat(["forest", "sand"]), "dirt").labor).toBeCloseTo(10 * 3 + 10 * 1.2);
-    expect(segmentCost(flat(["wetland", "rock", "ice"]), "path").labor).toBeCloseTo(0.2 * 10 * (2.5 + 2 + 3));
+    expect(segmentCost(flat(["wetland", "rock", "ice"]), "path").labor).toBeCloseTo(ROAD_KINDS.path.labor * 10 * (2.5 + 2 + 3));
   });
   it("adds a grade factor per piece", () => {
     const p = flat(["meadow", "meadow"]);

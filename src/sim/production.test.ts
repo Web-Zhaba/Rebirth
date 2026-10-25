@@ -6,7 +6,7 @@ import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { Handler, type Storage } from "./handler";
 import { builderCount, dailyStep, foodPerDay, immigrationStep, peopleStats, queryBuilding, RATES } from "./people";
-import { dailyEconomy, economyStats, HAND_HOURS, handHours, PACE, payMaterials, produceStep } from "./production";
+import { dailyEconomy, economyStats, HAND_HOURS, handHours, PACE, payMaterials, produceStep, RATE } from "./production";
 import type { FromWorker } from "./protocol";
 import { massText } from "./units";
 import { addRoad, emptyRoads } from "./roads";
@@ -191,15 +191,15 @@ describe("food", () => {
     s = work(s);
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.prod.today).toEqual({});
-    expect(d.prod.yesterday[1]).toBeCloseTo(2 * 0.25 * PACE);
-    expect(economyStats(d).yesterday.logs).toBeCloseTo(2);
+    expect(d.prod.yesterday[1]).toBeCloseTo(2 * RATE.logs * PACE);
+    expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * RATE.logs * PACE);
   });
 });
 
 describe("producers", () => {
   const staffed = (template: string, n: number, site?: Site, gm = NOON) => folk(town([bld(1, template, 50, "active", site)], { gm }), [{ home: null, adults: n, job: 1 }]);
-  it("woodcutter: 0.25 m3 per hour x PACE x forest share", () => {
-    expect(work(staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 })).stock.logs).toBeCloseTo(2 * 0.25 * PACE * 0.6);
+  it("woodcutter: RATE.logs m3 per hour x PACE x forest share", () => {
+    expect(work(staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 })).stock.logs).toBeCloseTo(2 * RATE.logs * PACE * 0.6);
     expect(work(staffed("woodcutter", 2, NO_SITE)).stock.logs).toBe(0);
   });
   it("quarry: 0.15 t per hour x PACE x (0.4 + 0.6 rock)", () => {
@@ -327,7 +327,7 @@ describe("fields", () => {
       return { ...s, residents: f.residents, households: f.households, buildings: { ...s.buildings, 9: bld(9, "izba", 700, "planned") } };
     };
     expect(builderCount(mk(SPRING_NOON))).toBe(3); // 2 jobless + 1 drafted: the artel has at least 3
-    expect(builderCount(mk(NOON))).toBe(6); // summer: the land has no work
+    expect(builderCount(mk(at(14, 12)))).toBe(6); // mid-summer, after the late sowing days: the land has no work
     expect(builderCount(mk(HARVEST_NOON))).toBe(6); // nothing was sown, so nothing to reap
     const sown = (s: SimState) => ({ ...s, prod: { ...s.prod, fields: { 1: { year: 1, sowH: 500, harvH: 0, reaped: 0 } } } });
     expect(builderCount(sown(mk(HARVEST_NOON)))).toBe(3);
@@ -335,7 +335,7 @@ describe("fields", () => {
     expect(builderCount({ ...reaped, prod: { ...reaped.prod, fields: { 1: { year: 1, sowH: 500, harvH: 2000, reaped: 4000 } } } })).toBe(6); // harvest done
     expect(builderCount(mk(at(22, 12)))).toBe(6); // after the first 45 days of autumn
     expect(builderCount(mk(WINTER_NOON))).toBe(6);
-    expect(peopleStats(mk(NOON)).builders).toBe(6);
+    expect(peopleStats(mk(at(14, 12))).builders).toBe(6);
     expect(peopleStats(mk(SPRING_NOON)).builders).toBe(3);
   });
   it("gumno jobs: one per 2.5 ha, at most 16, none without fields", () => {

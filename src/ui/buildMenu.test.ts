@@ -24,6 +24,6 @@ describe("build menu", () => {
     expect(i.materials.map((m) => m.text)).toEqual(["2 м³", "0,5 м³", "3 т"]);
     expect(i.reach).toContain("150");
     expect(toolInfo("fisher").site).toContain("воды");
-    expect(toolInfo("path").labor).toContain("0,2");
+    expect(toolInfo("path").labor).toContain("0,1");
   });
 });
