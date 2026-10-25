@@ -64,6 +64,8 @@ export const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: "traffic", label: "движение" },
 ];
 export const overlay = signal<Overlay>("none");
+// House tints of the overlays: covered / not covered, and the bad-mid-good ramp of the value and mood layers; also the legend keys.
+export const OVERLAY_COLORS = { good: "#3fae5a", mid: "#e6c84a", bad: "#d0453d", neutral: "#b9b9ad" };
 // Traffic overlay ramp: commuters per road edge per day -> colour and line width (px); also the HUD legend.
 export const TRAFFIC_STOPS: { n: number; color: string; width: number }[] = [
   { n: 1, color: "#f3e08a", width: 3 },

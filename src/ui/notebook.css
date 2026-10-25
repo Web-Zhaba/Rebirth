@@ -2,7 +2,7 @@
    Shares the column with the building panel (only one is open) and stays above the bottom toolbar. */
 .notebook {
   position: absolute;
-  top: 112px;
+  top: 176px;
   right: 10px;
   display: flex;
   flex-direction: column;

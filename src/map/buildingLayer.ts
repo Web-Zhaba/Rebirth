@@ -5,7 +5,7 @@ import type { Building, ClientState } from "../sim/types";
 import { pointInPolygon } from "../sim/zones";
 import { buildings, frame, state } from "../simClient";
 import type { Frame } from "../world/frame";
-import { BUILDING_COLORS, overlay, PLACED_COLORS, tool, type Overlay } from "./tools";
+import { BUILDING_COLORS, overlay, OVERLAY_COLORS, PLACED_COLORS, tool, type Overlay } from "./tools";
 
 const SRC = "buildings";
 
@@ -23,16 +23,14 @@ function ringOf(b: Building, f: Frame): [number, number][] {
   return ring;
 }
 
-const GOOD = "#3fae5a";
-const BAD = "#d0453d";
-const NEUTRAL = "#b9b9ad";
+const { good: GOOD, mid: MID, bad: BAD, neutral: NEUTRAL } = OVERLAY_COLORS;
 const mix = (a: string, b: string, t: number): string => {
   const p = (c: string, i: number) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
   const ch = (i: number) => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, "0");
   return `#${ch(0)}${ch(1)}${ch(2)}`;
 };
 // 0 (bad) .. 1 (good): red through yellow to green.
-const gradient = (t: number): string => (t < 0.5 ? mix(BAD, "#e6c84a", t * 2) : mix("#e6c84a", GOOD, (t - 0.5) * 2));
+const gradient = (t: number): string => (t < 0.5 ? mix(BAD, MID, t * 2) : mix(MID, GOOD, (t - 0.5) * 2));
 
 // Overlay colour of a finished house ("" = keep its own colour).
 function tintOf(b: Building, ov: Overlay, st: ClientState): string {

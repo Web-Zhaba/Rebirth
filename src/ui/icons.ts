@@ -21,12 +21,25 @@ import Shop from "~icons/game-icons/shop";
 import StonePile from "~icons/game-icons/stone-pile";
 import Trade from "~icons/game-icons/trade";
 import Wheat from "~icons/game-icons/wheat";
+import Coins from "~icons/game-icons/coins";
+import Jug from "~icons/game-icons/jug";
+import Log from "~icons/game-icons/log";
+import Moon from "~icons/game-icons/moon";
+import Person from "~icons/game-icons/person";
+import Planks from "~icons/game-icons/planks";
+import Sun from "~icons/game-icons/sun";
+import Sunrise from "~icons/game-icons/sunrise";
+import Sunset from "~icons/game-icons/sunset";
+import StoneBlock from "~icons/game-icons/stone-block";
 import Well from "~icons/game-icons/well";
 import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
+import PhFootprints from "~icons/ph/footprints";
 import PhPause from "~icons/ph/pause-fill";
+import PhProhibit from "~icons/ph/prohibit";
+import PhSmiley from "~icons/ph/smiley";
 import PhStack from "~icons/ph/stack";
 import PhTrash from "~icons/ph/trash";
 import PhWarning from "~icons/ph/warning";
@@ -44,6 +57,21 @@ export const ICONS = {
   pause: PhPause,
   trash: PhTrash,
   eraser: PhEraser,
+  layerNone: PhProhibit,
+  traffic: PhFootprints,
+  mood: PhSmiley,
+  // Top bar (game-icons): people, goods, day phases
+  person: Person,
+  food: Wheat,
+  log: Log,
+  planks: Planks,
+  stone: StoneBlock,
+  wares: Jug,
+  value: Coins,
+  morning: Sunrise,
+  day: Sun,
+  evening: Sunset,
+  night: Moon,
   // Notebook entries (game-icons): point of interest, street, foundations
   find: MagnifyingGlass,
   street: Road,

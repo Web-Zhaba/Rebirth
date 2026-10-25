@@ -1,5 +1,6 @@
 @import "maplibre-gl/dist/maplibre-gl.css";
 @import "./ui/tokens.css";
+@import "./ui/topbar.css";
 
 html,
 body {
@@ -88,27 +89,6 @@ body {
   cursor: default;
 }
 
-.hud {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  max-width: calc(100vw - 80px);
-  max-height: calc(100vh - 220px); /* keep clear of the toolbar */
-  overflow-y: auto;
-}
-
-.stock {
-  margin: 4px 0;
-  padding: 4px 0;
-  border-top: var(--bw-hair) solid var(--rule-soft);
-  border-bottom: var(--bw-hair) solid var(--rule-soft);
-}
-
-.stock-low {
-  color: var(--bad);
-  font-weight: 700;
-}
-
 .hud-more {
   font-size: 13px;
   color: var(--pencil);
@@ -118,49 +98,12 @@ body {
   cursor: pointer;
 }
 
-.hud-name {
-  font-family: var(--font-display);
-  font-size: var(--fs-lg);
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
 .hud-date {
   font-size: var(--fs-sm);
   color: var(--pencil);
 }
 
-.speed {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 4px 0;
-}
-
-.speed button {
-  font: inherit;
-  font-size: 12px;
-  padding: 3px 8px;
-  border: var(--bw) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--paper-raised);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.speed button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--paper);
-  font-weight: 700;
-}
-
-.speed-note {
-  font-size: 12px;
-  color: var(--pencil);
-  margin-left: 4px;
-}
-
-.hud .link {
+.town .link {
   display: block;
   margin-top: 6px;
   padding: 0;
@@ -171,25 +114,6 @@ body {
   color: var(--pencil);
   text-decoration: underline;
   cursor: pointer;
-}
-
-.layers {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--pencil);
-}
-
-.layers select {
-  flex: 1;
-  font: inherit;
-  padding: 2px 4px;
-  border: var(--bw) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--paper-raised);
-  color: var(--ink);
 }
 
 .hud-warn {
@@ -423,7 +347,7 @@ body {
 .building-panel {
   position: absolute;
   right: 12px;
-  top: 160px; /* below the notebook button */
+  top: 224px; /* below the notebook button */
   width: 220px;
   max-height: calc(100vh - 370px); /* above the toolbar */
   overflow-y: auto;
@@ -459,7 +383,7 @@ body {
 .events summary {
   cursor: pointer;
 }
-.hud .link.event-go {
+.town .link.event-go {
   display: inline;
   margin-top: 0;
   font-size: inherit;
@@ -513,22 +437,6 @@ body {
   cursor: pointer;
 }
 
-.traffic-legend {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--pencil);
-}
-
-.traffic-ramp {
-  flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #f3e08a, #f0b24a, #e0662f, #a8231c);
-}
-
 /* ---- Shared kit (src/ui/kit) ---- */
 
 .icon {
@@ -545,15 +453,10 @@ body {
 .speed button,
 .btn,
 .icon-btn,
-.tab,
-.layers {
+.tab {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-}
-
-.layers {
-  display: flex;
 }
 
 button:hover:not(:disabled) {
@@ -657,6 +560,11 @@ button:hover:not(:disabled) {
   font-size: var(--fs-sm);
   font-weight: 400;
   pointer-events: none;
+}
+
+.tooltip-end {
+  left: auto;
+  right: 0;
 }
 
 .tooltip-wrap:hover .tooltip,

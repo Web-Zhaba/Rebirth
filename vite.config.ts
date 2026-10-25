@@ -6,4 +6,6 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [Icons({ compiler: "jsx", jsx: "preact" })],
   esbuild: { jsx: "automatic", jsxImportSource: "preact" },
+  // Agent worktrees under .claude/ hold other copies of src/.
+  test: { exclude: ["**/node_modules/**", ".claude/**"] },
 });

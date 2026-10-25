@@ -1,0 +1,308 @@
+/* Top bar, warnings, town panel column, layer buttons and legend (PLAN-ui.md U2). */
+
+:root {
+  --topbar-h: 62px;
+}
+
+.topbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--topbar-h);
+  z-index: var(--z-panel);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: 0 var(--sp-4);
+  box-sizing: border-box;
+  background: var(--paper);
+  border-bottom: var(--bw) solid var(--rule);
+  box-shadow: 0 3px 0 var(--paper), 0 4.5px 0 var(--rule);
+}
+
+.tb-city {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: none;
+  max-width: 260px;
+}
+
+.city-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.city-date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.phase-morning,
+.phase-day,
+.phase-evening {
+  color: var(--warn);
+}
+
+.phase-night {
+  color: var(--info);
+}
+
+/* Speed: a joined segmented control. */
+.speed {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.speed button {
+  min-width: 40px;
+  height: 34px;
+  justify-content: center;
+  padding: 0 var(--sp-3);
+  margin-left: calc(-1 * var(--bw));
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.speed button:first-child {
+  margin-left: 0;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.speed button:last-of-type {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.speed button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.speed-note {
+  margin-left: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--pencil);
+  white-space: nowrap;
+}
+
+/* Resources: icon, number, daily delta and caption in a grid. */
+.stats {
+  display: flex;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.stats > .tooltip-wrap + .tooltip-wrap > .bar-stat {
+  border-left: var(--bw-hair) solid var(--rule-soft);
+}
+
+.bar-stat {
+  display: block;
+  padding: 3px var(--sp-3);
+  border-radius: var(--radius-sm);
+}
+
+.bar-stat:hover {
+  background: var(--paper-shade);
+}
+
+.bar-stat .stat {
+  display: grid;
+  grid-template-columns: 24px auto auto;
+  column-gap: 6px;
+  align-items: center;
+}
+
+.bar-stat .stat .icon {
+  grid-row: 1 / 3;
+}
+
+.bar-stat .stat-num {
+  grid-column: 2;
+  white-space: nowrap;
+}
+
+.bar-stat .stat-delta {
+  grid-column: 3;
+  white-space: nowrap;
+}
+
+.bar-stat .stat-cap {
+  grid-column: 2 / 4;
+  grid-row: 2;
+  white-space: nowrap;
+}
+
+.stat-bad .icon {
+  color: var(--bad);
+}
+
+.tip-title {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-family: var(--font-display);
+}
+
+.tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.tip-note {
+  display: block;
+  margin-top: var(--sp-1);
+  color: var(--pencil);
+}
+
+/* Left column under the bar: warnings, then the town panel. */
+.side-col {
+  position: absolute;
+  top: calc(var(--topbar-h) + 14px);
+  left: 12px;
+  width: 330px;
+  max-width: calc(100vw - 80px);
+  max-height: calc(100vh - var(--topbar-h) - 230px); /* keep clear of the toolbar */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  pointer-events: none;
+}
+
+.town {
+  flex: none;
+}
+
+.warns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.warn-chip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  padding: 3px var(--sp-2);
+  border: var(--bw) solid var(--bad);
+  border-radius: var(--radius);
+  background: var(--bad-fill);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.warn-chip .icon {
+  color: var(--bad);
+}
+
+/* Map controls (zoom, compass, globe) sit under the bar. */
+.maplibregl-ctrl-top-left,
+.maplibregl-ctrl-top-right {
+  top: calc(var(--topbar-h) + 6px);
+}
+
+/* Layers: icon button group and legend. */
+.layerbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-1);
+  border-bottom: var(--bw-hair) solid var(--rule-soft);
+}
+
+.layer-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.layer-name {
+  margin-left: auto;
+  font-size: var(--fs-sm);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.layer-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.layer-group .tooltip {
+  white-space: nowrap;
+}
+
+.layer-group .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.layer-group .icon-btn[aria-pressed="true"],
+.layer-group .icon-btn[aria-pressed="true"]:hover:not(:disabled) {
+  background-color: var(--ink);
+  color: var(--paper);
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--pencil);
+}
+
+.legend-ramp {
+  flex: 1;
+  min-width: 60px;
+  height: 8px;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+}
+
+.legend-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-sw {
+  width: 12px;
+  height: 12px;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+}
