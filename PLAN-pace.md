@@ -1,0 +1,194 @@
+# Rebirth — pace and balance plan
+
+Goal: the player sees and does more, the town grows several times faster, and night
+stops being dead time. Companion to `PLAN.md` (simulation design) and `PLAN-ui.md`.
+
+## 1. Diagnosis (current code)
+
+| Area | Now | Where |
+|---|---|---|
+| Clock | 1 real s = 1 game min, no pause or speed control. Day = 24 real min, year (360 days) = 6 real days. | `sim/clock.ts` `MS_PER_GAME_MINUTE`, `sim/time.ts` |
+| Night | Work only 07–19 (`step` skips roads, construction, production otherwise): 12 of every 24 real minutes nothing is built or made. Night shows lights only. | `sim/clock.ts:20`, `sim/roads.ts` `WORK_START/END` |
+| Start | 10 founders (6 adults) in tents; stock food 1.75 t, wares 20, **no logs, planks or stone**. | `sim/people.ts` `FOUNDERS`, `sim/buildings.ts` `FOUNDING_STOCK` |
+| First house | Izba 100 person-h, but with an empty stock the materials are made by hand: +100 (logs) +24 (planks) +4 (stone) = 228 person-h = 38 workday hours for 6 hands ≈ **76 real min**. The comment in `buildings.ts` intends "about one game day". | `sim/production.ts` `HAND_HOURS`, `payMaterials` |
+| Construction | The artel serves roads first, then one building at a time in id order. | `sim/clock.ts`, `sim/growth.ts` `advanceBuildings` |
+| Growth | Residential demand = 1.5 + 0.5 × job vacancies − vacant − unfinished + tents; one spawn per zone type per game hour, only at demand ≥ 1. Without jobs the next house waits until the last one is built **and** occupied. | `sim/growth.ts` |
+| Immigration | Once a game day, per vacant house, p = 0.5 × food outlook × mood/100 → about 3–4 game days (≈ 1.5 real h) per family. | `sim/people.ts` `RATES.immigrationDay` |
+| Seasons | First harvest on game day 181 = real day 3; sowing only in the first 1.5 real days. | `sim/fields.ts` |
+| Decisions | No currency, unlocks, goals, events or notifications; all 18 tools from minute one. Between placements the player only waits. | `sim/protocol.ts`, `ui/RoadTools.tsx` |
+
+Estimated result: the 4 founder houses take about 5 real hours, 10 houses 10–20 real hours.
+
+**Baseline measured by P0** (`npm run pace`, flat site, fixed build order, speed 1×):
+
+| Milestone | Real time | Game day | Population |
+|---|---|---|---|
+| First house finished | 1:21 | 4 | 10 |
+| First planks in stock | 7:13 | 19 | 10 |
+| 5 houses finished | 11:20 | 29 | 10 |
+| 10 houses finished | — | — | — |
+| Population 25 | 30:42 | 78 | 25 |
+| Population 50 / 100 | — | — | — |
+| First harvest | 81:49 | 205 | 25 |
+
+After 400 game days: 9 houses, 12 residents. Population peaks at 25 around day 78 and then falls:
+houses stand empty while families leave, so growth is limited by demand, immigration and
+departures, not by space (a hand-built town in the browser showed the same: 10 houses, 15
+residents after 80 days).
+
+## 2. Pace targets
+
+Measured at speed 1× by the harness (P0) with a scripted build order; tuned in P8.
+
+| Milestone | Now (est.) | Target |
+|---|---|---|
+| First house finished | ~80 min | ≤ 4 min |
+| First planks | — | ≤ 12 min |
+| 5 houses, ~25 residents | ~6 h | ~20 min |
+| First harvest | real day 3 | ~75 min (≤ 30 min at 2×–4×) |
+| 10 houses | 10–20 h | ~45 min |
+| 100 residents | days | 2–3 h of active play |
+| Something to decide or watch finish | every 10+ min | every 30–60 s |
+
+## 3. Milestones
+
+| # | Milestone | Done when |
+|---|---|---|
+| P0 | Pacing harness | A Node script (`npm run pace`) founds a town on a synthetic flat site with forest and water, plays a fixed build order through the worker handler (roads, residential zone, woodcutter, sawpit, gumno + fields, well, dig) and prints the real time to each target in section 2. Baseline recorded in this file. **Done** (`src/pace/pace.run.ts`, `vitest.pace.config.ts`). |
+| P1 | Time model | Speed controls and a short night (section 4). Pause, 1×, 2×, 4×; night 22–05 passes ×4 faster; offline catch-up unchanged in cost. Tests for the clock and catch-up. |
+| P2 | Compressed calendar | Year of 4 × 8 days with calendar-scaled daily processes; save v4 migration (section 5). First harvest ~75 real min after founding at 1×. |
+| P3 | Fast start, visible construction | Founding cart, more founders, parallel sites, growth pipeline and immigration retuned, forest clearing tool (section 6). First house ≤ 4 min in the harness. |
+| P4 | Evenings and night | Evening home crafts and gatherings, the day summary, lights that show vacancy (section 7). |
+| P5 | Player levers | Construction priority, «толока», work schedule, rations, call for settlers (section 8). |
+| P6 | Goals and unlocks | Starting tool set, goal chain with rewards that unlocks the rest (section 9). |
+| P7 | Events with choices | A small event every 1–2 game days with two options; offline events auto-resolve (section 10). |
+| P8 | Sim signals and tuning | The worker posts typed notices (finished, arrived, shortage, goal, event) for the UI; constants tuned until the harness meets section 2. |
+
+Order: P0 → P1 → P2 → P3 → P8 signals → P4 → P5 → P6 → P7 → P8 tuning. UI work for each
+milestone uses the current styles until `PLAN-ui.md` U1 lands.
+
+## 4. P1 — time model
+
+- **Decouple game time from wall time.** `SimState.gameMinutes` advances by
+  `speed × base rate` of elapsed wall time; `realTime` stays the wall-clock anchor for offline
+  catch-up. Base rate at 1×: 1 real s = 4 game min (1 game hour = 15 real s, workday 07–19 = 3 real min).
+- **Speeds:** pause, 1×, 2×, 4× (Space toggles pause, 1/2/3 pick a speed). Speed is per session,
+  not saved; the town starts at 1× after load.
+- **Short night:** 22:00–05:00 runs ×4 on top of the chosen speed (dusk and dawn at normal speed for
+  the light change). A day at 1× ≈ 3 min work + 45 s evening + 26 s night + 30 s dawn ≈ **4.7 real min**.
+- **Offline:** catch-up keeps today's cost: 1 game min per real s, cap 24 real h = 60 game days. A tab
+  hidden for more than 5 minutes is treated as offline (browsers throttle hidden timers anyway).
+- **Ticks and snapshots:** the tick stays 10 game min; the worker runs as many ticks as the elapsed
+  scaled time asks for (up to ~6 per real second at 4× at night) and posts a snapshot at most every 250 ms.
+- **Visuals:** walkers and carts already move in game time; check they stay readable at 4 game
+  min/s, else lower the base rate to 3 (one constant).
+- Risk: every place that uses `realTime` for display must switch to `gameMinutes`.
+
+## 5. P2 — compressed calendar
+
+- **Season = 8 days, year = 32 days** (≈ 2.5 real h at 1×). One game day stands for
+  `CAL = 360 / 32 = 11.25` calendar days for every calendar-bound process. Workday-bound work
+  (construction, roads, production per worker-hour) is unchanged.
+- One helper converts yearly rates to per-game-day ones; per-day constants are restated per year:
+  food per person per day (× CAL), foraging, immigrants' 60 days of food, marriage and departure
+  rates, the 20-day upgrade streak (→ 2 game days), school 720 days (→ 2 years), harvest window
+  (first half of autumn = 4 days).
+- Field labor per ha scales by 1 / CAL so sowing and harvest fit their shorter windows with the same
+  farmer count; yields per year stay 400 kg/ha.
+- Ageing, births and deaths follow `YEAR_MIN` automatically.
+- **Save v4 migration:** rescale every stored time stamp (resident `born`, chronicle and event
+  times, find dates, building streaks) to the new calendar, so ages and seasons are preserved.
+- Offline cap of 60 game days becomes ≈ 2 years: check the away summary stays readable.
+
+## 6. P3 — fast start and visible construction
+
+- **Founding party:** 14 people (4 families, 8 adults) with a cart: food 3 t, logs 60 m³, planks 8 m³,
+  stone 6 t, wares 20 — enough for the first two izbas without hand-made materials. With 8 hands an izba
+  (100 person-h) takes 12.5 workday hours ≈ 3.1 real min.
+- **Hand-made materials stay** (they motivate the woodcutter and sawpit), but the shortfall is shown on
+  the site («без досок стройка вдвое дольше»).
+- **Parallel sites:** the artel works up to ⌈hands / 4⌉ sites at once, oldest first, so several frames
+  rise together and the player sees progress everywhere.
+- **Growth pipeline:** an unfinished house counts 0.5 against residential demand instead of 1, and
+  families already on their way (see immigration below) count as demand, so the next lot starts before the last
+  family has moved in.
+- **Immigration:** checked every game hour as a hazard with the same daily expectation at base rate
+  1.0 (was 0.5). A family that decides to come is on its way for half a game day (the HUD shows
+  «в пути: N семей») and arrives as a visible cart walking in along the roads from the edge of the
+  built network.
+- **Forest clearing («Вырубка»):** a brush that marks forest for the artel; each cleared 100 m² gives
+  logs and turns the cells into meadow (buildable). This is the deferred "clearing forest for logs"
+  from `PLAN.md` section 8.
+
+## 7. P4 — evenings and night
+
+- **Evening 19–22, home crafts («посиделки»):** adults at home make wares at 0.01 pcs per adult-hour
+  (× 2 in winter); the HUD shows it as an evening line. Wares start to matter without a workshop.
+- **Gatherings:** households covered by a tavern or chapel gain mood each evening; taverns glow and draw
+  walkers in the evening.
+- **Day summary at 22:00:** a small card «Итоги дня»: built, arrived, born, produced, problems, each line
+  clickable to fly to the place. Natural pause point; dismissed by a click or the next morning.
+- **Lights tell the state:** occupied houses glow, vacant ones stay dark, workshops without inputs show
+  no light, so the night map is a vacancy and problem overview.
+- **Night planning:** all tools work at night; queued roads and sites show «начнут в 07:00».
+
+## 8. P5 — player levers
+
+| Lever | Effect | Tradeoff |
+|---|---|---|
+| Priority | Mark a site «в первую очередь»: the artel serves it first. | Others wait. |
+| Толока | Once per 3 game days call all employed adults to one site for the rest of the workday. | Production stops for that time. |
+| Распорядок | Workday 07–19 (normal) or «страда» 05–21. | +33 % work, mood −8 while active. |
+| Пайки | Rations normal, reduced (−25 % food, mood −10) or generous (+25 % food, mood +8). | Food outlook and immigration change with it. |
+| Призыв | Send a call for settlers: spend 300 kg food and 10 wares, a family arrives within a game day. | Needs a vacant house. |
+
+All levers are sim commands, saved with the town, shown in the chronicle when used.
+
+## 9. P6 — goals and unlocks
+
+- **Starting tools:** path, road, demolish, residential zone, field, gumno, woodcutter, well, dig.
+- **Unlocks by goals** (each goal shows its reward up front; three active goals at a time):
+
+| Goal | Reward |
+|---|---|
+| Build 2 izbas | sawpit, barn |
+| Stock 20 m³ logs | quarry, craft zone |
+| Sow 2 ha | fisher, +1 family |
+| Open a dig site | the notebook's first article prompt |
+| 25 residents | trade zone, market |
+| First harvest | chapel, a harvest feast event |
+| 50 residents | school, healer |
+| 5 craft buildings | izba upgrades shown on the map |
+
+- Existing towns get every unlock their buildings already prove (migration in v4).
+- Goals and unlocks live in `SimState`, are checked daily and when a building finishes, and write
+  chronicle lines.
+
+## 10. P7 — events with choices
+
+- One event every 1–2 game days (5–10 real min at 1×), drawn by the sim RNG from those whose
+  condition holds; two options, each with its effect stated.
+- First set: wanderers ask for shelter (accept a family / refuse); a trading cart (swap wares or food
+  for planks, stone or a tool bonus); early frost in the harvest window (draft workers to the fields /
+  accept the loss); a find at the dig (spend labor to dig deeper for an article / move on); harvest feast
+  (spend food for mood); a sick family (healer covers: no effect; else pay food or risk a death).
+- Unanswered events auto-resolve with the safe option after one game day; offline events resolve
+  that way and are listed in the away summary.
+- Events, choices and outcomes are saved and written to the chronicle.
+
+## 11. P8 — signals and tuning
+
+- **Signals:** the worker posts typed notices (`built`, `arrived`, `left`, `shortage`, `harvest`,
+  `goal`, `unlock`, `event`) with a position when there is one. `PLAN-ui.md` U5 renders them; until
+  then the HUD event list shows them.
+- **Growth advisor:** the sim reports why a zone does not grow (no demand, no free lots beside built
+  roads, no hands, no materials), shown in the zone tool hint.
+- **Tuning:** run the harness after each milestone; adjust the constants listed in section 1 until
+  section 2 holds; record the final numbers in `PLAN.md` sections 8–9.
+
+## 12. Decisions taken by default (change before P1 if needed)
+
+- Realism gives way to pace: 32-day years, a 4.7-minute day, a ×4 night.
+- Offline progress stays at today's rate (60 game days for 24 h away); speed controls affect only
+  live play.
+- Tools are gated by goals for new towns; existing saves keep what they have built.

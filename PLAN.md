@@ -56,6 +56,8 @@ tiles hold the buildings and streets that excavation reveals later.
 - **E1** excavation: dig sites reveal the buried OSM city, finds are saved, rebuild on old foundations.
 - **E2** notebook: finds, Wikipedia articles unlocked by digs (saved with the town) and the chronicle.
 
+Next: pace and balance in `PLAN-pace.md`, interface in `PLAN-ui.md`.
+
 ## 5. Architecture
 
 - **Local metric frame.** All simulation geometry is in meters on a tangent plane
