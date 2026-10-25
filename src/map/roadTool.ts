@@ -5,6 +5,7 @@ import { frame, roads, sendCmd, state } from "../simClient";
 import { oldWorld } from "./excavation";
 import { snapToOldStreets } from "../world/oldStreets";
 import { sampleProfile } from "../world/profile";
+import { etaText } from "./buildCost";
 import { flash, isRoadTool, mapMpp, tool, type RoadTool } from "./tools";
 
 export const MIN_DRAW_ZOOM = 14;
@@ -137,7 +138,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
     source("road-snap")?.setData({ type: "FeatureCollection", features: pt });
   };
 
-  const costText = (len: number, labor: number) => `${Math.round(len)} м · ${Math.round(labor)} чел.-ч`;
+  const costText = (len: number, labor: number) => `${Math.round(len)} м · ${Math.round(labor)} чел.-ч · ${etaText(labor)}`;
 
   // Terrain sampling is throttled; results of superseded requests are dropped.
   const requestCost = (a: Snap, b: Snap) => {

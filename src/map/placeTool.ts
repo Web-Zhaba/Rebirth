@@ -10,6 +10,7 @@ import type { Site, ZoneCell } from "../sim/types";
 import { cellCorners } from "../sim/zones";
 import { buildingSet, frame, sendCmd, state, zones } from "../simClient";
 import { cachedSite, NO_SITE, siteAt } from "../world/site";
+import { costText } from "./buildCost";
 import { flash, isPlaceTool, MIN_ZONE_ZOOM, PLACED_COLORS, placeReach, SITE_RADIUS, tool, type PlaceTool } from "./tools";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -197,7 +198,8 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     const base = { footprint, center, edge: c0.edge, side: c0.side, i: c0.i, radius, front };
     if (!check.ok) return { ...base, ok: false, pending: false, text: check.reason };
     if (pending) return { ...base, ok: true, pending: true, text: "…" };
-    return { ...base, ok: true, pending: false, text: siteText(id, site, t, center) };
+    return { ...base, ok: true, pending: false, text: `${siteText(id, site, t, center)}
+${costText(t.labor, t.materials)}` };
   };
 
   const ring = (pts: Pt[], f: NonNullable<typeof frame.value>): [number, number][] => {

@@ -7,6 +7,7 @@ import { frame, roads, sendCmd, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { landAt } from "../world/landcover";
 import { fieldDraft, hoverKeys, paintPreview } from "./zoneLayer";
+import { etaText } from "./buildCost";
 import { flash, isBrushTool, mapMpp, MIN_ZONE_ZOOM, tool, type BrushTool } from "./tools";
 
 const BRUSH_PX = 16;
@@ -23,7 +24,7 @@ const brushZone = (t: BrushTool): "none" | ZoneType => (t === "clear" ? "none" :
 
 const areaText = (m2: number) => `${(m2 / 10000).toFixed(m2 < 10000 ? 2 : 1).replace(".", ",")} га`;
 const clearingText = (area: number, forest: number) =>
-  `${areaText(area)} · лес ${Math.round(forest * 100)} % · брёвна ~${Math.round(clearingLogs(area, forest))} м³ · ${Math.round(clearingLabor(area, forest))} чел.-ч`;
+  `${areaText(area)} · лес ${Math.round(forest * 100)} % · брёвна ~${Math.round(clearingLogs(area, forest))} м³ · ${Math.round(clearingLabor(area, forest))} чел.-ч · ${etaText(clearingLabor(area, forest))}`;
 
 interface Analysis {
   water: boolean;

@@ -1,0 +1,176 @@
+/* Build bar: hint and cost lines above, category tabs and item buttons below (PLAN-ui.md U3). */
+
+.build-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 44px; /* clear the attribution bar */
+  transform: translateX(-50%);
+  z-index: var(--z-panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.bb-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 720px;
+  padding: 2px var(--sp-3);
+  background: var(--paper);
+  border-radius: var(--radius);
+  pointer-events: auto;
+}
+
+.bb-lines:not(:has(*)) {
+  display: none;
+}
+
+.road-hint {
+  font-size: var(--fs-sm);
+  color: var(--pencil);
+  text-align: center;
+}
+
+.road-msg {
+  font-size: var(--fs-md);
+  color: var(--bad);
+}
+
+.bb-cost {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.bb-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+}
+
+.bb-tabs .tab {
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+.bb-items {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-1);
+}
+
+.build-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100px;
+  padding: var(--sp-2) var(--sp-1) var(--sp-1);
+  border: var(--bw) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.build-btn:hover:not(:disabled) {
+  border-color: var(--rule);
+}
+
+.build-btn.on,
+.build-btn.on:hover:not(:disabled) {
+  border-color: var(--rule);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.bb-name {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+kbd {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  padding: 0 4px;
+  border: var(--bw-hair) solid var(--kbd-border);
+  border-radius: var(--radius-sm);
+  background: var(--paper-shade);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.build-btn.on kbd {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.bb-tabs kbd {
+  position: static;
+  margin-left: var(--sp-1);
+}
+
+.bb-items .tooltip {
+  width: 260px;
+  max-width: 260px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bb-items .tooltip-wrap:hover .tooltip,
+.bb-items .tooltip-wrap:focus-within .tooltip {
+  display: flex;
+}
+
+.bc-purpose {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.bc-mats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px var(--sp-2);
+}
+
+.bc-mat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bc-site {
+  display: block;
+  margin-top: 2px;
+  color: var(--pencil);
+}
+
+@media (max-width: 640px) {
+  .build-btn {
+    width: 64px;
+  }
+}

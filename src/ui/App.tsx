@@ -1,12 +1,12 @@
 import type maplibregl from "maplibre-gl";
 import { city } from "../simClient";
 import { AwayNotice } from "./AwayNotice";
+import { BuildBar } from "./BuildBar";
 import { BuildingPanel } from "./BuildingPanel";
 import { FoundCity } from "./FoundCity";
 import { Hud } from "./Hud";
 import { NightTint } from "./NightTint";
 import { NotebookHost } from "./NotebookHost";
-import { RoadTools } from "./RoadTools";
 import { TerrainInspector } from "./TerrainInspector";
 
 export function App({ map }: { map: maplibregl.Map }) {
@@ -16,7 +16,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c ? <Hud city={c} map={map} /> : <FoundCity map={map} />}
       {c && <NightTint />}
       {c && <TerrainInspector map={map} />}
-      {c && <RoadTools />}
+      {c && <BuildBar />}
       {c && <BuildingPanel />}
       {c && <NotebookHost />}
       <AwayNotice />

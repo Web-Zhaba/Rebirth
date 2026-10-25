@@ -1,0 +1,157 @@
+import { FIELD } from "../sim/fields";
+import { DIG } from "../sim/excavation";
+import { CLEARING } from "../sim/clearing";
+import { PLACE_MIN } from "../sim/growth";
+import { BUILDINGS, type Materials } from "../sim/buildings";
+import { ROAD_KINDS } from "../sim/roads";
+import { SERVICES, isService } from "../sim/services";
+import { SITE_RADIUS, type Tool } from "../map/tools";
+import type { IconName } from "./icons";
+
+export type CategoryId = "roads" | "zones" | "farm" | "services" | "past";
+
+export interface Category {
+  id: CategoryId;
+  label: string;
+  tools: Tool[]; // up to 6, picked by Q W E R T Y
+}
+
+export const CATEGORIES: Category[] = [
+  { id: "roads", label: "Дороги", tools: ["path", "dirt", "bulldoze"] },
+  { id: "zones", label: "Зоны", tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
+  { id: "farm", label: "Хозяйство", tools: ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "barn"] },
+  { id: "services", label: "Службы", tools: ["well", "market", "chapel", "school", "healer"] },
+  { id: "past", label: "Прошлое", tools: ["dig"] },
+];
+
+// Physical key codes (layout independent: Q is the key left of W also on a Russian layout).
+export const ITEM_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY"] as const;
+export const ITEM_KEY_LABEL = ["Q", "W", "E", "R", "T", "Y"] as const;
+export const CATEGORY_KEYS = ["F1", "F2", "F3", "F4", "F5"] as const;
+export const DEMOLISH_KEY = "KeyB";
+
+export const categoryOf = (t: Tool): Category => CATEGORIES.find((c) => c.tools.includes(t))!;
+
+export const TOOL_ICON: Record<Tool, IconName> = {
+  path: "path",
+  dirt: "dirt",
+  bulldoze: "bulldoze",
+  res: "res",
+  craft: "craft",
+  trade: "trade",
+  field: "field",
+  clearing: "clearing",
+  clear: "eraser",
+  gumno: "gumno",
+  woodcutter: "woodcutter",
+  sawpit: "sawpit",
+  quarry: "quarry",
+  fisher: "fisher",
+  barn: "barn",
+  well: "well",
+  market: "market",
+  chapel: "chapel",
+  school: "school",
+  healer: "healer",
+  dig: "dig",
+};
+
+const TOOL_LABEL: Partial<Record<Tool, string>> = {
+  path: "Тропа",
+  dirt: "Дорога",
+  bulldoze: "Снос",
+  res: "Жильё",
+  craft: "Ремесло",
+  trade: "Торговля",
+  field: "Поле",
+  clearing: "Вырубка",
+  clear: "Снять зону",
+};
+
+export const toolLabel = (t: Tool): string => TOOL_LABEL[t] ?? BUILDINGS[t].name;
+
+const PURPOSE: Record<Tool, string> = {
+  path: "Дешёвая тропа: по ней ходят пешком, ставить дома можно рядом",
+  dirt: "Грунтовая дорога: шире и ровнее тропы, по ней возят грузы",
+  bulldoze: "Снести участок дороги вместе с планами вдоль него",
+  res: "Размечает участки под жильё: сюда придут новые семьи",
+  craft: "Размечает участки под мастерские: кузница, столярня, гончарня",
+  trade: "Размечает участки под лавки и постоялый двор",
+  field: "Пашня: контур поля для зерна, его обрабатывают крестьяне гумна",
+  clearing: "Вырубка леса: брёвна на склад, на месте леса будет луг",
+  clear: "Снимает разметку зоны, поле или вырубку, которую ещё не взялись делать",
+  gumno: "Хозяйство крестьян: даёт работу на полях рядом и хранит урожай",
+  woodcutter: "Валит лес вокруг и приносит брёвна на склад",
+  sawpit: "Пилит брёвна в доски",
+  quarry: "Добывает камень",
+  fisher: "Ловит рыбу, еда без полей",
+  barn: "Склад: добавляет места для запасов еды",
+  well: "Вода рядом с домами: настроение и здоровье",
+  market: "Раздаёт утварь по домам и радует людей",
+  chapel: "Место для общей жизни: настроение людей",
+  school: "Учит детей грамоте, грамотные работают лучше",
+  healer: "Лечит: меньше смертей, настроение выше",
+  dig: "Раскоп на месте старых построек: находки для тетради, камень от фундаментов",
+};
+
+const SITE: Partial<Record<Tool, string>> = {
+  path: "Между двумя точками на суше, уклон не круче 25 %",
+  dirt: "Между двумя точками на суше, уклон не круче 12 %",
+  woodcutter: `В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`,
+  fisher: `У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`,
+  quarry: "Не на воде и не на болоте; чем больше камня рядом, тем лучше",
+  clearing: `Контур до ${CLEARING.maxArea / 10000} га, не дальше ${CLEARING.reach} м от построенной дороги`,
+  field: "Замкнутый контур на суше, не через дорогу и не поверх другого поля",
+};
+
+export interface ToolInfo {
+  tool: Tool;
+  label: string;
+  purpose: string;
+  labor: string | null; // "100 чел.-ч", or per metre for roads
+  materials: { icon: IconName; text: string }[];
+  jobs: number | null;
+  site: string;
+  reach: string | null;
+}
+
+const MAT_ICON: { key: keyof Materials; icon: IconName; unit: string }[] = [
+  { key: "logs", icon: "log", unit: "м³" },
+  { key: "planks", icon: "planks", unit: "м³" },
+  { key: "stone", icon: "stone", unit: "т" },
+];
+
+export const num = (n: number): string => String(Math.round(n * 10) / 10).replace(".", ",");
+
+export function materialList(m: Materials): { icon: IconName; text: string }[] {
+  return MAT_ICON.filter((x) => m[x.key] > 0).map((x) => ({ icon: x.icon, text: `${num(m[x.key])} ${x.unit}` }));
+}
+
+// Everything the hover card shows, taken from the sim tables.
+export function toolInfo(t: Tool): ToolInfo {
+  const b = BUILDINGS[t];
+  const road = t === "path" || t === "dirt" ? ROAD_KINDS[t] : null;
+  let reach: string | null = null;
+  if (isService(t)) reach = `Охват ${SERVICES[t].reach} м по дорогам`;
+  else if (t === "gumno") reach = `Поля до ${FIELD.radius} м от гумна`;
+  else if (t === "woodcutter" || t === "fisher") reach = `Радиус ${SITE_RADIUS[t]} м`;
+  else if (t === "dig") reach = `Вскрывает ${DIG.startRadius} м, потом растёт до ${DIG.maxRadius} м`;
+  return {
+    tool: t,
+    label: toolLabel(t),
+    purpose: PURPOSE[t],
+    labor: road ? `${num(road.labor)} чел.-ч на метр` : b ? `${num(b.labor)} чел.-ч` : null,
+    materials: b ? materialList(b.materials) : [],
+    jobs: b && b.jobs > 0 ? b.jobs : null,
+    site: SITE[t] ?? (b ? "У построенной дороги, на свободных участках" : "На карте"),
+    reach,
+  };
+}
+
+// Which tool a key code selects, given the active category; null for keys the bar does not use.
+export function toolForKey(code: string, category: CategoryId): Tool | null {
+  if (code === DEMOLISH_KEY) return "bulldoze";
+  const i = ITEM_KEYS.indexOf(code as (typeof ITEM_KEYS)[number]);
+  if (i < 0) return null;
+  return CATEGORIES.find((c) => c.id === category)?.tools[i] ?? null;
+}
