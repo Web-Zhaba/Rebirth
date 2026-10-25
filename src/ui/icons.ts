@@ -42,6 +42,7 @@ import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
 import PhInfo from "~icons/ph/info-bold";
 import PhFlag from "~icons/ph/flag-bold";
+import PhLock from "~icons/ph/lock-simple-fill";
 import PhFootprints from "~icons/ph/footprints";
 import PhHourglass from "~icons/ph/hourglass-bold";
 import PhUsers from "~icons/ph/users-three-bold";
@@ -66,6 +67,7 @@ export const ICONS = {
   trash: PhTrash,
   eraser: PhEraser,
   layerNone: PhProhibit,
+  lock: PhLock,
   traffic: PhFootprints,
   mood: PhSmiley,
   info: PhInfo,

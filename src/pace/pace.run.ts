@@ -80,6 +80,7 @@ it("pacing harness", async () => {
   };
   const roadBuilt = (x: number) => Object.values(st.roads.edges).every((e) => e.done >= e.labor || Math.min(st.roads.nodes[e.a].x, st.roads.nodes[e.b].x) > x);
   const houses = () => Object.values(st.buildings).filter(isFinishedHouse).length;
+  const unlocked = (key: string) => st.goals.unlocks.includes(key);
   const ready = (n: number) => houses() >= n && roadBuilt(200);
   // Out of lots: residential demand has asked for a house for a whole game day and none has appeared.
   let resCount = 0;
@@ -120,9 +121,10 @@ it("pacing harness", async () => {
     { when: () => true, run: () => extendRoad(200) },
     { when: () => true, run: () => paint("residential zone 0-120 m", "res", (c) => c.cx <= 120 && c.zone === "none") },
     { when: () => roadBuilt(200), run: () => place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 }) },
-    { when: () => ready(1), run: () => place("sawpit", -1, 140) },
+    // a sensible player waits for the goals: the sawpit comes with the 2nd izba, the craft zone with 20 m3 of logs
+    { when: () => unlocked("sawpit") && roadBuilt(200), run: () => place("sawpit", -1, 140) },
     { when: () => ready(2), run: () => place("well", -1, 170) },
-    { when: () => ready(3), run: () => paint("craft zone 130-170 m", "craft", (c) => c.side === 1 && c.cx >= 130 && c.cx <= 170 && !c.block) },
+    { when: () => ready(3) && unlocked("zone:craft"), run: () => paint("craft zone 130-170 m", "craft", (c) => c.side === 1 && c.cx >= 130 && c.cx <= 170 && !c.block) },
     { when: () => ready(3), run: () => place("dig", -1, 190) },
     // 0.5 ha south of the road, forest 0.8 as measured on a real site (the synthetic land itself is meadow); after the
     // gumno, which must stand before the end of spring to sow.
@@ -133,6 +135,9 @@ it("pacing harness", async () => {
   // ----- milestones -----
   const marks: { label: string; hit: () => boolean; at?: { ms: number; day: number; pop: number } }[] = [
     { label: "First house finished", hit: () => houses() >= 1 },
+    { label: "Goal: 20 m3 of logs (craft zone opens)", hit: () => st.goals.done.includes("logs20") },
+    { label: "Goal: 2 ha sown (fisher, a family)", hit: () => st.goals.done.includes("sow2") },
+    { label: "Goal: 2 izbas (sawpit, barn open)", hit: () => st.goals.done.includes("izbas2") },
     { label: "Sawpit finished", hit: () => Object.values(st.buildings).some((b) => b.template === "sawpit" && b.state === "active") },
     { label: "Gumno finished", hit: () => Object.values(st.buildings).some((b) => b.template === "gumno" && b.state === "active") },
     { label: "5 houses finished", hit: () => houses() >= 5 },

@@ -1,11 +1,12 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { toolMsg, tool, SITE_RADIUS, type Tool } from "../map/tools";
+import { flash, toolMsg, tool, SITE_RADIUS, type Tool } from "../map/tools";
+import { lockReason } from "../sim/goals";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
 import { SERVICES } from "../sim/services";
 import type { GrowthWhy } from "../sim/types";
-import { people } from "../simClient";
+import { people, state } from "../simClient";
 import { CATEGORIES, CATEGORY_KEYS, categoryOf, ITEM_KEY_LABEL, toolForKey, toolInfo, toolLabel, TOOL_ICON, type CategoryId } from "./buildMenu";
 import { Icon } from "./Icon";
 import { Tabs, Tooltip } from "./kit";
@@ -50,6 +51,12 @@ const ADVICE: Record<GrowthWhy, string | null> = {
   materials: "Растёт медленно: не хватает материалов, часть работы делают вручную",
 };
 
+// Why a tool is closed (the goal that opens it), or null. Before the town is loaded nothing is locked.
+const lockOf = (t: Tool): string | null => {
+  const goals = state.peek()?.goals;
+  return goals ? lockReason({ goals }, t) : null;
+};
+
 const isTyping = (el: HTMLElement | null) => !!el && (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable || !!el.closest("dialog"));
 
 // F1-F5 pick a category, Q W E R T Y an item of it, B demolish. Layout independent (key codes).
@@ -66,6 +73,11 @@ function onKey(e: KeyboardEvent): void {
   const t = toolForKey(e.code, category.value);
   if (!t) return;
   category.value = categoryOf(t).id;
+  if (lockOf(t)) {
+    flash(lockOf(t)!);
+    e.preventDefault();
+    return;
+  }
   tool.value = tool.peek() === t ? null : t;
   e.preventDefault();
 }
@@ -77,11 +89,12 @@ function onEsc(e: KeyboardEvent): void {
   if (el && el.closest(".build-bar")) el.blur();
 }
 
-function Card({ t }: { t: Tool }) {
+function Card({ t, lock }: { t: Tool; lock: string | null }) {
   const i = toolInfo(t);
   return (
     <>
       <b class="tip-title">{i.label}</b>
+      {lock && <span class="bc-lock">{lock}</span>}
       <span class="bc-purpose">{i.purpose}</span>
       {i.labor && (
         <span class="tip-row">
@@ -153,6 +166,7 @@ export function BuildBar() {
   const active = tool.value;
   const cat = CATEGORIES.find((c) => c.id === category.value)!;
   const msg = toolMsg.value;
+  const goals = state.value?.goals;
   const growth = active === "res" || active === "craft" || active === "trade" ? ADVICE[people.value?.growth?.[active] ?? "ok"] : null;
   return (
     <div class="build-bar">
@@ -184,21 +198,26 @@ export function BuildBar() {
           }))}
         />
         <div class="bb-items" role="group" aria-label={cat.label}>
-          {cat.tools.map((t, i) => (
-            <Tooltip key={t} side="top" align={i >= 4 ? "end" : "start"} text={<Card t={t} />}>
+          {cat.tools.map((t, i) => {
+            const lock = goals ? lockReason({ goals }, t) : null;
+            return (
+            <Tooltip key={t} side="top" align={i >= 4 ? "end" : "start"} text={<Card t={t} lock={lock} />}>
               <button
                 type="button"
-                class={active === t ? "build-btn on" : "build-btn"}
+                class={`${active === t ? "build-btn on" : "build-btn"}${lock ? " locked" : ""}`}
                 aria-pressed={active === t}
+                aria-disabled={lock ? true : undefined}
                 aria-keyshortcuts={t === "bulldoze" ? `${ITEM_KEY_LABEL[i]} B` : ITEM_KEY_LABEL[i]}
-                onClick={() => (tool.value = active === t ? null : t)}
+                onClick={() => (lock ? flash(lock) : (tool.value = active === t ? null : t))}
               >
                 <Icon name={TOOL_ICON[t]} size={22} />
                 <span class="bb-name">{toolLabel(t)}</span>
                 <kbd>{t === "bulldoze" ? "B" : ITEM_KEY_LABEL[i]}</kbd>
+                {lock && <Icon name="lock" size={14} class="bb-lock" />}
               </button>
             </Tooltip>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
 import { builderCount, dailyStep, immigrationStep, productionScale } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
+import { goalStep } from "./goals";
 import { settleLevers } from "./leverCmds";
 import { daySummary } from "./summary";
 import { dailyEconomy, payMaterials, produceStep, reportShortages } from "./production";
@@ -89,7 +90,7 @@ export function step(s: SimState): SimState {
   let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
-  return recordChronicle(s, settleLevers(spawnBuildings(immigrationStep(next, BASE_TICK))));
+  return recordChronicle(s, settleLevers(spawnBuildings(goalStep(s, immigrationStep(next, BASE_TICK)))));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.

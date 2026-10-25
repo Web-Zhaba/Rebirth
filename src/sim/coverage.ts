@@ -1,4 +1,5 @@
 import { BUILDINGS, UPGRADE } from "./buildings";
+import { isUnlocked } from "./goals";
 import { ageOf, buildNet, countResidents, isFinishedHouse, lotFront, nearestNode, reach, type Net } from "./people";
 import { countServices, covers, isService, SERVICE, SERVICE_IDS, SERVICES, withService } from "./services";
 import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
@@ -111,7 +112,7 @@ export function dailyServices(s: SimState): SimState {
   for (const h of Object.values(s.households)) if (h.home !== null) moodAt.set(h.home, h.mood);
   let buildings = s.buildings;
   for (const b of Object.values(s.buildings)) {
-    if (b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) continue;
+    if (!isUnlocked(s.goals, "upgrade") || b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) continue;
     const mood = moodAt.get(b.id);
     const good = mood !== undefined && mood >= SERVICE.upgradeMood && (landValue[b.id] ?? 0) >= SERVICE.upgradeLand;
     const streak = good ? b.streak + 1 : 0;

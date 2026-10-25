@@ -4,6 +4,7 @@ import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
+import { migrateGoals, parseGoals } from "./goals";
 import { emptyLevers, type Levers } from "./levers";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
@@ -201,7 +202,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
 }
 
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -475,7 +476,10 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   // Cells are rebuilt from roads on load, so broken zone data only costs the paint,
   // never the whole town (a rejected save would send the player back to founding).
   const zones = parseZones(sim.zones) ?? emptyZones();
-  return { version: 4, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...parseGrowth(sim, city, sim.gameMinutes) } };
+  const growth = parseGrowth(sim, city, sim.gameMinutes);
+  // A save without goals is an existing town: it gets every unlock its buildings prove and every goal already met, silently.
+  growth.goals = parseGoals(sim.goals) ?? migrateGoals({ ...growth, zones, gameMinutes: sim.gameMinutes });
+  return { version: 4, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...growth } };
 }
 
 // Old localStorage saves (v1, v2): keep the city, start a fresh village.
