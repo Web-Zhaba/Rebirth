@@ -1,0 +1,234 @@
+/* Right slot (PLAN-ui.md section 5): the inspector and the town panel sit under the notebook button,
+   where the notebook page opens. Opaque paper, ink rules, hard shadow (panel kit class). */
+.rs-panel {
+  position: absolute;
+  top: 220px;
+  right: 10px;
+  width: min(340px, calc(100vw - 20px));
+  max-height: max(200px, calc(100vh - 372px)); /* above the build bar */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  background: var(--paper-raised);
+  z-index: var(--z-panel);
+}
+
+.rs-panel .tabs {
+  flex-wrap: wrap;
+  flex: none;
+}
+
+.rs-panel .tab {
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.insp-ic {
+  display: inline-flex;
+  flex: none;
+  padding: var(--sp-2);
+  border: var(--bw) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-shade);
+}
+
+.insp-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+}
+
+.insp-title h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
+}
+
+.insp-sub {
+  color: var(--pencil);
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chip-build {
+  background: var(--warn-fill);
+}
+
+.chip-ok {
+  background: var(--ok-fill);
+}
+
+.chip-warn {
+  background: var(--info-fill);
+}
+
+.chip-bad {
+  background: var(--bad-fill);
+}
+
+.insp-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: var(--bw-hair) solid var(--rule-soft);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.insp-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.insp-line .icon {
+  align-self: center;
+}
+
+.insp-label {
+  color: var(--pencil);
+}
+
+.insp-value {
+  margin-left: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.insp-bad .insp-value {
+  color: var(--bad);
+}
+
+.insp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+
+.site-levers,
+.orders-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: var(--sp-1) 0;
+}
+
+.rs-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.rs-sub {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+}
+
+.rs-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.rs-warn {
+  max-width: none;
+}
+
+.rs-danger {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: var(--bw-hair) solid var(--rule-soft);
+}
+
+.demand-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-1) 0;
+}
+
+.demand-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 700;
+}
+
+.demand-sw {
+  width: 12px;
+  height: 12px;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+}
+
+.demand-count {
+  margin-left: auto;
+  color: var(--pencil);
+  font-weight: 400;
+}
+
+.rs-events {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.rs-events .link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--info);
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.confirm-text {
+  margin-bottom: var(--sp-4);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.rs-warn .link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

@@ -5,3 +5,4 @@ export { ProgressBar } from "./ProgressBar";
 export { Stat } from "./Stat";
 export { Tabs, type TabItem } from "./Tabs";
 export { Tooltip } from "./Tooltip";
+export { Confirm } from "./Confirm";

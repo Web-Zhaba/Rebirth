@@ -331,11 +331,18 @@
 }
 
 /* «Об игре»: small, at the far right end; takes the free space itself when the resources are not shown yet. */
-.tb-about {
+.tb-end {
+  display: inline-flex;
+  gap: var(--sp-1);
   margin-left: auto;
   flex: none;
 }
 
-.stats ~ .tb-about {
+.stats ~ .tb-end {
   margin-left: var(--sp-2);
+}
+
+.icon-btn[aria-pressed="true"] {
+  border-color: var(--rule);
+  background: var(--paper-shade);
 }

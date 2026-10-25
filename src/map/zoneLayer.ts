@@ -3,12 +3,16 @@ import { effect, signal } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
 import { isCleared } from "../sim/clearing";
 import { fieldCentroid } from "../sim/fields";
-import { cellCorners } from "../sim/zones";
+import { cellCorners, pointInPolygon } from "../sim/zones";
 import { occupiedKeys } from "../sim/growth";
 import { buildingSet, frame, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
+import { selectedBuilding } from "./buildingLayer";
 import { MEADOW_COLOR } from "./style";
 import { isBrushTool, MIN_ZONE_ZOOM, tool, ZONE_COLORS } from "./tools";
+
+// Unfinished clearing shown in the inspector.
+export const selectedClearing = signal<number | null>(null);
 
 // Optimistic paint while a drag is in progress or a command is in flight: key -> zone.
 export const paintPreview = signal<Map<string, "none" | ZoneType> | null>(null);
@@ -218,6 +222,16 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       source("field-draft-pts")?.setData({ type: "FeatureCollection", features: pts });
     });
   };
+
+  // Click selects an unfinished clearing while no tool is active (a building under the click wins, see buildingLayer).
+  map.on("click", (e) => {
+    if (tool.value) return;
+    const f = frame.peek();
+    const [x, y] = f ? f.toLocal(e.lngLat.lng, e.lngLat.lat) : [0, 0];
+    const hit = f ? state.peek()?.clearings.find((c) => !isCleared(c) && pointInPolygon(x, y, c.pts)) : undefined;
+    selectedClearing.value = hit?.id ?? null;
+    if (hit) selectedBuilding.value = null;
+  });
 
   if (map.isStyleLoaded()) setup();
   else map.once("load", setup);

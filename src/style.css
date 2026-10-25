@@ -49,14 +49,7 @@ body {
   pointer-events: none;
 }
 
-.hud-more {
-  font-size: 13px;
-  color: var(--pencil);
-}
 
-.hud-more summary {
-  cursor: pointer;
-}
 
 .hud-date {
   font-size: var(--fs-sm);
@@ -126,86 +119,14 @@ body {
   font-size: 12px;
 }
 
-.demand {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin: 4px 0;
-}
 
-.demand-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--pencil);
-}
 
-.demand-label {
-  width: 56px;
-}
 
-.demand-track {
-  flex: 1;
-  min-width: 90px;
-  height: 6px;
-  border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--paper-sunk);
-  overflow: hidden;
-}
 
-.demand-fill {
-  display: block;
-  height: 100%;
-}
 
-.building-panel {
-  position: absolute;
-  right: 12px;
-  top: 224px; /* below the notebook button */
-  width: 220px;
-  max-height: calc(100vh - 370px); /* above the toolbar */
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
 
-.building-name {
-  font-weight: 700;
-  font-size: 15px;
-  padding-right: 20px;
-}
 
-.building-panel .close {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  border: none;
-  background: none;
-  display: inline-flex;
-  padding: 4px;
-  line-height: 1;
-  color: var(--pencil);
-  cursor: pointer;
-}
 
-.events {
-  font-size: 13px;
-  color: var(--pencil);
-}
-.events summary {
-  cursor: pointer;
-}
-.town .link.event-go {
-  display: inline;
-  margin-top: 0;
-  font-size: inherit;
-  color: inherit;
-  text-align: left;
-}
 .event-at {
   color: var(--pencil-faint);
   font-size: 11px;
@@ -238,39 +159,9 @@ body {
   font-size: 12px;
 }
 
-.building-panel .demolish {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  margin-top: 6px;
-  font: inherit;
-  padding: 5px 10px;
-  border: var(--bw) solid var(--bad);
-  border-radius: var(--radius);
-  background: var(--paper-raised);
-  color: var(--bad);
-  cursor: pointer;
-}
 
-/* Levers (P5): site orders in the building panel, «Распоряжения» in the town panel */
-.site-levers,
-.orders-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 6px 0;
-}
 
-.orders {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: var(--bw) solid var(--line, currentColor);
-}
 
-.orders-title {
-  font-weight: 600;
-}
 
 /* ---- Shared kit (src/ui/kit) ---- */
 

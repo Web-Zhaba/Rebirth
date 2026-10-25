@@ -34,13 +34,17 @@ import Sun from "~icons/game-icons/sun";
 import Sunrise from "~icons/game-icons/sunrise";
 import Sunset from "~icons/game-icons/sunset";
 import StoneBlock from "~icons/game-icons/stone-block";
+import Village from "~icons/game-icons/village";
 import Well from "~icons/game-icons/well";
 import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
 import PhInfo from "~icons/ph/info-bold";
+import PhFlag from "~icons/ph/flag-bold";
 import PhFootprints from "~icons/ph/footprints";
+import PhHourglass from "~icons/ph/hourglass-bold";
+import PhUsers from "~icons/ph/users-three-bold";
 import PhPause from "~icons/ph/pause-fill";
 import PhProhibit from "~icons/ph/prohibit";
 import PhSmiley from "~icons/ph/smiley";
@@ -65,6 +69,11 @@ export const ICONS = {
   traffic: PhFootprints,
   mood: PhSmiley,
   info: PhInfo,
+  // Inspector and town panel: priority, volunteers, waiting, the town button
+  flag: PhFlag,
+  crowd: PhUsers,
+  hourglass: PhHourglass,
+  town: Village,
   // Journal (game-icons): chronicle entry, article, founding
   quill: QuillInk,
   scroll: ScrollUnfurled,
