@@ -4,6 +4,7 @@ import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
+import { emptyLevers, type Levers } from "./levers";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
@@ -335,6 +336,19 @@ function parseProd(v: unknown): ProdState {
 
 const SUMMARY_KINDS: readonly string[] = ["built", "arrived", "born", "made", "problem"];
 
+// Levers: every field falls back to its default, so old saves load with all levers off.
+function parseLevers(v: unknown): Levers {
+  const out = emptyLevers();
+  if (!isRecord(v)) return out;
+  if (isNum(v.priority) && Number.isInteger(v.priority) && v.priority !== 0) out.priority = v.priority;
+  const t = v.toloka;
+  if (isRecord(t) && isNum(t.site) && Number.isInteger(t.site) && t.site !== 0 && isNum(t.until)) out.toloka = { site: t.site, until: t.until };
+  if (isNum(v.tolokaReady)) out.tolokaReady = v.tolokaReady;
+  out.strada = v.strada === true;
+  if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
+  return out;
+}
+
 // The last day summary; a missing or broken one is null, broken lines are dropped.
 function parseSummary(v: unknown): DaySummary | null {
   if (!isRecord(v) || !isNum(v.at) || !Array.isArray(v.lines)) return null;
@@ -416,6 +430,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.attract = isNum(sim.attract) ? Math.min(1, Math.max(0, sim.attract)) : 0;
   g.chronicle = parseChronicle(sim.chronicle);
   g.summary = parseSummary(sim.summary);
+  g.levers = parseLevers(sim.levers);
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   const ls = sim.lastSpawn;

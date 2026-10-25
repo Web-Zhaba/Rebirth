@@ -253,6 +253,25 @@ body {
   cursor: pointer;
 }
 
+/* Levers (P5): site orders in the building panel, «Распоряжения» in the town panel */
+.site-levers,
+.orders-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.orders {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: var(--bw) solid var(--line, currentColor);
+}
+
+.orders-title {
+  font-weight: 600;
+}
+
 /* ---- Shared kit (src/ui/kit) ---- */
 
 .icon {

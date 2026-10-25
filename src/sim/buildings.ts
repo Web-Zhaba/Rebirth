@@ -121,7 +121,14 @@ export const clearingsFirst = (stock: Stock): boolean => stock.logs < BUILDINGS.
 // Splits `personHours` between the open sites: buildings by id and clearings, the clearings first or last (`first`).
 // Each takes at most one crew's work (`crewHours`), in that order; what is left goes to the same sites in the same
 // order while they still have work, so labor is never wasted.
-function allocate(buildings: Record<number, Building>, clearings: readonly Clearing[], personHours: number, crewHours: number, first: boolean) {
+// Player levers that reorder the work: `priority` goes to the very front of both rounds; `focus` (толока) takes all the
+// hands it can use, without the crew limit, before anyone else. Keys: building id, or -id of a clearing.
+export interface SiteLever {
+  priority?: number | null;
+  focus?: number | null;
+}
+
+function allocate(buildings: Record<number, Building>, clearings: readonly Clearing[], personHours: number, crewHours: number, first: boolean, lever?: SiteLever) {
   const sites: [number, number][] = []; // key (building id, or -id of a clearing), remaining
   const fell = clearings.filter((c) => remainingClearing(c) > EPS).map((c): [number, number] => [-c.id, remainingClearing(c)]);
   if (first) sites.push(...fell);
@@ -130,8 +137,19 @@ function allocate(buildings: Record<number, Building>, clearings: readonly Clear
     if (rem > EPS) sites.push([Number(key), rem]);
   }
   if (!first) sites.push(...fell);
+  const pi = lever?.priority != null ? sites.findIndex(([id]) => id === lever.priority) : -1;
+  if (pi > 0) sites.unshift(...sites.splice(pi, 1));
   const out = new Map<number, number>();
   let left = personHours;
+  const fi = lever?.focus != null ? sites.findIndex(([id]) => id === lever.focus) : -1;
+  if (fi >= 0) {
+    const take = Math.min(left, sites[fi][1]);
+    if (take > EPS) {
+      out.set(sites[fi][0], take);
+      left -= take;
+    }
+    sites.splice(fi, 1);
+  }
   for (const [id, rem] of sites) {
     const take = Math.min(left, crewHours, rem);
     if (take <= EPS) break;
@@ -149,15 +167,15 @@ function allocate(buildings: Record<number, Building>, clearings: readonly Clear
 }
 
 // Building id -> person-hours it receives.
-export function allocateLabor(buildings: Record<number, Building>, personHours: number, crewHours: number, clearings: readonly Clearing[] = [], first = false): Map<number, number> {
+export function allocateLabor(buildings: Record<number, Building>, personHours: number, crewHours: number, clearings: readonly Clearing[] = [], first = false, lever?: SiteLever): Map<number, number> {
   const out = new Map<number, number>();
-  for (const [key, h] of allocate(buildings, clearings, personHours, crewHours, first)) if (key > 0) out.set(key, h);
+  for (const [key, h] of allocate(buildings, clearings, personHours, crewHours, first, lever)) if (key > 0) out.set(key, h);
   return out;
 }
 
 // Clearing id -> person-hours it receives from the same allocation.
-export function allocateClearings(buildings: Record<number, Building>, clearings: readonly Clearing[], personHours: number, crewHours: number, first = false): Map<number, number> {
+export function allocateClearings(buildings: Record<number, Building>, clearings: readonly Clearing[], personHours: number, crewHours: number, first = false, lever?: SiteLever): Map<number, number> {
   const out = new Map<number, number>();
-  for (const [key, h] of allocate(buildings, clearings, personHours, crewHours, first)) if (key < 0) out.set(-key, h);
+  for (const [key, h] of allocate(buildings, clearings, personHours, crewHours, first, lever)) if (key < 0) out.set(-key, h);
   return out;
 }

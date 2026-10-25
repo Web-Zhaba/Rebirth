@@ -1,6 +1,7 @@
 import type { Speed } from "./clock";
 import type { Light, Trip } from "../map/lifeLayer";
 import type { Away } from "./away";
+import type { Rations } from "./levers";
 import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
 export type { Away };
@@ -28,6 +29,12 @@ export type Cmd =
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "demolish"; id: number }
+  // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
+  | { type: "setPriority"; key: number | null }
+  | { type: "callToloka"; key: number }
+  | { type: "setSchedule"; strada: boolean }
+  | { type: "setRations"; rations: Rations }
+  | { type: "callSettlers" }
   // Wikipedia articles found near the dig discs (validated, deduplicated by id and capped by the sim).
   | { type: "addArticles"; articles: ArticleInput[] }
   // New finds of a dig site: foundations in local meters, named places and one entry per street name.

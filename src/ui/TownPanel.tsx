@@ -1,13 +1,15 @@
 import type maplibregl from "maplibre-gl";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { calendar } from "../sim/clock";
-import { WORK_END, WORK_START } from "../sim/roads";
+import { CALL, RATIONS, workHours, type Rations } from "../sim/levers";
 import { SERVICE_LIST } from "../sim/services";
 import type { City } from "../sim/types";
 import { massText } from "../sim/units";
 import { ZONE_COLORS } from "../map/tools";
-import { economy, events, frame, incomingCount, people, reset, roads, services, state, zones } from "../simClient";
+import { flash } from "../map/tools";
+import { economy, events, frame, incomingCount, people, reset, roads, sendCmd, services, state, zones } from "../simClient";
 import { Icon } from "./Icon";
+import { Button } from "./kit";
 import { LayerBar } from "./LayerBar";
 import { amount, pad, roadQueue } from "./topbarModel";
 
@@ -16,6 +18,57 @@ const plural = (n: number) => {
   if (m >= 11 && m <= 14) return "участков";
   return n % 10 === 1 ? "участок" : n % 10 >= 2 && n % 10 <= 4 ? "участка" : "участков";
 };
+const RATION_IDS: Rations[] = ["reduced", "normal", "generous"];
+
+// «Распоряжения»: workday schedule, rations and a call for settlers.
+function Orders() {
+  const s = state.value;
+  const lv = s?.levers;
+  if (!s || !lv) return null;
+  const block = s.callBlock;
+  const act = (cmd: Parameters<typeof sendCmd>[0]) =>
+    void sendCmd(cmd).then((r) => {
+      if (!r.ok) flash(r.reason ?? "Не удалось");
+    });
+  return (
+    <div class="orders" role="group" aria-label="Распоряжения">
+      <div class="orders-title">Распоряжения</div>
+      <div class="orders-row">
+        <Button
+          aria-label="Страда"
+          aria-pressed={lv.strada}
+          variant={lv.strada ? "primary" : "default"}
+          title="Работа с 05 до 21 часа: на треть больше труда, но настроение ниже на 8"
+          onClick={() => act({ type: "setSchedule", strada: !lv.strada })}
+        >
+          {lv.strada ? "Страда: до 21:00" : "Обычный день: 07–19"}
+        </Button>
+      </div>
+      <div class="orders-row" role="radiogroup" aria-label="Пайки">
+        {RATION_IDS.map((id) => (
+          <Button
+            key={id}
+            role="radio"
+            aria-checked={lv.rations === id}
+            aria-label={`Пайки: ${RATIONS[id].name.toLowerCase()}`}
+            variant={lv.rations === id ? "primary" : "default"}
+            title={`Еда ${RATIONS[id].food * 100 - 100 > 0 ? "+" : ""}${Math.round(RATIONS[id].food * 100 - 100)} %, настроение ${RATIONS[id].mood > 0 ? "+" : ""}${RATIONS[id].mood}`}
+            onClick={() => act({ type: "setRations", rations: id })}
+          >
+            {RATIONS[id].name}
+          </Button>
+        ))}
+      </div>
+      <div class="orders-row">
+        <Button aria-label="Призвать поселенцев" disabled={block !== null} onClick={() => act({ type: "callSettlers" })}>
+          Призвать поселенцев
+        </Button>
+      </div>
+      <div class={block ? "people-note" : "hud-date"}>{block ?? `Стоит ${CALL.food} кг провизии и ${CALL.wares} шт утвари`}</div>
+    </div>
+  );
+}
+
 const families = (n: number) => {
   const m = n % 100;
   if (m >= 11 && m <= 14) return "семей";
@@ -85,7 +138,7 @@ export function TownPanel({ city, map }: { city: City; map: maplibregl.Map }) {
         <summary>Подробнее</summary>
         {p && (
           <div class="hud-date">
-            Дорога на работу: {p.employed > 0 ? `~${Math.round(p.avgCommute)} мин` : "—"} · стройка {pad(WORK_START)}–{pad(WORK_END)}
+            Дорога на работу: {p.employed > 0 ? `~${Math.round(p.avgCommute)} мин` : "—"} · стройка {pad(workHours(state.value?.levers).start)}–{pad(workHours(state.value?.levers).end)}
           </div>
         )}
         {sv && sv.houses > 0 && (
@@ -120,6 +173,7 @@ export function TownPanel({ city, map }: { city: City; map: maplibregl.Map }) {
           </button>
         </div>
       )}
+      <Orders />
       <details class="events">
         <summary>События</summary>
         {recent.length === 0 && <div class="hud-date">Пока тихо</div>}

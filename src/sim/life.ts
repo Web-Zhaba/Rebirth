@@ -1,6 +1,7 @@
 import type { Light, Trip } from "../map/lifeLayer";
 import { BUILDINGS } from "./buildings";
 import { EVENING } from "./evening";
+import { workHours } from "./levers";
 import { WORKSHOP_INPUT } from "./fields";
 import { nodePath, polyline, polyLength, shortestTree } from "./paths";
 import { buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, nearestNode, WALK_SPEED } from "./people";
@@ -174,7 +175,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
       if (!hl || !path) continue;
       const pts = round2(polyline(s.roads, [...path].reverse(), hl.at, tl.at));
       if (polyLength(pts) < 5) continue;
-      const out = EVENING.from * 60 + unit(c.who, 6) * 90;
+      const out = workHours(s).end * 60 + unit(c.who, 6) * 90;
       const back = 21 * 60 + unit(c.who, 7) * 45;
       trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts, depart: out, speed: WALK_SPEED });
       trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts: [...pts].reverse(), depart: back, speed: WALK_SPEED });

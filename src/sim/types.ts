@@ -1,3 +1,4 @@
+import type { Levers } from "./levers";
 import type { Land } from "../world/landcover";
 
 export interface City {
@@ -141,7 +142,7 @@ export interface Household {
   mood: number; // 0..100
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage";
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order";
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -274,6 +275,7 @@ export interface SimState extends PeopleState {
   coverage: Record<number, number>;
   landValue: Record<number, number>; // house id -> 0..100
   summary: DaySummary | null; // «Итоги дня» of the last 22:00
+  levers: Levers; // player levers (P5)
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
@@ -342,6 +344,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
+  callBlock: string | null; // why a call for settlers cannot be made now, or null
 };
 
 // What the main thread keeps.

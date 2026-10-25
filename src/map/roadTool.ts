@@ -156,7 +156,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
         .then((p) => {
           if (mine !== seq) return;
           const c = segmentCost(p, t);
-          const queued = queuedLabel(gameClock.peek());
+          const queued = queuedLabel(gameClock.peek(), state.peek()?.levers);
           verdict = c.ok ? { ok: true, text: costText(p.length, c.labor) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? "Нельзя" };
           drawPreview(req.a, req.b);
           setLabel(verdict.text);
