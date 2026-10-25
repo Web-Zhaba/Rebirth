@@ -1,3 +1,4 @@
+import type { Speed } from "./clock";
 import type { Light, Trip } from "../map/lifeLayer";
 import type { Away } from "./away";
 import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, Site, StoredArticle, ZoneState, ZoneType } from "./types";
@@ -41,6 +42,10 @@ export type ToWorker =
   | { t: "cmd"; id: number; cmd: Cmd }
   | { t: "query"; id: number; q: { type: "building"; id: number } }
   | { t: "flush" }
+  // Session setting, not saved: 0 = paused. `now` keeps paused wall time from being owed later.
+  | { t: "speed"; speed: Speed; now: number }
+  // The tab was hidden or shown; hidden for long enough, the town runs at the offline rate.
+  | { t: "visibility"; hidden: boolean; now: number }
   | { t: "reset" };
 
 export interface CmdResult {

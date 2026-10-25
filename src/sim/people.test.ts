@@ -596,14 +596,14 @@ describe("handler: persistence and query channel", () => {
     return { h, out, puts: () => puts, get: () => stored as SaveV3 };
   }
 
-  it("saves once per game hour while ticking, not every tick", async () => {
+  it("saves every 10 wall seconds while ticking, not every tick", async () => {
     const { h, puts } = setup();
     await h.handle({ t: "found", city, now: NOW });
     const before = puts();
-    for (let k = 1; k <= 12; k++) h.tick(NOW + k * 10_000); // 120 game minutes
-    expect(puts() - before).toBe(2);
+    for (let k = 1; k <= 40; k++) h.tick(NOW + k * 2500); // 100 s, one tick per call
+    expect(puts() - before).toBe(10);
     await h.handle({ t: "flush" });
-    expect(puts() - before).toBe(3);
+    expect(puts() - before).toBe(11);
   });
   it("sends aggregates, not residents, in `loaded`", async () => {
     const { h, out } = setup();

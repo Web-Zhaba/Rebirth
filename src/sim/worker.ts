@@ -12,4 +12,4 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
 };
 
 // No-op until a save is loaded or founded.
-setInterval(() => handler.tick(Date.now()), 1000);
+setInterval(() => handler.tick(Date.now()), 250);

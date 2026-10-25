@@ -178,15 +178,15 @@ describe("handler", () => {
     h.tick(NOW); // nothing loaded
     await h.handle({ t: "found", city, now: NOW });
     out.length = 0;
-    h.tick(NOW + 5000);
+    h.tick(NOW + 2000);
     expect(out).toEqual([]);
-    h.tick(NOW + 10_000);
+    h.tick(NOW + 2500);
     expect(out.map((m) => m.t)).toEqual(["snapshot", "life"]); // the first tick of a day also brings the visual life
     const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
-    expect(snap.sim).toMatchObject({ realTime: NOW + 10_000, gameMinutes: 10, roads: emptyRoads(), people: { pop: 10, households: 3, tents: 3 } });
+    expect(snap.sim).toMatchObject({ realTime: NOW + 2500, gameMinutes: 10, roads: emptyRoads(), people: { pop: 10, households: 3, tents: 3 } });
     // aggregates only: no individual residents cross the thread boundary
     for (const k of ["residents", "households", "zones", "nextPersonId"]) expect(snap.sim).not.toHaveProperty(k);
-    h.tick(NOW + 12_000);
+    h.tick(NOW + 3000);
     expect(out.length).toBe(2);
   });
   it("addRoad command: persisted, snapshot posted, result ok", async () => {

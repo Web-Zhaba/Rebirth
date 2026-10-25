@@ -1,10 +1,11 @@
 import type maplibregl from "maplibre-gl";
-import { calendar } from "../sim/clock";
+import { useEffect } from "preact/hooks";
+import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
 import { cutOffEdges, WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
 import { SERVICE_LIST } from "../sim/services";
-import { OVERLAYS, overlay, ZONE_COLORS, type Overlay } from "../map/tools";
-import { economy, events, people, reset, roads, services, stock, zones } from "../simClient";
+import { OVERLAYS, overlay, tool, ZONE_COLORS, type Overlay } from "../map/tools";
+import { economy, events, people, reset, roads, services, setSpeed, speed, stock, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -18,9 +19,34 @@ const tons = (kg: number) => (Math.round(kg / 100) / 10).toString().replace(".",
 const amount = (v: number) => (v >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toString().replace(".", ",");
 const LOW_FOOD_DAYS = 30;
 const pad = (n: number) => String(n).padStart(2, "0");
+const SPEEDS: { v: Speed; label: string; key: string }[] = [
+  { v: 0, label: "Пауза", key: "P" },
+  { v: 1, label: "1×", key: "1" },
+  { v: 2, label: "2×", key: "2" },
+  { v: 4, label: "4×", key: "3" },
+];
+const KEY_SPEED: Record<string, Speed> = { "1": 1, "2": 2, "3": 4 };
+
+// 1/2/3 pick a speed, P pauses; Space too, unless a map tool is active (the zone brush pans with Space).
+function onSpeedKey(e: KeyboardEvent): void {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const el = e.target as HTMLElement | null;
+  if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
+  const toggle = () => setSpeed(speed.peek() === 0 ? 1 : 0);
+  if (e.key in KEY_SPEED) setSpeed(KEY_SPEED[e.key]);
+  else if (e.key === "p" || e.key === "P") toggle();
+  else if (e.key === " " && tool.value === null && !(el && ["BUTTON", "A", "SUMMARY"].includes(el.tagName))) toggle();
+  else return;
+  e.preventDefault();
+}
 
 export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
-  const cal = calendar(useGameMinutes());
+  const gm = useGameMinutes();
+  const cal = calendar(gm);
+  useEffect(() => {
+    window.addEventListener("keydown", onSpeedKey);
+    return () => window.removeEventListener("keydown", onSpeedKey);
+  }, []);
   const onReset = () => {
     if (confirm("Удалить поселение и начать заново?")) reset();
   };
@@ -72,6 +98,14 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
       <div class="hud-name">{city.name}</div>
       <div class="hud-date">
         Год {cal.year} · {SEASON_RU[cal.season]}, день {cal.dayOfSeason} · {pad(cal.hour)}:{pad(cal.minute)}
+      </div>
+      <div class="speed" role="group" aria-label="Скорость времени">
+        {SPEEDS.map((s) => (
+          <button key={s.v} type="button" aria-pressed={speed.value === s.v} title={`Клавиша ${s.key}`} onClick={() => setSpeed(s.v)}>
+            {s.label}
+          </button>
+        ))}
+        {speed.value > 0 && isNight(gm) && <span class="speed-note">ночь ×{NIGHT_BOOST}</span>}
       </div>
       {p && (
         <>

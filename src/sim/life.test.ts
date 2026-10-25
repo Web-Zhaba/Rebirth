@@ -249,11 +249,11 @@ describe("handler: life message", () => {
     const { h, out, get } = setup();
     await h.handle({ t: "found", city, now: NOW });
     expect(lives(out)).toHaveLength(0);
-    h.tick(NOW + 10_000);
+    h.tick(NOW + 2500);
     expect(lives(out)).toHaveLength(1);
-    h.tick(NOW + 20_000);
+    h.tick(NOW + 5000);
     expect(lives(out)).toHaveLength(1); // same day
-    for (let k = 3; k <= 120; k++) h.tick(NOW + k * 10_000); // crosses 00:00 of day 2 (18 h after the 06:00 start)
+    for (let k = 3; k <= 104; k++) h.tick(NOW + k * 2500); // crosses 00:00 of day 2 (18 h after the 06:00 start, 247.5 s at 1x)
     expect(lives(out)).toHaveLength(2);
     expect((lives(out)[1] as Extract<FromWorker, { t: "life" }>).day).toBe(1);
     await h.handle({ t: "flush" });

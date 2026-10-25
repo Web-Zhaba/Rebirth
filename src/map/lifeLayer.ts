@@ -20,6 +20,7 @@ export interface LifeOptions {
   gameMinutes: ReadonlySignal<number>;
   lights: ReadonlySignal<Light[]>;
   frame: ReadonlySignal<Frame | null>;
+  gameMinPerSec: () => number; // for extrapolating between clock updates
 }
 
 const SRC_TRIPS = "life-trips";
@@ -74,7 +75,7 @@ function metersToPx(k: number, meters: number): maplibregl.ExpressionSpecificati
 
 // Visual life: walkers and carts moving along their trips, warm windows at night.
 export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => void {
-  const { trips, gameMinutes, lights, frame } = opts;
+  const { trips, gameMinutes, lights, frame, gameMinPerSec } = opts;
   let ready = false;
   let disposed = false;
   let raf = 0;
@@ -83,7 +84,7 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
   const stops: (() => void)[] = [];
   const shown = { house: -1, work: -1 };
 
-  const nowGame = (): number => base.gm + Math.min(MAX_EXTRAP, (performance.now() - base.at) / 1000);
+  const nowGame = (): number => base.gm + Math.min(MAX_EXTRAP, (gameMinPerSec() * (performance.now() - base.at)) / 1000);
 
   const setup = (lat: number) => {
     const k = 512 / (EQUATOR_M * Math.cos((lat * Math.PI) / 180));

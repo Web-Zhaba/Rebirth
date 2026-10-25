@@ -1,6 +1,6 @@
 import { it } from "vitest";
 import { BUILDINGS } from "../sim/buildings";
-import { calendar, TICK_MS } from "../sim/clock";
+import { calendar } from "../sim/clock";
 import { canPlace } from "../sim/growth";
 import { Handler, type Storage } from "../sim/handler";
 import { isFinishedHouse } from "../sim/people";
@@ -16,6 +16,7 @@ declare const process: { stdout: { write(s: string): void }; stderr: { write(s: 
 
 const T0 = 1_800_000_000_000; // fake wall clock at founding
 const CAP_DAYS = 400;
+const STEP_MS = 2500; // fake wall time per h.tick(): ten worker intervals, about one tick at 1x
 const NONE: Site = { forest: 0, water: 0, rock: 0 };
 const mem: Storage = { get: async () => null, put: async () => {}, clear: async () => {} };
 
@@ -127,7 +128,7 @@ it("pacing harness", async () => {
       await paint(`residential zone ${from}-${roadEnd} m`, "res", (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
     }
     for (let k = 0; k < 6; k++) {
-      now += TICK_MS;
+      now += STEP_MS;
       h.tick(now);
       for (const m of marks) if (!m.at && m.hit()) m.at = { ms: now - T0, day: dayOf(st.gameMinutes) + 1, pop: st.people.pop };
     }

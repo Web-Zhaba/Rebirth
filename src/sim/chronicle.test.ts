@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { summarize, newTally, observe } from "./away";
 import { addChronicle, CHRONICLE_CAP, recordChronicle } from "./chronicle";
-import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
+import { advanceTo, BASE_TICK, OFFLINE, step, TICK_MS } from "./clock";
 import { emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
@@ -205,7 +205,7 @@ describe("catch-up", () => {
   it("away summary counts people, buildings, goods and chronicle of the period", () => {
     const start = grower(NOW - GAP);
     const tally = newTally();
-    const end = advanceTo(start, NOW, Infinity, (p, n) => observe(tally, p, n));
+    const end = advanceTo(start, NOW, OFFLINE, Infinity, (p, n) => observe(tally, p, n));
     const a = summarize(tally, start, end, GAP);
     expect(a.gameMinutes).toBe(end.gameMinutes - start.gameMinutes);
     expect(a.popBefore).toBe(10);

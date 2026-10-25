@@ -1,5 +1,5 @@
 import { newTally, observe, summarize, type Tally } from "./away";
-import { advanceTo, BASE_TICK, capGap, MS_PER_GAME_MINUTE, TICK_MS } from "./clock";
+import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { digInfos, recordFinds } from "./excavation";
@@ -24,8 +24,10 @@ export interface Storage {
 }
 
 const AWAY_MIN_MS = 60_000;
-const PERSIST_MINUTES = 60; // game minutes between saves while ticking
-const CATCHUP_MIN = 60; // game minutes: a longer gap is caught up in chunks with progress
+const PERSIST_MS = 10_000; // wall ms between saves while ticking
+const CATCHUP_MIN = 60; // game minutes: a longer catch-up reports progress
+const AWAY_GAP_MS = 70_000; // a longer gap between ticks is caught up in chunks with progress
+const HIDDEN_OFFLINE_MS = 5 * 60_000; // a tab hidden this long counts as offline
 const CHUNK_TICKS = 144; // one game day per chunk
 
 // What the main thread sees: aggregates instead of individual residents.
@@ -72,6 +74,9 @@ export class Handler {
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private lifeDay = Number.NaN; // game day the main thread has visual life for
+  private speed: Speed = 1; // session setting
+  private hiddenAt: number | null = null; // wall time the tab was hidden
+  private persistedAt = 0; // wall time of the last save by tick()
 
   constructor(
     private storage: Storage,
@@ -118,6 +123,17 @@ export class Handler {
         case "flush":
           if (this.save) await this.storage.put(this.save);
           return;
+        case "speed":
+          if (!validSpeed(msg.speed) || !finite(msg.now)) return;
+          this.tick(msg.now); // up to now at the old speed; a pause then owes nothing, an unpause starts from now
+          this.speed = msg.speed;
+          this.postSnapshot(); // carries the new wall-time anchor
+          return;
+        case "visibility":
+          if (typeof msg.hidden !== "boolean" || !finite(msg.now)) return;
+          if (msg.hidden) this.hiddenAt ??= msg.now;
+          else this.hiddenAt = null;
+          return;
         case "reset":
           this.setSave(null);
           await this.storage.clear();
@@ -146,7 +162,7 @@ export class Handler {
     const count = (p: SimState, n: SimState) => observe(tally, p, n);
     if (report) this.post({ t: "progress", done: 0, total });
     while (cur.realTime + TICK_MS <= now) {
-      cur = advanceTo(cur, Math.min(now, cur.realTime + CHUNK_TICKS * TICK_MS), Infinity, count);
+      cur = advanceTo(cur, Math.min(now, cur.realTime + CHUNK_TICKS * TICK_MS), OFFLINE, Infinity, count);
       if (report) {
         this.post({ t: "progress", done: cur.gameMinutes - startGm, total });
         if (cur.realTime + TICK_MS <= now) await new Promise((r) => setTimeout(r, 0));
@@ -214,6 +230,9 @@ export class Handler {
     this.postedFinds = save ? save.sim.finds : null;
     this.postedArticles = save ? save.sim.articles : null;
     this.lifeDay = Number.NaN;
+    this.speed = 1;
+    this.hiddenAt = null;
+    this.persistedAt = save?.sim.realTime ?? 0;
     this.failed.clear();
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
@@ -410,26 +429,36 @@ export class Handler {
     this.enrich();
   }
 
-  // Called by the worker timer every second.
+  private pace(now: number): Pace {
+    return { speed: this.speed, offline: this.hiddenAt !== null && now - this.hiddenAt > HIDDEN_OFFLINE_MS };
+  }
+
+  // Called by the worker timer every 250 ms.
   tick(now: number): void {
     if (!this.save || this.busy) return;
-    if ((now - this.save.sim.realTime) / MS_PER_GAME_MINUTE > CATCHUP_MIN + BASE_TICK) {
+    const pace = this.pace(now);
+    if (pace.speed !== 0 && now - this.save.sim.realTime > AWAY_GAP_MS) {
       this.catching = this.runAway(now).finally(() => (this.catching = null));
       return;
     }
     const prev = this.save.sim.gameMinutes;
-    const sim = advanceTo(this.save.sim, now);
-    if (sim.gameMinutes === prev) return;
+    const sim = advanceTo(this.save.sim, now, pace);
+    if (sim.gameMinutes === prev) {
+      if (sim.realTime !== this.save.sim.realTime) this.save = { ...this.save, sim }; // paused: the wall time just follows
+      return;
+    }
     this.save = { ...this.save, sim };
     this.postSnapshot();
     if (dayOf(sim.gameMinutes) !== this.lifeDay) this.postLife();
-    // Persist once per game hour, not every tick (commands and flush save as well).
-    if (Math.floor(sim.gameMinutes / PERSIST_MINUTES) !== Math.floor(prev / PERSIST_MINUTES)) {
+    // Persist every few wall seconds, not every tick (commands and flush save as well).
+    if (now - this.persistedAt >= PERSIST_MS) {
+      this.persistedAt = now;
       this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));
     }
   }
 }
 
+const validSpeed = (v: unknown): v is Speed => v === 0 || v === 1 || v === 2 || v === 4;
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const validSite = (v: unknown): v is Site =>
   typeof v === "object" && v !== null && ["forest", "water", "rock"].every((k) => finite((v as Record<string, unknown>)[k]) && (v as Record<string, number>)[k] >= 0 && (v as Record<string, number>)[k] <= 1);

@@ -9,12 +9,42 @@ import type { SimState } from "./types";
 
 export { START_MINUTE_OF_DAY };
 
-// 1 real second = 1 game minute.
-export const MS_PER_GAME_MINUTE = 1000;
 export const BASE_TICK = 10; // game minutes
-export const TICK_MS = BASE_TICK * MS_PER_GAME_MINUTE;
+export const LIVE_MS_PER_GAME_MINUTE = 250; // live play at 1x: 1 real second = 4 game minutes
+export const OFFLINE_MS_PER_GAME_MINUTE = 1000; // catch-up: 1 real second = 1 game minute
+export const TICK_MS = BASE_TICK * OFFLINE_MS_PER_GAME_MINUTE; // one tick of a catch-up, real ms
 export const OFFLINE_CAP = 24 * 3600 * 1000; // real ms
+export const NIGHT_BOOST = 4; // live play runs this much faster at night
+const NIGHT_START = 22;
+const NIGHT_END = 5;
 export { calendar, DAYS_PER_SEASON, type Calendar } from "./time";
+
+export type Speed = 0 | 1 | 2 | 4;
+// How wall time is spent: the chosen speed (0 = paused), or the fixed catch-up rate.
+export interface Pace {
+  speed: Speed;
+  offline: boolean;
+}
+export const OFFLINE: Pace = { speed: 1, offline: true };
+
+export const isNight = (gameMinutes: number): boolean => {
+  const h = calendar(gameMinutes).hour;
+  return h >= NIGHT_START || h < NIGHT_END;
+};
+
+// Real ms that the tick starting at `gameMinutes` costs; Infinity while paused. Offline ignores speed and night.
+export function tickMs(gameMinutes: number, pace: Pace): number {
+  if (pace.speed === 0) return Infinity;
+  if (pace.offline) return TICK_MS;
+  return (BASE_TICK * LIVE_MS_PER_GAME_MINUTE) / (pace.speed * (isNight(gameMinutes) ? NIGHT_BOOST : 1));
+}
+
+// The game clock interpolated between snapshots (live play), never past the next tick.
+export function clockAt(gameMinutes: number, realTime: number, now: number, speed: Speed): number {
+  if (speed === 0) return gameMinutes;
+  const msPerMinute = tickMs(gameMinutes, { speed, offline: false }) / BASE_TICK;
+  return gameMinutes + Math.min(Math.max(0, (now - realTime) / msPerMinute), BASE_TICK - 0.001);
+}
 
 export function step(s: SimState): SimState {
   const hour = calendar(s.gameMinutes).hour;
@@ -33,7 +63,7 @@ export function step(s: SimState): SimState {
   }
   let cur: SimState = { ...s, roads, buildings, stock };
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScale(s));
-  let next: SimState = { ...cur, realTime: s.realTime + TICK_MS, gameMinutes: s.gameMinutes + BASE_TICK };
+  let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
   return recordChronicle(s, spawnBuildings(next));
 }
@@ -41,11 +71,13 @@ export function step(s: SimState): SimState {
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.
 export const capGap = (s: SimState, now: number, cap = OFFLINE_CAP): SimState => (now - s.realTime > cap ? { ...s, realTime: now - cap } : s);
 
-// Caps the gap to `cap` real ms, then runs whole ticks up to `now`. `onStep` sees every tick (prev, next).
-export function advanceTo(s: SimState, now: number, cap = OFFLINE_CAP, onStep?: (prev: SimState, next: SimState) => void): SimState {
+// Caps the gap to `cap` real ms, then spends wall time up to `now` on whole ticks at `pace`; paused, wall time is
+// simply dropped. `onStep` sees every tick (prev, next).
+export function advanceTo(s: SimState, now: number, pace: Pace = OFFLINE, cap = OFFLINE_CAP, onStep?: (prev: SimState, next: SimState) => void): SimState {
   let cur = capGap(s, now, cap);
-  while (cur.realTime + TICK_MS <= now) {
-    const next = step(cur);
+  if (pace.speed === 0) return cur.realTime < now ? { ...cur, realTime: now } : cur;
+  for (let ms = tickMs(cur.gameMinutes, pace); cur.realTime + ms <= now; ms = tickMs(cur.gameMinutes, pace)) {
+    const next = { ...step(cur), realTime: cur.realTime + ms };
     onStep?.(cur, next);
     cur = next;
   }

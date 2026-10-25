@@ -55,7 +55,7 @@ Measured at speed 1× by the harness (P0) with a scripted build order; tuned in 
 | # | Milestone | Done when |
 |---|---|---|
 | P0 | Pacing harness | A Node script (`npm run pace`) founds a town on a synthetic flat site with forest and water, plays a fixed build order through the worker handler (roads, residential zone, woodcutter, sawpit, gumno + fields, well, dig) and prints the real time to each target in section 2. Baseline recorded in this file. **Done** (`src/pace/pace.run.ts`, `vitest.pace.config.ts`). |
-| P1 | Time model | Speed controls and a short night (section 4). Pause, 1×, 2×, 4×; night 22–05 passes ×4 faster; offline catch-up unchanged in cost. Tests for the clock and catch-up. |
+| P1 | Time model | Speed controls and a short night (section 4). Pause, 1×, 2×, 4×; night 22–05 passes ×4 faster; offline catch-up unchanged in cost. Tests for the clock and catch-up. **Done**: `tickMs` and `clockAt` in `sim/clock.ts`; `step` no longer moves `realTime`, `advanceTo` spends wall time at a `Pace`; worker ticks every 250 ms and persists at most every 10 s; speed is not saved; harness: first house 0:16, 5 houses 2:13, first harvest 15:59 (game days unchanged). |
 | P2 | Compressed calendar | Year of 4 × 8 days with calendar-scaled daily processes; save v4 migration (section 5). First harvest ~75 real min after founding at 1×. |
 | P3 | Fast start, visible construction | Founding cart, more founders, parallel sites, growth pipeline and immigration retuned, forest clearing tool (section 6). First house ≤ 4 min in the harness. |
 | P4 | Evenings and night | Evening home crafts and gatherings, the day summary, lights that show vacancy (section 7). |
@@ -86,21 +86,27 @@ milestone uses the current styles until `PLAN-ui.md` U1 lands.
 
 ## 5. P2 — compressed calendar
 
-- **Season = 8 days, year = 32 days** (≈ 2.5 real h at 1×). One game day stands for
-  `CAL = 360 / 32 = 11.25` calendar days for every calendar-bound process. Workday-bound work
-  (construction, roads, production per worker-hour) is unchanged.
-- One helper converts yearly rates to per-game-day ones; per-day constants are restated per year:
-  food per person per day (× CAL), foraging, immigrants' 60 days of food, marriage and departure
-  rates, the 20-day upgrade streak (→ 2 game days), school 720 days (→ 2 years), harvest window
-  (first half of autumn = 4 days).
-- Field labor per ha scales by 1 / CAL so sowing and harvest fit their shorter windows with the same
-  farmer count; yields per year stay 400 kg/ha.
-- Ageing, births and deaths follow `YEAR_MIN` automatically.
-- **Save v4 migration:** rescale every stored time stamp (resident `born`, chronicle and event
-  times, find dates, building streaks) to the new calendar, so ages and seasons are preserved.
+- **Season = 8 days, year = 32 days** (≈ 2.5 real h at 1×). A day stays a day: people eat,
+  forage, fish and make wares per day as before, and construction stays per workday hour. Only
+  what is counted **per year** shrinks with the year, by `YEAR_DAYS / 360 = 32 / 360`:
+  - crop yield per ha per year (400 → ~35.6 kg/ha), so the land a family needs stays historical
+    (about 2 ha per family of four);
+  - field labor per ha (sowing 50 → ~4.4 h/ha, harvest 200 → ~17.8 h/ha) so the same farmers fit
+    the 8-day spring and the 4-day harvest window (first half of autumn);
+  - school days to literacy (720 → 2 years = 64 days); the food-outlook horizon (one year);
+  - births and deaths stay annual rates, applied per day as `rate / YEAR_DAYS` (no literal 360 left).
+- Ageing follows `YEAR_MIN` automatically.
+- **Save v4 migration:** game time is kept as it is (the date is re-read in the new calendar, so a
+  town may jump a few years ahead); resident `born` is rescaled so every age is preserved, and
+  school days scale with the year.
 - Offline cap of 60 game days becomes ≈ 2 years: check the away summary stays readable.
 
 ## 6. P3 — fast start and visible construction
+
+Finding from P0: the population falls because food runs out, not for lack of space. Mood drops
+below 35 only in a famine (target = 10 + 45 × fed + 10 × house + …), and immigration stops when the
+food outlook falls below 90 % of a year's need. So early food (forage, fishers, the first fields) is
+the real wall; the harness build order adds about 2 ha of fields per new house to play sensibly.
 
 - **Founding party:** 14 people (4 families, 8 adults) with a cart: food 3 t, logs 60 m³, planks 8 m³,
   stone 6 t, wares 20 — enough for the first two izbas without hand-made materials. With 8 hands an izba

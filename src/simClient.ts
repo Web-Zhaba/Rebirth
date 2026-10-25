@@ -1,6 +1,6 @@
 import { computed, effect, signal } from "@preact/signals";
 import type { Light, Trip } from "./map/lifeLayer";
-import { BASE_TICK, MS_PER_GAME_MINUTE } from "./sim/clock";
+import { BASE_TICK, clockAt, tickMs, type Speed } from "./sim/clock";
 import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState } from "./sim/types";
 import { makeFrame } from "./world/frame";
@@ -32,17 +32,25 @@ export const catchUp = signal<{ done: number; total: number } | null>(null);
 export const lifeTrips = signal<Trip[]>([]);
 export const lifeTraffic = signal<Record<number, number>>({});
 export const lifeLights = signal<Light[]>([]);
+// Game speed of this session (0 = paused); not saved, 1x after every load.
+export const speed = signal<Speed>(1);
 // Game minutes, interpolated between snapshots and refreshed every 2 s for the life layer.
 export const gameClock = signal(0);
 const syncClock = () => {
   const s = state.peek();
-  if (s) gameClock.value = s.gameMinutes + Math.min(Math.max(0, (Date.now() - s.realTime) / MS_PER_GAME_MINUTE), BASE_TICK - 0.001);
+  if (s) gameClock.value = clockAt(s.gameMinutes, s.realTime, Date.now(), speed.peek());
 };
 effect(() => {
   void state.value;
+  void speed.value;
   syncClock();
 });
 setInterval(syncClock, 2000);
+// Game minutes per real second right now, for extrapolating between clock updates.
+export const gameMinPerSec = (): number => {
+  const s = state.peek();
+  return s && speed.peek() > 0 ? (BASE_TICK * 1000) / tickMs(s.gameMinutes, { speed: speed.peek(), offline: false }) : 0;
+};
 
 const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module" });
 const send = (msg: ToWorker) => worker.postMessage(msg);
@@ -80,6 +88,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
           // storage unavailable: nothing to clean up
         }
       }
+      speed.value = 1; // the worker starts every town at 1x
       city.value = m.save?.city ?? null;
       state.value = m.save?.sim ?? null;
       away.value = m.away;
@@ -140,7 +149,14 @@ export function load(): void {
 export const found = (c: City) => send({ t: "found", city: c, now: Date.now() });
 export const reset = () => send({ t: "reset" });
 
+export function setSpeed(v: Speed): void {
+  speed.value = v;
+  send({ t: "speed", speed: v, now: Date.now() });
+}
+
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") send({ t: "flush" });
+  const hidden = document.visibilityState === "hidden";
+  send({ t: "visibility", hidden, now: Date.now() });
+  if (hidden) send({ t: "flush" });
 });
 addEventListener("pagehide", () => send({ t: "flush" }));
