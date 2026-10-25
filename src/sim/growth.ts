@@ -1,12 +1,13 @@
 import { DIG, emptyFinds } from "./excavation";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate } from "./buildings";
-import { jobsOf } from "./fields";
+import { fieldCentroid, jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
-import { emptyProd, emptyStock } from "./production";
+import { clearingLogs } from "./clearing";
+import { emptyProd, emptyStock, handHours, say } from "./production";
 import { nextRandom } from "./rng";
 import { distToEdge, ROAD_KINDS } from "./roads";
-import type { Building, Demand, PeopleState, RoadEdge, RoadGraph, Site, SimState, ZoneCell, ZoneType } from "./types";
-import { CELL_SIZE, paintCells, qkey } from "./zones";
+import type { Building, Clearing, Demand, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
+import { CELL_SIZE, paintCells, pointInPolygon, qkey, qpoint, regenerateCells } from "./zones";
 
 export { nextRandom };
 export type { Demand };
@@ -31,13 +32,14 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
   const f = createFounders(seed >>> 0, now);
   return {
     buildings: {},
+    clearings: [],
     nextBuildingId: 1,
     rng: f.rng,
     lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
@@ -205,7 +207,7 @@ interface Lot {
   fits: [BuildingTemplate, ZoneCell][]; // template and the far corner cell of its lot
 }
 
-function findLots(s: SimState, zone: ZoneType): Lot[] {
+function findLots(s: Pick<SimState, "roads" | "buildings" | "zones">, zone: ZoneType): Lot[] {
   const built = new Set<number>();
   for (const e of Object.values(s.roads.edges)) if (e.done >= e.labor) built.add(e.id);
   const occ = occupancy(s.buildings);
@@ -229,6 +231,25 @@ function findLots(s: SimState, zone: ZoneType): Lot[] {
     if (fits.length > 0) lots.push({ c0, fits });
   }
   return lots;
+}
+
+// Why a zone type is not growing, in the order a player can fix it: nothing painted, no demand, no free lot
+// beside a built road, no hands in the artel, materials made by hand. "ok" = it grows (or a site is in work).
+export function growthAdvice(s: SimState, dem: Demand, builders: number): GrowthAdvice {
+  const painted = new Set<ZoneType>();
+  for (const c of s.zones.cells) if (!c.block && c.zone !== "none") painted.add(c.zone);
+  const open = Object.values(s.buildings).filter((b) => b.state !== "active" && b.zone !== "placed");
+  const why = (zone: ZoneType): GrowthWhy => {
+    if (!painted.has(zone)) return "nozone";
+    const sites = open.filter((b) => b.zone === zone);
+    if (sites.length > 0) {
+      if (builders === 0) return "hands";
+      if (sites.some((b) => !b.paid && b.state === "planned" && handHours(BUILDINGS[b.template]?.materials ?? { logs: 0, planks: 0, stone: 0 }, s.stock) > 0)) return "materials";
+    }
+    if (dem[zone] < 1) return sites.length > 0 ? "ok" : "demand";
+    return findLots(s, zone).length > 0 ? "ok" : "lots";
+  };
+  return { res: why("res"), craft: why("craft"), trade: why("trade") };
 }
 
 // At most one new building per zone type per game hour, when demand asks for it.
@@ -329,9 +350,9 @@ export function placeBuilding(s: SimState, t: BuildingTemplate, edge: number, si
 
 // Spends person-hours on the open sites as allocateLabor splits them (a crew of CREW hands each, oldest first);
 // returns the same record when nothing changed. `crewHours` is the work of one crew in this tick.
-export function advanceBuildings(buildings: Record<number, Building>, personHours: number, crewHours = Infinity): Record<number, Building> {
+export function advanceBuildings(buildings: Record<number, Building>, personHours: number, crewHours = Infinity, clearings: readonly Clearing[] = []): Record<number, Building> {
   let out = buildings;
-  for (const [id, use] of allocateLabor(buildings, personHours, crewHours)) {
+  for (const [id, use] of allocateLabor(buildings, personHours, crewHours, clearings)) {
     const b = buildings[id];
     if (out === buildings) out = { ...buildings };
     if (b.state === "active") {
@@ -345,6 +366,57 @@ export function advanceBuildings(buildings: Record<number, Building>, personHour
     }
   }
   return out;
+}
+
+// A "built" notice for every building that became active (or an izba rebuilt to level 2) between the two records.
+export function reportBuilt(before: Record<number, Building>, after: Record<number, Building>, events: TownEvent[], now: number): TownEvent[] {
+  if (after === before) return events;
+  let out = events;
+  for (const b of Object.values(after)) {
+    const was = before[b.id];
+    if (!was) continue;
+    const pos: [number, number] = [b.lot.cx, b.lot.cy];
+    if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `Достроено: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
+    else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", "Изба перестроена", pos);
+  }
+  return out;
+}
+
+// Credits the logs of the work each clearing received (a share of its total, by labor done). A clearing that
+// finishes turns the forest in its sampled terrain into meadow and regenerates the cells; each one is an event.
+export function advanceClearings(s: SimState, use: Map<number, number>): SimState {
+  if (use.size === 0) return s;
+  let logs = 0;
+  const finished: Clearing[] = [];
+  const clearings = s.clearings.map((c) => {
+    const h = use.get(c.id);
+    if (!h) return c;
+    const done = h >= c.labor - c.done - EPS ? c.labor : c.done + h;
+    logs += (clearingLogs(c.area, c.forest) * (done - c.done)) / c.labor;
+    const next = { ...c, done };
+    if (done >= c.labor) finished.push(next);
+    return next;
+  });
+  let events = s.events;
+  for (const c of finished) {
+    events = say(events, s.gameMinutes, "clearing", `Вырубка закончена: ${(c.area / 10_000).toFixed(2).replace(".", ",")} га, брёвен +${Math.round(clearingLogs(c.area, c.forest))} м³`, fieldCentroid(c));
+  }
+  const zones = finished.length > 0 ? clearTerrain(s.zones, s.roads, finished) : s.zones;
+  return { ...s, clearings, events, zones, stock: { ...s.stock, logs: s.stock.logs + logs } };
+}
+
+// Sampled forest inside the polygons becomes meadow; the cells are regenerated (rev bumped) when anything changed.
+function clearTerrain(z: ZoneState, roads: RoadGraph, done: readonly Clearing[]): ZoneState {
+  let terrain = z.terrain;
+  for (const [key, t] of Object.entries(z.terrain)) {
+    if (t.land !== "forest") continue;
+    const [x, y] = qpoint(key);
+    if (!done.some((c) => pointInPolygon(x, y, c.pts))) continue;
+    if (terrain === z.terrain) terrain = { ...z.terrain };
+    terrain[key] = { ...t, land: "meadow" };
+  }
+  if (terrain === z.terrain) return z;
+  return { ...z, terrain, cells: regenerateCells(roads, z.cells, z.fields, terrain), rev: z.rev + 1 };
 }
 
 // ---------- reconcile ----------

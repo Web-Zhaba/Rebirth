@@ -1,4 +1,6 @@
 import { PLACED_COLORS, toolMsg, tool, type Tool } from "../map/tools";
+import type { GrowthWhy } from "../sim/types";
+import { people } from "../simClient";
 
 const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: string }[] }[] = [
   {
@@ -16,6 +18,7 @@ const GROUPS: { title: string; buttons: { id: Tool; label: string; color?: strin
       { id: "craft", label: "Ремесло", color: "#d99a3b" },
       { id: "trade", label: "Торговля", color: "#4f8fd0" },
       { id: "field", label: "Поле", color: "#d9c26a" },
+      { id: "clearing", label: "Вырубка", color: "#a3c088" },
       { id: "clear", label: "Снять зону" },
     ],
   },
@@ -55,7 +58,7 @@ const HINT: Record<Tool, string> = {
   res: BRUSH_HINT,
   craft: BRUSH_HINT,
   trade: BRUSH_HINT,
-  clear: `${BRUSH_HINT}. Клик по полю — убрать поле`,
+  clear: `${BRUSH_HINT}. Клик по полю или вырубке в работе — убрать`,
   gumno: `${PLACE_HINT}. Круг — досягаемость полей (400 м)`,
   woodcutter: `${PLACE_HINT}. Круг — лес вокруг (150 м)`,
   sawpit: PLACE_HINT,
@@ -69,17 +72,31 @@ const HINT: Record<Tool, string> = {
   healer: `${PLACE_HINT}. Подсветка дорог — охват 1000 м, нужен работник`,
   dig: `${PLACE_HINT}. Круг — первое вскрытие (15 м), потом растёт до 120 м`,
   field: "Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить",
+  clearing: "Как поле: контур леса до 5 га у построенной дороги (до 300 м). На каждую вырубку артель ставит бригаду из 6 человек раньше строек, брёвна идут на склад, земля станет лугом",
+};
+
+const ADVICE: Record<GrowthWhy, string | null> = {
+  ok: null,
+  nozone: "Не растёт: нет размеченных участков",
+  demand: "Не растёт: нет спроса",
+  lots: "Не растёт: нет свободных участков у построенной дороги",
+  hands: "Не растёт: некому строить",
+  materials: "Растёт медленно: не хватает материалов, часть работы делают вручную",
 };
 
 export function RoadTools() {
   const active = tool.value;
   const msg = toolMsg.value;
+  const why = active === "res" || active === "craft" || active === "trade" ? ADVICE[people.value?.growth?.[active] ?? "ok"] : null;
   return (
     <div class="road-tools panel">
       {msg ? (
         <div class="road-msg">{msg}</div>
       ) : (
-        <div class="road-hint">{active ? HINT[active] : "Правая кнопка — наклон"}</div>
+        <div class="road-hint">
+          {active ? HINT[active] : "Правая кнопка — наклон"}
+          {why && <div>{why}</div>}
+        </div>
       )}
       <div class="tool-groups">
         {GROUPS.map((g) => (

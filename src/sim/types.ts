@@ -55,6 +55,16 @@ export interface Field {
   area: number; // m2
 }
 
+// Forest being cleared by the artel; its land becomes meadow once `done` reaches `labor`.
+export interface Clearing {
+  id: number;
+  pts: [number, number][]; // counter-clockwise
+  area: number; // m2
+  forest: number; // share 0..1 of the area that was forest when it was marked
+  labor: number; // person-hours
+  done: number;
+}
+
 export interface TerrainInfo {
   land: Land;
   slope: number; // degrees
@@ -131,12 +141,13 @@ export interface Household {
   mood: number; // 0..100
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food";
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage";
 
 export interface TownEvent {
   at: number; // gameMinutes
   kind: EventKind;
   text: string;
+  pos?: [number, number]; // local meters; the HUD flies the map here
 }
 
 // Notable moments kept forever (PLAN.md section 11); `kind` is a machine key, `text` the Russian line.
@@ -253,6 +264,7 @@ export interface SimState extends PeopleState {
   finds: Finds;
   articles: StoredArticle[]; // oldest first, capped at 500
   buildings: Record<number, Building>;
+  clearings: Clearing[]; // finished ones stay as cleared land
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
   lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
@@ -304,11 +316,15 @@ export interface Demand {
   trade: number;
 }
 
+// Why a zone type is (not) growing, see growthAdvice in growth.ts.
+export type GrowthWhy = "ok" | "nozone" | "demand" | "lots" | "hands" | "materials";
+export type GrowthAdvice = Record<ZoneType, GrowthWhy>;
+
 // What the worker streams every tick: no individual residents, only aggregates.
 // Zones, the chronicle, finds and articles travel separately, only when they changed.
 export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod" | "finds" | "articles"> & {
   digs: DigInfo[]; // finished dig sites with their discs and find counts
-  people: PeopleStats & { demand: Demand };
+  people: PeopleStats & { demand: Demand; growth: GrowthAdvice };
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay

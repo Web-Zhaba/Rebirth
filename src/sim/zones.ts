@@ -342,7 +342,7 @@ export type FieldCheck = { ok: true; pts: [number, number][]; area: number } | {
 
 const bad = (reason: string): FieldCheck => ({ ok: false, reason });
 
-function selfIntersects(pts: readonly [number, number][]): boolean {
+export function selfIntersects(pts: readonly [number, number][]): boolean {
   const n = pts.length;
   for (let i = 0; i < n; i++) {
     const p1 = pts[i];
@@ -367,7 +367,7 @@ function selfIntersects(pts: readonly [number, number][]): boolean {
   return false;
 }
 
-function polygonsOverlap(a: readonly [number, number][], b: readonly [number, number][]): boolean {
+export function polygonsOverlap(a: readonly [number, number][], b: readonly [number, number][]): boolean {
   for (let i = 0; i < a.length; i++) {
     for (let j = 0; j < b.length; j++) {
       if (segmentsIntersect(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true;

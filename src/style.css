@@ -458,6 +458,13 @@ body {
 .events summary {
   cursor: pointer;
 }
+.hud .link.event-go {
+  display: inline;
+  margin-top: 0;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+}
 .event-at {
   color: #a3ab94;
   font-size: 11px;

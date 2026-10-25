@@ -2,10 +2,11 @@ import { newTally, observe, summarize, type Tally } from "./away";
 import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
+import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { digInfos, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
-import { canPlace, demand, emptyGrowth, placeBuilding, reconcile, seedOf } from "./growth";
+import { canPlace, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
 import { peopleStats, queryBuilding, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
@@ -13,7 +14,7 @@ import { SERVICES, isService } from "./services";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSave } from "./save";
 import { dayOf } from "./time";
-import type { BuildingQuery, ChronicleEntry, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
+import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 
@@ -37,7 +38,9 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   const { zones: _z, chronicle: _c, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, finds: _f, articles: _a, ...rest } = sim;
   const houseMood: Record<number, number> = {};
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
-  return { ...rest, people: { ...peopleStats(sim), demand: demand(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim) };
+  const ps = peopleStats(sim);
+  const dem = demand(sim);
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -320,7 +323,7 @@ export class Handler {
             keys.slice(n, n + ENRICH_BATCH).map(async (k) => {
               const [x, y] = qpoint(k);
               try {
-                got[k] = await sampler(frame, x, y);
+                got[k] = overTerrain(await sampler(frame, x, y), x, y, this.save?.sim.clearings ?? []); // cleared forest is meadow
               } catch {
                 this.failed.add(k);
               }
@@ -380,6 +383,18 @@ export class Handler {
       } else if (cmd.type === "removeField") {
         if (!z.fields.some((f) => f.id === cmd.id)) return reject("Поле уже убрано");
         zones = this.rezone(z, roads, z.fields.filter((f) => f.id !== cmd.id));
+      } else if (cmd.type === "addClearing") {
+        const v = validateClearing(cmd.pts, cmd.forest, roads, z.fields, sim.clearings);
+        if (!v.ok) return reject(v.reason);
+        const c: Clearing = { id: nextClearingId(sim.clearings), pts: v.pts, area: v.area, forest: cmd.forest, labor: v.labor, done: 0 };
+        this.save = { ...this.save, sim: { ...sim, clearings: [...sim.clearings, c] } };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "removeClearing") {
+        const c = sim.clearings.find((x) => x.id === cmd.id);
+        if (!c) return reject("Вырубка уже убрана");
+        if (isCleared(c)) return reject("Участок уже расчищен");
+        this.save = { ...this.save, sim: { ...sim, clearings: sim.clearings.filter((x) => x !== c) } }; // logs already made stay in the stock
+        return await this.finishCommand(id);
       } else if (cmd.type === "placeBuilding") {
         const t = typeof cmd.template === "string" && Object.hasOwn(BUILDINGS, cmd.template) ? BUILDINGS[cmd.template] : null;
         if (!t || t.zone !== "placed") return reject("Это здание нельзя поставить");

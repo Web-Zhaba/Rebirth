@@ -154,6 +154,16 @@ describe("save", () => {
     expect(broken.sim.chronicle).toEqual(entries);
     expect(parseSave({ ...save, sim: { ...s, chronicle: "nope" } }, NOW)!.sim.chronicle).toEqual([]);
   });
+  it("keeps the position of an event, drops a malformed one, loads events without it", () => {
+    const s = grower();
+    const events = [
+      { at: 5, kind: "built", text: "Достроено: изба", pos: [1.5, -2] },
+      { at: 6, kind: "shortage", text: "Не хватает брёвен", pos: [1, "x"] },
+      { at: 7, kind: "birth", text: "Родился" },
+    ];
+    const back = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: { ...s, events } })), NOW)!;
+    expect(back.sim.events).toEqual([events[0], { at: 6, kind: "shortage", text: "Не хватает брёвен" }, events[2]]);
+  });
 });
 
 describe("catch-up", () => {

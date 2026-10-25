@@ -21,7 +21,7 @@ export const HARVEST_END_DAY = 2 * DAYS_PER_SEASON + FIELD.harvestDays;
 
 export const haOf = (f: Field): number => f.area / 10_000;
 
-export function fieldCentroid(f: Field): [number, number] {
+export function fieldCentroid(f: Pick<Field, "pts">): [number, number] {
   let a = 0;
   let cx = 0;
   let cy = 0;

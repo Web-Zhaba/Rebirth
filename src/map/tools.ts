@@ -3,7 +3,7 @@ import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
 export type RoadTool = RoadKind | "bulldoze";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
-export type ZoneTool = BrushTool | "field";
+export type ZoneTool = BrushTool | "field" | "clearing";
 export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "barn" | "dig" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 

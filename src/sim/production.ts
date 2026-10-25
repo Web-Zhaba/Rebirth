@@ -5,7 +5,7 @@ import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, pr
 import { massText } from "./units";
 import { covers, SERVICE, serviceMood } from "./services";
 import { calendar, dayOf } from "./time";
-import type { Building, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
+import type { Building, Clearing, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
 
 // Building materials come PACE times faster than in history; food and wares do not.
 export const PACE = 4;
@@ -37,8 +37,37 @@ export const emptyStock = (): Stock => ({ ...FOUNDING_STOCK });
 export const emptyFlags = (year = 1): ProdFlags => ({ year, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 });
 export const emptyProd = (): ProdState => ({ fields: {}, flags: emptyFlags(), today: {}, yesterday: {} });
 
-function say(events: TownEvent[], at: number, kind: EventKind, text: string): TownEvent[] {
-  return [...events, { at, kind, text }].slice(-MAX_EVENTS);
+export function say(events: TownEvent[], at: number, kind: EventKind, text: string, pos?: [number, number]): TownEvent[] {
+  return [...events, pos ? { at, kind, text, pos } : { at, kind, text }].slice(-MAX_EVENTS);
+}
+
+const SHORT_OF = { logs: "брёвен", planks: "досок", stone: "камня" } as const;
+
+// Notices for sites that were paid in this tick (`before` -> `after`, with the stock as it was before) and had to
+// make part of their materials by hand: one "shortage" per material per game day. Mirrors payMaterials' accounting.
+export function reportShortages(before: Record<number, Building>, after: Record<number, Building>, stock: Stock, events: TownEvent[], now: number): TownEvent[] {
+  if (after === before) return events;
+  const st = { ...stock };
+  let out = events;
+  for (const b of Object.values(after)) {
+    const was = before[b.id];
+    if (!was) continue;
+    const up = b.state === "active" ? b.upgrade : undefined;
+    const wasUp = was.state === "active" ? was.upgrade : undefined;
+    if (up ? !(up.paid && wasUp && !wasUp.paid) : !(b.paid && !was.paid)) continue;
+    const m = up ? UPGRADE.materials : BUILDINGS[b.template]?.materials;
+    if (!m) continue;
+    const hand = up ? up.labor > (wasUp?.labor ?? 0) : (b.hand ?? 0) > 0;
+    for (const g of ["logs", "planks", "stone"] as const) {
+      const need = !up && b.onRuins && g === "stone" ? 0 : m[g];
+      if (hand && need > st[g]) {
+        const text = `Не хватает ${SHORT_OF[g]}: часть работы делают вручную`;
+        if (!out.some((e) => e.kind === "shortage" && e.text === text && dayOf(e.at) === dayOf(now))) out = say(out, now, "shortage", text, [b.lot.cx, b.lot.cy]);
+      }
+      st[g] -= Math.min(st[g], need);
+    }
+  }
+  return out;
 }
 
 
@@ -84,10 +113,11 @@ export function payMaterials(
   personHours: number,
   foundations: readonly { ring: [number, number][] }[] = [],
   crewHours = Infinity, // no crew limit: sites are served one after another
+  clearings: readonly Clearing[] = [], // each takes its crew before the buildings
 ): { buildings: Record<number, Building>; stock: Stock } {
   let out = buildings;
   let st = stock;
-  for (const id of allocateLabor(buildings, personHours, crewHours).keys()) {
+  for (const id of allocateLabor(buildings, personHours, crewHours, clearings).keys()) {
     let b = buildings[id];
     // A finished house being upgraded is served like a building under construction.
     const up = b.state === "active" ? b.upgrade : undefined;
@@ -219,7 +249,7 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
         if (win === "sowing") {
           if (!flags.sowing) {
             flags = { ...flags, sowing: true };
-            events = say(events, s.gameMinutes, "farm", "Начался сев");
+            events = say(events, s.gameMinutes, "farm", "Начался сев", [b.lot.cx, b.lot.cy]);
           }
         } else {
           harvested = true;
@@ -228,7 +258,7 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
           made(b.id, kg);
           if (!flags.harvest) {
             flags = { ...flags, harvest: true };
-            events = say(events, s.gameMinutes, "farm", "Началась жатва");
+            events = say(events, s.gameMinutes, "farm", "Началась жатва", [b.lot.cx, b.lot.cy]);
           }
         }
         break;

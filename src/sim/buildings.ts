@@ -1,4 +1,4 @@
-import type { Building, Stock, ZoneType } from "./types";
+import type { Building, Clearing, Stock, ZoneType } from "./types";
 
 export interface Materials {
   logs: number; // m3
@@ -111,10 +111,15 @@ export function remainingLabor(b: Building): number {
   return b.upgrade ? Math.max(0, b.upgrade.labor - b.upgrade.done) : 0;
 }
 
-// Splits `personHours` between the open sites. Each takes at most one crew's work (`crewHours`), lowest id
-// first; what is left goes to the oldest sites that still have work, so labor is never wasted.
-export function allocateLabor(buildings: Record<number, Building>, personHours: number, crewHours: number): Map<number, number> {
-  const sites: [number, number][] = []; // id, remaining
+// Person-hours still to spend on a clearing.
+export const remainingClearing = (c: Clearing): number => Math.max(0, c.labor - c.done);
+
+// Splits `personHours` between the open sites: clearings (the player ordered them, and they are the way out of a
+// log shortage), then buildings by id. Each takes at most one crew's work (`crewHours`), in that order; what is left
+// goes to the same sites in the same order while they still have work, so labor is never wasted.
+function allocate(buildings: Record<number, Building>, clearings: readonly Clearing[], personHours: number, crewHours: number) {
+  const sites: [number, number][] = []; // key (building id, or -id of a clearing), remaining
+  for (const c of clearings) if (remainingClearing(c) > EPS) sites.push([-c.id, remainingClearing(c)]);
   for (const key of Object.keys(buildings)) {
     const rem = remainingLabor(buildings[Number(key)]);
     if (rem > EPS) sites.push([Number(key), rem]);
@@ -134,5 +139,19 @@ export function allocateLabor(buildings: Record<number, Building>, personHours: 
     out.set(id, (out.get(id) ?? 0) + take);
     left -= take;
   }
+  return out;
+}
+
+// Building id -> person-hours it receives; each clearing has taken its crew first.
+export function allocateLabor(buildings: Record<number, Building>, personHours: number, crewHours: number, clearings: readonly Clearing[] = []): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const [key, h] of allocate(buildings, clearings, personHours, crewHours)) if (key > 0) out.set(key, h);
+  return out;
+}
+
+// Clearing id -> person-hours it receives from the same allocation.
+export function allocateClearings(buildings: Record<number, Building>, clearings: readonly Clearing[], personHours: number, crewHours: number): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const [key, h] of allocate(buildings, clearings, personHours, crewHours)) if (key < 0) out.set(-key, h);
   return out;
 }

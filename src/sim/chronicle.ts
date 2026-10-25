@@ -78,6 +78,10 @@ export function recordChronicle(prev: SimState, next: SimState): SimState {
     }
   }
 
+  if (next.clearings !== prev.clearings && next.clearings.some((c) => c.done >= c.labor) && !prev.clearings.some((c) => c.done >= c.labor)) {
+    once("clearing", "Вырублен первый участок леса");
+  }
+
   if (next.events !== prev.events) {
     for (const e of newEvents(prev.events, next.events)) if (e.kind === "farm" && e.text.startsWith("Урожай собран")) add("harvest", e.text);
   }

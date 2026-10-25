@@ -124,6 +124,8 @@ it("pacing harness", async () => {
     { when: () => ready(2), run: () => place("well", -1, 170) },
     { when: () => ready(3), run: () => paint("craft zone 130-170 m", "craft", (c) => c.side === 1 && c.cx >= 130 && c.cx <= 170 && !c.block) },
     { when: () => ready(3), run: () => place("dig", -1, 190) },
+    // 0.5 ha south of the road, forest 0.8 as measured on a real site (the synthetic land itself is meadow).
+    { when: () => roadBuilt(200), run: () => send("clearing 0.5 ha", { type: "addClearing", pts: [[20, -150], [70, -150], [70, -50], [20, -50]], forest: 0.8 }) },
   ];
   const done = new Set<number>();
 
@@ -137,6 +139,7 @@ it("pacing harness", async () => {
     { label: "Population 25", hit: () => st.people.pop >= 25 },
     { label: "Population 50", hit: () => st.people.pop >= 50 },
     { label: "Population 100", hit: () => st.people.pop >= 100 },
+    { label: "First clearing finished", hit: () => st.chronicle.some((e) => e.kind === "clearing") },
     { label: "First harvest", hit: () => st.chronicle.some((e) => e.kind === "harvest") },
   ];
 

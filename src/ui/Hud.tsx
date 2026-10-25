@@ -1,12 +1,13 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect } from "preact/hooks";
+import { clearingLogs, isCleared } from "../sim/clearing";
 import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
 import { cutOffEdges, WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
 import { massText } from "../sim/units";
 import { SERVICE_LIST } from "../sim/services";
 import { OVERLAYS, overlay, tool, ZONE_COLORS, type Overlay } from "../map/tools";
-import { economy, events, incomingCount, people, reset, roads, services, setSpeed, speed, stock, zones } from "../simClient";
+import { economy, events, frame, incomingCount, people, reset, roads, services, setSpeed, speed, state, stock, zones } from "../simClient";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -98,6 +99,13 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
     if (eco.fields.window === "sowing") fieldLine = `Сев: ${Math.round(eco.fields.sown * 100)} %`;
     else if (eco.fields.window === "harvest") fieldLine = `Жатва: ${massText(eco.fields.reaped)} из ${massText(eco.fields.expected)}`;
   }
+  // Clearings in work: share of the labor done and the logs they have given so far.
+  const clearing = (state.value?.clearings ?? []).filter((c) => !isCleared(c));
+  const clearLabor = clearing.reduce((a, c) => a + c.labor, 0);
+  const clearLine =
+    clearing.length > 0
+      ? `Вырубка: ${Math.floor((clearing.reduce((a, c) => a + c.done, 0) / clearLabor) * 100)} % · брёвна +${amount(clearing.reduce((a, c) => a + (clearingLogs(c.area, c.forest) * c.done) / c.labor, 0))} из ${amount(clearing.reduce((a, c) => a + clearingLogs(c.area, c.forest), 0))} м³`
+      : null;
   const ga = (fieldArea / 10000).toFixed(1).replace(".", ",");
   return (
     <div class="hud panel">
@@ -142,6 +150,7 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
             Брёвна {amount(st.logs)} м³ · доски {amount(st.planks)} м³ · камень {amount(st.stone)} т · утварь {Math.floor(st.wares)} шт
           </div>
           {fieldLine && <div class="hud-date">{fieldLine}</div>}
+          {clearLine && <div class="hud-date">{clearLine}</div>}
           {eco.avgMood > 0 && <div class="hud-date">Настроение: {Math.round(eco.avgMood)}</div>}
         </div>
       )}
@@ -212,12 +221,20 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
         {recent.length === 0 && <div class="hud-date">Пока тихо</div>}
         {recent.map((e) => {
           const c = calendar(e.at);
+          const pos = e.pos;
+          const fl = frame.value;
           return (
             <div class="event" key={`${e.at}:${e.text}`}>
               <span class="event-at">
                 г{c.year} д{c.dayOfYear}
               </span>{" "}
-              {e.text}
+              {pos && fl ? (
+                <button class="link event-go" title="Показать на карте" onClick={() => map.flyTo({ center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}>
+                  {e.text}
+                </button>
+              ) : (
+                e.text
+              )}
             </div>
           );
         })}

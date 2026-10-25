@@ -1,10 +1,13 @@
 import type maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
+import { isCleared } from "../sim/clearing";
+import { fieldCentroid } from "../sim/fields";
 import { cellCorners } from "../sim/zones";
 import { occupiedKeys } from "../sim/growth";
 import { buildingSet, frame, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
+import { MEADOW_COLOR } from "./style";
 import { isBrushTool, MIN_ZONE_ZOOM, tool, ZONE_COLORS } from "./tools";
 
 // Optimistic paint while a drag is in progress or a command is in flight: key -> zone.
@@ -46,9 +49,31 @@ export function attachZoneLayer(map: maplibregl.Map): void {
   const source = (id: string) => map.getSource(id) as maplibregl.GeoJSONSource | undefined;
 
   const setup = () => {
-    for (const id of ["fields", "zone-cells", "zone-grid", "zone-hover", "field-draft", "field-draft-pts"]) {
+    for (const id of ["clearings", "clearing-labels", "fields", "zone-cells", "zone-grid", "zone-hover", "field-draft", "field-draft-pts"]) {
       map.addSource(id, { type: "geojson", data: empty() });
     }
+    // Cleared forest is plain meadow; a clearing in progress is an outline with its percent done.
+    map.addLayer({
+      id: "clearings-fill",
+      type: "fill",
+      source: "clearings",
+      filter: ["get", "done"],
+      paint: { "fill-color": MEADOW_COLOR, "fill-opacity": 1 },
+    });
+    map.addLayer({
+      id: "clearings-line",
+      type: "line",
+      source: "clearings",
+      filter: ["!", ["get", "done"]],
+      paint: { "line-color": "#6b4f2a", "line-width": 2, "line-dasharray": [2, 1.5] },
+    });
+    map.addLayer({
+      id: "clearing-labels",
+      type: "symbol",
+      source: "clearing-labels",
+      layout: { "text-field": ["get", "text"], "text-font": ["Noto Sans Regular"], "text-size": 12 },
+      paint: { "text-color": "#3b3a33", "text-halo-color": "rgba(255,252,240,0.85)", "text-halo-width": 1.2 },
+    });
     map.addLayer({
       id: "fields-fill",
       type: "fill",
@@ -152,6 +177,28 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       const f = frame.value;
       const features = z && f ? z.fields.map((fl) => polygon(closed(fl.pts, f), { id: fl.id })) : [];
       source("fields")?.setData({ type: "FeatureCollection", features });
+    });
+
+    let hadClearings = false; // snapshots arrive every tick: leave the sources alone while there is nothing to draw
+    effect(() => {
+      const list = state.value?.clearings ?? [];
+      const f = frame.value;
+      if (list.length === 0 && !hadClearings) return;
+      hadClearings = list.length > 0;
+      const shapes: GeoJSON.Feature[] = [];
+      const labels: GeoJSON.Feature[] = [];
+      if (f) {
+        for (const c of list) {
+          const done = isCleared(c);
+          shapes.push(polygon(closed(c.pts, f), { id: c.id, done }));
+          if (!done) {
+            const [x, y] = fieldCentroid(c);
+            labels.push({ type: "Feature", properties: { text: `${Math.floor((c.done / c.labor) * 100)} %` }, geometry: { type: "Point", coordinates: f.toLngLat(x, y) } });
+          }
+        }
+      }
+      source("clearings")?.setData({ type: "FeatureCollection", features: shapes });
+      source("clearing-labels")?.setData({ type: "FeatureCollection", features: labels });
     });
 
     effect(() => {

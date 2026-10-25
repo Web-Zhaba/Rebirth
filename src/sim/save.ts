@@ -11,6 +11,7 @@ import { YEAR_MIN, YEAR_SCALE } from "./time";
 import type {
   Building,
   ChronicleEntry,
+  Clearing,
   City,
   EventKind,
   Field,
@@ -197,7 +198,10 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
 }
 
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage"];
+
+// A position of two finite numbers, else undefined (the event is kept without it).
+const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
 
 // Structurally broken people data gives null (the caller starts over with founders). References to
 // buildings that do not exist are repaired instead: such households go back to tents, such workers
@@ -280,7 +284,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
   if (Array.isArray(sim.events)) {
     for (const e of sim.events) {
       if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && EVENT_KINDS.includes(e.kind) && typeof e.text === "string") {
-        events.push({ at: e.at, kind: e.kind as EventKind, text: e.text });
+        const pos = parsePos(e.pos);
+        events.push(pos ? { at: e.at, kind: e.kind as EventKind, text: e.text, pos } : { at: e.at, kind: e.kind as EventKind, text: e.text });
       }
     }
   }
@@ -336,6 +341,22 @@ function parseChronicle(v: unknown): ChronicleEntry[] {
   return out.slice(-CHRONICLE_CAP);
 }
 
+// Clearing sites; broken entries are dropped, a missing list is empty.
+function parseClearings(v: unknown): Clearing[] {
+  if (!Array.isArray(v)) return [];
+  const out: Clearing[] = [];
+  const seen = new Set<number>();
+  for (const c of v) {
+    if (!isRecord(c) || !Number.isInteger(c.id) || (c.id as number) < 1 || seen.has(c.id as number)) continue;
+    if (!Array.isArray(c.pts) || c.pts.length < 3 || !c.pts.every(isPoint)) continue;
+    if (!isNum(c.area) || c.area <= 0 || !isNum(c.forest) || c.forest < 0 || c.forest > 1) continue;
+    if (!isNum(c.labor) || c.labor <= 0 || !isNum(c.done) || c.done < 0) continue;
+    seen.add(c.id as number);
+    out.push({ id: c.id as number, pts: (c.pts as [number, number][]).map((p) => [p[0], p[1]]), area: c.area, forest: c.forest, labor: c.labor, done: Math.min(c.done, c.labor) });
+  }
+  return out;
+}
+
 // Families on their way: entries with a broken shape or without a finished house to come to are dropped.
 function parseIncoming(v: unknown, buildings: Record<number, Building>): Incoming[] {
   if (!Array.isArray(v)) return [];
@@ -376,6 +397,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.coverage = numRecord(sim.coverage); // derived: rebuilt on load and every day
   g.landValue = numRecord(sim.landValue);
   g.incoming = parseIncoming(sim.incoming, g.buildings);
+  g.clearings = parseClearings(sim.clearings);
   g.attract = isNum(sim.attract) ? Math.min(1, Math.max(0, sim.attract)) : 0;
   g.chronicle = parseChronicle(sim.chronicle);
   g.finds = parseFinds(sim.finds);

@@ -1,8 +1,9 @@
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
+import { clearingLabor, clearingLogs, validateClearing } from "../sim/clearing";
 import { pointInPolygon, validateField } from "../sim/zones";
-import { frame, roads, sendCmd, zones } from "../simClient";
+import { frame, roads, sendCmd, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { landAt } from "../world/landcover";
 import { fieldDraft, hoverKeys, paintPreview } from "./zoneLayer";
@@ -21,6 +22,8 @@ const bucketKey = (bx: number, by: number) => bx * 65536 + by;
 const brushZone = (t: BrushTool): "none" | ZoneType => (t === "clear" ? "none" : t);
 
 const areaText = (m2: number) => `${(m2 / 10000).toFixed(m2 < 10000 ? 2 : 1).replace(".", ",")} га`;
+const clearingText = (area: number, forest: number) =>
+  `${areaText(area)} · лес ${Math.round(forest * 100)} % · брёвна ~${Math.round(clearingLogs(area, forest))} м³ · ${Math.round(clearingLabor(area, forest))} чел.-ч`;
 
 interface Analysis {
   water: boolean;
@@ -107,7 +110,8 @@ export function attachZoneTool(map: maplibregl.Map): void {
     const t = tool.value;
     return t && isBrushTool(t) ? t : null;
   };
-  const fieldActive = () => tool.value === "field";
+  const clearingActive = () => tool.value === "clearing";
+  const fieldActive = () => tool.value === "field" || clearingActive(); // both are drawn as a polygon
 
   // Dragging paints, so the map must not pan under a brush (hold Space to pan).
   const applyPan = () => {
@@ -141,6 +145,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
   };
 
   const fieldAt = (x: number, y: number) => zones.value?.fields.find((fl) => pointInPolygon(x, y, fl.pts)) ?? null;
+  const clearingAt = (x: number, y: number) => state.value?.clearings.find((c) => c.done < c.labor && pointInPolygon(x, y, c.pts)) ?? null;
 
   const brushAt = (e: maplibregl.MapMouseEvent, t: BrushTool) => {
     const f = frame.value;
@@ -165,7 +170,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
     if (!b) return;
     const near = cellsNear(b.x, b.y, b.r);
     hoverKeys.value = near.map((c) => c.key);
-    setLabel(t === "clear" && fieldAt(b.x, b.y) ? "Убрать поле" : null);
+    setLabel(t === "clear" ? (fieldAt(b.x, b.y) ? "Убрать поле" : clearingAt(b.x, b.y) ? "Убрать вырубку" : null) : null);
     if (dragging) {
       // Mouse events are sparse on fast drags: sweep the brush along the stroke so no cells are skipped.
       const [px, py] = strokeEnd ?? [b.x, b.y];
@@ -195,6 +200,13 @@ export function attachZoneTool(map: maplibregl.Map): void {
       if (field) {
         void sendCmd({ type: "removeField", id: field.id }).then((r) => {
           if (!r.ok) flash(r.reason ?? "Не удалось убрать поле");
+        });
+        return;
+      }
+      const clearing = clearingAt(b.x, b.y);
+      if (clearing) {
+        void sendCmd({ type: "removeClearing", id: clearing.id }).then((r) => {
+          if (!r.ok) flash(r.reason ?? "Не удалось убрать вырубку");
         });
         return;
       }
@@ -247,6 +259,10 @@ export function attachZoneTool(map: maplibregl.Map): void {
   let timer = 0;
   let analysis: { sig: string; a: Analysis } | null = null;
 
+  // The same checks the sim makes; the forest share is only known after the land is sampled.
+  const check = (poly: Pt[], g: NonNullable<typeof roads.value>, z: NonNullable<typeof zones.value>) =>
+    clearingActive() ? validateClearing(poly, 0, g, z.fields, state.value?.clearings ?? []) : validateField(poly, g, z.fields);
+
   const sig = (poly: Pt[]) => poly.map((p) => `${Math.round(p[0] * 10)},${Math.round(p[1] * 10)}`).join(";");
 
   const showDraft = () => {
@@ -264,7 +280,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
       setLabel("Клик — следующая точка");
       return;
     }
-    const v = validateField(poly, g, z.fields);
+    const v = check(poly, g, z);
     fieldDraft.value = { pts: poly, ok: v.ok };
     if (!v.ok) {
       seq++;
@@ -275,6 +291,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
     }
     const s = sig(poly);
     const text = (a: Analysis | null) => {
+      if (clearingActive()) return a ? clearingText(v.area, a.forest) : areaText(v.area);
       if (a?.water) return "Поле заходит в воду";
       return a ? `${areaText(v.area)} · лес ${Math.round(a.forest * 100)} %` : areaText(v.area);
     };
@@ -291,7 +308,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
           if (mine !== seq) return;
           analysis = { sig: s, a };
           setLabel(text(a));
-          if (a.water) fieldDraft.value = { pts: poly, ok: false };
+          if (a.water && !clearingActive()) fieldDraft.value = { pts: poly, ok: false };
         })
         .catch(() => {
           if (mine === seq) setLabel(`${areaText(v.area)} · нет данных о местности`);
@@ -318,21 +335,23 @@ export function attachZoneTool(map: maplibregl.Map): void {
       flash("Нужно минимум 3 точки");
       return;
     }
-    const v = validateField(pts, g, z.fields);
+    const v = check(pts, g, z);
     if (!v.ok) {
       flash(v.reason);
       return;
     }
     busy = true;
     const poly = [...pts];
+    const clearing = clearingActive();
     analyzeField(f, poly)
       .then((a) => {
-        if (a.water) {
+        if (a.water && !clearing) {
           flash("Поле заходит в воду");
           return false;
         }
-        return sendCmd({ type: "addField", pts: poly }).then((r) => {
-          if (!r.ok) flash(r.reason ?? "Не удалось создать поле");
+        const cmd = clearing ? ({ type: "addClearing", pts: poly, forest: a.forest } as const) : ({ type: "addField", pts: poly } as const);
+        return sendCmd(cmd).then((r) => {
+          if (!r.ok) flash(r.reason ?? (clearing ? "Не удалось создать вырубку" : "Не удалось создать поле"));
           return r.ok;
         });
       })

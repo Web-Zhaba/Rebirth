@@ -2,10 +2,10 @@ import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
 import { allocateLabor, BUILDINGS, CREW } from "./buildings";
-import { advanceBuildings, demand, emptyGrowth, nextRandom, reconcile, seedOf, townStats } from "./growth";
+import { advanceBuildings, demand, emptyGrowth, growthAdvice, nextRandom, reconcile, seedOf, townStats } from "./growth";
 import { builderCount, peopleStats } from "./people";
 import { addRoad, emptyRoads, removeEdge } from "./roads";
-import { payMaterials } from "./production";
+import { payMaterials, reportShortages } from "./production";
 import { parseSave } from "./save";
 import type { Building, City, RoadGraph, SimState, TerrainInfo, ZoneCell, ZoneType } from "./types";
 import { emptyZones, paintCells, qkey, regenerateCells, signedArea } from "./zones";
@@ -237,6 +237,51 @@ describe("construction", () => {
     const s2 = { ...s, residents: busy };
     expect(builderCount(s2)).toBe(6);
     expect(step(s2).buildings[1].done).toBeCloseTo((6 * BASE_TICK) / 60);
+  });
+});
+
+const hand = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 }; // an empty stock: every material is made by hand
+
+describe("notices", () => {
+  const at7 = 60;
+  it("a finished building is announced once, with its position", () => {
+    const s0 = ticks(world(straight(), "res"), 1);
+    const b = s0.buildings[1];
+    const s = { ...s0, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 }, buildings: { 1: { ...b, labor: 1, paid: true } } };
+    const built = (x: SimState) => x.events.filter((e) => e.kind === "built");
+    const a = step(s);
+    expect(a.buildings[1].state).toBe("active");
+    expect(built(a)).toEqual([{ at: at7, kind: "built", text: `Достроено: ${BUILDINGS[b.template].name.toLowerCase()}`, pos: [b.lot.cx, b.lot.cy] }]);
+    expect(built(step(a))).toHaveLength(1);
+  });
+  it("a shortage of hand-made materials is told once per material per game day", () => {
+    const base = ticks(world(straight(), "res"), 1).buildings[1];
+    const before = { 1: { ...base, paid: false } };
+    const after = { 1: { ...base, paid: true, hand: 5 } };
+    const first = reportShortages(before, after, hand, [], 100);
+    expect(first.map((e) => e.kind)).toEqual(["shortage", "shortage", "shortage"]);
+    expect(first[0].text).toContain("брёвен");
+    expect(first[0].pos).toEqual([base.lot.cx, base.lot.cy]);
+    expect(reportShortages(before, after, hand, first, 200)).toHaveLength(3); // same day
+    expect(reportShortages(before, after, hand, first, 2000)).toHaveLength(6); // next day
+    expect(reportShortages(before, after, { ...hand, logs: 100, planks: 100, stone: 100 }, [], 100)).toEqual([]); // the stock suffices
+    expect(reportShortages(before, before, hand, [], 100)).toEqual([]);
+  });
+});
+
+describe("growth advice", () => {
+  const advise = (s: SimState, builders = 8) => growthAdvice(s, demand(s), builders);
+  it("tells why a zone does not grow", () => {
+    expect(advise(world(emptyRoads(), () => "none"))).toEqual({ res: "nozone", craft: "nozone", trade: "nozone" });
+    expect(advise(world(straight(), "res"))).toMatchObject({ res: "ok", craft: "nozone" });
+    expect(advise({ ...world(straight(), "craft"), residents: {}, households: {} }).craft).toBe("demand");
+    expect(advise(world(road(emptyRoads(), [[0, 0], [160, 0]], 500), "res")).res).toBe("lots"); // the road is not built
+  });
+  it("a house waiting for hands or for materials", () => {
+    const s = ticks(world(straight(), "res"), 1);
+    expect(advise(s).res).toBe("ok"); // under way
+    expect(advise(s, 0).res).toBe("hands");
+    expect(advise({ ...s, stock: hand }).res).toBe("materials");
   });
 });
 

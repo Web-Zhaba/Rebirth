@@ -1,7 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { addRoad, cutOffEdges, distToEdge, ROAD_KINDS, segmentCost, snapPoint, type Snap } from "../sim/roads";
-import { frame, roads, sendCmd } from "../simClient";
+import { frame, roads, sendCmd, state } from "../simClient";
 import { oldWorld } from "./excavation";
 import { snapToOldStreets } from "../world/oldStreets";
 import { sampleProfile } from "../world/profile";
@@ -150,7 +150,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       const t = roadT();
       if (!req || !f || !t || t === "bulldoze") return;
       const mine = ++seq;
-      sampleProfile(f, [req.a.x, req.a.y], [req.b.x, req.b.y])
+      sampleProfile(f, [req.a.x, req.a.y], [req.b.x, req.b.y], state.value?.clearings)
         .then((p) => {
           if (mine !== seq) return;
           const c = segmentCost(p, t);
@@ -283,7 +283,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       finish(false);
       return;
     }
-    sampleProfile(f, [a.x, a.y], [snap.x, snap.y])
+    sampleProfile(f, [a.x, a.y], [snap.x, snap.y], state.value?.clearings)
       .then((p) => {
         const c = segmentCost(p, t);
         if (!c.ok) {

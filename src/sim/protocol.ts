@@ -22,6 +22,9 @@ export type Cmd =
   | { type: "paintZones"; keys: string[]; zone: "none" | ZoneType }
   | { type: "addField"; pts: [number, number][] }
   | { type: "removeField"; id: number }
+  // Forest to clear; `forest` is the share 0..1 of the polygon that is forest, measured on the main thread.
+  | { type: "addClearing"; pts: [number, number][]; forest: number }
+  | { type: "removeClearing"; id: number }
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "demolish"; id: number }

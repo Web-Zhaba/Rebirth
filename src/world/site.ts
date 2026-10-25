@@ -1,4 +1,5 @@
-import type { Site } from "../sim/types";
+import { isCleared, landOver } from "../sim/clearing";
+import type { Clearing, Site } from "../sim/types";
 import type { Frame } from "./frame";
 import { landAt, type Land } from "./landcover";
 
@@ -42,21 +43,23 @@ export async function sampleSite(cx: number, cy: number, radius: number, sampler
 // ---------- cache for the placement tool ----------
 
 const cache = new Map<string, { site?: Site; promise: Promise<Site> }>();
-const keyOf = (cx: number, cy: number, radius: number) => `${Math.round(cx * 2)},${Math.round(cy * 2)},${radius}`;
+// The count of finished clearings is part of the key: a new one changes the land.
+const keyOf = (cx: number, cy: number, radius: number, clearings: readonly Clearing[]) =>
+  `${Math.round(cx * 2)},${Math.round(cy * 2)},${radius},${clearings.filter(isCleared).length}`;
 
 // Already measured shares for this lot, or null while unknown.
-export function cachedSite(cx: number, cy: number, radius: number): Site | null {
-  return cache.get(keyOf(cx, cy, radius))?.site ?? null;
+export function cachedSite(cx: number, cy: number, radius: number, clearings: readonly Clearing[] = []): Site | null {
+  return cache.get(keyOf(cx, cy, radius, clearings))?.site ?? null;
 }
 
 // Measures (once per lot) and caches the shares; never blocks, failures are not cached.
-export function siteAt(f: Frame, cx: number, cy: number, radius: number): Promise<Site> {
-  const key = keyOf(cx, cy, radius);
+export function siteAt(f: Frame, cx: number, cy: number, radius: number, clearings: readonly Clearing[] = []): Promise<Site> {
+  const key = keyOf(cx, cy, radius, clearings);
   const hit = cache.get(key);
   if (hit) return hit.promise;
   const sampler: LandSampler = (x, y) => {
     const [lng, lat] = f.toLngLat(x, y);
-    return landAt(lng, lat);
+    return landAt(lng, lat).then((l) => landOver(l, x, y, clearings));
   };
   const entry: { site?: Site; promise: Promise<Site> } = {
     promise: sampleSite(cx, cy, radius, sampler).then(

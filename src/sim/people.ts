@@ -1,10 +1,11 @@
 import { BUILDINGS, foodCapacity, houseCapacity } from "./buildings";
+import { isCleared } from "./clearing";
 import { assignFields, expectedKg, FIELD, idleGumnos, FISH, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
 import { covers, SERVICE, servicesIn } from "./services";
 import { WORK_END, WORK_START, workableEdges } from "./roads";
 import { calendar, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
-import type { Building, BuildingQuery, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
+import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
 import { CELL_SIZE } from "./zones";
 
 export const FOUNDERS = 14; // founding party: 4 households in tents
@@ -88,8 +89,11 @@ function cloneW(s: PeopleState, now: number): W {
   return { residents, households, nextPersonId: s.nextPersonId, nextHouseholdId: s.nextHouseholdId, events: s.events.slice(), now };
 }
 
-function say(w: W, kind: EventKind, text: string): void {
-  w.events.push({ at: w.now, kind, text });
+// Centre of a building's lot, the position of the notices about the family living there.
+const homePos = (b: { lot: { cx: number; cy: number } } | undefined): [number, number] | undefined => (b ? [b.lot.cx, b.lot.cy] : undefined);
+
+function say(w: W, kind: EventKind, text: string, pos?: [number, number]): void {
+  w.events.push(pos ? { at: w.now, kind, text, pos } : { at: w.now, kind, text });
 }
 
 function addPerson(w: W, first: string, last: string, sex: "m" | "f", age: number, household: number): Resident {
@@ -289,9 +293,10 @@ export function vacantHouses(buildings: Record<number, Building>, households: Re
   return out;
 }
 
-// Is there construction work (unfinished buildings, house upgrades or roads a work party can reach)?
-export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph): boolean {
+// Is there construction work (unfinished buildings, house upgrades, forest clearings or roads a work party can reach)?
+export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph, clearings: readonly Clearing[] = []): boolean {
   for (const b of Object.values(buildings)) if (b.state !== "active" || b.upgrade) return true;
+  if (clearings.some((c) => !isCleared(c))) return true;
   return workableEdges(roads).length > 0;
 }
 
@@ -341,7 +346,7 @@ export const forageRate = (gameMinutes: number): number => (calendar(gameMinutes
 // for them to join. Their number is the unemployed of peopleStats.
 export function idleResidents(s: ArtelState): Set<number> {
   const out = new Set<number>();
-  if (constructionWork(s.buildings, s.roads)) return out;
+  if (constructionWork(s.buildings, s.roads, s.clearings)) return out;
   const farmless = idleGumnos(s);
   for (const r of Object.values(s.residents)) {
     if (!isAdultAge(ageOf(r.born, s.gameMinutes))) continue;
@@ -356,7 +361,7 @@ export const forageKg = (s: ArtelState): number => idleResidents(s).size * forag
 export const MIN_ARTEL_SHARE = 0.2;
 export const MIN_ARTEL_FLOOR = 3;
 
-type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock">;
+type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock"> & { clearings?: Clearing[] };
 
 // The construction artel: every adult without a regular job, plus farmers while the land has no work
 // for them and the workers of workshops without inputs. While construction work exists it has at least
@@ -367,7 +372,7 @@ export function artel(s: ArtelState): { hands: number; drafted: number; employed
   const idle = idleWorkers(s);
   const hands = c.jobless + idle;
   let drafted = 0;
-  if (constructionWork(s.buildings, s.roads)) {
+  if (constructionWork(s.buildings, s.roads, s.clearings)) {
     const min = Math.max(MIN_ARTEL_FLOOR, Math.ceil(MIN_ARTEL_SHARE * c.adults - 1e-9));
     drafted = Math.max(0, Math.min(min - hands, c.employed - idle));
   }
@@ -419,7 +424,7 @@ export function foodPerDay(residents: Record<number, Resident>, now: number): nu
 
 export function peopleStats(s: ArtelState & Pick<SimState, "households">): PeopleStats {
   const c = countResidents(s.residents, s.gameMinutes);
-  const work = constructionWork(s.buildings, s.roads);
+  const work = constructionWork(s.buildings, s.roads, s.clearings);
   const farmers = idleFarmers(s);
   const blocked = idleWorkers(s) - farmers; // workers of workshops without inputs: busy by job, free for the artel
   let tents = 0;
@@ -605,7 +610,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     });
   const on = (r: Rule) => !opts.only || opts.only.includes(r);
   const now = w.now;
-  const work = constructionWork(buildings, s.roads);
+  const work = constructionWork(buildings, s.roads, s.clearings);
   const ids = () => Object.keys(w.residents).map(Number);
 
   // 1. deaths
@@ -689,7 +694,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       const i = vacant.findIndex((b) => houseCap(buildings[b]) >= h.members.length);
       if (i < 0) continue;
       h.home = vacant.splice(i, 1)[0];
-      say(w, "movein", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) заселилась в дом`);
+      say(w, "movein", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) заселилась в дом`, homePos(buildings[h.home]));
     }
   }
 
@@ -704,7 +709,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       stock = { ...stock, food: stock.food * (1 - n / pop) };
       for (const m of h.members) delete w.residents[m];
       delete w.households[h.id];
-      say(w, "departure", `Семья ${familyGenitive(h.last)} (${n} чел.) покинула поселение`);
+      say(w, "departure", `Семья ${familyGenitive(h.last)} (${n} чел.) покинула поселение`, homePos(buildings[h.home]));
     }
   }
 
@@ -771,7 +776,7 @@ export function immigrationStep(s: SimState, dt: number): SimState {
       const room = house === null ? 3 : Math.max(0, houseCap(s.buildings[house]) - 2);
       const kids = Math.floor(rand() * (Math.min(3, room) + 1));
       const h = makeFamily(wk, rand, 18, 45, kids, house);
-      say(wk, "arrival", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`);
+      say(wk, "arrival", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`, house === null ? undefined : homePos(s.buildings[house]));
       // They bring 60 days of their own food, as far as the barns can hold it.
       let eat = 0;
       for (const m of h.members) eat += ageOf(wk.residents[m].born, now) < ADULT_MIN ? FOOD.child : FOOD.adult;
@@ -859,7 +864,7 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
   if (!b || !t) return null;
   const now = s.gameMinutes;
   if (b.zone === "res") {
-    const work = constructionWork(s.buildings, s.roads);
+    const work = constructionWork(s.buildings, s.roads, s.clearings);
     const idle = idleWorkplaces(s);
     const households = Object.values(s.households)
       .filter((h) => h.home === id)

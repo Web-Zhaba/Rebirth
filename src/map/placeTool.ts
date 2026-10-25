@@ -182,14 +182,14 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     let site: Site = NO_SITE;
     let pending = false;
     if (radius !== undefined) {
-      const known = cachedSite(center[0], center[1], radius);
+      const known = cachedSite(center[0], center[1], radius, state.value?.clearings);
       if (known) site = known;
       else {
         pending = true;
         site = { forest: 1, water: 1, rock: 0 }; // optimistic: only the lot itself is judged until sampled
         clearTimeout(timer);
         timer = window.setTimeout(() => {
-          siteAt(f, center[0], center[1], radius).then(refresh, () => setLabel("Нет данных о местности"));
+          siteAt(f, center[0], center[1], radius, state.value?.clearings).then(refresh, () => setLabel("Нет данных о местности"));
         }, SAMPLE_DELAY_MS);
       }
     }
@@ -290,7 +290,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     }
     busy = true;
     const t = BUILDINGS[id];
-    const measure = v.radius !== undefined ? siteAt(f, v.center[0], v.center[1], v.radius) : Promise.resolve(NO_SITE);
+    const measure = v.radius !== undefined ? siteAt(f, v.center[0], v.center[1], v.radius, state.value?.clearings) : Promise.resolve(NO_SITE);
     measure
       .then((site) => {
         const st = state.value;

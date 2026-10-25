@@ -21,6 +21,8 @@ const C = {
   water: "#9fc9dc",
 };
 
+export const MEADOW_COLOR = C.meadow;
+
 const OMT_ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ' +
   '<a href="https://www.openmaptiles.org/" target="_blank">&copy; OpenMapTiles</a> ' +
