@@ -1,3 +1,4 @@
+import type maplibregl from "maplibre-gl";
 import type { ComponentChildren } from "preact";
 import { useEffect } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
@@ -8,6 +9,7 @@ import { buildings, economy, incomingCount, people, roads, setSpeed, speed, stat
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { aboutOpen } from "./AboutDialog";
+import { hotkeysOpen } from "./HotkeysDialog";
 import { rightPanel, togglePanel } from "./panels";
 import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
@@ -75,14 +77,31 @@ const GOODS: { id: Good; icon: IconName; title: string; cap: string }[] = [
   { id: "wares", icon: "wares", title: "Утварь", cap: "утварь" },
 ];
 
-export function TopBar({ city }: { city: City }) {
+export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
   const gm = useGameMinutes();
   const cal = calendar(gm);
   const phase = dayPhase(cal.hour);
   useEffect(() => {
-    window.addEventListener("keydown", onSpeedKey);
-    return () => window.removeEventListener("keydown", onSpeedKey);
-  }, []);
+    const onKey = (e: KeyboardEvent) => {
+      onSpeedKey(e);
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const el = e.target as HTMLElement | null;
+      if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
+      if (e.key === "?") {
+        e.preventDefault();
+        hotkeysOpen.value = true;
+        return;
+      }
+      if (e.key === "h" || e.key === "H" || e.key === "Home") {
+        if (map) {
+          e.preventDefault();
+          map.flyTo({ center: [city.lng, city.lat], zoom: 16 });
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [map, city.lng, city.lat]);
   const p = people.value;
   const st = stock.value;
   const eco = economy.value;
@@ -96,7 +115,19 @@ export function TopBar({ city }: { city: City }) {
   return (
     <header class="topbar">
       <div class="tb-city">
-        <div class="city-name">{city.name}</div>
+        {map ? (
+          <Tooltip text="К центру поселения (H)">
+            <button
+              class="city-name-btn"
+              type="button"
+              onClick={() => map.flyTo({ center: [city.lng, city.lat], zoom: 16 })}
+            >
+              <span class="city-name">{city.name}</span>
+            </button>
+          </Tooltip>
+        ) : (
+          <div class="city-name">{city.name}</div>
+        )}
         <div class="city-date">
           <Icon name={phase} size={16} label={PHASE_LABEL[phase]} class={`phase-${phase}`} />
           <span>
@@ -183,6 +214,7 @@ export function TopBar({ city }: { city: City }) {
       )}
       <span class="tb-end">
         <IconButton icon="town" size={20} label="Город" aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")} />
+        <IconButton icon="help" size={16} label="Горячие клавиши (?)" onClick={() => (hotkeysOpen.value = true)} />
         <IconButton icon="info" size={16} label="Об игре" onClick={() => (aboutOpen.value = true)} />
       </span>
     </header>

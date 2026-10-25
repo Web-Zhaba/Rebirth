@@ -1,3 +1,4 @@
+import { useState } from "preact/hooks";
 import { OVERLAY_COLORS, OVERLAYS, overlay, TRAFFIC_STOPS, type Overlay } from "../map/tools";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
@@ -24,6 +25,7 @@ function Legend({ id }: { id: Overlay }) {
     const ramp = `linear-gradient(90deg, ${TRAFFIC_STOPS.map((s) => s.color).join(", ")})`;
     return (
       <div class="legend" title="Жителей в день на участке дороги">
+        <span class="legend-what">Дороги:</span>
         <span>мало</span>
         <span class="legend-ramp" style={{ background: ramp }} />
         <span>много</span>
@@ -33,6 +35,7 @@ function Legend({ id }: { id: Overlay }) {
   if (id === "value" || id === "mood") {
     return (
       <div class="legend">
+        <span class="legend-what">Дома:</span>
         <span>{id === "value" ? "дешевле" : "хуже"}</span>
         <span class="legend-ramp" style={{ background: `linear-gradient(90deg, ${bad}, ${mid}, ${good})` }} />
         <span>{id === "value" ? "дороже" : "лучше"}</span>
@@ -45,37 +48,62 @@ function Legend({ id }: { id: Overlay }) {
   }
   return (
     <div class="legend">
+      <span class="legend-what">Дома:</span>
       <span class="legend-key">
         <i class="legend-sw" style={{ background: good }} />
-        охвачено
+        охвачены
       </span>
       <span class="legend-key">
         <i class="legend-sw" style={{ background: bad }} />
-        не охвачено
+        не охвачены
       </span>
     </div>
   );
 }
 
+const STORE_KEY = "rebirth.layers.collapsed";
+const readCollapsed = (): boolean => {
+  try {
+    return localStorage.getItem(STORE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
 // Map layers as an icon button group, with a legend for the one that is on.
 export function LayerBar() {
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(STORE_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
   const cur = overlay.value;
   const active = OVERLAYS.find((o) => o.id === cur);
   return (
     <div class="layerbar">
-      <div class="layer-head">
+      <button class="layer-head" type="button" aria-expanded={!collapsed} onClick={toggle}>
         <Icon name="layers" size={16} />
         <span>Слои</span>
         <b class="layer-name">{active?.label}</b>
-      </div>
-      <div class="layer-group" role="group" aria-label="Слои карты">
-        {OVERLAYS.map((o) => (
-          <Tooltip key={o.id} text={o.label}>
-            <IconButton icon={LAYER_ICON[o.id]} label={o.label} title={undefined} aria-pressed={cur === o.id} onClick={() => (overlay.value = o.id)} />
-          </Tooltip>
-        ))}
-      </div>
-      <Legend id={cur} />
+        <Icon name={collapsed ? "caretDown" : "caretUp"} size={14} />
+      </button>
+      {!collapsed && (
+        <>
+          <div class="layer-group" role="group" aria-label="Слои карты">
+            {OVERLAYS.map((o) => (
+              <Tooltip key={o.id} text={o.label}>
+                <IconButton icon={LAYER_ICON[o.id]} label={o.label} title={undefined} aria-pressed={cur === o.id} onClick={() => (overlay.value = o.id)} />
+              </Tooltip>
+            ))}
+          </div>
+          <Legend id={cur} />
+        </>
+      )}
     </div>
   );
 }

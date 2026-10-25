@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import { daylight, START_MINUTE_OF_DAY } from "../sim/clock";
+import { MAP_ONLY, PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
 
 export interface Trip {
@@ -101,7 +102,7 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
         minzoom: 14,
         filter: ["==", ["get", "kind"], kind],
         paint: {
-          "circle-color": "#ffbe55",
+          "circle-color": MAP_ONLY.lamp,
           "circle-radius": metersToPx(k, r),
           "circle-blur": 0.9,
           "circle-opacity": 0,
@@ -121,12 +122,12 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
         paint: {
           "circle-color": color,
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, px[0], 19, px[1]],
-          "circle-stroke-color": "rgba(255,252,240,0.8)",
+          "circle-stroke-color": PALETTE.paperRaised,
           "circle-stroke-width": 0.8,
         },
       });
-    dot("life-walkers", "walk", [1.5, 3.5], "#3b3a33");
-    dot("life-carts", "cart", [2.5, 6], "#7a4e24");
+    dot("life-walkers", "walk", [1.5, 3.5], PALETTE.ink);
+    dot("life-carts", "cart", [2.5, 6], MAP_ONLY.cart);
     ready = true;
   };
 

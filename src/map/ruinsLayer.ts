@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
+import { PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
 import type { OldWorld, XY } from "../world/oldworld";
 
@@ -117,7 +118,7 @@ export function attachRuinsLayer(
     for (const id of [SRC_WALLS, SRC_FLOORS, SRC_STREETS, SRC_POIS]) map.addSource(id, { type: "geojson", data: empty() });
     const beneath = map.getLayer("roads-casing") ? "roads-casing" : undefined;
     map.addLayer(
-      { id: "ruins-floor", type: "fill", source: SRC_FLOORS, minzoom: 13, paint: { "fill-color": "#b9b2a0", "fill-opacity": 0.22 } },
+      { id: "ruins-floor", type: "fill", source: SRC_FLOORS, minzoom: 13, paint: { "fill-color": PALETTE.pencilFaint, "fill-opacity": 0.28 } },
       beneath,
     );
     map.addLayer(
@@ -128,7 +129,7 @@ export function attachRuinsLayer(
         minzoom: 12,
         layout: { "line-cap": "butt", "line-join": "round" },
         // Solid and faint: at real width, dashes read as rows of small houses.
-        paint: { "line-color": "#b89a5c", "line-width": realWidth(k), "line-opacity": 0.3 },
+        paint: { "line-color": PALETTE.warn, "line-width": realWidth(k), "line-opacity": 0.3 },
       },
       beneath,
     );
@@ -140,7 +141,7 @@ export function attachRuinsLayer(
         source: SRC_WALLS,
         minzoom: 14,
         filter: ["==", ["get", "thin"], 1],
-        paint: { "line-color": "#8a8578", "line-width": 1.2, "line-opacity": 0.8 },
+        paint: { "line-color": PALETTE.pencil, "line-width": 1.2, "line-opacity": 0.85 },
       },
       beneath,
     );
@@ -152,7 +153,7 @@ export function attachRuinsLayer(
         minzoom: 14,
         filter: ["==", ["get", "thin"], 0],
         paint: {
-          "fill-extrusion-color": "#8a8578",
+          "fill-extrusion-color": PALETTE.pencilFaint,
           "fill-extrusion-height": WALL_HEIGHT,
           "fill-extrusion-base": 0,
           "fill-extrusion-opacity": 0.9,
@@ -174,7 +175,7 @@ export function attachRuinsLayer(
           "text-size": 11,
           "text-letter-spacing": 0.05,
         },
-        paint: { "text-color": "#5d4a26", "text-halo-color": "rgba(255,252,240,0.85)", "text-halo-width": 1.2 },
+        paint: { "text-color": PALETTE.ink2, "text-halo-color": PALETTE.paperRaised, "text-halo-width": 1.5 },
       },
       beneath,
     );
@@ -192,7 +193,7 @@ export function attachRuinsLayer(
           "text-anchor": "top",
           "text-offset": [0, 0.4],
         },
-        paint: { "text-color": "#3b3a33", "text-halo-color": "rgba(255,252,240,0.85)", "text-halo-width": 1.2 },
+        paint: { "text-color": PALETTE.ink, "text-halo-color": PALETTE.paperRaised, "text-halo-width": 1.5 },
       },
       beneath,
     );

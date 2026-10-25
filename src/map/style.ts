@@ -9,16 +9,18 @@ import {
   WATER_EXCLUDED_CLASSES,
   WILD_GRASS,
 } from "../world/nature";
+import { MAP_ONLY, PALETTE } from "../ui/palette";
 
-const C = {
-  meadow: "#dfe6c3",
-  grass: "#d3e0b4",
-  forest: "#a3c088",
-  wetland: "#b9d3a6",
-  sand: "#eadfb4",
-  rock: "#cfc9b8",
-  ice: "#f2f6f8",
-  water: "#9fc9dc",
+// Atlas palette (ui/palette.ts): paper land, ink-blue water, muted green forest.
+export const C = {
+  meadow: PALETTE.mapLand,
+  grass: PALETTE.mapGrass,
+  forest: PALETTE.mapForest,
+  wetland: PALETTE.mapWetland,
+  sand: PALETTE.mapSand,
+  rock: PALETTE.mapRock,
+  ice: PALETTE.mapIce,
+  water: PALETTE.mapWater,
 };
 
 export const MEADOW_COLOR = C.meadow;
@@ -90,10 +92,10 @@ export function rewildedStyle(): StyleSpecification {
         type: "hillshade",
         source: "terrain",
         paint: {
-          "hillshade-exaggeration": 0.6,
-          "hillshade-shadow-color": "#5b6350",
-          "hillshade-highlight-color": "#ffffff",
-          "hillshade-accent-color": "#7a8468",
+          "hillshade-exaggeration": 0.5,
+          "hillshade-shadow-color": MAP_ONLY.hillShadow,
+          "hillshade-highlight-color": PALETTE.paperRaised,
+          "hillshade-accent-color": MAP_ONLY.hillAccent,
         },
       },
       {

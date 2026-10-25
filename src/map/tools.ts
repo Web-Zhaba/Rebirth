@@ -1,4 +1,5 @@
 import { signal } from "@preact/signals";
+import { mixHex, MAP_ONLY, PALETTE } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
 export type RoadTool = RoadKind | "bulldoze";
@@ -30,24 +31,24 @@ const EQUATOR_M = 40075016.686;
 // Meters of ground per screen pixel (MapLibre uses 512 px tiles).
 export const mapMpp = (lat: number, zoom: number) => (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
-export const ZONE_COLORS: Record<ZoneType, string> = { res: "#6fb35a", craft: "#d99a3b", trade: "#4f8fd0" };
+export const ZONE_COLORS: Record<ZoneType, string> = { res: PALETTE.ok, craft: PALETTE.warn, trade: PALETTE.info };
 
-export const BUILDING_COLORS: Record<ZoneType, string> = { res: "#9b7653", craft: "#7f7466", trade: "#a8784f" };
+export const BUILDING_COLORS: Record<ZoneType, string> = { res: "#a9865c", craft: "#857b6c", trade: "#b07d4c" };
 
 // Colours of player-placed buildings, per template.
 export const PLACED_COLORS: Record<PlaceTool, string> = {
-  gumno: "#c2a24f",
-  woodcutter: "#5f7f45",
-  sawpit: "#b98a55",
-  quarry: "#8d9096",
-  fisher: "#4f86a8",
-  barn: "#a2573f",
-  dig: "#8b6f47",
-  well: "#5aa0c8",
-  market: "#d08a3c",
-  chapel: "#9a78bd",
-  school: "#4aa583",
-  healer: "#cf5d57",
+  gumno: "#b8963f",
+  woodcutter: "#5c7342",
+  sawpit: "#a97d4d",
+  quarry: "#7d7f82",
+  fisher: "#4a7088",
+  barn: "#94503a",
+  dig: "#7d6340",
+  well: "#4f7f9c",
+  market: "#b9772f",
+  chapel: "#85689f",
+  school: "#3f8a6b",
+  healer: "#b24d46",
 };
 
 // Map overlay: houses tinted by coverage of one service, or by a value; or roads by commuter traffic.
@@ -65,13 +66,13 @@ export const OVERLAYS: { id: Overlay; label: string }[] = [
 ];
 export const overlay = signal<Overlay>("none");
 // House tints of the overlays: covered / not covered, and the bad-mid-good ramp of the value and mood layers; also the legend keys.
-export const OVERLAY_COLORS = { good: "#3fae5a", mid: "#e6c84a", bad: "#d0453d", neutral: "#b9b9ad" };
+export const OVERLAY_COLORS = { good: PALETTE.ok, mid: PALETTE.warn, bad: PALETTE.bad, neutral: PALETTE.pencilFaint };
 // Traffic overlay ramp: commuters per road edge per day -> colour and line width (px); also the HUD legend.
 export const TRAFFIC_STOPS: { n: number; color: string; width: number }[] = [
-  { n: 1, color: "#f3e08a", width: 3 },
-  { n: 5, color: "#f0b24a", width: 5 },
-  { n: 15, color: "#e0662f", width: 8 },
-  { n: 40, color: "#a8231c", width: 11 },
+  { n: 1, color: mixHex(PALETTE.warnFill, PALETTE.warn, 0.5), width: 3 },
+  { n: 5, color: PALETTE.warn, width: 5 },
+  { n: 15, color: PALETTE.bad, width: 8 },
+  { n: 40, color: MAP_ONLY.badDeep, width: 11 },
 ];
 
 // Reach of the service being placed: where its lot front would be, and how far it serves (m).

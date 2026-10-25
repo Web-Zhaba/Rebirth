@@ -1,14 +1,15 @@
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { cutOffEdges, ROAD_KINDS, workableEdges } from "../sim/roads";
+import { PALETTE } from "../ui/palette";
 import { city, frame, roads } from "../simClient";
 
 const SRC = "roads";
 const EQUATOR_M = 40075016.686;
 
-const BUILT_COLOR = ["match", ["get", "kind"], "dirt", "#a88a5a", "#c8b48a"];
-const CUT_COLOR = "#c4553a"; // roads no work party can reach
-const CASING_COLOR = ["match", ["get", "kind"], "dirt", "#6f5a38", "#a89870"];
+const BUILT_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirt, PALETTE.roadPath];
+const CUT_COLOR = PALETTE.bad; // roads no work party can reach
+const CASING_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirtEdge, PALETTE.roadPathEdge];
 
 // Width in px of `meters` of ground at zoom z (MapLibre uses 512 px tiles), at least 1 px,
 // plus `extra` px. Integer-zoom stops keep the exponential interpolation exact.
@@ -48,7 +49,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
       paint: {
         "line-color": BUILT_COLOR as never,
         "line-width": realWidth(k),
-        "line-opacity": ["match", ["get", "state"], "active", 0.5, 0.28],
+        "line-opacity": ["match", ["get", "state"], "active", 0.7, 0.4],
         "line-dasharray": [2, 2],
       },
     });

@@ -10,6 +10,7 @@ import type { Site, ZoneCell } from "../sim/types";
 import { cellCorners } from "../sim/zones";
 import { buildingSet, frame, sendCmd, state, zones } from "../simClient";
 import { cachedSite, NO_SITE, siteAt } from "../world/site";
+import { PALETTE } from "../ui/palette";
 import { costText } from "./buildCost";
 import { flash, isPlaceTool, MIN_ZONE_ZOOM, PLACED_COLORS, placeReach, SITE_RADIUS, tool, type PlaceTool } from "./tools";
 
@@ -17,7 +18,7 @@ const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may 
 const BUCKET = 16;
 const SAMPLE_DELAY_MS = 150; // the cursor must rest on a lot before its terrain is sampled
 const CIRCLE_STEPS = 64;
-const PENDING_COLOR = "#d9a52b";
+const PENDING_COLOR = PALETTE.warn;
 
 type Pt = [number, number];
 const bucketKey = (bx: number, by: number) => bx * 65536 + by;
@@ -58,13 +59,13 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     ready = true;
     map.addSource("place-lot", { type: "geojson", data: empty() });
     map.addSource("place-radius", { type: "geojson", data: empty() });
-    const color = ["case", ["get", "pending"], PENDING_COLOR, ["get", "ok"], "#2f9e44", "#d0342c"] as never;
-    map.addLayer({ id: "place-radius-fill", type: "fill", source: "place-radius", paint: { "fill-color": "#ffffff", "fill-opacity": 0.08 } });
+    const color = ["case", ["get", "pending"], PENDING_COLOR, ["get", "ok"], PALETTE.ok, PALETTE.bad] as never;
+    map.addLayer({ id: "place-radius-fill", type: "fill", source: "place-radius", paint: { "fill-color": PALETTE.paperRaised, "fill-opacity": 0.25 } });
     map.addLayer({
       id: "place-radius-line",
       type: "line",
       source: "place-radius",
-      paint: { "line-color": "#3b4331", "line-width": 1.5, "line-dasharray": [3, 2], "line-opacity": 0.7 },
+      paint: { "line-color": PALETTE.ink2, "line-width": 1.5, "line-dasharray": [3, 2], "line-opacity": 0.7 },
     });
     map.addLayer({ id: "place-lot-fill", type: "fill", source: "place-lot", paint: { "fill-color": color, "fill-opacity": 0.45 } });
     map.addLayer({ id: "place-lot-line", type: "line", source: "place-lot", paint: { "line-color": color, "line-width": 2 } });

@@ -5,6 +5,7 @@ import type { Building, ClientState } from "../sim/types";
 import { pointInPolygon } from "../sim/zones";
 import { buildings, frame, state } from "../simClient";
 import type { Frame } from "../world/frame";
+import { mixHex, PALETTE } from "../ui/palette";
 import { BUILDING_COLORS, overlay, OVERLAY_COLORS, PLACED_COLORS, tool, type Overlay } from "./tools";
 
 const SRC = "buildings";
@@ -24,13 +25,8 @@ function ringOf(b: Building, f: Frame): [number, number][] {
 }
 
 const { good: GOOD, mid: MID, bad: BAD, neutral: NEUTRAL } = OVERLAY_COLORS;
-const mix = (a: string, b: string, t: number): string => {
-  const p = (c: string, i: number) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
-  const ch = (i: number) => Math.round(p(a, i) + (p(b, i) - p(a, i)) * t).toString(16).padStart(2, "0");
-  return `#${ch(0)}${ch(1)}${ch(2)}`;
-};
 // 0 (bad) .. 1 (good): red through yellow to green.
-const gradient = (t: number): string => (t < 0.5 ? mix(BAD, MID, t * 2) : mix(MID, GOOD, (t - 0.5) * 2));
+const gradient = (t: number): string => (t < 0.5 ? mixHex(BAD, MID, t * 2) : mixHex(MID, GOOD, (t - 0.5) * 2));
 
 // Overlay colour of a finished house ("" = keep its own colour).
 function tintOf(b: Building, ov: Overlay, st: ClientState): string {
@@ -73,10 +69,10 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
       source: SRC,
       filter: ["==", ["get", "state"], "building"],
       paint: {
-        "fill-extrusion-color": "#e6dcc3",
+        "fill-extrusion-color": PALETTE.paperRaised,
         "fill-extrusion-height": ["get", "hp"],
         "fill-extrusion-base": 0,
-        "fill-extrusion-opacity": 0.55,
+        "fill-extrusion-opacity": 0.75,
       },
     });
     map.addLayer({
@@ -84,14 +80,27 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
       type: "fill",
       source: SRC,
       filter: ["==", ["get", "state"], "planned"],
-      paint: { "fill-color": "#ffffff", "fill-opacity": 0.1 },
+      paint: { "fill-color": PALETTE.paperRaised, "fill-opacity": 0.4 },
     });
     map.addLayer({
       id: "buildings-planned",
       type: "line",
       source: SRC,
       filter: ["==", ["get", "state"], "planned"],
-      paint: { "line-color": "#6b5a3c", "line-width": 1.5, "line-dasharray": [2, 1.5] },
+      paint: { "line-color": PALETTE.ink2, "line-width": 1.5, "line-dasharray": [2, 1.5] },
+    });
+    // Footprint outlines in ink: finished and growing buildings keep an edge on any ground; a house being rebuilt
+    // (upgrade) gets a heavier amber one.
+    map.addLayer({
+      id: "buildings-outline",
+      type: "line",
+      source: SRC,
+      filter: ["in", ["get", "state"], ["literal", ["active", "building"]]],
+      paint: {
+        "line-color": ["case", ["get", "up"], PALETTE.warn, PALETTE.ink],
+        "line-width": ["case", ["get", "up"], 3, 1],
+        "line-opacity": ["case", ["get", "up"], 1, 0.55],
+      },
     });
     ready = true;
 
@@ -110,6 +119,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
             zone: b.zone,
             template: b.template,
             state: b.state,
+            up: !!b.upgrade,
             tint: tintOf(b, ov, st),
             h: b.height,
             hp: Math.max(0.5, b.height * progress),

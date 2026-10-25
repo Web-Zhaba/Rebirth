@@ -3,6 +3,7 @@ import { render, h } from "preact";
 import { effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
 import { attachArticles } from "./map/articles";
+import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
@@ -12,6 +13,7 @@ import { attachRoadLayer } from "./map/roadLayer";
 import { attachRuinsLayer } from "./map/ruinsLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachLifeLayer } from "./map/lifeLayer";
+import { attachNightTint } from "./map/nightLayer";
 import { attachTrafficLayer } from "./map/trafficLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
 import { attachZoneTool } from "./map/zoneTool";
@@ -29,8 +31,10 @@ attachExcavation();
 attachArticles();
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
+attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
 attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec });
+attachNightTint(map, gameClock); // dusk tint of the map itself; sits just under the lights
 attachReachLayer(map);
 attachCityMarker(map);
 attachRoadTool(map);

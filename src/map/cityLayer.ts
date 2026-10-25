@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { ORIGIN_RADIUS } from "../sim/roads";
+import { PALETTE } from "../ui/palette";
 import { city, frame } from "../simClient";
 
 const SRC = "city";
@@ -36,7 +37,7 @@ export function attachCityMarker(map: maplibregl.Map): void {
     map.addSource(CAMP_SRC, { type: "geojson", data: camp });
     const beneath = map.getLayer("roads-casing") ? "roads-casing" : undefined; // under the roads when they exist
     map.addLayer(
-      { id: "camp-fill", type: "fill", source: CAMP_SRC, minzoom: 14, paint: { "fill-color": "#e0a050", "fill-opacity": 0.12 } },
+      { id: "camp-fill", type: "fill", source: CAMP_SRC, minzoom: 14, paint: { "fill-color": PALETTE.warn, "fill-opacity": 0.12 } },
       beneath,
     );
     map.addLayer(
@@ -45,7 +46,7 @@ export function attachCityMarker(map: maplibregl.Map): void {
         type: "line",
         source: CAMP_SRC,
         minzoom: 14,
-        paint: { "line-color": "#c08030", "line-width": 1.5, "line-dasharray": [3, 2] },
+        paint: { "line-color": PALETTE.warn, "line-width": 1.5, "line-dasharray": [3, 2] },
       },
       beneath,
     );
@@ -56,8 +57,8 @@ export function attachCityMarker(map: maplibregl.Map): void {
       source: SRC,
       paint: {
         "circle-radius": 7,
-        "circle-color": "#e0a050",
-        "circle-stroke-color": "#ffffff",
+        "circle-color": PALETTE.warn,
+        "circle-stroke-color": PALETTE.paperRaised,
         "circle-stroke-width": 2,
       },
     });

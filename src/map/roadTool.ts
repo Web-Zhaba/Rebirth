@@ -6,6 +6,7 @@ import { frame, gameClock, roads, sendCmd, state } from "../simClient";
 import { oldWorld } from "./excavation";
 import { snapToOldStreets } from "../world/oldStreets";
 import { sampleProfile } from "../world/profile";
+import { PALETTE } from "../ui/palette";
 import { etaText } from "./buildCost";
 import { flash, isRoadTool, mapMpp, tool, type RoadTool } from "./tools";
 
@@ -57,14 +58,14 @@ export function attachRoadTool(map: maplibregl.Map): void {
       id: "road-hover",
       type: "line",
       source: "road-hover",
-      paint: { "line-color": "#d0342c", "line-width": 6, "line-opacity": 0.75 },
+      paint: { "line-color": PALETTE.bad, "line-width": 6, "line-opacity": 0.75 },
     });
     map.addLayer({
       id: "road-preview",
       type: "line",
       source: "road-preview",
       paint: {
-        "line-color": ["case", ["get", "ok"], "#2f9e44", "#d0342c"],
+        "line-color": ["case", ["get", "ok"], PALETTE.ok, PALETTE.bad],
         "line-width": 3,
         "line-dasharray": [2, 1.5],
       },
@@ -75,8 +76,8 @@ export function attachRoadTool(map: maplibregl.Map): void {
       source: "road-snap",
       paint: {
         "circle-radius": 6,
-        "circle-color": "rgba(255,255,255,0.35)",
-        "circle-stroke-color": "#2f6fdf",
+        "circle-color": PALETTE.paperRaised,
+        "circle-stroke-color": PALETTE.info,
         "circle-stroke-width": 2,
       },
     });

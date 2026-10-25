@@ -31,6 +31,31 @@
   max-width: 260px;
 }
 
+button.city-name-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  max-width: 100%;
+}
+
+button.city-name-btn:hover .city-name {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+}
+
+button.city-name-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
 .city-name {
   font-family: var(--font-display);
   font-size: var(--fs-xl);
@@ -241,11 +266,17 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--pencil);
+  cursor: pointer;
+  text-align: left;
 }
 
 .layer-name {
@@ -307,14 +338,8 @@
   border-radius: var(--radius-sm);
 }
 
-/* «Итоги дня»: centre of the screen under the top bar (PLAN-ui.md section 5). */
+/* «Итоги дня»: sits in the centre column (CentreColumn). */
 .day-summary {
-  position: absolute;
-  top: 96px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(360px, calc(100% - 32px));
-  z-index: var(--z-panel);
   pointer-events: auto;
 }
 .day-summary-head {
@@ -397,32 +422,4 @@
 .goal-hint {
   font-size: var(--fs-xs);
   color: var(--warn);
-}
-
-/* Event with two choices: under the top bar like the day summary, a little lower while that is shown. */
-.event-card {
-  position: absolute;
-  top: 96px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(380px, calc(100% - 32px));
-  z-index: var(--z-panel);
-  pointer-events: auto;
-}
-.event-card-title {
-  font-family: var(--font-display);
-  font-size: var(--fs-md);
-  font-weight: 700;
-  margin-bottom: var(--sp-1);
-}
-.event-card-option {
-  display: block;
-  width: 100%;
-  margin-top: var(--sp-2);
-  text-align: left;
-}
-.event-card-effect {
-  display: block;
-  font-weight: 400;
-  font-size: var(--fs-sm);
 }

@@ -38,6 +38,8 @@ import Village from "~icons/game-icons/village";
 import Well from "~icons/game-icons/well";
 import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
+import PhCaretDown from "~icons/ph/caret-down-bold";
+import PhCaretUp from "~icons/ph/caret-up-bold";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
 import PhInfo from "~icons/ph/info-bold";
@@ -47,6 +49,8 @@ import PhFootprints from "~icons/ph/footprints";
 import PhHourglass from "~icons/ph/hourglass-bold";
 import PhUsers from "~icons/ph/users-three-bold";
 import PhPause from "~icons/ph/pause-fill";
+import PhPlay from "~icons/ph/play-fill";
+import PhQuestion from "~icons/ph/question";
 import PhProhibit from "~icons/ph/prohibit";
 import PhSmiley from "~icons/ph/smiley";
 import PhStack from "~icons/ph/stack";
@@ -60,10 +64,14 @@ export const ICONS = {
   // Interface (Phosphor)
   close: PhX,
   check: PhCheck,
+  caretDown: PhCaretDown,
+  caretUp: PhCaretUp,
   warning: PhWarning,
   notebook: PhBookOpen,
   layers: PhStack,
   pause: PhPause,
+  play: PhPlay,
+  help: PhQuestion,
   trash: PhTrash,
   eraser: PhEraser,
   layerNone: PhProhibit,

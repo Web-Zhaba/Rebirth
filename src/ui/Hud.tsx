@@ -2,17 +2,19 @@ import type maplibregl from "maplibre-gl";
 import type { City } from "../sim/types";
 import { LeftPanel } from "./LeftPanel";
 import { GoalsTracker } from "./GoalsTracker";
+import { Toasts } from "./Toasts";
 import { TopBar, Warnings } from "./TopBar";
 
 // Full-width top bar, then warnings and the layers on the left. The town panel lives in the right slot (App).
-export function Hud({ city }: { city: City; map: maplibregl.Map }) {
+export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
   return (
     <>
-      <TopBar city={city} />
+      <TopBar city={city} map={map} />
       <div class="side-col">
         <Warnings />
         <LeftPanel />
         <GoalsTracker />
+        <Toasts map={map} />
       </div>
     </>
   );

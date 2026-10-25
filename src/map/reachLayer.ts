@@ -5,6 +5,7 @@ import { lotFront } from "../sim/people";
 import { isService, SERVICES } from "../sim/services";
 import { frame, state } from "../simClient";
 import { selectedBuilding } from "./buildingLayer";
+import { PALETTE } from "../ui/palette";
 import { placeReach, tool } from "./tools";
 
 const SRC = "service-reach";
@@ -14,7 +15,7 @@ const SRC = "service-reach";
 export function attachReachLayer(map: maplibregl.Map): void {
   const setup = () => {
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    map.addLayer({ id: "service-reach-casing", type: "line", source: SRC, layout: { "line-cap": "round" }, paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.7 } });
+    map.addLayer({ id: "service-reach-casing", type: "line", source: SRC, layout: { "line-cap": "round" }, paint: { "line-color": PALETTE.paperRaised, "line-width": 8, "line-opacity": 1 } });
     map.addLayer({ id: "service-reach", type: "line", source: SRC, layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": 0.9 } });
 
     effect(() => {
