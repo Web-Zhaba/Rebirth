@@ -2,7 +2,7 @@ import type { Land } from "../world/landcover";
 import type { RoadEdge, RoadGraph, RoadKind } from "./types";
 
 export const ROAD_KINDS: Record<RoadKind, { name: string; width: number; labor: number; maxGrade: number }> = {
-  path: { name: "Тропа", width: 2, labor: 0.2, maxGrade: 0.25 },
+  path: { name: "Тропа", width: 2, labor: 0.1, maxGrade: 0.25 },
   dirt: { name: "Грунтовая дорога", width: 5, labor: 1.0, maxGrade: 0.12 },
 };
 

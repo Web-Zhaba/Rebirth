@@ -2,6 +2,7 @@ import { it } from "vitest";
 import { BUILDINGS } from "../sim/buildings";
 import { calendar } from "../sim/clock";
 import { canPlace } from "../sim/growth";
+import { vacantHouses } from "../sim/people";
 import { Handler, type Storage } from "../sim/handler";
 import { isFinishedHouse } from "../sim/people";
 import type { Cmd, FromWorker } from "../sim/protocol";
@@ -62,7 +63,7 @@ it("pacing harness", async () => {
     roadEnd = to;
     return send(`path to ${to} m`, { type: "addRoad", kind: "path", pts, snapTol: 6, labor });
   };
-  const paint = (what: string, zone: "res" | "craft", keep: (c: ZoneCell) => boolean) => {
+  const paint = (what: string, zone: "res" | "craft" | "trade", keep: (c: ZoneCell) => boolean) => {
     const keys = st.zones.cells.filter(keep).map((c) => c.key);
     return send(`${what} (${keys.length} cells)`, { type: "paintZones", keys, zone });
   };
@@ -77,6 +78,12 @@ it("pacing harness", async () => {
     if (c) return send(`${template} at x=${Math.round(c.cx)}`, { type: "placeBuilding", template, edge: c.edge, side: c.side, i: c.i, site });
     log.push(`${stamp()}  FAIL  ${template}: no lot east of x=${x}`);
     return Promise.resolve(false);
+  };
+  // A sensible player puts the materials workshop at the front of the artel's queue, ahead of the houses already planned.
+  const placeFirst = async (template: string, side: 1 | -1, x: number) => {
+    if (!(await place(template, side, x))) return false;
+    const id = Object.values(st.buildings).find((b) => b.template === template)?.id;
+    return id === undefined ? false : send(`priority: ${template}`, { type: "setPriority", key: id });
   };
   const roadBuilt = (x: number) => Object.values(st.roads.edges).every((e) => e.done >= e.labor || Math.min(st.roads.nodes[e.a].x, st.roads.nodes[e.b].x) > x);
   const houses = () => Object.values(st.buildings).filter(isFinishedHouse).length;
@@ -105,6 +112,7 @@ it("pacing harness", async () => {
   // The first field and its gumno as soon as there is built road for the gumno; then 2 ha more per 2 finished houses,
   // with a new gumno when the field lies beyond the reach of every one placed.
   const tillMore = async () => {
+    if (houses() < 4) return; // the first four houses come first (the sowing window reaches into summer)
     while (fields < Math.min(FIELD_SLOTS.length, 1 + Math.floor(houses() / 2))) {
       const cx = 110 + 104 * FIELD_SLOTS[fields];
       const near = gumnos.some((gx) => Math.hypot(gx - cx, 150) < 330);
@@ -118,19 +126,25 @@ it("pacing harness", async () => {
 
   // ----- build order: short list of steps, each fired once when its trigger holds -----
   const steps: { when: () => boolean; run: () => Promise<unknown> }[] = [
+    // a sensible player puts construction first while the town is being raised
+    { when: () => true, run: () => send("job priority: construction high", { type: "setJobPriority", group: "build", priority: 3 }) },
     { when: () => true, run: () => extendRoad(200) },
     { when: () => true, run: () => paint("residential zone 0-120 m", "res", (c) => c.cx <= 120 && c.zone === "none") },
-    { when: () => roadBuilt(200), run: () => place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 }) },
+    { when: () => ready(3), run: () => place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 }) },
     // a sensible player waits for the goals: the sawpit comes with the 2nd izba, the craft zone with 20 m3 of logs
-    { when: () => unlocked("sawpit") && roadBuilt(200), run: () => place("sawpit", -1, 140) },
-    { when: () => ready(2), run: () => place("well", -1, 170) },
-    { when: () => ready(3) && unlocked("zone:craft"), run: () => paint("craft zone 130-170 m", "craft", (c) => c.side === 1 && c.cx >= 130 && c.cx <= 170 && !c.block) },
-    { when: () => ready(3), run: () => place("dig", -1, 190) },
+    { when: () => unlocked("sawpit") && roadBuilt(200), run: () => placeFirst("sawpit", -1, 140) },
+    { when: () => ready(5), run: () => place("well", -1, 170) },
+    { when: () => ready(3) && unlocked("zone:craft"), run: () => paint("craft zone 130-170 m", "craft", (c) => c.cx >= 130 && c.cx <= 170 && c.zone === "none" && !c.block) },
+    { when: () => ready(5) && unlocked("zone:trade"), run: () => paint("trade zone 120-200 m", "trade", (c) => c.cx > 120 && c.cx <= 200 && c.zone === "none" && !c.block) },
+    { when: () => ready(5), run: () => place("dig", -1, 190) },
     // 0.5 ha south of the road, forest 0.8 as measured on a real site (the synthetic land itself is meadow); after the
     // gumno, which must stand before the end of spring to sow.
     { when: () => Object.values(st.buildings).some((b) => b.template === "gumno" && b.state === "active"), run: () => send("clearing 0.5 ha", { type: "addClearing", pts: [[20, -150], [70, -150], [70, -50], [20, -50]], forest: 0.8 }) },
   ];
   const done = new Set<number>();
+  let lastJobsDay = -9;
+  let lastCallDay = -1;
+  let jobsStretches = 0;
 
   // ----- milestones -----
   const marks: { label: string; hit: () => boolean; at?: { ms: number; day: number; pop: number } }[] = [
@@ -145,9 +159,30 @@ it("pacing harness", async () => {
     { label: "Population 25", hit: () => st.people.pop >= 25 },
     { label: "Population 50", hit: () => st.people.pop >= 50 },
     { label: "Population 100", hit: () => st.people.pop >= 100 },
+    { label: "First planks made (sawpit output)", hit: () => planksMade },
     { label: "First clearing finished", hit: () => st.chronicle.some((e) => e.kind === "clearing") },
-    { label: "First harvest", hit: () => st.chronicle.some((e) => e.kind === "harvest") },
+    { label: "Harvest begins (first grain reaped)", hit: () => st.events.some((e) => e.kind === "farm" && e.text.startsWith("Началась уборка")) || st.chronicle.some((e) => e.kind === "harvest") },
+    { label: "First harvest finished", hit: () => st.chronicle.some((e) => e.kind === "harvest") },
   ];
+
+  // Feed events that give the player something to watch or decide (built, arrival, goal, unlock, event): seen once each,
+  // stamped with the real time (speed 1x) they appeared. «Events per minute» is their count over a stretch of real time.
+  const FEED = new Set<string>(["built", "arrival", "goal", "unlock", "event"]);
+  const seen = new Set<string>();
+  const feedAt: number[] = [];
+  let planksMade = false;
+  const watch = () => {
+    for (const e of st.events) {
+      const key = `${e.at}|${e.kind}|${e.text}`;
+      if (FEED.has(e.kind) && !seen.has(key)) {
+        seen.add(key);
+        feedAt.push(now - T0);
+      }
+    }
+    // planks are made when a sawpit has output (the houses may take them in the same tick, so the stock need not rise)
+    const full = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
+    if (Object.values(full.buildings).some((b) => b.template === "sawpit" && ((full.prod.today[b.id] ?? 0) > 0 || (full.prod.yesterday[b.id] ?? 0) > 0))) planksMade = true;
+  };
 
   const started = Date.now();
   while (dayOf(st.gameMinutes) < CAP_DAYS && marks.some((m) => !m.at)) {
@@ -164,19 +199,42 @@ it("pacing harness", async () => {
       await extendRoad(roadEnd + 50);
       await paint(`residential zone ${from}-${roadEnd} m`, "res", (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
     }
+    // A house stands empty and there are wares to pay: call settlers (the wares of the founding cart pay for two calls).
+    if (st.stock.wares >= 10 && dayOf(st.gameMinutes) > lastCallDay) {
+      const sim = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
+      const promised = new Set(sim.incoming.map((f) => f.house));
+      if (vacantHouses(sim.buildings, sim.households).some((id) => !promised.has(id))) {
+        lastCallDay = dayOf(st.gameMinutes);
+        await send("call settlers", { type: "callSettlers" });
+      }
+    }
+    // Jobless adults: zone a stretch of new road for workshops, then shops (a sensible player makes jobs for the people).
+    if (done.size === steps.length && st.people.unemployed >= 6 && unlocked("zone:craft") && dayOf(st.gameMinutes) >= lastJobsDay + 2) {
+      lastJobsDay = dayOf(st.gameMinutes);
+      const from = roadEnd;
+      const zone = unlocked("zone:trade") && jobsStretches++ % 2 === 1 ? "trade" : "craft";
+      await extendRoad(roadEnd + 50);
+      await paint(`${zone} zone ${from}-${roadEnd} m`, zone, (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
+    }
     for (let k = 0; k < 6; k++) {
       now += STEP_MS;
       h.tick(now);
+      watch();
       for (const m of marks) if (!m.at && m.hit()) m.at = { ms: now - T0, day: dayOf(st.gameMinutes) + 1, pop: st.people.pop };
     }
   }
 
   const rows = marks.map((m) => `| ${m.label} | ${m.at ? hm(m.at.ms) : "—"} | ${m.at ? m.at.day : "—"} | ${m.at ? m.at.pop : "—"} |`);
   const cal = calendar(st.gameMinutes);
+  const gaps = feedAt.slice(1).map((t, i) => t - feedAt[i]);
+  const span = feedAt.length > 1 ? feedAt[feedAt.length - 1] - feedAt[0] : 0;
+  const perMin = (a: number, b: number) => (feedAt.filter((t) => t >= a && t < b).length / ((b - a) / 60_000)).toFixed(2);
   const out = [
     "| Milestone | Real time (h:mm) | Game day | Population |",
     "|---|---|---|---|",
     ...rows,
+    "",
+    `Feed events (built/arrival/goal/unlock/event): ${feedAt.length} in ${hm(span)} -> mean gap ${gaps.length ? Math.round(span / gaps.length / 1000) : "—"} s, longest ${gaps.length ? Math.round(Math.max(...gaps) / 1000) : "—"} s; per minute: 0-30 min ${perMin(0, 1_800_000)}, 30-60 min ${perMin(1_800_000, 3_600_000)}, 1-2 h ${perMin(3_600_000, 7_200_000)}.`,
     "",
     `End: game day ${dayOf(st.gameMinutes) + 1} (year ${cal.year}), ${houses()} houses finished, population ${st.people.pop}, road ${roadEnd} m.`,
     "",

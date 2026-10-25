@@ -19,6 +19,10 @@ export const FIELD = {
 // Day of the year on which the harvest window closes (autumn is the third season).
 export const HARVEST_END_DAY = 2 * DAYS_PER_SEASON + FIELD.harvestDays;
 
+// Sowing goes on into the first days of summer, but a late hour counts for half: a farm that stands a little after
+// spring still sows a part of its fields instead of losing the whole year.
+export const LATE_SOWING = { days: 4, credit: 0.5 };
+
 export const haOf = (f: Field): number => f.area / 10_000;
 
 export function fieldCentroid(f: Pick<Field, "pts">): [number, number] {
@@ -73,7 +77,7 @@ export function jobsOf(b: Building, s: Pick<SimState, "buildings" | "zones">, as
 
 export function windowAt(gameMinutes: number): Window {
   const c = calendar(gameMinutes);
-  if (c.season === 0) return "sowing";
+  if (c.season === 0 || (c.season === 1 && c.dayOfSeason <= LATE_SOWING.days)) return "sowing";
   if (c.season === 2 && c.dayOfSeason <= FIELD.harvestDays) return "harvest";
   return null;
 }
@@ -84,6 +88,9 @@ export function remainingHours(f: Field, w: FieldWork, win: Window): number {
   if (win === "harvest") return Math.max(0, FIELD.harvestHoursHa * haOf(f) * sownShare(f, w) - w.harvH);
   return 0;
 }
+
+// Sowing progress per hour of work now: 1 in spring, less in the late days.
+export const sowCredit = (gameMinutes: number): number => (calendar(gameMinutes).season === 0 ? 1 : LATE_SOWING.credit);
 
 type Idle = Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod" | "stock">;
 
