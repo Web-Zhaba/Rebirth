@@ -74,7 +74,6 @@ export function GoalsTracker() {
                 </span>
               ))}
             </div>
-            {g.hint && <div class="goal-hint">{g.hint}</div>}
           </li>
         ))}
       </ul>

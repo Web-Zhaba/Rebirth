@@ -267,6 +267,7 @@ export interface GoalsState {
   families: number; // free families owed by goals that wait for a vacant house
   notebook: boolean; // the dig goal was paid: the notebook's first article prompt is out
   feast: boolean; // the harvest goal was paid: P7 turns this into the harvest feast event
+  logsMade: number; // m3 of logs the town cut itself (woodcutters, clearings); the founding stock does not count
 }
 
 // A family that decided to come: the house is promised to them; the family itself is made on arrival.

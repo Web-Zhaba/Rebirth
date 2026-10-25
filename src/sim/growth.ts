@@ -413,7 +413,7 @@ export function advanceClearings(s: SimState, use: Map<number, number>): SimStat
     events = say(events, s.gameMinutes, "clearing", `Вырубка закончена: ${(c.area / 10_000).toFixed(2).replace(".", ",")} га, брёвен +${Math.round(clearingLogs(c.area, c.forest))} м³`, fieldCentroid(c));
   }
   const zones = finished.length > 0 ? clearTerrain(s.zones, s.roads, finished) : s.zones;
-  return { ...s, clearings, events, zones, stock: { ...s.stock, logs: s.stock.logs + logs } };
+  return { ...s, clearings, events, zones, stock: { ...s.stock, logs: s.stock.logs + logs }, goals: { ...s.goals, logsMade: s.goals.logsMade + logs } };
 }
 
 // Sampled forest inside the polygons becomes meadow; the cells are regenerated (rev bumped) when anything changed.

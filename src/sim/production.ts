@@ -160,6 +160,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
   let fields = s.prod.fields;
   let events = s.events;
   let buildings = s.buildings;
+  let logsCut = 0;
   const cap = foodCapacity(s.buildings);
   const addFood = (kg: number) => {
     const take = Math.max(0, Math.min(kg, cap - stock.food));
@@ -183,6 +184,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
       case "woodcutter": {
         const q = h * RATE.logs * PACE * (b.site?.forest ?? 0);
         stock.logs += q;
+        logsCut += q;
         made(b.id, q);
         break;
       }
@@ -287,7 +289,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
       events = say(events, s.gameMinutes, "farm", `Урожай собран: ${massText(got)}`);
     }
   }
-  return { ...s, stock, events, buildings, prod: { ...s.prod, fields, today, flags } };
+  return { ...s, stock, events, buildings, goals: { ...s.goals, logsMade: s.goals.logsMade + logsCut }, prod: { ...s.prod, fields, today, flags } };
 }
 
 // ---------- daily ----------

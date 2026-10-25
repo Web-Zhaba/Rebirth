@@ -76,8 +76,7 @@ describe("goals chain", () => {
 
   it("shows progress of the active goals", () => {
     const v = goalViews(town([bld(1, "izba")]));
-    expect(v.map((g) => [g.id, g.value, g.target])).toEqual([["izbas2", 1, 2], ["logs20", 20, 20], ["sow2", 0, 2]]);
-    expect(v[1].hint).toBe("нужна лесозаготовка или вырубка");
+    expect(v.map((g) => [g.id, g.value, g.target])).toEqual([["izbas2", 1, 2], ["logs20", 0, 20], ["sow2", 0, 2]]);
   });
 
   it("2 izbas unlock the sawpit and the barn, and the chain fills the slot", () => {
@@ -101,13 +100,21 @@ describe("goals chain", () => {
     expect(s.events[0].pos).toEqual([40, 10]);
   });
 
-  it("stock of logs counts once the town makes its own", () => {
-    expect(checkGoals(town()).goals.done).not.toContain("logs20"); // the founding stock alone does not
-    const s = checkGoals(town([bld(1, "woodcutter")]));
+  it("a new town with its founding stock does not open the logs goal by itself", () => {
+    let s = town();
+    for (let i = 0; i < 300; i++) s = step(s);
+    expect(s.stock.logs).toBeGreaterThan(20);
+    expect(s.goals.logsMade).toBe(0);
+    expect(s.goals.done).not.toContain("logs20");
+  });
+
+  it("counts only the logs the town cuts itself, not the founding stock", () => {
+    expect(checkGoals(town()).goals.done).not.toContain("logs20"); // 100 m3 in stock at founding, none cut
+    const cut = (logsMade: number) => ({ ...town(), goals: { ...town().goals, logsMade } });
+    expect(checkGoals(cut(19)).goals.done).toEqual([]);
+    const s = checkGoals(cut(20));
     expect(s.goals.done).toEqual(["logs20"]);
     expect(isUnlocked(s.goals, "quarry") && isUnlocked(s.goals, "zone:craft")).toBe(true);
-    const poor = checkGoals({ ...town([bld(1, "woodcutter")]), stock: { ...town().stock, logs: 19 } });
-    expect(poor.goals.done).toEqual([]);
   });
 
   it("2 ha sown unlocks the fisher and brings a family into a vacant house", () => {
@@ -281,7 +288,7 @@ describe("migration and save", () => {
     const g = { done: ["izbas2", "nope"], unlocks: ["sawpit", "barn", "bogus"], families: 2, notebook: true, feast: true };
     const raw = { version: 4, city, sim: { ...JSON.parse(JSON.stringify(town())), goals: g } };
     const sim = parseSave(raw, NOW + 1)!.sim;
-    expect(sim.goals).toEqual({ done: ["izbas2"], unlocks: ["sawpit", "barn", "hunter"], families: 2, notebook: true, feast: true });
+    expect(sim.goals).toEqual({ done: ["izbas2"], unlocks: ["sawpit", "barn", "hunter"], families: 2, notebook: true, feast: true, logsMade: 0 });
     const again = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW + 1)!.sim;
     expect(again.goals).toEqual(sim.goals);
   });

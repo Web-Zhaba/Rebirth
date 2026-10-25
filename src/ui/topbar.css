@@ -417,7 +417,3 @@ button.city-name-btn:hover .city-name {
   color: var(--ok-text);
 }
 
-.goal-hint {
-  font-size: var(--fs-xs);
-  color: var(--warn-text);
-}

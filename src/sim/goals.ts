@@ -14,7 +14,7 @@ import type { Building, GoalsState, SimState, ZoneType } from "./types";
 export const ACTIVE_GOALS = 3;
 export const FEAST_MOOD = 15; // one-off mood bonus of the harvest feast reward
 
-type Slice = Pick<SimState, "buildings" | "residents" | "stock" | "prod" | "zones" | "chronicle" | "clearings" | "gameMinutes">;
+type Slice = Pick<SimState, "buildings" | "residents" | "stock" | "prod" | "zones" | "chronicle" | "clearings" | "gameMinutes" | "goals">;
 
 export interface GoalDef {
   id: string;
@@ -25,13 +25,10 @@ export interface GoalDef {
   unlocks: string[]; // unlock keys paid by the goal
   families?: number; // free families that come
   value: (s: Slice) => number; // progress, may exceed the target
-  gate?: (s: Slice) => boolean; // extra condition besides value >= target
-  gateHint?: string; // shown while the gate is closed
 }
 
 const finished = (b: Building): boolean => b.state === "active";
 const countWhere = (s: Pick<SimState, "buildings">, f: (b: Building) => boolean): number => Object.values(s.buildings).filter((b) => finished(b) && f(b)).length;
-const exists = (s: Pick<SimState, "buildings">, f: (b: Building) => boolean): boolean => Object.values(s.buildings).some((b) => finished(b) && f(b));
 
 // Hectares sown this year on the fields a gumno works.
 export function sownHa(s: Pick<SimState, "zones" | "buildings" | "prod" | "gameMinutes">): number {
@@ -58,10 +55,8 @@ export const GOALS: GoalDef[] = [
     target: 20,
     unit: "м³",
     unlocks: ["quarry", "zone:craft"],
-    value: (s) => s.stock.logs,
-    // The founding stock already holds the logs: they count once the town makes its own (a woodcutter or a clearing).
-    gate: (s) => exists(s, (b) => b.template === "woodcutter") || s.clearings.some((c) => c.done >= c.labor),
-    gateHint: "нужна лесозаготовка или вырубка",
+    // Only the logs the town cuts itself: the founding stock is not a result of the goal.
+    value: (s) => s.goals.logsMade,
   },
   { id: "sow2", title: "Засеять 2 га", reward: "рыболовный причал, огород, +1 семья", target: 2, unit: "га", unlocks: ["fisher", "garden"], families: 1, value: (s) => round1(sownHa(s)) },
   { id: "dig", title: "Открыть раскоп", reward: "первая статья в тетради", target: 1, unit: "", unlocks: [], value: (s) => countWhere(s, (b) => b.template === "dig") },
@@ -104,9 +99,9 @@ for (const g of GOALS) for (const k of g.unlocks) UNLOCK_GOAL[k] = g;
 
 export const ALL_UNLOCKS = Object.keys(UNLOCK_NAME);
 
-export const initialGoals = (): GoalsState => ({ done: [], unlocks: [], families: 0, notebook: false, feast: false });
+export const initialGoals = (): GoalsState => ({ done: [], unlocks: [], families: 0, notebook: false, feast: false, logsMade: 0 });
 // Every goal paid, nothing locked: for plain sim states in tests and tools that do not play the chain.
-export const allUnlocked = (): GoalsState => ({ done: GOALS.map((g) => g.id), unlocks: [...ALL_UNLOCKS], families: 0, notebook: true, feast: false });
+export const allUnlocked = (): GoalsState => ({ done: GOALS.map((g) => g.id), unlocks: [...ALL_UNLOCKS], families: 0, notebook: true, feast: false, logsMade: 0 });
 
 export const isUnlocked = (g: Pick<GoalsState, "unlocks">, key: string): boolean => g.unlocks.includes(key);
 
@@ -137,7 +132,6 @@ export interface GoalView {
   value: number; // progress, capped at the target
   target: number;
   unit: string;
-  hint: string | null; // what is missing while the goal cannot finish yet
 }
 
 export function goalViews(s: Slice & { goals: GoalsState }): GoalView[] {
@@ -148,11 +142,10 @@ export function goalViews(s: Slice & { goals: GoalsState }): GoalView[] {
     value: Math.min(g.target, round1(g.value(s))),
     target: g.target,
     unit: g.unit,
-    hint: g.gate && !g.gate(s) ? (g.gateHint ?? null) : null,
   }));
 }
 
-const met = (g: GoalDef, s: Slice): boolean => g.value(s) >= g.target && (!g.gate || g.gate(s));
+const met = (g: GoalDef, s: Slice): boolean => g.value(s) >= g.target;
 
 const lowerNames = (keys: string[]): string => keys.map((k) => UNLOCK_NAME[k]).join(", ");
 
@@ -267,7 +260,8 @@ export function parseGoals(v: unknown): GoalsState | null {
   const paid = new Set([...(r.unlocks as unknown[]), ...done.flatMap((id) => GOAL_BY_ID.get(id)?.unlocks ?? [])]);
   const unlocks = ALL_UNLOCKS.filter((k) => paid.has(k));
   const families = Number.isInteger(r.families) && (r.families as number) > 0 ? Math.min(20, r.families as number) : 0;
-  return { done, unlocks, families, notebook: r.notebook === true, feast: r.feast === true };
+  const logsMade = typeof r.logsMade === "number" && Number.isFinite(r.logsMade) && r.logsMade > 0 ? r.logsMade : 0;
+  return { done, unlocks, families, notebook: r.notebook === true, feast: r.feast === true, logsMade };
 }
 
 export const goalById = (id: string): GoalDef | undefined => GOAL_BY_ID.get(id);
