@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { newTally, observe, summarize } from "./away";
 import { advanceTo, step } from "./clock";
 import { BUILDINGS } from "./buildings";
-import { ANSWER_WITHIN, AUTO, CART, COOLDOWN, DIG_LABOR, EVENT_GAP, EVENT_IDS, eventStep, FEAST, FIRE, FIRST_EVENT, FLOOD, FROST_MOOD, HOARD, MINSTREL, RAID, resolveChoice, RETRY, SHELTER_FOOD, SICK, WOLF } from "./events";
+import { ANSWER_WITHIN, AUTO, CART, COLLAPSE, COOLDOWN, DIG_LABOR, EVENT_GAP, EVENT_IDS, eventStep, FEAST, FIRE, FIRST_EVENT, FLOOD, FROST_MOOD, HOARD, MINSTREL, RAID, resolveChoice, RETRY, SHELTER_FOOD, SICK, WOLF } from "./events";
+import { withService } from "./services";
+
+const chance = (p: number) => `${Math.round(p * 100)}%`;
 import { FIELD } from "./fields";
 import { emptyGrowth } from "./growth";
 import { Handler, toSnapshot, type Storage } from "./handler";
@@ -480,6 +483,36 @@ describe("hoard and minstrels", () => {
     const s = resolveChoice(p, 0, false);
     expect(s.stock.food).toBe(p.stock.food - MINSTREL.food);
     expect(moods(s)).toEqual(moods(p).map((m) => m + MINSTREL.mood));
+  });
+});
+
+describe("buildings that soften events", () => {
+  it("a well in reach halves the labor a fire takes", () => {
+    const s = town([bld(1, "izba"), { ...bld(2, "izba", "building"), done: 40 }]);
+    const p = eventStep(only({ ...family(noPeople(s), 1, 2), coverage: { 1: withService(0, "well") } }, "fire"));
+    expect(resolveChoice(p, 0, false).buildings[2].done).toBe(40 - FIRE.labor / 2);
+  });
+  it("a hunter's hut halves the death risk of a wolf hunt", () => {
+    const base = family(noPeople(town([bld(1, "izba")])), 1, 3);
+    const w = { ...base, gameMinutes: at(26, 9) };
+    expect(eventStep(only(w, "wolves")).pending!.options[0].effect).toContain(chance(WOLF.death));
+    const h = eventStep(only({ ...w, buildings: { ...w.buildings, 3: bld(3, "hunter") } }, "wolves"));
+    expect(h.pending!.options[0].effect).toContain(chance(WOLF.death / 2));
+  });
+  it("a market halves the bribe the raiders take", () => {
+    const p = eventStep(only({ ...town([bld(1, "izba"), bld(2, "market")]) }, "raid"));
+    expect(resolveChoice(p, 0, false).stock.food).toBe(2000 - RAID.food / 2);
+  });
+  it("a healer in reach halves the risk of a quarry collapse", () => {
+    const base = family(noPeople(town([bld(1, "izba"), bld(2, "quarry")])), 1, 2);
+    const [first] = Object.keys(base.residents).map(Number);
+    const s = { ...base, residents: { ...base.residents, [first]: { ...base.residents[first], job: 2 } } };
+    expect(eventStep(only(s, "collapse")).pending!.options[1].effect).toContain(chance(COLLAPSE.death));
+    expect(eventStep(only({ ...s, coverage: { 2: withService(0, "healer") } }, "collapse")).pending!.options[1].effect).toContain(chance(COLLAPSE.death / 2));
+  });
+  it("a tavern makes the minstrels' feast cheaper", () => {
+    const p = eventStep(only({ ...town([bld(1, "izba"), bld(2, "tavern")]) }, "minstrels"));
+    expect(resolveChoice(p, 0, false).stock.food).toBe(2000 - MINSTREL.food / 2);
   });
 });
 

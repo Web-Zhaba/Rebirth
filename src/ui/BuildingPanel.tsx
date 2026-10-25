@@ -1,9 +1,10 @@
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, houseCapacity, JOB_NAMES, type JobGroup, type Materials } from "../sim/buildings";
+import { BUILDINGS, houseCapacity, JOB_NAMES, type JobGroup, type Materials, UPGRADE } from "../sim/buildings";
+import { upgradeBlockers } from "../sim/coverage";
 import { queuedLabel } from "../sim/clock";
 import { handHours } from "../sim/production";
 import { DIG, revealedArea } from "../sim/excavation";
-import { SERVICES } from "../sim/services";
+import { SERVICE, SERVICES } from "../sim/services";
 import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
 import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
@@ -83,7 +84,6 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
     <div class="prod">
       {site && template === "woodcutter" && <div>Лес вокруг: {pct(site.forest)}</div>}
       {site && template === "fisher" && <div>Вода рядом: {pct(site.water)}</div>}
-      {site && template === "quarry" && <div>Камень и песок: {pct(site.rock)}</div>}
       {p.storage !== undefined && <div>Склад: +{tons(p.storage)} т еды</div>}
       {p.fields && (
         <div>
@@ -147,6 +147,8 @@ export function BuildingPanel() {
   const t = b ? BUILDINGS[b.template] : undefined;
   const shown = !!b && !!t && !tool.value && rightPanel.value === "inspector";
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
+  const snap = state.value;
+  const upgradeNote = b && snap && b.state === "active" && b.template === UPGRADE.template && b.level < 2 && !b.upgrade ? upgradeBlockers(snap, b, snap.houseMood[b.id]) : null;
   const group = t?.group ?? null;
   const info = useResidents(id, shown && b?.state === "active", `${b?.staff ?? "-"}|${group ? (state.value?.levers.jobs?.[group] ?? 2) : "-"}`);
   useEffect(() => setConfirming(false), [id]);
@@ -194,6 +196,17 @@ export function BuildingPanel() {
         </div>
       )}
       {b.state !== "active" && <SiteMaterials template={b.template} paid={b.paid} hand={b.hand} st={stock.value} />}
+      {upgradeNote && (
+        <div class="prod">
+          {upgradeNote.length > 0 ? (
+            <div>Расширение до второго уровня: нет — {upgradeNote.join("; ")}</div>
+          ) : (
+            <div>
+              Расширение до второго уровня: условия выполнены, {b.streak} из {SERVICE.upgradeDays} дней подряд
+            </div>
+          )}
+        </div>
+      )}
       {dig && (
         <div class="prod">
           <div>
@@ -204,7 +217,6 @@ export function BuildingPanel() {
             Находки: {dig.foundations} {plural(dig.foundations, "фундамент", "фундамента", "фундаментов")}, {dig.pois}{" "}
             {plural(dig.pois, "место", "места", "мест")}, {dig.streets} {plural(dig.streets, "улица", "улицы", "улиц")}
           </div>
-          {dig.r >= DIG.maxRadius - 1e-6 && <div class="prod-warn">Раскоп завершён</div>}
         </div>
       )}
       {info?.kind === "house" && (

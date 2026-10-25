@@ -2,9 +2,10 @@ import { useState } from "preact/hooks";
 import { OVERLAY_COLORS, OVERLAYS, overlay, TRAFFIC_STOPS, type Overlay } from "../map/tools";
 import { compactScreen } from "../map/motion";
 import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
+import { ruinsShown, toggleRuins } from "../map/ruinsLayer";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
-import { IconButton, Tooltip } from "./kit";
+import { IconButton } from "./kit";
 
 const LAYER_ICON: Record<Overlay, IconName> = {
   none: "layerNone",
@@ -98,15 +99,13 @@ export function LayerBar() {
       {!collapsed && (
         <>
           <div class="layer-group" role="group" aria-label="Слои карты">
+            {/* Native title tooltips: a CSS tooltip here overflows the scrolling left column and makes it jump. */}
             {OVERLAYS.map((o) => (
-              <Tooltip key={o.id} text={o.label}>
-                <IconButton icon={LAYER_ICON[o.id]} label={o.label} title={undefined} aria-pressed={cur === o.id} onClick={() => (overlay.value = o.id)} />
-              </Tooltip>
+              <IconButton key={o.id} icon={LAYER_ICON[o.id]} label={o.label} aria-pressed={cur === o.id} onClick={() => (overlay.value = o.id)} />
             ))}
             <span class="layer-sep" aria-hidden="true" />
-            <Tooltip text="Старые названия">
-              <IconButton icon="placeNames" label="Старые названия" title={undefined} aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
-            </Tooltip>
+            <IconButton icon="placeNames" label="Старые названия" aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
+            <IconButton icon="dig" label="Старый город" aria-pressed={ruinsShown.value} onClick={toggleRuins} />
           </div>
           <Legend id={cur} />
         </>

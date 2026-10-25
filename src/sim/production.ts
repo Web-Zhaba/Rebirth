@@ -1,6 +1,6 @@
 import { leverMood } from "./levers";
 import { allocateLabor, BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE, type Materials, type SiteLever } from "./buildings";
-import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, sowCredit, windowAt, workOf } from "./fields";
+import { assignedHa, assignFields, expectedKg, FIELD, foodKgHour, haOf, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
 import { buildingPriority } from "./jobs";
@@ -18,10 +18,7 @@ export const RATE = {
   logs: 0.4, // m3, times PACE and the forest share
   planks: 0.02, // m3, times PACE
   logsPerPlank: 1.6, // m3 of logs per m3 of planks
-  stone: 0.15, // t, times PACE and (0.4 + 0.6 rock)
-  rockBase: 0.4,
-  fish: FISH.kgHour, // kg of food
-  winterFish: FISH.winter,
+  stone: 0.15, // t, times PACE; a quarry works on any land (rock nearby changes nothing)
   pottery: 0.025, // pieces
   smithy: 0.015,
   smithyLogs: 0.05, // m3 per piece (charcoal)
@@ -197,13 +194,15 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         break;
       }
       case "quarry": {
-        const q = h * RATE.stone * PACE * (RATE.rockBase + (1 - RATE.rockBase) * (b.site?.rock ?? 0));
+        const q = h * RATE.stone * PACE;
         stock.stone += q;
         made(b.id, q);
         break;
       }
-      case "fisher": {
-        const q = (h * RATE.fish * (cal.season === 3 ? RATE.winterFish : 1)) * 3;
+      case "fisher":
+      case "garden":
+      case "hunter": {
+        const q = h * foodKgHour(b.template, cal.season);
         addFood(q);
         made(b.id, q);
         break;
@@ -420,6 +419,8 @@ export const GOOD: Record<string, keyof Stock> = {
   sawpit: "planks",
   quarry: "stone",
   fisher: "food",
+  garden: "food",
+  hunter: "food",
   gumno: "food",
   pottery: "wares",
   smithy: "wares",

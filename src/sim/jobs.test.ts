@@ -4,7 +4,7 @@ import { emptyGrowth } from "./growth";
 import { capacityOf, groupOf } from "./jobs";
 import { emptyLevers } from "./levers";
 import { setJobPriority, setStaff } from "./leverCmds";
-import { builderCount, dailyStep, peopleStats, productionScales, rebalanceJobs } from "./people";
+import { builderCount, dailyStep, peopleStats, productionScales, rebalanceJobs, WALK_SPEED } from "./people";
 import { jobReport } from "./jobReport";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
@@ -112,6 +112,12 @@ describe("assignment", () => {
     const a = day(base());
     expect(at(a, 2)).toBe(3);
     expect(at(a, 3)).toBe(1);
+  });
+  it("a house mid-road walks from its own place on the road: 110 m to the work is 1.7 min, not 4.4", () => {
+    const s = people(town([building(1, "izba", 50), building(2, "smithy", 160)]), 1, [2]);
+    const r = day(s).residents[1];
+    expect(r.job).toBe(2);
+    expect(r.commute).toBeCloseTo(116 / WALK_SPEED, 1); // 110 m along the road and 3 m off it at each end
   });
   it("takes the highest priority first, then the nearest", () => {
     const a = day(withJobs(base(), { materials: 3 }));

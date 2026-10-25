@@ -8,11 +8,12 @@ describe("build menu", () => {
     const want: Tool[] = ["path", "dirt", "bulldoze", "res", "craft", "trade", "field", "clearing", "clear", ...PLACE_TOOLS];
     expect([...all].sort()).toEqual([...want].sort());
     for (const c of CATEGORIES) expect(c.tools.length).toBeLessThanOrEqual(ITEM_KEYS.length);
-    expect(CATEGORIES.length).toBe(5);
+    expect(CATEGORIES.length).toBe(6);
   });
   it("maps keys to items of the active category, B to demolish", () => {
-    expect(toolForKey("KeyQ", "farm")).toBe("gumno");
-    expect(toolForKey("KeyY", "farm")).toBe("barn");
+    expect(toolForKey("KeyQ", "food")).toBe("gumno");
+    expect(toolForKey("KeyQ", "farm")).toBe("woodcutter");
+    expect(toolForKey("KeyR", "farm")).toBe("barn");
     expect(toolForKey("KeyY", "roads")).toBeNull();
     expect(toolForKey("KeyB", "services")).toBe("bulldoze");
     expect(toolForKey("Digit1", "farm")).toBeNull();

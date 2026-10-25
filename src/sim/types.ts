@@ -193,10 +193,19 @@ export interface StoredArticle {
   at: number; // gameMinutes
 }
 
+// The disc of a dig site that is gone (demolished or finished): its finds stay revealed.
+export interface RevealedSite {
+  digId: number;
+  x: number;
+  y: number;
+  r: number; // m
+}
+
 export interface Finds {
   foundations: FoundFoundation[];
   pois: FoundPlace[];
   streets: FoundPlace[];
+  revealed: RevealedSite[];
 }
 
 // A finished dig site as the snapshot shows it.

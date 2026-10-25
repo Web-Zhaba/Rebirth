@@ -1,5 +1,5 @@
 import type maplibregl from "maplibre-gl";
-import { effect, type ReadonlySignal } from "@preact/signals";
+import { effect, signal, type ReadonlySignal } from "@preact/signals";
 import { PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
 import type { OldWorld, XY } from "../world/oldworld";
@@ -8,7 +8,29 @@ const SRC_WALLS = "ruins-walls";
 const SRC_FLOORS = "ruins-floors";
 const SRC_STREETS = "ruins-streets";
 const SRC_POIS = "ruins-pois";
+const RUIN_LAYERS = ["ruins-floor", "ruins-streets", "ruins-outline", "ruins-walls", "ruins-street-names", "ruins-poi-names"];
 const EQUATOR_M = 40075016.686;
+
+// Whether the old city is drawn: a choice of the player's, kept in localStorage. The finds stay either way.
+const SHOW_KEY = "rebirth.ruins";
+function readShown(): boolean {
+  try {
+    return localStorage.getItem(SHOW_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export const ruinsShown = signal(readShown());
+
+export function toggleRuins(): void {
+  ruinsShown.value = !ruinsShown.value;
+  try {
+    localStorage.setItem(SHOW_KEY, ruinsShown.value ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
 
 export const WALL_HEIGHT = 0.6; // m
 export const WALL_THICKNESS = 0.5; // m
@@ -111,7 +133,12 @@ export function attachRuinsLayer(
 ): () => void {
   let ready = false;
   let disposeEffect: (() => void) | null = null;
+  let disposeShown: (() => void) | null = null;
   let disposed = false;
+
+  const applyShown = () => {
+    for (const id of RUIN_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", ruinsShown.peek() ? "visible" : "none");
+  };
 
   const setup = (lat: number) => {
     const k = 512 / (EQUATOR_M * Math.cos((lat * Math.PI) / 180));
@@ -198,6 +225,7 @@ export function attachRuinsLayer(
       beneath,
     );
     ready = true;
+    applyShown();
   };
 
   const apply = () => {
@@ -237,7 +265,12 @@ export function attachRuinsLayer(
   };
 
   const run = () => {
-    if (!disposed) disposeEffect = effect(apply);
+    if (disposed) return;
+    disposeEffect = effect(apply);
+    disposeShown = effect(() => {
+      void ruinsShown.value;
+      applyShown();
+    });
   };
   if (map.isStyleLoaded()) run();
   else map.once("load", run);
@@ -245,5 +278,6 @@ export function attachRuinsLayer(
   return () => {
     disposed = true;
     disposeEffect?.();
+    disposeShown?.();
   };
 }

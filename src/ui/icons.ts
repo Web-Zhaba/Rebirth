@@ -9,6 +9,8 @@ import Bulldozer from "~icons/game-icons/bulldozer";
 import Church from "~icons/game-icons/church";
 import DigHole from "~icons/game-icons/dig-hole";
 import FishingPole from "~icons/game-icons/fishing-pole";
+import Carrot from "~icons/game-icons/carrot";
+import Deer from "~icons/game-icons/deer";
 import GrainBundle from "~icons/game-icons/grain-bundle";
 import HammerNails from "~icons/game-icons/hammer-nails";
 import HandSaw from "~icons/game-icons/hand-saw";
@@ -133,6 +135,8 @@ export const ICONS = {
   sawpit: HandSaw,
   quarry: StonePile,
   fisher: FishingPole,
+  garden: Carrot,
+  hunter: Deer,
   barn: Barn,
   well: Well,
   market: Shop,

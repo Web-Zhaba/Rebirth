@@ -34,6 +34,16 @@ export const PALETTE = {
   mapRock: "#cdc6b2",
   mapIce: "#f2f1e8",
   mapWater: "#9fbac8",
+  // Biomes from the same OpenMapTiles data (subclasses): map only, the game still counts them as meadow or forest.
+  mapForestDeep: "#7d9462", // soft edge of dense forest
+  mapWoodLight: "#bccb9b", // open wood, lighter than the forest
+  mapScrub: "#c9cc98",
+  mapHeath: "#d9c99d",
+  mapFell: "#cfcab4",
+  mapBog: "#93a37b",
+  mapFarm: "#e4dba6",
+  mapBeach: "#efe4c0",
+  mapShore: "#d6cca3", // a sand band where the land meets water
   // Roads: surface and edge per kind.
   roadPath: "#dccfa6",
   roadPathEdge: "#8a7d63",
@@ -59,6 +69,8 @@ export const PLACED_BUILDING_COLORS = {
   sawpit: "#a97d4d",
   quarry: "#7d7f82",
   fisher: "#4a7088",
+  garden: "#6f8a3a",
+  hunter: "#7a5a3c",
   barn: "#94503a",
   dig: "#7d6340",
   well: "#4f7f9c",

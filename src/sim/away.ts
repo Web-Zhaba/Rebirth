@@ -30,7 +30,7 @@ export interface Tally {
 
 export const newTally = (): Tally => ({ births: 0, deaths: 0, arrivals: 0, departures: 0, built: 0, produced: { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 }, choices: [] });
 
-const GOOD: Record<string, keyof Stock> = { woodcutter: "logs", sawpit: "planks", quarry: "stone", fisher: "food", gumno: "food", pottery: "wares", smithy: "wares", carpentry: "wares" };
+const GOOD: Record<string, keyof Stock> = { woodcutter: "logs", sawpit: "planks", quarry: "stone", fisher: "food", garden: "food", hunter: "food", gumno: "food", pottery: "wares", smithy: "wares", carpentry: "wares" };
 
 // "(5 чел.)" in the family events; one person when the text has no count.
 const people = (text: string): number => Number(/\((\d+) чел\./.exec(text)?.[1] ?? 1);

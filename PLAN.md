@@ -251,7 +251,7 @@ Mood target becomes 10 + 45 × fed + 10 × wares + 10 × house + well 8 + market
 + school 3 + healer 2 (max 100). Emigration below 35 stays.
 
 **Land value** of a house lot (0–100): 20 + 8 per covered service + 0.3 × (mood of the
-households within 100 m − 50), clamped. **House upgrade:** an izba whose land value ≥ 70 and
+households within 100 m − 50), clamped. **House upgrade:** an izba whose land value ≥ 60 and
 whose household mood ≥ 75 for 20 days in a row rebuilds into level 2 (+2 residents, +1.5 m
 height; 60 h labor, 10 m³ logs, 2 m³ planks, taken like construction).
 

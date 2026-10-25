@@ -144,7 +144,6 @@ export function attachPlaceTool(map: maplibregl.Map): void {
   const siteText = (id: PlaceTool, site: Site, t: BuildingTemplate, center: Pt): string => {
     if (id === "woodcutter") return `Лес вокруг: ${pct(site.forest)}`;
     if (id === "fisher") return `Вода рядом: ${pct(site.water)}`;
-    if (id === "quarry") return `Камень: ${pct(site.rock)}`;
     if (id === "gumno") {
       let n = 0;
       let ha = 0;

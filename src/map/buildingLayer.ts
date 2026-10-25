@@ -9,6 +9,7 @@ import { mixHex, PALETTE } from "../ui/palette";
 import { BUILDING_COLORS, overlay, OVERLAY_COLORS, PLACED_COLORS, tool, type Overlay } from "./tools";
 
 const SRC = "buildings";
+const OUTLINE_MAX_PITCH = 10; // degrees
 
 // Building shown in the info panel.
 export const selectedBuilding = signal<number | null>(null);
@@ -60,7 +61,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
         "fill-extrusion-color": color as never,
         "fill-extrusion-height": ["get", "h"],
         "fill-extrusion-base": 0,
-        "fill-extrusion-opacity": 0.95,
+        "fill-extrusion-opacity": 1,
       },
     });
     map.addLayer({
@@ -72,7 +73,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
         "fill-extrusion-color": PALETTE.paperRaised,
         "fill-extrusion-height": ["get", "hp"],
         "fill-extrusion-base": 0,
-        "fill-extrusion-opacity": 0.75,
+        "fill-extrusion-opacity": 1,
       },
     });
     map.addLayer({
@@ -89,8 +90,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
       filter: ["==", ["get", "state"], "planned"],
       paint: { "line-color": PALETTE.ink2, "line-width": 1.5, "line-dasharray": [2, 1.5] },
     });
-    // Footprint outlines in ink: finished and growing buildings keep an edge on any ground; a house being rebuilt
-    // (upgrade) gets a heavier amber one.
+    // Footprint outlines show only close to a top-down view: at a tilt they would be drawn over the walls.
     map.addLayer({
       id: "buildings-outline",
       type: "line",
@@ -102,6 +102,9 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
         "line-opacity": ["case", ["get", "up"], 1, 0.55],
       },
     });
+    const outlineByTilt = () => map.setLayoutProperty("buildings-outline", "visibility", map.getPitch() < OUTLINE_MAX_PITCH ? "visible" : "none");
+    map.on("pitch", outlineByTilt);
+    outlineByTilt();
     ready = true;
 
     effect(() => {
@@ -119,8 +122,8 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
             zone: b.zone,
             template: b.template,
             state: b.state,
-            up: !!b.upgrade,
             tint: tintOf(b, ov, st),
+            up: !!b.upgrade,
             h: b.height,
             hp: Math.max(0.5, b.height * progress),
           },

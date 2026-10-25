@@ -15,10 +15,10 @@
   z-index: var(--z-panel);
 }
 
+/* Tabs wrap onto a second line instead of scrolling: a scroll bar on the strip is not part of the style. */
 .rs-panel .tabs {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   flex: none;
-  overflow-x: auto;
 }
 
 .rs-panel .tab {

@@ -55,9 +55,6 @@ button.link {
   border: 0;
   background: none;
   font: inherit;
-  color: var(--info);
-  text-decoration: underline;
-  text-underline-offset: 2px;
   cursor: pointer;
   text-align: left;
 }
@@ -265,3 +262,19 @@ button.event-card-pause-btn {
     visibility: hidden;
   }
 }
+
+/* Builders' tasks: bottom-right, on the same bottom line as the build bar; sized by its content. Moves left of the right
+   slot while it is open. */
+.builder-tasks {
+  position: absolute;
+  right: 8px;
+  bottom: var(--bb-bottom);
+  z-index: var(--z-slot);
+}
+/* Below ~1200 px the build bar (centred, ~640 px wide) reaches under the panel: the panel sits above it instead. */
+@media (max-width: 1199px) {
+  .builder-tasks {
+    bottom: calc(var(--bb-reserve) + 8px);
+  }
+}
+

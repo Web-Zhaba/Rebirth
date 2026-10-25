@@ -32,7 +32,7 @@ export const SERVICE = {
   landPerService: 8,
   landMoodWeight: 0.3,
   landRadius: 100, // m: households whose mood counts
-  upgradeLand: 70,
+  upgradeLand: 60,
   upgradeMood: 75,
   upgradeDays: 20,
 };

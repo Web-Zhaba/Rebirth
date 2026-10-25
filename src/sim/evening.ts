@@ -1,4 +1,4 @@
-import { ADULT_MAX, ADULT_MIN, ageOf, buildNet, isFinishedHouse, lotFront, nearestNode, reach } from "./people";
+import { ADULT_MAX, ADULT_MIN, ageOf, buildNet, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Spot } from "./people";
 import { covers } from "./services";
 import { workHours, type Levers } from "./levers";
 import { calendar } from "./time";
@@ -49,23 +49,20 @@ export function gatherHouses(s: Pick<SimState, "buildings" | "roads" | "resident
   const taverns = Object.values(s.buildings).filter((b) => b.template === "tavern" && b.state === "active" && workers.has(b.id));
   if (taverns.length === 0) return out;
   const net = buildNet(s.roads);
-  if (net.adj.size === 0) return out;
-  const spots: { id: number; node: number; off: number }[] = [];
+  if (net.edges.length === 0) return out;
+  const spots: { id: number; spot: Spot }[] = [];
   for (const b of Object.values(s.buildings)) {
     if (!isFinishedHouse(b)) continue;
     const [x, y] = lotFront(b);
-    const l = nearestNode(net, x, y);
-    if (l) spots.push({ id: b.id, node: l.node, off: l.off });
+    const p = snapToRoad(net, x, y);
+    if (p) spots.push({ id: b.id, spot: p });
   }
   for (const t of taverns) {
     const [x, y] = lotFront(t);
-    const from = nearestNode(net, x, y);
+    const from = snapToRoad(net, x, y);
     if (!from || from.off > EVENING.tavernReach) continue;
-    const dist = reach(net, from.node, EVENING.tavernReach - from.off);
-    for (const h of spots) {
-      const d = dist.get(h.node);
-      if (d !== undefined && d + from.off + h.off <= EVENING.tavernReach) out.add(h.id);
-    }
+    const tree = spotTree(net, from, EVENING.tavernReach);
+    for (const h of spots) if (walkMetres(tree, from, h.spot) <= EVENING.tavernReach) out.add(h.id);
   }
   return out;
 }

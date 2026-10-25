@@ -1,41 +1,38 @@
 import { BUILDINGS, UPGRADE } from "./buildings";
 import { isUnlocked } from "./goals";
-import { ageOf, buildNet, countResidents, isFinishedHouse, lotFront, nearestNode, reach, type Net } from "./people";
-import { countServices, covers, isService, SERVICE, SERVICE_IDS, SERVICES, withService } from "./services";
+import { ageOf, buildNet, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
+import { countServices, covers, isService, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
 
 // ---------- coverage ----------
 
-// Bit mask per finished house of the services that cover it: network distance along built roads from
-// the service's lot front to the house's lot front (both offsets to the nearest node included) within
-// the service's reach, and the service finished and, if it has jobs, staffed by at least one worker.
+// Bit mask per finished house of the services that cover it: walking road distance from the service's lot front
+// to the house's lot front within the service's reach, and the service finished and, if it has jobs, staffed by
+// at least one worker.
 export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "residents">): Record<number, number> {
   const out: Record<number, number> = {};
   const services = Object.values(s.buildings).filter((b) => b.state === "active" && isService(b.template));
   if (services.length === 0) return out;
   const net = buildNet(s.roads);
-  if (net.adj.size === 0) return out;
+  if (net.edges.length === 0) return out;
   const workers = new Map<number, number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
-  const spots: { id: number; node: number; off: number }[] = [];
+  const spots: { id: number; spot: Spot }[] = [];
   for (const b of Object.values(s.buildings)) {
     if (!isFinishedHouse(b)) continue;
     const [x, y] = lotFront(b);
-    const l = nearestNode(net, x, y);
-    if (l) spots.push({ id: b.id, node: l.node, off: l.off });
+    const p = snapToRoad(net, x, y);
+    if (p) spots.push({ id: b.id, spot: p });
   }
   for (const b of services) {
     const id = b.template as ServiceId;
     if (BUILDINGS[id].jobs > 0 && (workers.get(b.id) ?? 0) < 1) continue;
     const range = SERVICES[id].reach;
     const [x, y] = lotFront(b);
-    const from = nearestNode(net, x, y);
+    const from = snapToRoad(net, x, y);
     if (!from || from.off > range) continue;
-    const dist = reach(net, from.node, range - from.off);
-    for (const h of spots) {
-      const d = dist.get(h.node);
-      if (d !== undefined && d + from.off + h.off <= range) out[h.id] = withService(out[h.id] ?? 0, id);
-    }
+    const tree = spotTree(net, from, range);
+    for (const h of spots) if (walkMetres(tree, from, h.spot) <= range) out[h.id] = withService(out[h.id] ?? 0, id);
   }
   return out;
 }
@@ -45,7 +42,7 @@ export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "resid
 const BUCKET = SERVICE.landRadius;
 const bkey = (bx: number, by: number) => bx * 65536 + by;
 
-// 20 + 12 per covered service + 0.3 x (mood of the households within 100 m - 50), clamped to 0..100.
+// 20 + 8 per covered service + 0.3 x (mood of the households within 100 m - 50), clamped to 0..100.
 export function computeLandValue(s: Pick<SimState, "buildings" | "households">, coverage: Record<number, number>): Record<number, number> {
   const out: Record<number, number> = {};
   const grid = new Map<number, { x: number; y: number; mood: number }[]>();
@@ -88,8 +85,26 @@ export function refreshServices<T extends SimState>(s: T): T {
   return { ...s, coverage, landValue: computeLandValue(s, coverage) };
 }
 
+// The land and mood conditions of a house upgrade, as texts for what is still short; empty when both hold.
+export function upgradeShortfall(land: number, services: number | undefined, mood: number | undefined): string[] {
+  const out: string[] = [];
+  if (land < SERVICE.upgradeLand) {
+    const missing = SERVICE_LIST.filter((sv) => !covers(services, sv.id)).map((sv) => sv.name.toLowerCase());
+    out.push(`стоимость участка ${land} из ${SERVICE.upgradeLand}${missing.length ? `, нет: ${missing.join(", ")}` : ""}`);
+  }
+  if (mood === undefined || mood < SERVICE.upgradeMood) out.push(`настроение ${mood === undefined ? 0 : mood} из ${SERVICE.upgradeMood}`);
+  return out;
+}
+
+// Why a finished izba is not upgraded yet, for the inspector; empty when it is upgraded or nothing is left to do.
+export function upgradeBlockers(s: Pick<SimState, "goals" | "coverage" | "landValue">, b: Building, mood: number | undefined): string[] {
+  if (b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) return [];
+  const out = isUnlocked(s.goals, "upgrade") ? [] : ["откроется с пятью ремесленными постройками"];
+  return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood)];
+}
+
 // Runs at the end of the daily chain (moods and jobs are already today's): coverage, land value,
-// school attendance and literacy, and the upgrade of houses that stayed good for 10 days.
+// school attendance and literacy, and the upgrade of houses that stayed good for 20 days.
 export function dailyServices(s: SimState): SimState {
   const { coverage, landValue } = refreshServices(s);
   const now = s.gameMinutes;
@@ -113,8 +128,7 @@ export function dailyServices(s: SimState): SimState {
   let buildings = s.buildings;
   for (const b of Object.values(s.buildings)) {
     if (!isUnlocked(s.goals, "upgrade") || b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) continue;
-    const mood = moodAt.get(b.id);
-    const good = mood !== undefined && mood >= SERVICE.upgradeMood && (landValue[b.id] ?? 0) >= SERVICE.upgradeLand;
+    const good = upgradeShortfall(landValue[b.id] ?? 0, coverage[b.id], moodAt.get(b.id)).length === 0;
     const streak = good ? b.streak + 1 : 0;
     let next: Building = b;
     if (streak >= SERVICE.upgradeDays) next = { ...b, streak: 0, upgrade: { labor: UPGRADE.labor, done: 0, paid: false } };
@@ -152,25 +166,33 @@ export type Segment = [[number, number], [number, number]];
 // Built road stretches within `range` metres of a lot front (x, y), as straight segments; an edge the
 // reach ends inside is cut at that point.
 export function reachSegments(roads: RoadGraph, x: number, y: number, range: number, net: Net = buildNet(roads)): Segment[] {
-  const from = nearestNode(net, x, y);
-  if (!from || from.off > range) return [];
-  const limit = range - from.off;
-  const dist = reach(net, from.node, limit);
+  const p = snapToRoad(net, x, y);
+  if (!p || p.off > range) return [];
+  const limit = range - p.off;
+  const tree = spotTree(net, p, range);
   const out: Segment[] = [];
-  for (const e of Object.values(roads.edges)) {
-    if (e.done < e.labor) continue;
-    const da = dist.get(e.a);
-    const db = dist.get(e.b);
-    if (da === undefined && db === undefined) continue;
-    const a = roads.nodes[e.a];
-    const b = roads.nodes[e.b];
-    if (da !== undefined && db !== undefined) {
-      out.push([[a.x, a.y], [b.x, b.y]]);
-      continue;
+  for (const e of net.edges) {
+    // Stretches of the edge within reach: from each end the tree reaches, and around the spot when it lies on the edge.
+    const spans: [number, number][] = [];
+    const da = tree.dist.get(e.a);
+    const db = tree.dist.get(e.b);
+    if (da !== undefined) spans.push([0, limit - da]);
+    if (db !== undefined) spans.push([e.length - (limit - db), e.length]);
+    if (e.id === p.edge.id) spans.push([p.t - limit, p.t + limit]);
+    const at = (m: number): [number, number] => [e.ax + ((e.bx - e.ax) * m) / e.length, e.ay + ((e.by - e.ay) * m) / e.length];
+    const clipped = spans
+      .map(([lo, hi]): [number, number] => [Math.max(0, lo), Math.min(e.length, hi)])
+      .filter(([lo, hi]) => hi > lo)
+      .sort((p1, p2) => p1[0] - p2[0]);
+    let cur: [number, number] | null = null;
+    for (const span of clipped) {
+      if (cur && span[0] <= cur[1]) cur[1] = Math.max(cur[1], span[1]);
+      else {
+        if (cur) out.push([at(cur[0]), at(cur[1])]);
+        cur = [span[0], span[1]];
+      }
     }
-    const [from0, to0, d] = da !== undefined ? [a, b, da] : [b, a, db!];
-    const t = Math.min(1, Math.max(0, (limit - d) / e.length));
-    out.push([[from0.x, from0.y], [from0.x + (to0.x - from0.x) * t, from0.y + (to0.y - from0.y) * t]]);
+    if (cur) out.push([at(cur[0]), at(cur[1])]);
   }
   return out;
 }

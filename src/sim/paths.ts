@@ -1,66 +1,43 @@
-import { MAX_COMMUTE, MinHeap, nearestNode, WALK_SPEED, type Net } from "./people";
-import type { RoadGraph } from "./types";
+import type { Spot, Tree } from "./people";
 
-// Shortest-path tree over the built road net, bounded by `limit` metres of road.
-export interface Tree {
-  start: number;
-  dist: Map<number, number>;
-  prev: Map<number, number>; // node -> the node before it on its shortest path from `start`
-}
-
-export function shortestTree(net: Net, start: number, limit: number): Tree {
-  const dist = new Map<number, number>([[start, 0]]);
-  const prev = new Map<number, number>();
-  const done = new Set<number>();
-  const heap = new MinHeap();
-  heap.push(0, start);
-  while (heap.size > 0) {
-    const [d, n] = heap.pop();
-    if (done.has(n)) continue;
-    done.add(n);
-    for (const [m, len] of net.adj.get(n) ?? []) {
-      const nd = d + len;
-      if (nd > limit) continue;
-      if (nd < (dist.get(m) ?? Infinity)) {
-        dist.set(m, nd);
-        prev.set(m, n);
-        heap.push(nd, m);
-      }
-    }
-  }
-  return { start, dist, prev };
-}
-
-// Node ids from the tree's start to `to`, or null when `to` was not reached.
+// Node ids from the tree's seed the shortest path starts at to `to`, or null when `to` was not reached.
 export function nodePath(tree: Tree, to: number): number[] | null {
   if (!tree.dist.has(to)) return null;
   const out = [to];
-  for (let n = to; n !== tree.start; ) {
-    const p = tree.prev.get(n);
-    if (p === undefined) return null;
-    out.push(p);
-    n = p;
-  }
+  for (let p = tree.prev.get(to); p !== undefined; p = tree.prev.get(p)) out.push(p);
   return out.reverse();
 }
 
-export interface Route {
-  nodes: number[]; // road nodes, first to last
-  pts: [number, number][]; // local m: `from`, the nodes, `to` (consecutive duplicates dropped)
-  length: number; // m, including both off-road legs
+export interface Walk {
+  nodes: number[]; // road nodes the walk passes, from the tree's seed on; empty when it stays on one edge
+  metres: number; // walked, off-road legs included
 }
 
-// The polyline of a node path with the off-road legs at both ends.
-export function polyline(g: RoadGraph, nodes: number[], from: [number, number], to: [number, number]): [number, number][] {
-  const pts: [number, number][] = [];
-  const add = (x: number, y: number) => {
-    const l = pts[pts.length - 1];
-    if (!l || l[0] !== x || l[1] !== y) pts.push([x, y]);
-  };
-  add(from[0], from[1]);
-  for (const id of nodes) add(g.nodes[id].x, g.nodes[id].y);
-  add(to[0], to[1]);
-  return pts;
+// The walk from the spot the tree was built from (`from`, or a node the tree starts at when null) to a spot beside
+// the net: along the road to the nearer end of its edge, or straight along the edge when both lie on it.
+// Null when `to` is out of reach within `limit`.
+export function walkTo(tree: Tree, from: Spot | null, to: Spot, limit: number): Walk | null {
+  const e = to.edge;
+  let road = Infinity;
+  let end = -1;
+  const da = tree.dist.get(e.a);
+  if (da !== undefined && da + to.t < road) {
+    road = da + to.t;
+    end = e.a;
+  }
+  const db = tree.dist.get(e.b);
+  if (db !== undefined && db + e.length - to.t < road) {
+    road = db + e.length - to.t;
+    end = e.b;
+  }
+  if (from && from.edge.id === e.id && Math.abs(from.t - to.t) <= road) {
+    const metres = Math.abs(from.t - to.t) + from.off + to.off;
+    return metres <= limit ? { nodes: [], metres } : null;
+  }
+  if (end < 0) return null;
+  const nodes = nodePath(tree, end);
+  const metres = road + (from?.off ?? 0) + to.off;
+  return nodes && metres <= limit ? { nodes, metres } : null;
 }
 
 export const polyLength = (pts: [number, number][]): number => {
@@ -68,15 +45,3 @@ export const polyLength = (pts: [number, number][]): number => {
   for (let i = 1; i < pts.length; i++) t += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
   return t;
 };
-
-// Route over built roads between two free points: each steps onto the net at its nearest node. Null when a
-// point is out of walking range of the net or the second is not reached within `limit` m of road.
-export function routeBetween(g: RoadGraph, net: Net, from: [number, number], to: [number, number], limit = MAX_COMMUTE * WALK_SPEED): Route | null {
-  const a = nearestNode(net, from[0], from[1]);
-  const b = nearestNode(net, to[0], to[1]);
-  if (!a || !b) return null;
-  const nodes = nodePath(shortestTree(net, a.node, limit), b.node);
-  if (!nodes) return null;
-  const pts = polyline(g, nodes, from, to);
-  return { nodes, pts, length: polyLength(pts) };
-}

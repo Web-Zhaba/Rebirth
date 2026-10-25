@@ -88,6 +88,9 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   chapel: T("chapel", "Храм", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6], "services"),
   school: T("school", "Школа", "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3], "services"),
   healer: T("healer", "Лечебница", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1], "services"),
+  // Food without fields (fields.ts FOOD_RATE): a kitchen garden by the houses, a hunter's hut.
+  garden: T("garden", "Огород", "placed", 1, 1, 3, 3, 1, 20, 3, [2, 0.5, 0], "food"),
+  hunter: T("hunter", "Охотничий пост", "placed", 1, 1, 4, 4, 3, 30, 2, [4, 1, 0], "food"),
   // Excavation (PLAN.md section 12).
   dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0], "services"),
 };

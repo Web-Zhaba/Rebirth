@@ -1,9 +1,18 @@
 import { BUILDINGS } from "./buildings";
-import { digDone } from "./excavation";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
 import type { Building, Field, FieldWork, Resident, SimState, Stock, Window } from "./types";
 
-export const FISH = { kgHour: 0.2, winter: 0.5 }; // kg of food per worker-hour, winter factor
+// Food from work that needs no field: kg per worker-hour and the factor of each season (0 spring .. 3 winter).
+// The fisher is buffed on purpose (P-food); the hunter and the kitchen garden are the other ways to feed the town.
+export const FOOD_RATE: Record<string, { kgHour: number; season: [number, number, number, number] }> = {
+  fisher: { kgHour: 0.6, season: [1, 1, 1, 0.5] },
+  garden: { kgHour: 0.2, season: [1, 1, 1, 0] }, // the beds lie fallow in winter
+  hunter: { kgHour: 0.15, season: [0.5, 0.5, 1, 2] }, // game comes down to the izba in the cold
+};
+export const foodKgHour = (template: string, season: number): number => {
+  const r = FOOD_RATE[template];
+  return r ? r.kgHour * r.season[season] : 0;
+};
 
 // Field work tuning (design: PLAN.md section 8).
 export const FIELD = {
@@ -124,7 +133,6 @@ function blockedWorkshops(s: Pick<Idle, "buildings" | "stock" | "prod">): Set<nu
   for (const b of Object.values(s.buildings)) {
     const good = WORKSHOP_INPUT[b.template];
     if (good && b.state === "active" && s.stock[good] <= 1e-9 && (s.prod.yesterday[b.id] ?? 0) <= 1e-9) out.add(b.id);
-    if (digDone(b)) out.add(b.id); // nothing left to reveal
   }
   return out;
 }

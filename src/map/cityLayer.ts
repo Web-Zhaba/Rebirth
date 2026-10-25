@@ -2,7 +2,7 @@ import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { ORIGIN_RADIUS } from "../sim/roads";
 import { PALETTE } from "../ui/palette";
-import { city, frame } from "../simClient";
+import { city, frame, roads } from "../simClient";
 
 const SRC = "city";
 const CAMP_SRC = "camp";
@@ -13,12 +13,15 @@ export function attachCityMarker(map: maplibregl.Map): void {
   const apply = () => {
     const c = city.value;
     const f = frame.value;
+    const g = roads.value;
     const data: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
       features: c ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [c.lng, c.lat] } }] : [],
     };
+    // The camp area is only a guide until the first road is built; after that it is hidden for good.
+    const anyBuilt = g !== null && Object.values(g.edges).some((e) => e.done >= e.labor);
     const ring: [number, number][] = [];
-    if (f) {
+    if (f && !anyBuilt) {
       for (let i = 0; i <= CAMP_STEPS; i++) {
         const a = (i / CAMP_STEPS) * 2 * Math.PI;
         ring.push(f.toLngLat(ORIGIN_RADIUS * Math.cos(a), ORIGIN_RADIUS * Math.sin(a)));
@@ -26,7 +29,7 @@ export function attachCityMarker(map: maplibregl.Map): void {
     }
     const camp: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
-      features: f ? [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] : [],
+      features: ring.length ? [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] : [],
     };
     const src = map.getSource(SRC) as maplibregl.GeoJSONSource | undefined;
     if (src) {

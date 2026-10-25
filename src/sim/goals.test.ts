@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { step } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { dailyServices } from "./coverage";
-import { activeGoals, allUnlocked, checkGoals, FEAST_MOOD, goalStep, goalViews, GOALS, initialGoals, isUnlocked, lockReason, migrateGoals, sownHa } from "./goals";
+import { activeGoals, allUnlocked, checkGoals, FEAST_MOOD, goalStep, goalViews, GOALS, initialGoals, isUnlocked, lockReason, migrateGoals, parseGoals, sownHa } from "./goals";
 import { emptyGrowth } from "./growth";
 import { Handler, toSnapshot, type Storage } from "./handler";
 import { FIELD } from "./fields";
@@ -55,6 +55,14 @@ const upTo = (s: SimState, id: string): SimState => ({ ...s, goals: { ...s.goals
 const ids = (s: Pick<SimState, "goals">) => activeGoals(s.goals).map((g) => g.id);
 const FIELD2 = { id: 1, pts: [[0, 40], [100, 40], [100, 240], [0, 240]] as [number, number][], area: 20_000 };
 const sown2 = (base: SimState): SimState => ({ ...base, zones: { ...base.zones, fields: [FIELD2] }, prod: { ...base.prod, fields: { 1: { year: 1, sowH: FIELD.sowHoursHa * 2, harvH: 0, reaped: 0 } } } });
+
+describe("saved goals", () => {
+  it("a paid goal opens its unlocks even when the save predates them", () => {
+    const g = parseGoals({ done: ["izbas2", "sow2"], unlocks: ["sawpit", "barn", "fisher"], families: 1, notebook: false, feast: false });
+    expect(g!.unlocks).toEqual(expect.arrayContaining(["hunter", "garden", "fisher"]));
+    expect(isUnlocked(g!, "hunter")).toBe(true);
+  });
+});
 
 describe("goals chain", () => {
   it("starts with the first three goals and everything else locked", () => {
@@ -273,7 +281,7 @@ describe("migration and save", () => {
     const g = { done: ["izbas2", "nope"], unlocks: ["sawpit", "barn", "bogus"], families: 2, notebook: true, feast: true };
     const raw = { version: 4, city, sim: { ...JSON.parse(JSON.stringify(town())), goals: g } };
     const sim = parseSave(raw, NOW + 1)!.sim;
-    expect(sim.goals).toEqual({ done: ["izbas2"], unlocks: ["sawpit", "barn"], families: 2, notebook: true, feast: true });
+    expect(sim.goals).toEqual({ done: ["izbas2"], unlocks: ["sawpit", "barn", "hunter"], families: 2, notebook: true, feast: true });
     const again = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW + 1)!.sim;
     expect(again.goals).toEqual(sim.goals);
   });

@@ -332,10 +332,10 @@ export function canPlace(
   }
   if (t.id === "woodcutter" && site.forest < PLACE_MIN.forest) return NO_PLACE("Рядом мало леса (нужно от 10 %)");
   if (t.id === "fisher" && site.water < PLACE_MIN.water) return NO_PLACE("Рядом нет воды (нужно от 5 %)");
-  if (t.id === "quarry") {
+  if (t.id === "quarry" || t.id === "garden") {
     for (const c of cells) {
       const land = s.zones.terrain[qkey(c.cx, c.cy)]?.land;
-      if (land === "water" || land === "wetland") return NO_PLACE("Карьер нельзя ставить на воде и болоте");
+      if (land === "water" || land === "wetland") return NO_PLACE(`${t.name} нельзя ставить на воде и болоте`);
     }
   }
   return { ok: true };

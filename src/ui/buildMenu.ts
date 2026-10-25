@@ -1,4 +1,5 @@
-import { FIELD } from "../sim/fields";
+import { FIELD, FOOD_RATE } from "../sim/fields";
+import { workLength } from "../sim/levers";
 import { DIG } from "../sim/excavation";
 import { CLEARING } from "../sim/clearing";
 import { PLACE_MIN } from "../sim/growth";
@@ -8,7 +9,7 @@ import { SERVICES, isService } from "../sim/services";
 import { SITE_RADIUS, type Tool } from "../map/tools";
 import type { IconName } from "./icons";
 
-export type CategoryId = "roads" | "zones" | "farm" | "services" | "past";
+export type CategoryId = "roads" | "zones" | "food" | "farm" | "services" | "past";
 
 export interface Category {
   id: CategoryId;
@@ -19,7 +20,8 @@ export interface Category {
 export const CATEGORIES: Category[] = [
   { id: "roads", label: "Дороги", tools: ["path", "dirt", "bulldoze"] },
   { id: "zones", label: "Зоны", tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
-  { id: "farm", label: "Хозяйство", tools: ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "barn"] },
+  { id: "food", label: "Еда", tools: ["gumno", "garden", "hunter", "fisher"] },
+  { id: "farm", label: "Ресурсы", tools: ["woodcutter", "sawpit", "quarry", "barn"] },
   { id: "services", label: "Службы", tools: ["well", "market", "chapel", "school", "healer"] },
   { id: "past", label: "Прошлое", tools: ["dig"] },
 ];
@@ -27,7 +29,7 @@ export const CATEGORIES: Category[] = [
 // Physical key codes (layout independent: Q is the key left of W also on a Russian layout).
 export const ITEM_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY"] as const;
 export const ITEM_KEY_LABEL = ["Q", "W", "E", "R", "T", "Y"] as const;
-export const CATEGORY_KEYS = ["F1", "F2", "F3", "F4", "F5"] as const;
+export const CATEGORY_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6"] as const;
 export const DEMOLISH_KEY = "KeyB";
 
 export const categoryOf = (t: Tool): Category => CATEGORIES.find((c) => c.tools.includes(t))!;
@@ -47,6 +49,8 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   sawpit: "sawpit",
   quarry: "quarry",
   fisher: "fisher",
+  garden: "garden",
+  hunter: "hunter",
   barn: "barn",
   well: "well",
   market: "market",
@@ -85,6 +89,8 @@ const PURPOSE: Record<Tool, string> = {
   sawpit: "Пилит брёвна в доски",
   quarry: "Добывает камень",
   fisher: "Ловит рыбу, еда без полей",
+  garden: "Огород у дома: овощи летом и осенью, зимой не даёт ничего",
+  hunter: "Охотник приносит дичь, зимой и осенью больше всего",
   barn: "Склад: добавляет места для запасов еды",
   well: "Вода рядом с домами: настроение и здоровье",
   market: "Раздаёт товары по домам и радует людей",
@@ -99,7 +105,7 @@ const SITE: Partial<Record<Tool, string>> = {
   dirt: "Между двумя точками на суше, уклон не круче 12 %",
   woodcutter: `В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`,
   fisher: `У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`,
-  quarry: "Не на воде и не на болоте; чем больше камня рядом, тем лучше",
+  quarry: "Не на воде и не на болоте; камень добывается на любой суше",
   clearing: `Контур до ${CLEARING.maxArea / 10000} га, не дальше ${CLEARING.reach} м от построенной дороги`,
   field: "Замкнутый контур на суше, не через дорогу и не поверх другого поля",
 };
@@ -135,7 +141,12 @@ export function toolInfo(t: Tool): ToolInfo {
   if (isService(t)) reach = `Охват ${SERVICES[t].reach} м по дорогам`;
   else if (t === "gumno") reach = `Поля до ${FIELD.radius} м от фермы`;
   else if (t === "woodcutter" || t === "fisher") reach = `Радиус ${SITE_RADIUS[t]} м`;
-  else if (t === "dig") reach = `Вскрывает ${DIG.startRadius} м, потом растёт до ${DIG.maxRadius} м`;
+  else if (t === "dig") reach = `Вскрывает ${DIG.startRadius} м, потом растёт до ${DIG.maxRadius} м и снимается сам`;
+  else if (t === "garden" || t === "hunter") {
+    // The best season with every job filled, a full working day.
+    const rate = FOOD_RATE[t];
+    reach = `Даёт до ${Math.round(Math.max(...rate.season) * rate.kgHour * BUILDINGS[t].jobs * workLength())} кг еды в день`;
+  }
   return {
     tool: t,
     label: toolLabel(t),

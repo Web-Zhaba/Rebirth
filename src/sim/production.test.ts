@@ -141,7 +141,7 @@ describe("storage", () => {
     expect(s.stock.food).toBe(FOOD_CAMP_CAP);
     s = work(s);
     s = work(s);
-    expect(s.prod.flags.rot).toBeCloseTo(0.4 * 3 - 0.1);
+    expect(s.prod.flags.rot).toBeCloseTo(1.2 * 3 - 0.1);
     expect(s.events).toHaveLength(0);
     s = { ...s, prod: { ...s.prod, flags: { ...s.prod.flags, rot: 480 } } };
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
@@ -151,7 +151,7 @@ describe("storage", () => {
     // a barn raises the capacity: nothing rots
     let b = folk(town([bld(1, "fisher", 50), bld(2, "barn", 90)]), [{ home: null, adults: 2, job: 1 }]);
     b = work({ ...b, stock: { ...b.stock, food: FOOD_CAMP_CAP } });
-    expect(b.stock.food).toBeCloseTo(FOOD_CAMP_CAP + 0.4);
+    expect(b.stock.food).toBeCloseTo(FOOD_CAMP_CAP + 1.2);
     expect(b.prod.flags.rot).toBe(0);
   });
   it("daily rot trims food above capacity (a barn was demolished)", () => {
@@ -202,13 +202,21 @@ describe("producers", () => {
     expect(work(staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 })).stock.logs).toBeCloseTo(2 * RATE.logs * PACE * 0.6);
     expect(work(staffed("woodcutter", 2, NO_SITE)).stock.logs).toBe(0);
   });
-  it("quarry: 0.15 t per hour x PACE x (0.4 + 0.6 rock)", () => {
-    expect(work(staffed("quarry", 3, { forest: 0, water: 0, rock: 0.5 })).stock.stone).toBeCloseTo(3 * 0.15 * PACE * 0.7);
-    expect(work(staffed("quarry", 3, NO_SITE)).stock.stone).toBeCloseTo(3 * 0.15 * PACE * 0.4);
+  it("quarry: 0.15 t per hour x PACE, with or without rock nearby", () => {
+    expect(work(staffed("quarry", 3, { forest: 0, water: 0, rock: 0.5 })).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
+    expect(work(staffed("quarry", 3, NO_SITE)).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
   });
-  it("fisher: 0.2 kg per hour, halved in winter", () => {
-    expect(work(staffed("fisher", 2, { forest: 0, water: 1, rock: 0 })).stock.food - 1750).toBeCloseTo(0.4);
-    expect(work(staffed("fisher", 2, { forest: 0, water: 1, rock: 0 }, WINTER_NOON)).stock.food - 1750).toBeCloseTo(0.2);
+  it("fisher: 0.6 kg per hour, halved in winter", () => {
+    expect(work(staffed("fisher", 2, { forest: 0, water: 1, rock: 0 })).stock.food - 1750).toBeCloseTo(1.2);
+    expect(work(staffed("fisher", 2, { forest: 0, water: 1, rock: 0 }, WINTER_NOON)).stock.food - 1750).toBeCloseTo(0.6);
+  });
+  it("garden: 0.2 kg per hour in the growing seasons, nothing in winter", () => {
+    expect(work(staffed("garden", 3, NO_SITE)).stock.food - 1750).toBeCloseTo(0.6);
+    expect(work(staffed("garden", 3, NO_SITE, WINTER_NOON)).stock.food - 1750).toBeCloseTo(0);
+  });
+  it("hunter: 0.15 kg per hour, most in winter", () => {
+    expect(work(staffed("hunter", 2, NO_SITE)).stock.food - 1750).toBeCloseTo(0.15);
+    expect(work(staffed("hunter", 2, NO_SITE, WINTER_NOON)).stock.food - 1750).toBeCloseTo(0.6);
   });
   it("sawpit: 0.02 m3 per hour x PACE, 1.6 m3 of logs per m3; stops without logs", () => {
     let s = staffed("sawpit", 2);

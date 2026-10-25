@@ -1,7 +1,7 @@
 import { BUILDINGS, foodCapacity, houseCapacity } from "./buildings";
 import { buildFloor, buildingPriority, capacityOf } from "./jobs";
 import { isCleared } from "./clearing";
-import { assignFields, expectedKg, FIELD, idleGumnos, FISH, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
+import { assignFields, expectedKg, FIELD, foodKgHour, idleGumnos, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
 import { covers, SERVICE, servicesIn } from "./services";
 import { workableEdges } from "./roads";
@@ -147,13 +147,21 @@ export function createFounders(rng: number, now: number): { people: PeopleState;
 
 // ---------- road net (built edges only) ----------
 
-const NBUCKET = 64; // m
-const bkey = (bx: number, by: number) => bx * 65536 + by;
-const bidx = (v: number) => Math.floor(v / NBUCKET);
+// The road net for walking: built edges with their ends' coordinates, and the adjacency for shortest paths.
+export interface NetEdge {
+  id: number;
+  a: number; // node ids
+  b: number;
+  length: number; // m
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+}
 
 export interface Net {
   adj: Map<number, [number, number][]>; // node -> [neighbour, metres]
-  grid: Map<number, { id: number; x: number; y: number }[]>;
+  edges: NetEdge[];
 }
 
 export function buildNet(g: RoadGraph): Net {
@@ -163,45 +171,41 @@ export function buildNet(g: RoadGraph): Net {
     if (l) l.push([b, len]);
     else adj.set(a, [[b, len]]);
   };
+  const edges: NetEdge[] = [];
   for (const e of Object.values(g.edges)) {
     if (e.done < e.labor) continue;
     link(e.a, e.b, e.length);
     link(e.b, e.a, e.length);
+    const a = g.nodes[e.a];
+    const b = g.nodes[e.b];
+    edges.push({ id: e.id, a: e.a, b: e.b, length: e.length, ax: a.x, ay: a.y, bx: b.x, by: b.y });
   }
-  const grid = new Map<number, { id: number; x: number; y: number }[]>();
-  for (const id of adj.keys()) {
-    const n = g.nodes[id];
-    const k = bkey(bidx(n.x), bidx(n.y));
-    const item = { id, x: n.x, y: n.y };
-    const l = grid.get(k);
-    if (l) l.push(item);
-    else grid.set(k, [item]);
-  }
-  return { adj, grid };
+  return { adj, edges };
 }
 
-const MAX_RING = Math.ceil((MAX_COMMUTE * WALK_SPEED) / NBUCKET) + 1;
+// A point beside the road net: its nearest built edge, the place on that edge (`t` metres from the edge's `a` end),
+// the straight walk from the point to that place (`off`) and the place itself (`at`).
+export interface Spot {
+  edge: NetEdge;
+  t: number;
+  off: number;
+  at: [number, number];
+}
 
-// Nearest net node by straight line, or null when none lies within walking range.
-export function nearestNode(net: Net, x: number, y: number): { node: number; off: number } | null {
-  const bx = bidx(x);
-  const by = bidx(y);
-  let best = null as { node: number; off: number } | null;
-  for (let r = 0; r <= MAX_RING; r++) {
-    for (let dx = -r; dx <= r; dx++) {
-      const step = Math.abs(dx) === r ? 1 : 2 * r; // inner columns: only the top and bottom cell
-      for (let dy = -r; dy <= r; dy += step) {
-        const cell = net.grid.get(bkey(bx + dx, by + dy));
-        if (!cell) continue;
-        for (const n of cell) {
-          const d = Math.hypot(n.x - x, n.y - y);
-          if (!best || d < best.off || (d === best.off && n.id < best.node)) best = { node: n.id, off: d };
-        }
-      }
-    }
-    if (best && best.off <= r * NBUCKET) break;
+// Projects (x, y) onto the nearest built edge. Not onto its nodes: a house in the middle of a long road
+// stands at its own place on the road, not at the nearest end of it.
+export function snapToRoad(net: Net, x: number, y: number): Spot | null {
+  let best: Spot | null = null;
+  for (const e of net.edges) {
+    const dx = e.bx - e.ax;
+    const dy = e.by - e.ay;
+    const l2 = dx * dx + dy * dy;
+    const f = l2 > 0 ? Math.min(1, Math.max(0, ((x - e.ax) * dx + (y - e.ay) * dy) / l2)) : 0;
+    const at: [number, number] = [e.ax + dx * f, e.ay + dy * f];
+    const off = Math.hypot(at[0] - x, at[1] - y);
+    if (!best || off < best.off) best = { edge: e, t: f * e.length, off, at };
   }
-  return best && best.off <= MAX_COMMUTE * WALK_SPEED ? best : null;
+  return best;
 }
 
 export class MinHeap {
@@ -249,12 +253,23 @@ export class MinHeap {
   }
 }
 
-// Road distance in metres from `start` to every node within `limit`.
-export function reach(net: Net, start: number, limit: number): Map<number, number> {
-  const dist = new Map<number, number>([[start, 0]]);
+// Shortest road paths from seeds: metres to every node within `limit`, and the node before each on its path.
+export interface Tree {
+  dist: Map<number, number>;
+  prev: Map<number, number>;
+}
+
+// Dijkstra from seeds [node, metres already walked to it].
+export function treeFrom(net: Net, seeds: [number, number][], limit: number): Tree {
+  const dist = new Map<number, number>();
+  const prev = new Map<number, number>();
   const done = new Set<number>();
   const heap = new MinHeap();
-  heap.push(0, start);
+  for (const [n, d] of seeds) {
+    if (d > limit || d >= (dist.get(n) ?? Infinity)) continue;
+    dist.set(n, d);
+    heap.push(d, n);
+  }
   while (heap.size > 0) {
     const [d, n] = heap.pop();
     if (done.has(n)) continue;
@@ -264,11 +279,32 @@ export function reach(net: Net, start: number, limit: number): Map<number, numbe
       if (nd > limit) continue;
       if (nd < (dist.get(m) ?? Infinity)) {
         dist.set(m, nd);
+        prev.set(m, n);
         heap.push(nd, m);
       }
     }
   }
-  return dist;
+  return { dist, prev };
+}
+
+// The tree from a point beside the net: the walk leaves it towards either end of its edge.
+export const spotTree = (net: Net, p: Spot, limit: number): Tree =>
+  treeFrom(
+    net,
+    [
+      [p.edge.a, p.t],
+      [p.edge.b, p.edge.length - p.t],
+    ],
+    limit - p.off,
+  );
+
+// Walking metres from the point the tree was built from to `q`: along the road, or straight along one edge
+// when both points lie on it.
+export function walkMetres(tree: Tree, p: Spot, q: Spot): number {
+  const e = q.edge;
+  let road = Math.min((tree.dist.get(e.a) ?? Infinity) + q.t, (tree.dist.get(e.b) ?? Infinity) + e.length - q.t);
+  if (p.edge.id === e.id) road = Math.min(road, Math.abs(p.t - q.t));
+  return p.off + road + q.off;
 }
 
 // Midpoint of the lot edge that faces the road (the door).
@@ -431,10 +467,13 @@ export function foodOutlook(s: ArtelState & { households: SimState["households"]
     if (!open || w.sowH <= 0) projected += FIELD.yieldKgHa * haOf(f);
     else projected += Math.max(0, expectedKg(f, w) - w.reaped);
   }
-  const fishers = new Map<number, number>();
-  for (const r of Object.values(s.residents)) if (r.job !== null) fishers.set(r.job, (fishers.get(r.job) ?? 0) + 1);
+  const workers = new Map<number, number>();
+  for (const r of Object.values(s.residents)) if (r.job !== null) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
   let daily = 0;
-  for (const [id, n] of fishers) if (s.buildings[id]?.template === "fisher" && s.buildings[id].state === "active") daily += n * FISH.kgHour * workLength(s.levers) * (cal.season === 3 ? FISH.winter : 1);
+  for (const [id, n] of workers) {
+    const b = s.buildings[id];
+    if (b && b.state === "active") daily += n * foodKgHour(b.template, cal.season) * workLength(s.levers);
+  }
   projected += (daily + forageKg(s)) * days;
   return Math.min(1, Math.max(0, (projected / (need * days) - 0.9) / 0.3));
 }
@@ -562,29 +601,27 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     }
   }
   const net = buildNet(s.roads);
-  if (net.adj.size === 0 || wps.length === 0) {
+  if (net.edges.length === 0 || wps.length === 0) {
     for (const r of Object.values(w.residents)) lose(r);
   } else {
-    const spot = new Map<number, { node: number; off: number } | null>();
+    // Doors -> the road: one spot per building, so a house mid-road walks from its own place on it.
+    const spot = new Map<number, Spot | null>();
     const locate = (key: number, x: number, y: number) => {
       let l = spot.get(key);
       if (l === undefined) {
-        l = nearestNode(net, x, y);
+        l = snapToRoad(net, x, y);
         spot.set(key, l);
       }
       return l;
     };
-    const workAt = new Map<number, { id: number; off: number }[]>();
+    const workAt: { id: number; spot: Spot }[] = [];
     for (const b of wps) {
       const [x, y] = lotFront(b);
       const l = locate(b.id, x, y);
-      if (!l) continue;
-      const list = workAt.get(l.node);
-      if (list) list.push({ id: b.id, off: l.off });
-      else workAt.set(l.node, [{ id: b.id, off: l.off }]);
+      if (l) workAt.push({ id: b.id, spot: l });
     }
     const origin = locate(-1, 0, 0);
-    const groups: { node: number; off: number; h: Household; adults: Resident[]; cands: JobCand[] }[] = [];
+    const groups: { spot: Spot; h: Household; adults: Resident[]; cands: JobCand[]; candMap: Map<number, number> }[] = [];
     for (const h of Object.values(w.households)) {
       const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)));
       if (adults.length === 0) continue;
@@ -593,34 +630,30 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
         continue;
       }
       const home = buildings[h.home];
-      let l: { node: number; off: number } | null;
+      let l: Spot | null;
       if (home) {
         const [x, y] = lotFront(home);
         l = locate(-2 - home.id, x, y);
       } else l = origin;
-      if (l) groups.push({ node: l.node, off: l.off, h, adults, cands: [] });
+      if (l) groups.push({ spot: l, h, adults, cands: [], candMap: new Map() });
       else for (const r of adults) lose(r);
     }
-    groups.sort((p, q) => p.node - q.node || p.h.id - q.h.id);
-    // Workplaces within reach of each group, nearest first (shared by the households of one node).
-    let curNode = Number.NaN;
-    let cands: JobCand[] = [];
-    let candMap = new Map<number, number>();
+    groups.sort((p, q) => p.spot.edge.id - q.spot.edge.id || p.spot.t - q.spot.t || p.h.id - q.h.id);
+    // Workplaces within reach of each household, nearest first.
     for (const g of groups) {
-      if (g.node !== curNode) {
-        curNode = g.node;
-        cands = [];
-        for (const [n, d] of reach(net, g.node, limit)) {
-          for (const c of workAt.get(n) ?? []) if (d + c.off <= limit) cands.push({ id: c.id, m: d + c.off });
-        }
-        cands.sort((p, q) => p.m - q.m || p.id - q.id);
-        candMap = new Map(cands.map((c) => [c.id, c.m]));
+      const tree = spotTree(net, g.spot, limit);
+      for (const wk of workAt) {
+        const m = walkMetres(tree, g.spot, wk.spot);
+        if (m <= limit) g.cands.push({ id: wk.id, m });
       }
-      g.cands = cands;
+      g.cands.sort((p, q) => p.m - q.m || p.id - q.id);
+      g.candMap = new Map(g.cands.map((c) => [c.id, c.m]));
+    }
+    for (const g of groups) {
       for (const r of g.adults) {
         if (r.job === null) continue;
-        const m = candMap.get(r.job);
-        const t = m === undefined ? Infinity : (g.off + m) / WALK_SPEED;
+        const m = g.candMap.get(r.job);
+        const t = m === undefined ? Infinity : m / WALK_SPEED;
         if (t <= MAX_COMMUTE) r.commute = Math.round(t * 10) / 10;
         else lose(r);
       }
@@ -647,7 +680,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
           let bp = had ? pri.get(r.job!)! : -1;
           if (bp >= 3) continue;
           for (const c of g.cands) {
-            if ((g.off + c.m) / WALK_SPEED > MAX_COMMUTE) break;
+            if (c.m / WALK_SPEED > MAX_COMMUTE) break;
             const p = pri.get(c.id)!;
             if (p <= bp || (workers.get(c.id) ?? 0) >= (cap.get(c.id) ?? 0)) continue;
             best = c;
@@ -661,7 +694,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
           }
           workers.set(best.id, (workers.get(best.id) ?? 0) + 1);
           r.job = best.id;
-          r.commute = Math.round(((g.off + best.m) / WALK_SPEED) * 10) / 10;
+          r.commute = Math.round((best.m / WALK_SPEED) * 10) / 10;
         }
       }
       return moved;
@@ -922,6 +955,8 @@ const WORK_TEXT: Record<string, string> = {
   tavern: "работает в Таверне",
   gumno: "фермер — Ферма",
   woodcutter: "лесоруб",
+  garden: "работает в Огороде",
+  hunter: "охотник — Охотничий пост",
   sawpit: "рабочий лесопилки",
   quarry: "рабочий карьера",
   fisher: "рыбак",

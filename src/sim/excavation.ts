@@ -20,7 +20,7 @@ const EPS = 1e-9;
 
 type Pt = [number, number];
 
-export const emptyFinds = (): Finds => ({ foundations: [], pois: [], streets: [] });
+export const emptyFinds = (): Finds => ({ foundations: [], pois: [], streets: [], revealed: [] });
 export const isDig = (b: Pick<Building, "template">): boolean => b.template === DIG.template;
 export const radiusOf = (b: Pick<Building, "radius">): number => b.radius ?? DIG.startRadius;
 export const revealedArea = (r: number): number => Math.PI * r * r;
@@ -28,8 +28,14 @@ export const revealedArea = (r: number): number => Math.PI * r * r;
 // Radius after `diggerHours` of work: the revealed area grows by areaPerHour per hour, up to the maximum.
 export const growDig = (r: number, diggerHours: number): number => Math.min(DIG.maxRadius, Math.sqrt(r * r + (DIG.areaPerHour * diggerHours) / Math.PI));
 
-// A finished site that has revealed everything it can: its diggers join the construction artel.
+// A finished site that has revealed everything it can: it goes away on its own.
 export const digDone = (b: Building): boolean => isDig(b) && b.state === "active" && radiusOf(b) >= DIG.maxRadius - EPS;
+
+// The finds of a dig site that goes away: its disc is kept, so what it revealed stays on the map and in the notebook.
+export function keepRevealed(f: Finds, b: Building): Finds {
+  if (!isDig(b) || b.state !== "active") return f;
+  return { ...f, revealed: [...f.revealed, { digId: b.id, x: b.lot.cx, y: b.lot.cy, r: radiusOf(b) }] };
+}
 
 // ---------- geometry ----------
 
@@ -112,15 +118,16 @@ function countsOf(f: Finds): Map<number, [number, number, number]> {
   return m;
 }
 
-// The discs of finished dig sites with the finds counted for each, for the snapshot.
+// The discs of all dig sites, working or gone, with the finds counted for each, for the snapshot.
 export function digInfos(s: Pick<SimState, "buildings" | "finds">): DigInfo[] {
   const out: DigInfo[] = [];
   const c = countsOf(s.finds);
-  for (const b of Object.values(s.buildings)) {
-    if (!isDig(b) || b.state !== "active") continue;
-    const [foundations, pois, streets] = c.get(b.id) ?? [0, 0, 0];
-    out.push({ id: b.id, x: b.lot.cx, y: b.lot.cy, r: radiusOf(b), foundations, pois, streets });
-  }
+  const add = (id: number, x: number, y: number, r: number) => {
+    const [foundations, pois, streets] = c.get(id) ?? [0, 0, 0];
+    out.push({ id, x, y, r, foundations, pois, streets });
+  };
+  for (const b of Object.values(s.buildings)) if (isDig(b) && b.state === "active") add(b.id, b.lot.cx, b.lot.cy, radiusOf(b));
+  for (const d of s.finds.revealed) add(d.digId, d.x, d.y, d.r);
   return out;
 }
 
@@ -156,7 +163,8 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   const bad = (reason: string): RecordResult => ({ ok: false, reason });
   if (!isRec(cmd) || !Number.isInteger(cmd.digId)) return bad("Некорректные находки");
   const dig = s.buildings[cmd.digId];
-  if (!dig || !isDig(dig)) return bad("Раскопа уже нет");
+  const gone = !dig || !isDig(dig);
+  if (gone && !s.finds.revealed.some((d) => d.digId === cmd.digId)) return bad("Раскопа уже нет");
   const { foundations, pois, streets } = cmd;
   if (!Array.isArray(foundations) || !Array.isArray(pois) || !Array.isArray(streets)) return bad("Некорректные находки");
   if (foundations.length > DIG.batch || pois.length > MAX_LIST || streets.length > MAX_LIST) return bad("Слишком много находок");
@@ -212,6 +220,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
       stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock,
       chronicle,
       finds: {
+        ...s.finds,
         foundations: newF.length ? [...s.finds.foundations, ...newF] : s.finds.foundations,
         pois: newPois.length ? [...s.finds.pois, ...newPois] : s.finds.pois,
         streets: newStreets.length ? [...s.finds.streets, ...newStreets] : s.finds.streets,
@@ -247,6 +256,12 @@ export function parseFinds(v: unknown): Finds {
         p.y = r.y;
       }
       out[key].push(p);
+    }
+  }
+  if (Array.isArray(v.revealed)) {
+    for (const r of v.revealed) {
+      if (!isRec(r) || !Number.isInteger(r.digId) || !isNum(r.x) || !isNum(r.y) || !isNum(r.r) || r.r <= 0) continue;
+      out.revealed.push({ digId: r.digId as number, x: r.x, y: r.y, r: r.r });
     }
   }
   return out;

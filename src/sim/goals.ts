@@ -50,7 +50,7 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 // Chain order = the order of the plan table.
 export const GOALS: GoalDef[] = [
-  { id: "izbas2", title: "Построить 2 дома", reward: "лесопилка, склад", target: 2, unit: "", unlocks: ["sawpit", "barn"], value: (s) => countWhere(s, (b) => b.zone === "res") },
+  { id: "izbas2", title: "Построить 2 дома", reward: "лесопилка, склад, охотничий пост", target: 2, unit: "", unlocks: ["sawpit", "barn", "hunter"], value: (s) => countWhere(s, (b) => b.zone === "res") },
   {
     id: "logs20",
     title: "Накопить 20 м³ брёвен",
@@ -63,7 +63,7 @@ export const GOALS: GoalDef[] = [
     gate: (s) => exists(s, (b) => b.template === "woodcutter") || s.clearings.some((c) => c.done >= c.labor),
     gateHint: "нужна лесозаготовка или вырубка",
   },
-  { id: "sow2", title: "Засеять 2 га", reward: "рыболовный причал, +1 семья", target: 2, unit: "га", unlocks: ["fisher"], families: 1, value: (s) => round1(sownHa(s)) },
+  { id: "sow2", title: "Засеять 2 га", reward: "рыболовный причал, огород, +1 семья", target: 2, unit: "га", unlocks: ["fisher", "garden"], families: 1, value: (s) => round1(sownHa(s)) },
   { id: "dig", title: "Открыть раскоп", reward: "первая статья в тетради", target: 1, unit: "", unlocks: [], value: (s) => countWhere(s, (b) => b.template === "dig") },
   { id: "pop25", title: "25 жителей", reward: "торговая зона, рынок", target: 25, unit: "", unlocks: ["zone:trade", "market"], value: (s) => Object.keys(s.residents).length },
   {
@@ -87,6 +87,8 @@ export const UNLOCK_NAME: Record<string, string> = {
   barn: "склад",
   quarry: "карьер",
   fisher: "рыболовный причал",
+  garden: "огород",
+  hunter: "охотничий пост",
   market: "рынок",
   chapel: "храм",
   school: "школа",
@@ -261,7 +263,9 @@ export function parseGoals(v: unknown): GoalsState | null {
   const r = v as Record<string, unknown>;
   if (!Array.isArray(r.done) || !Array.isArray(r.unlocks)) return null;
   const done = GOALS.map((g) => g.id).filter((id) => (r.done as unknown[]).includes(id));
-  const unlocks = ALL_UNLOCKS.filter((k) => (r.unlocks as unknown[]).includes(k));
+  // A goal already paid has its unlocks, even when the save was written before the unlock was added to the goal.
+  const paid = new Set([...(r.unlocks as unknown[]), ...done.flatMap((id) => GOAL_BY_ID.get(id)?.unlocks ?? [])]);
+  const unlocks = ALL_UNLOCKS.filter((k) => paid.has(k));
   const families = Number.isInteger(r.families) && (r.families as number) > 0 ? Math.min(20, r.families as number) : 0;
   return { done, unlocks, families, notebook: r.notebook === true, feast: r.feast === true };
 }

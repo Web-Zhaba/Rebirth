@@ -287,10 +287,6 @@ button.city-name-btn:hover .city-name {
   gap: 2px;
 }
 
-.layer-group .tooltip {
-  white-space: nowrap;
-}
-
 /* Between the exclusive overlays and the independent place names switch. */
 .layer-sep {
   width: var(--bw-hair);

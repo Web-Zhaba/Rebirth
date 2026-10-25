@@ -8,6 +8,8 @@ const REWARD_ICONS: [RegExp, IconName][] = [
   [/карьер/i, "quarry"],
   [/ремесл/i, "craft"],
   [/рыболов/i, "fisher"],
+  [/огород/i, "garden"],
+  [/охотн/i, "hunter"],
   [/семь/i, "person"],
   [/торгов/i, "trade"],
   [/рынок/i, "market"],

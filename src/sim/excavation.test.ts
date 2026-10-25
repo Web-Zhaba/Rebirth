@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILDINGS } from "./buildings";
 import { DIG, digDone, digInfos, growDig, onOldFoundation, radiusOf, recordFinds, revealedArea, type FindsCmd } from "./excavation";
-import { idleWorkplaces } from "./fields";
+import { step } from "./clock";
 import { emptyGrowth, makeBuilding } from "./growth";
 import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
@@ -61,10 +61,26 @@ describe("dig site", () => {
     expect(s.buildings[1].radius).toBe(DIG.maxRadius);
     expect(digDone(s.buildings[1])).toBe(true);
   });
-  it("a finished site counts its workers as builders", () => {
-    const s = town([{ ...dig(), radius: DIG.maxRadius }], 3);
-    expect(idleWorkplaces(s).has(1)).toBe(true);
-    expect(idleWorkplaces(town([dig()], 3)).has(1)).toBe(false);
+  it("a finished site goes away on its own; its disc and finds stay", () => {
+    const done = { ...dig(), radius: DIG.maxRadius };
+    const found1 = recordFinds(town([done]), cmd({ foundations: [found("a")] }));
+    if (!found1.ok) throw new Error(found1.reason);
+    const s = step(found1.sim);
+    expect(s.buildings[1]).toBeUndefined();
+    expect(s.finds.revealed).toEqual([{ digId: 1, x: done.lot.cx, y: done.lot.cy, r: DIG.maxRadius }]);
+    expect(s.finds.foundations).toHaveLength(1);
+    expect(digInfos(s)).toEqual([{ id: 1, x: done.lot.cx, y: done.lot.cy, r: DIG.maxRadius, foundations: 1, pois: 0, streets: 0 }]);
+    expect(s.events.some((e) => e.kind === "built" && e.text.includes("Раскоп завершён"))).toBe(true);
+  });
+  it("a finished site's workers go back to the artel at once", () => {
+    const s = step(town([{ ...dig(), radius: DIG.maxRadius }], 3));
+    expect(Object.values(s.buildings)).toEqual([]);
+    expect(produceStep(town([dig()], 3), 1e6).buildings[1].radius).toBe(DIG.maxRadius);
+  });
+  it("a working site's disc is in the snapshot too; its finds are recorded while it works", () => {
+    const s = town([dig()]);
+    expect(digInfos(s)).toEqual([expect.objectContaining({ id: 1, r: DIG.startRadius })]);
+    expect(recordFinds(s, cmd({ foundations: [found("a")] })).ok).toBe(true);
   });
   it("the snapshot exposes the disc and the finds of each dig", () => {
     let s = town([dig(), dig(2, "building")]);
@@ -166,12 +182,12 @@ describe("rebuild on old foundations", () => {
 describe("saves", () => {
   const save = (sim: SimState): unknown => JSON.parse(JSON.stringify({ version: 4, city, sim } satisfies SaveV4));
   it("a new town has empty finds and an older save gets the default", () => {
-    expect(emptyGrowth(1).finds).toEqual({ foundations: [], pois: [], streets: [] });
+    expect(emptyGrowth(1).finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [] });
     const s = town([dig()]);
     const raw = save(s) as { sim: Record<string, unknown> };
     delete raw.sim.finds;
     const p = parseSave(raw, NOW)!;
-    expect(p.sim.finds).toEqual({ foundations: [], pois: [], streets: [] });
+    expect(p.sim.finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [] });
     expect(p.sim.buildings[1].radius).toBe(15);
   });
   it("finds, the radius and the ruins mark survive a round trip", () => {
@@ -191,7 +207,7 @@ describe("saves", () => {
       raw.sim.finds = junk;
       const p = parseSave(raw, NOW);
       expect(p).not.toBeNull();
-      expect(p!.sim.finds).toEqual({ foundations: [], pois: [], streets: [] });
+      expect(p!.sim.finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [] });
     }
     const raw = save(s) as { sim: Record<string, unknown> };
     raw.sim.finds = { foundations: [{ id: "ok", ring: square(0, 0, 3), area: 9, digId: 1, at: 0 }, { id: "bad", ring: [[0, 0]], area: 1, digId: 1, at: 0 }], pois: [], streets: [{ id: "s", name: "A", kind: "street", digId: 1, at: 0 }, { nope: 1 }] };
@@ -202,6 +218,25 @@ describe("saves", () => {
 });
 
 describe("recordFinds through the worker", () => {
+  it("a demolished dig keeps its disc, so the finds stay on the map", async () => {
+    const road = addRoad(emptyRoads(), [[0, 0], [100, 0]], "dirt", 1, [0]);
+    if (!road.ok) throw new Error(road.reason);
+    const s = { ...town([{ ...dig(), radius: 40 }]), roads: road.graph, realTime: NOW };
+    let stored: unknown = JSON.parse(JSON.stringify({ version: 4, city, sim: s }));
+    const storage: Storage = { get: async () => stored, put: async (x) => void (stored = JSON.parse(JSON.stringify(x))), clear: async () => void (stored = undefined) };
+    const out: FromWorker[] = [];
+    const h = new Handler(storage, (m) => out.push(m));
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    await h.handle({ t: "cmd", id: 1, cmd: { type: "recordFinds", digId: 1, foundations: [found("a", 100)], pois: [], streets: [] } });
+    await h.handle({ t: "cmd", id: 2, cmd: { type: "demolish", id: 1 } });
+    expect(out.filter((m) => m.t === "cmdResult").pop()).toEqual({ t: "cmdResult", id: 2, ok: true });
+    const snap = out.filter((m): m is Extract<FromWorker, { t: "snapshot" }> => m.t === "snapshot").pop()!;
+    expect(snap.sim.buildings[1]).toBeUndefined();
+    expect(snap.sim.digs).toEqual([expect.objectContaining({ id: 1, r: 40, foundations: 1 })]);
+    expect((stored as SaveV4).sim.finds.revealed).toEqual([expect.objectContaining({ digId: 1, r: 40 })]);
+    await h.handle({ t: "cmd", id: 3, cmd: { type: "recordFinds", digId: 1, foundations: [found("late", 100)], pois: [], streets: [] } });
+    expect(out.filter((m) => m.t === "cmdResult").pop()).toEqual({ t: "cmdResult", id: 3, ok: true });
+  });
   it("is acknowledged, persisted and posts the new chronicle; a repeat changes nothing", async () => {
     const road = addRoad(emptyRoads(), [[0, 0], [100, 0]], "dirt", 1, [0]);
     if (!road.ok) throw new Error(road.reason);

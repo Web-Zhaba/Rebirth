@@ -80,7 +80,8 @@ export function attachBadgeLayer(map: maplibregl.Map): void {
       }
       if (e.key !== key) {
         e.key = key;
-        e.el.className = `map-badge map-badge-${spec.tone}`;
+        // Keep maplibregl-marker: it is what makes the element absolutely positioned at its marker's point.
+        e.el.className = `maplibregl-marker map-badge map-badge-${spec.tone}`;
         e.el.title = `${spec.title}. Открыть здание`;
         render(h("span", { class: "map-badge-in" }, h(Icon, { name: spec.icon, size: 12 }), spec.label), e.el);
       }

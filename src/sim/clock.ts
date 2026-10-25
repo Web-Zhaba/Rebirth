@@ -1,14 +1,15 @@
 import { recordChronicle } from "./chronicle";
-import { dailyServices } from "./coverage";
+import { dailyServices, refreshServices } from "./coverage";
 import { allocateClearings, clearingsFirst, CREW } from "./buildings";
+import { digDone, keepRevealed } from "./excavation";
 import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
-import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales, rebalanceJobs } from "./people";
+import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales, rebalanceJobs, syncPeople } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
 import { eventStep } from "./events";
 import { goalStep } from "./goals";
 import { settleLevers } from "./leverCmds";
 import { daySummary } from "./summary";
-import { dailyEconomy, payMaterials, produceStep, reportShortages } from "./production";
+import { dailyEconomy, payMaterials, produceStep, reportShortages, say } from "./production";
 import { isWorkHour, tolokaActive, workHours, type Levers } from "./levers";
 import { spendOnRoads } from "./roads";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
@@ -59,6 +60,21 @@ export function queuedLabel(gameMinutes: number, levers?: Levers): string | null
   return isWorkHour(h, levers) ? null : `начнут в ${String(workHours(levers).start).padStart(2, "0")}:00`;
 }
 
+// A dig site that has revealed everything it can goes away: its diggers return to the artel, its finds stay on the map.
+function retireDigs(s: SimState): SimState {
+  const done = Object.values(s.buildings).filter(digDone);
+  if (done.length === 0) return s;
+  const buildings = { ...s.buildings };
+  let finds = s.finds;
+  let events = s.events;
+  for (const b of done) {
+    delete buildings[b.id];
+    finds = keepRevealed(finds, b);
+    events = say(events, s.gameMinutes, "built", "Раскоп завершён: открытое остаётся на карте и в тетради", [b.lot.cx, b.lot.cy]);
+  }
+  return refreshServices(syncPeople({ ...s, buildings, finds, events }));
+}
+
 export function step(s: SimState): SimState {
   const hour = calendar(s.gameMinutes).hour;
   const working = isWorkHour(hour, s.levers);
@@ -88,6 +104,7 @@ export function step(s: SimState): SimState {
   let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, events }, clearUse);
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScales(s));
   else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
+  cur = retireDigs(cur);
   let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
   // A workplace finished in this tick hires at once, not at the next midnight.
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);

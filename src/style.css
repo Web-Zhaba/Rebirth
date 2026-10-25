@@ -21,6 +21,52 @@ body {
   height: 100vh;
 }
 
+/* Links: one style for <a> and text-like buttons (button.link), ink on hover, visible focus ring. */
+a,
+button.link {
+  color: var(--ink-2);
+  text-decoration: underline dotted var(--rule-dotted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+a:hover,
+button.link:hover {
+  color: var(--info);
+  text-decoration-color: var(--info);
+  text-decoration-thickness: 2px;
+}
+.maplibregl-ctrl a {
+  color: var(--ink-2);
+  text-decoration: underline dotted var(--rule-dotted);
+}
+a:focus-visible,
+button.link:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Scrollbars: thin, square, in the paper and ink palette (standard properties; WebKit for Safari). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-dotted) var(--paper-shade);
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--paper-shade);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rule-dotted);
+  border: 2px solid var(--paper-shade);
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pencil);
+}
+
 #ui {
   position: fixed;
   inset: 0;
@@ -363,6 +409,7 @@ button:hover:not(:disabled) {
   box-shadow: var(--shadow-hard);
   color: var(--ink);
   z-index: var(--z-dialog);
+  pointer-events: auto; /* the #ui wrapper ignores the pointer; a dialog must still take the clicks it shows */
 }
 
 .dialog::backdrop {

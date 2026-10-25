@@ -2,7 +2,7 @@ import { allUnlocked } from "./goals";
 import { describe, expect, it } from "vitest";
 import { advanceTo } from "./clock";
 import { BUILDINGS, houseCapacity, UPGRADE } from "./buildings";
-import { computeCoverage, computeLandValue, dailyServices, refreshServices, reachSegments, serviceStats } from "./coverage";
+import { computeCoverage, computeLandValue, dailyServices, refreshServices, reachSegments, serviceStats, upgradeBlockers, upgradeShortfall } from "./coverage";
 import { advanceBuildings, canPlace, emptyGrowth, placeBuilding } from "./growth";
 import { toSnapshot } from "./handler";
 import { builderCount, constructionWork, dailyStep, foodOutlook, FORAGE, forageKg, idleResidents, peopleStats, productionScale, queryBuilding } from "./people";
@@ -417,6 +417,19 @@ describe("house upgrade", () => {
     s = day({ ...s, households: { ...s.households, 1: { ...s.households[1], mood: 74 } } });
     expect(s.buildings[4].streak).toBe(0);
   });
+  it("the land threshold is 60: four services and a happy neighbourhood are enough", () => {
+    expect(SERVICE.upgradeLand).toBe(60);
+    expect(upgradeShortfall(60, undefined, 80)).toEqual([]);
+    expect(upgradeShortfall(59, undefined, 80)).toEqual(["стоимость участка 59 из 60, нет: вода, рынок, храм, школа, лечебница"]);
+  });
+  it("the inspector names what keeps a house from its second level", () => {
+    const poor = folk(town([bld(4, "izba", 120)]), [{ home: 4, adults: 2, mood: 60 }]);
+    const left = upgradeBlockers(poor, poor.buildings[4], 60);
+    expect(left).toEqual(expect.arrayContaining([expect.stringContaining("нет: вода"), "настроение 60 из 75"]));
+    const ok = day(rich());
+    expect(upgradeBlockers(ok, ok.buildings[4], 90)).toEqual([]);
+    expect(upgradeBlockers(ok, ok.buildings[5], 90)).toEqual([]);
+  });
   it("needs the land value too, and only an izba upgrades", () => {
     const poor = folk(town([bld(4, "izba", 120)]), [{ home: 4, adults: 2, mood: 100 }]);
     let s = poor;
@@ -527,6 +540,15 @@ describe("reach segments", () => {
   });
   it("skips unbuilt edges", () => {
     expect(reachSegments(roadAlong(1000, 100), 0, 3, 1000)).toHaveLength(1);
+  });
+  it("starts from the point on the road, not from a node: a spot mid-edge reaches both ways at its own distance", () => {
+    const seg = reachSegments(roadAlong(1000), 50, 3, 150);
+    expect(seg).toHaveLength(2);
+    expect(Math.max(...seg.flat().map((p) => p[0]))).toBeCloseTo(197, 0);
+  });
+  it("a well one house away on the same long road covers it", () => {
+    const s = town([bld(1, "well", 50), bld(2, "izba", 60)]);
+    expect(servicesIn(computeCoverage(s)[2])).toEqual(["well"]);
   });
 });
 
@@ -684,10 +706,10 @@ describe("food outlook", () => {
     const gm = at(12, 12);
     const s0 = busy(folk(town([bld(1, "fisher", 50), bld(2, "izba", 0)], roadAlong(), gm), [{ home: 2, adults: 2, job: 1 }]));
     const s = { ...s0, stock: { ...s0.stock, food: 0 } };
-    // 1 fisher x 0.2 kg x 12 h = 2.4 kg a day against 1.4: more than enough
+    // 1 fisher x 0.6 kg x 12 h = 7.2 kg a day against 1.4: more than enough
     expect(foodOutlook(s)).toBe(1);
-    // in winter 1.2 kg a day: 0.857 of the need, below 0.9
-    expect(foodOutlook({ ...s, gameMinutes: at(28, 12) })).toBe(0);
+    // in winter 3.6 kg a day: still above the need
+    expect(foodOutlook({ ...s, gameMinutes: at(28, 12) })).toBe(1);
   });
   it("is in the economy stats", () => {
     expect(economyStats(withFood(at(12, 12), 5)).outlook).toBe(1);

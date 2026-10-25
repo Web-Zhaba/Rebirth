@@ -25,7 +25,7 @@ const TABS: TabItem<Tab>[] = [
   { id: "work", label: "Работа" },
   { id: "services", label: "Службы" },
   { id: "events", label: "События" },
-  { id: "orders", label: "Распоряжения" },
+  { id: "orders", label: "Приказы" },
 ];
 
 const tab = signal<Tab>("people");
@@ -250,7 +250,7 @@ function OrdersTab() {
   if (!s || !lv) return null;
   const block = s.callBlock;
   return (
-    <div class="rs-list orders" role="group" aria-label="Распоряжения">
+    <div class="rs-list orders" role="group" aria-label="Приказы">
       <div class="orders-row">
         <Button
           aria-label="Долгий день"

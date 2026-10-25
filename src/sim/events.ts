@@ -9,7 +9,7 @@ import { refreshServices } from "./coverage";
 import { covers } from "./services";
 import { calendar, DAY_MIN } from "./time";
 import { massText } from "./units";
-import type { ChoiceOption, SimState, TownChoice } from "./types";
+import type { Building, ChoiceOption, ServiceId, SimState, TownChoice } from "./types";
 
 // Events with choices (PLAN-pace.md section 10). One event every one to two game days, drawn by the sim generator from
 // the kinds whose condition holds; two options, each with its effect in the text. An event nobody answers resolves with
@@ -99,6 +99,16 @@ const adults = (s: SimState) => Object.values(s.residents).filter((r) => isAdult
 const quarrymen = (s: SimState) => Object.values(s.residents).filter((r) => r.job !== null && s.buildings[r.job]?.template === "quarry");
 const died = (r: { sex: "m" | "f"; first: string; last: string }) => `${r.sex === "f" ? "погибла" : "погиб"} ${fullName(r)}`;
 const chance = (p: number) => `${Math.round(p * 100)}%`;
+// The town has a finished building of this kind (a tavern, a market, a hunter's hut).
+const active = (s: SimState, template: string) => Object.values(s.buildings).some((b) => b.state === "active" && b.template === template);
+// A building within a service's reach (services cover the houses and workplaces around them).
+const coveredBy = (s: SimState, b: Building | undefined, id: ServiceId) => !!b && covers(s.coverage[b.id], id);
+// The same effects, lessened by the building that prevents them.
+const fireLabor = (s: SimState, b?: Building) => (coveredBy(s, b, "well") ? FIRE.labor / 2 : FIRE.labor);
+const huntDeath = (s: SimState) => (active(s, "hunter") ? WOLF.death / 2 : WOLF.death);
+const bribe = (s: SimState) => (active(s, "market") ? RAID.food / 2 : RAID.food);
+const quarryDeath = (s: SimState, b?: Building) => (coveredBy(s, b, "healer") ? COLLAPSE.death / 2 : COLLAPSE.death);
+const feastKg = (s: SimState) => (active(s, "tavern") ? MINSTREL.food / 2 : MINSTREL.food);
 
 // Families with a home and at least two members that no healer covers.
 const sickFamilies = (s: SimState) => Object.values(s.households).filter((h) => h.home !== null && h.members.length >= 2 && s.buildings[h.home] && !covers(s.coverage[h.home], "healer"));
@@ -265,21 +275,21 @@ const EVENTS: EventDef[] = [
       const h = Object.values(s.households).find((x) => x.home === b.id);
       return {
         title: "Пожар",
-        text: h ? `Загорелась изба семьи ${h.last}. Огонь быстро перекидывается на соседние крыши.` : "Загорелась пустая изба. Огонь быстро перекидывается на соседние крыши.",
-        options: [opt("Тушить всем миром", `Стройки потеряют ${FIRE.labor} чел.-ч, изба уцелеет.`), opt("Дать сгореть", h ? `Изба сгорит, семья ${h.last} останется без крова.` : "Изба сгорит.")],
+        text: h ? `Загорелся дом семьи ${h.last}. Огонь быстро перекидывается на соседние крыши.` : "Загорелся пустой дом. Огонь быстро перекидывается на соседние крыши.",
+        options: [opt("Тушить всем посёлком", `Стройки потеряют ${fireLabor(s, b)} чел.-ч, дом уцелеет.`), opt("Дать сгореть", h ? `Дом сгорит, семья ${h.last} останется без крова.` : "Дом сгорит.")],
         safe: 0,
         arg: b.id,
         pos: [b.lot.cx, b.lot.cy],
       };
     },
     apply: (s, o, c) => {
-      if (o === 0) return { sim: delayWork(s, FIRE.labor), text: "Пожар потушили всем миром: изба уцелела, стройки задержались" };
+      if (o === 0) return { sim: delayWork(s, fireLabor(s, s.buildings[c.arg])), text: "Пожар потушили всем посёлком: дом уцелел, стройки задержались" };
       const b = s.buildings[c.arg];
       if (!b || !isFinishedHouse(b)) return { sim: s, text: "Гореть уже нечему" };
       const rest = { ...s.buildings };
       delete rest[b.id];
       const homeless = Object.values(s.households).some((h) => h.home === b.id);
-      return { sim: refreshServices(syncPeople({ ...s, buildings: rest })), text: `Изба сгорела дотла${homeless ? ": семья осталась без крова" : ""}` };
+      return { sim: refreshServices(syncPeople({ ...s, buildings: rest })), text: `Дом сгорел дотла${homeless ? ": семья осталась без крова" : ""}` };
     },
   },
   {
@@ -288,8 +298,8 @@ const EVENTS: EventDef[] = [
     cond: (s) => s.stock.food > 0,
     make: () => ({
       title: "Паводок",
-      text: "Река поднялась за ночь и подходит к амбарам. Вода ещё не дошла до зерна, но медлить нельзя.",
-      options: [opt("Копать канавы", `Стройки потеряют ${FLOOD.labor} чел.-ч, вода уйдёт от амбаров.`), opt("Ждать, пока отступит", `Вода подмочит около ${chance(FLOOD.share)} запасов еды.`)],
+      text: "Река поднялась за ночь и подходит к складам. Вода ещё не дошла до зерна, но медлить нельзя.",
+      options: [opt("Копать канавы", `Стройки потеряют ${FLOOD.labor} чел.-ч, вода уйдёт от складов.`), opt("Ждать, пока отступит", `Вода подмочит около ${chance(FLOOD.share)} запасов еды.`)],
       safe: 0,
       arg: 0,
     }),
@@ -303,10 +313,10 @@ const EVENTS: EventDef[] = [
     id: "wolves",
     weight: 3,
     cond: (s) => calendar(s.gameMinutes).season === 3 && adults(s).length > 0,
-    make: () => ({
+    make: (s) => ({
       title: "Волки у околицы",
-      text: "Голодные зимние волки ходят вокруг дворов и ночью воют у изб.",
-      options: [opt("Устроить облаву", `Стройки потеряют ${WOLF.labor} чел.-ч; при облаве может погибнуть охотник (${chance(WOLF.death)}).`), opt("Запереть дворы", `Зима в запертых домах тяжелее: настроение во всех семьях ${WOLF.mood}.`)],
+      text: "Голодные зимние волки ходят вокруг дворов и ночью воют у домов.",
+      options: [opt("Устроить облаву", `Стройки потеряют ${WOLF.labor} чел.-ч; при облаве может погибнуть охотник (${chance(huntDeath(s))}).`), opt("Запереть дворы", `Зима в запертых домах тяжелее: настроение во всех семьях ${WOLF.mood}.`)],
       safe: 1,
       arg: 0,
     }),
@@ -314,7 +324,7 @@ const EVENTS: EventDef[] = [
       if (o === 1) return { sim: moodAll(s, WOLF.mood), text: "Дворы заперли: волки ушли ни с чем, зима в запертых домах тяжелее" };
       const d = delayWork(s, WOLF.labor);
       const pool = adults(s);
-      if (pool.length === 0 || rand() >= WOLF.death) return { sim: d, text: "Волков отогнали облавой: охотники вернулись живыми" };
+      if (pool.length === 0 || rand() >= huntDeath(s)) return { sim: d, text: "Волков отогнали облавой: охотники вернулись живыми" };
       const r = pick(pool, rand);
       return { sim: killResident(d, r.id), text: `В облаве ${died(r)}` };
     },
@@ -323,16 +333,16 @@ const EVENTS: EventDef[] = [
     id: "raid",
     weight: 2,
     cond: (s) => s.stock.food >= RAID.food,
-    make: () => ({
+    make: (s) => ({
       title: "Разбойники на дороге",
       text: "Чужие люди с оружием перегородили дорогу и требуют отдать запасы.",
-      options: [opt("Откупиться", `Уйдёт ${RAID.food} кг еды.`), opt("Дать отпор", `С вероятностью ${chance(RAID.death)} в драке погибнет один из взрослых жителей. Еда останется.`)],
+      options: [opt("Откупиться", `Уйдёт ${bribe(s)} кг еды.`), opt("Дать отпор", `С вероятностью ${chance(RAID.death)} в драке погибнет один из взрослых жителей. Еда останется.`)],
       safe: 0,
       arg: 0,
     }),
     apply: (s, o, c, rand) => {
       if (o === 0) {
-        const paid = Math.min(RAID.food, s.stock.food);
+        const paid = Math.min(bribe(s), s.stock.food);
         return { sim: { ...s, stock: { ...s.stock, food: s.stock.food - paid } }, text: `Откупились: ушло ${paid} кг еды` };
       }
       const pool = adults(s);
@@ -351,7 +361,7 @@ const EVENTS: EventDef[] = [
       return {
         title: "Обвал в карьере",
         text: `В карьере обвалился свод: ${fullName(r)} оказался под камнями.`,
-        options: [opt("Вытаскивать", `Стройки потеряют ${COLLAPSE.labor} чел.-ч: людей роют из-под камней.`), opt("Работать дальше", `С вероятностью ${chance(COLLAPSE.death)} ${fullName(r)} не выберется.`)],
+        options: [opt("Вытаскивать", `Стройки потеряют ${COLLAPSE.labor} чел.-ч: людей роют из-под камней.`), opt("Работать дальше", `С вероятностью ${chance(quarryDeath(s, b))} ${fullName(r)} не выберется.`)],
         safe: 0,
         arg: r.id,
         pos: [b.lot.cx, b.lot.cy],
@@ -361,7 +371,8 @@ const EVENTS: EventDef[] = [
       if (o === 0) return { sim: delayWork(s, COLLAPSE.labor), text: "Человека вытащили из-под камней: стройки задержались" };
       const r = s.residents[c.arg];
       if (!r) return { sim: s, text: "Пострадавший уже ушёл из посёлка" };
-      if (rand() >= COLLAPSE.death) return { sim: s, text: `${fullName(r)} выбрался сам` };
+      const b = r.job === null ? undefined : s.buildings[r.job];
+      if (rand() >= quarryDeath(s, b)) return { sim: s, text: `${fullName(r)} выбрался сам` };
       return { sim: killResident(s, r.id), text: `Под обвалом ${died(r)}` };
     },
   },
@@ -372,30 +383,31 @@ const EVENTS: EventDef[] = [
     make: () => ({
       title: "Находка в земле",
       text: "Под старым полом нашли глиняный горшок с бронзовыми украшениями и утварью.",
-      options: [opt("Сдать в общину", `Пойдёт в запасы: ${HOARD.wares} шт товаров и ${HOARD.stone} т камня.`), opt("Поделить между семьями", `Каждая семья получит свою вещь: настроение +${HOARD.mood}.`)],
+      options: [opt("Сдать в общий запас", `Пойдёт в запасы: ${HOARD.wares} шт товаров и ${HOARD.stone} т камня.`), opt("Поделить между семьями", `Каждая семья получит свою вещь: настроение +${HOARD.mood}.`)],
       safe: 0,
       arg: 0,
     }),
     apply: (s, o) => {
       if (o === 1) return { sim: moodAll(s, HOARD.mood), text: "Находку поделили между семьями: люди довольны" };
-      return { sim: { ...s, stock: { ...s.stock, wares: s.stock.wares + HOARD.wares, stone: s.stock.stone + HOARD.stone } }, text: `Находку сдали в общину: ${HOARD.wares} шт товаров и ${HOARD.stone} т камня` };
+      return { sim: { ...s, stock: { ...s.stock, wares: s.stock.wares + HOARD.wares, stone: s.stock.stone + HOARD.stone } }, text: `Находку сдали в общий запас: ${HOARD.wares} шт товаров и ${HOARD.stone} т камня` };
     },
   },
   {
     id: "minstrels",
     weight: 3,
     cond: () => true,
-    make: () => ({
-      title: "Скоморохи",
-      text: "В посёлок пришли скоморохи с дудками и ручным медведем. Просят места у костра и угощения.",
-      options: [opt("Угостить", `Уйдёт ${MINSTREL.food} кг еды, настроение во всех семьях +${MINSTREL.mood}.`), opt("Прогнать", NOTHING)],
+    make: (s) => ({
+      title: "Бродячие музыканты",
+      text: "В посёлок пришли бродячие музыканты с инструментами и ручным медведем. Просят места у костра и угощения.",
+      options: [opt("Угостить", `Уйдёт ${feastKg(s)} кг еды, настроение во всех семьях +${MINSTREL.mood}.`), opt("Прогнать", NOTHING)],
       safe: 1,
       arg: 0,
     }),
     apply: (s, o) => {
-      if (o === 1) return { sim: s, text: "Скоморохов прогнали: ушли дальше по дороге" };
-      if (s.stock.food < MINSTREL.food) return { sim: s, text: "Угостить скоморохов было нечем: ушли дальше" };
-      return { sim: moodAll({ ...s, stock: { ...s.stock, food: s.stock.food - MINSTREL.food } }, MINSTREL.mood), text: `Скоморохов угостили: ушло ${MINSTREL.food} кг еды, люди повеселели` };
+      if (o === 1) return { sim: s, text: "Музыкантов прогнали: ушли дальше по дороге" };
+      const kg = feastKg(s);
+      if (s.stock.food < kg) return { sim: s, text: "Угостить музыкантов было нечем: ушли дальше" };
+      return { sim: moodAll({ ...s, stock: { ...s.stock, food: s.stock.food - kg } }, MINSTREL.mood), text: `Музыкантов угостили: ушло ${kg} кг еды, люди повеселели` };
     },
   },
 ];

@@ -352,3 +352,87 @@ button.toast-main:hover .toast-text {
 .hotkeys-desc {
   font-size: var(--fs-sm);
 }
+
+/* Builders' tasks, bottom-right of the HUD (BuilderTasks.tsx). */
+.builder-tasks {
+  width: min(260px, calc(100vw - 16px));
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+}
+.builder-tasks-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  min-height: 24px;
+}
+.builder-tasks-count {
+  font-weight: 400;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.builder-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.builder-task {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.builder-task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.builder-tasks-list[hidden] {
+  display: none;
+}
+.builder-tasks-more {
+  color: var(--ink-2);
+}
+
+/* One line per site: name, a "first" tag for the priority site, and the expected finish time on the right. */
+.builder-task-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.builder-task-line .builder-task-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.builder-task-first {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--warn-text);
+  white-space: nowrap;
+}
+.builder-task-eta {
+  margin-left: auto;
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ring over the site under a hovered builder task (BuilderTasks.tsx). */
+.builder-focus-ring {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--info);
+  border-radius: 50%;
+  pointer-events: none;
+}

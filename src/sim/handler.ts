@@ -7,7 +7,7 @@ import { resolveChoice } from "./events";
 import { goalViews, lockReason } from "./goals";
 import { callBlock, callSettlers, callToloka, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
 import { jobReport } from "./jobReport";
-import { digInfos, recordFinds } from "./excavation";
+import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
@@ -454,9 +454,10 @@ export class Handler {
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");
+        const gone = sim.buildings[cmd.id];
         const rest = { ...sim.buildings };
         delete rest[cmd.id];
-        this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, buildings: rest })) };
+        this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, buildings: rest, finds: keepRevealed(sim.finds, gone) })) };
         return await this.finishCommand(id);
       } else {
         return reject("Неизвестная команда");

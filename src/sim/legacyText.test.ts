@@ -14,6 +14,11 @@ describe("migrateText", () => {
     expect(migrateText("Страда: работают с 5 до 21 часов")).toBe("Долгий день: работают с 5 до 21 часов");
     expect(migrateText("Артель потеряет около 10 чел.-ч")).toBe("Строители потеряют около 10 чел.-ч");
     expect(migrateText("Лекаря рядом нет.")).toBe("Врача рядом нет.");
+    expect(migrateText("Поставлена первая охотничья избушка")).toBe("Поставлен первый охотничий пост");
+    expect(migrateText("Загорелась изба семьи")).toBe("Загорелся дом семьи");
+    expect(migrateText("В посёлок пришли скоморохи")).toBe("В посёлок пришли бродячие музыканты");
+    expect(migrateText("Скоморохов прогнали")).toBe("Музыкантов прогнали");
+    expect(migrateText("Сдать в общину")).toBe("Сдать в общий запас");
   });
   it("leaves current texts and longer words alone", () => {
     for (const t of ["Дом расширен", "Хроника пуста", "Избыток досок", "Вырубка готова"]) expect(migrateText(t)).toBe(t);

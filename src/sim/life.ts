@@ -3,8 +3,8 @@ import { BUILDINGS } from "./buildings";
 import { EVENING } from "./evening";
 import { workHours } from "./levers";
 import { WORKSHOP_INPUT } from "./fields";
-import { nodePath, polyline, polyLength, shortestTree } from "./paths";
-import { buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, nearestNode, WALK_SPEED } from "./people";
+import { polyLength, walkTo, type Walk } from "./paths";
+import { buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
 import { GOOD } from "./production";
 import { START_MINUTE_OF_DAY } from "./time";
 import type { Building, SimState, Stock } from "./types";
@@ -49,16 +49,9 @@ const centre = (b: Building): [number, number] => {
   return [Math.round((x / b.footprint.length) * 10) / 10, Math.round((y / b.footprint.length) * 10) / 10];
 };
 
-interface Spot {
-  node: number;
-  off: number;
-  at: [number, number];
-}
 interface Commuter {
   id: number;
-  nodes: number[];
-  home: [number, number];
-  work: [number, number];
+  pts: [number, number][];
 }
 
 export function computeLife(s: SimState, day = 0): LifeData {
@@ -89,17 +82,21 @@ export function computeLife(s: SimState, day = 0): LifeData {
   }
   if (net.adj.size === 0) return { day, trips, traffic, lights };
 
-  // door -> net node, once per building
+  // door -> its spot on the net, once per building
   const spot = new Map<number, Spot | null>();
   const locate = (b: Building): Spot | null => {
     let l = spot.get(b.id);
     if (l === undefined) {
-      const at = lotFront(b);
-      const n = nearestNode(net, at[0], at[1]);
-      l = n && { ...n, at };
+      const [x, y] = lotFront(b);
+      l = snapToRoad(net, x, y);
       spot.set(b.id, l);
     }
     return l;
+  };
+  // a walk drawn as points: the first door, the road where the walk joins it, the nodes passed, the road where it leaves, the last door
+  const trail = (nodes: number[], from: [number, number], to: [number, number], doors: [[number, number], [number, number]]): [number, number][] => {
+    const pts: [number, number][] = [doors[0], from, ...nodes.map((n): [number, number] => [s.roads.nodes[n].x, s.roads.nodes[n].y]), to, doors[1]];
+    return pts.filter((p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]);
   };
 
   // edge between two adjacent nodes (the shortest one if several run in parallel)
@@ -112,9 +109,27 @@ export function computeLife(s: SimState, day = 0): LifeData {
     if (!old || e.length < old.len) edgeOf.set(k, { id: e.id, len: e.length });
   }
 
-  // commuters grouped by the node their home door steps onto: one Dijkstra per node
+  // the traffic of a walk: the edges between the nodes it passes, and the edges of its ends when it runs along
+  // them for a stretch (a door right on a node counts nothing there); its own edge when it stays on one
+  const countTraffic = (walk: Walk, from: Spot, to: Spot) => {
+    const used = new Set<number>();
+    if (walk.nodes.length === 0) used.add(from.edge.id);
+    else {
+      const first = walk.nodes[0];
+      const last = walk.nodes[walk.nodes.length - 1];
+      if ((from.edge.a === first ? from.t : from.edge.length - from.t) > 0) used.add(from.edge.id);
+      if ((to.edge.a === last ? to.t : to.edge.length - to.t) > 0) used.add(to.edge.id);
+      for (let i = 1; i < walk.nodes.length; i++) {
+        const e = edgeOf.get(pair(walk.nodes[i - 1], walk.nodes[i]));
+        if (e) used.add(e.id);
+      }
+    }
+    for (const id of used) traffic[id] = (traffic[id] ?? 0) + 1;
+  };
+
+  // commuters grouped by the spot of their home: one tree per spot
   const limit = MAX_COMMUTE * WALK_SPEED;
-  const groups = new Map<number, { id: number; home: Spot; work: Spot }[]>();
+  const groups = new Map<string, { spot: Spot; items: { id: number; from: [number, number]; to: [number, number]; work: Spot }[] }>();
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const hh = s.households[r.household];
@@ -124,29 +139,27 @@ export function computeLife(s: SimState, day = 0): LifeData {
     const hl = locate(home);
     const wl = locate(work);
     if (!hl || !wl) continue;
-    const item = { id: r.id, home: hl, work: wl };
-    const list = groups.get(hl.node);
-    if (list) list.push(item);
-    else groups.set(hl.node, [item]);
+    const item = { id: r.id, from: lotFront(home), to: lotFront(work), work: wl };
+    const key = `${hl.edge.id}:${hl.t}`;
+    const g = groups.get(key);
+    if (g) g.items.push(item);
+    else groups.set(key, { spot: hl, items: [item] });
   }
   const routed: Commuter[] = [];
-  for (const [node, list] of groups) {
-    const tree = shortestTree(net, node, limit);
-    for (const c of list) {
-      const nodes = nodePath(tree, c.work.node);
-      if (!nodes) continue;
-      for (let i = 1; i < nodes.length; i++) {
-        const e = edgeOf.get(pair(nodes[i - 1], nodes[i]));
-        if (e) traffic[e.id] = (traffic[e.id] ?? 0) + 1;
-      }
-      routed.push({ id: c.id, nodes, home: c.home.at, work: c.work.at });
+  for (const { spot: from, items } of groups.values()) {
+    const tree = spotTree(net, from, limit);
+    for (const c of items) {
+      const walk = walkTo(tree, from, c.work, limit);
+      if (!walk) continue;
+      countTraffic(walk, from, c.work);
+      routed.push({ id: c.id, pts: round2(trail(walk.nodes, from.at, c.work.at, [c.from, c.to])) });
     }
   }
 
   // walkers: the MAX_WALKERS commuters with the lowest hash
   routed.sort((p, q) => unit(p.id, 1) - unit(q.id, 1) || p.id - q.id);
   for (const c of routed.slice(0, MAX_WALKERS)) {
-    const pts = round2(polyline(s.roads, c.nodes, c.home, c.work));
+    const pts = c.pts;
     const travel = polyLength(pts) / WALK_SPEED;
     // leaves within 06:00-07:00 but early enough to be at work by 07:00
     const out = TO_WORK + unit(c.id, 2) * Math.max(0, 60 - travel);
@@ -163,7 +176,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
   for (const t of taverns) {
     const tl = locate(t);
     if (!tl) continue;
-    const tree = shortestTree(net, tl.node, EVENING.tavernReach);
+    const tree = spotTree(net, tl, EVENING.tavernReach);
     const cands: { who: number; house: Building }[] = [];
     for (const [hid, who] of homes) if (isFinishedHouse(s.buildings[hid])) cands.push({ who, house: s.buildings[hid] });
     cands.sort((p, q) => unit(p.who, 5) - unit(q.who, 5) || p.who - q.who);
@@ -171,9 +184,9 @@ export function computeLife(s: SimState, day = 0): LifeData {
     for (const c of cands) {
       if (n >= MAX_GUESTS) break;
       const hl = locate(c.house);
-      const path = hl && nodePath(tree, hl.node);
-      if (!hl || !path) continue;
-      const pts = round2(polyline(s.roads, [...path].reverse(), hl.at, tl.at));
+      const walk = hl && walkTo(tree, tl, hl, EVENING.tavernReach);
+      if (!hl || !walk) continue;
+      const pts = round2(trail([...walk.nodes].reverse(), hl.at, tl.at, [lotFront(c.house), lotFront(t)]));
       if (polyLength(pts) < 5) continue;
       const out = workHours(s).end * 60 + unit(c.who, 6) * 90;
       const back = 21 * 60 + unit(c.who, 7) * 45;
@@ -184,9 +197,9 @@ export function computeLife(s: SimState, day = 0): LifeData {
   }
 
   // carts: one per load of yesterday's output, producer -> camp
-  const camp = nearestNode(net, 0, 0);
+  const camp = snapToRoad(net, 0, 0);
   if (camp) {
-    const tree = shortestTree(net, camp.node, CART_RANGE);
+    const tree = spotTree(net, camp, CART_RANGE);
     let n = 0;
     for (const b of Object.values(s.buildings)) {
       const good = GOOD[b.template];
@@ -195,9 +208,9 @@ export function computeLife(s: SimState, day = 0): LifeData {
       if (!(made > 0)) continue;
       const loads = Math.min(MAX_CARTS, Math.ceil(made / LOAD[good] - 1e-9));
       const l = locate(b);
-      const path = l && nodePath(tree, l.node);
-      if (!l || !path) continue;
-      const pts = round2(polyline(s.roads, path.reverse(), l.at, [0, 0]));
+      const walk = l && walkTo(tree, camp, l, CART_RANGE);
+      if (!l || !walk) continue;
+      const pts = round2(trail([...walk.nodes].reverse(), l.at, camp.at, [lotFront(b), [0, 0]]));
       for (let k = 0; k < loads; k++) {
         trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: WORK_FROM + ((k + 0.5) * (WORK_TO - WORK_FROM)) / loads, speed: CART_SPEED });
       }
@@ -206,13 +219,14 @@ export function computeLife(s: SimState, day = 0): LifeData {
     // timed to arrive when they do (the trip repeats daily, but the family is gone by then)
     let far: number | null = null;
     for (const [node, d] of tree.dist) if (far === null || d > tree.dist.get(far)! || (d === tree.dist.get(far) && node < far)) far = node;
-    const fromFar = far === null || s.incoming.length === 0 ? null : shortestTree(net, far, CART_RANGE);
+    const fromFar = far === null || s.incoming.length === 0 ? null : treeFrom(net, [[far, 0]], CART_RANGE);
     for (const f of s.incoming) {
       const house = s.buildings[f.house];
       const l = fromFar && isFinishedHouse(house) ? locate(house) : null;
-      const path = l && fromFar && nodePath(fromFar, l.node);
-      if (!l || !path || far === null) continue;
-      const pts = round2(polyline(s.roads, path, [s.roads.nodes[far].x, s.roads.nodes[far].y], l.at));
+      const walk = l && fromFar && walkTo(fromFar, null, l, CART_RANGE);
+      if (!l || !walk || far === null) continue;
+      const farAt: [number, number] = [s.roads.nodes[far].x, s.roads.nodes[far].y];
+      const pts = round2(trail(walk.nodes, farAt, l.at, [farAt, lotFront(house)]));
       const depart = f.arrive - polyLength(pts) / CART_SPEED;
       trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: (((depart + START_MINUTE_OF_DAY) % 1440) + 1440) % 1440, speed: CART_SPEED });
     }
