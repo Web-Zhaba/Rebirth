@@ -2,9 +2,10 @@ import { addChronicle } from "./chronicle";
 import { DIG, growDig, isDig, radiusOf } from "./excavation";
 import { assignFields, expectedKg, FIELD, haOf, windowAt, workOf } from "./fields";
 import { CALL } from "./levers";
-import { killResident, vacantHouses } from "./people";
+import { ageOf, fullName, isAdultAge, isFinishedHouse, killResident, syncPeople, vacantHouses } from "./people";
 import { say } from "./production";
 import { nextRandom } from "./rng";
+import { refreshServices } from "./coverage";
 import { covers } from "./services";
 import { calendar, DAY_MIN } from "./time";
 import { massText } from "./units";
@@ -31,6 +32,13 @@ export const DIG_LABOR = 24; // person-hours the artel loses on the sites in pro
 export const DIG_HOURS = 40; // digger-hours the deeper dig adds to the disc
 export const FEAST = { kgPerPerson: 3, minKg: 60, mood: 12 };
 export const SICK = { food: 80, death: 0.5 };
+export const FIRE = { labor: 30 }; // person-hours taken from the sites to put a fire out
+export const FLOOD = { labor: 30, share: 0.15 }; // the share of the food stock a flood spoils if nobody digs
+export const WOLF = { labor: 24, death: 0.25, mood: -4 }; // a hunt costs labor and may cost a hunter; a locked yard costs mood
+export const RAID = { food: 150, death: 0.3 }; // the raiders' price in food; the chance a fight costs an adult
+export const COLLAPSE = { labor: 30, death: 0.5 }; // labor to dig a quarryman out; the chance he dies if left
+export const HOARD = { wares: 10, stone: 2, mood: 8 }; // a find handed to the common store, or shared out for mood
+export const MINSTREL = { food: 40, mood: 6 }; // the feast for the travelling players
 
 type Rand = () => number;
 type Outcome = { sim: SimState; text: string };
@@ -84,6 +92,13 @@ function delayWork(s: SimState, hours: number): SimState {
 }
 
 const activeDig = (s: SimState) => Object.values(s.buildings).find((b) => isDig(b) && b.state === "active" && radiusOf(b) < DIG.maxRadius - 1e-6);
+
+const pick = <T,>(list: T[], rand: Rand): T => list[Math.min(list.length - 1, Math.floor(rand() * list.length))];
+const finishedHouses = (s: SimState) => Object.values(s.buildings).filter(isFinishedHouse);
+const adults = (s: SimState) => Object.values(s.residents).filter((r) => isAdultAge(ageOf(r.born, s.gameMinutes)));
+const quarrymen = (s: SimState) => Object.values(s.residents).filter((r) => r.job !== null && s.buildings[r.job]?.template === "quarry");
+const died = (r: { sex: "m" | "f"; first: string; last: string }) => `${r.sex === "f" ? "погибла" : "погиб"} ${fullName(r)}`;
+const chance = (p: number) => `${Math.round(p * 100)}%`;
 
 // Families with a home and at least two members that no healer covers.
 const sickFamilies = (s: SimState) => Object.values(s.households).filter((h) => h.home !== null && h.members.length >= 2 && s.buildings[h.home] && !covers(s.coverage[h.home], "healer"));
@@ -218,8 +233,7 @@ const EVENTS: EventDef[] = [
     weight: 3,
     cond: (s) => sickFamilies(s).length > 0,
     make: (s, rand) => {
-      const list = sickFamilies(s);
-      const h = list[Math.min(list.length - 1, Math.floor(rand() * list.length))];
+      const h = pick(sickFamilies(s), rand);
       const home = s.buildings[h.home!];
       return {
         title: "Больная семья",
@@ -240,6 +254,148 @@ const EVENTS: EventDef[] = [
       const id = h.members[Math.min(h.members.length - 1, Math.floor(rand() * h.members.length))];
       const r = s.residents[id];
       return { sim: killResident(s, id), text: `Больная семья потеряла близкого: ${r ? `${r.sex === "f" ? "умерла" : "умер"} ${r.first} ${r.last}` : "умер один из них"}${why}` };
+    },
+  },
+  {
+    id: "fire",
+    weight: 3,
+    cond: (s) => finishedHouses(s).length > 0,
+    make: (s, rand) => {
+      const b = pick(finishedHouses(s), rand);
+      const h = Object.values(s.households).find((x) => x.home === b.id);
+      return {
+        title: "Пожар",
+        text: h ? `Загорелась изба семьи ${h.last}. Огонь быстро перекидывается на соседние крыши.` : "Загорелась пустая изба. Огонь быстро перекидывается на соседние крыши.",
+        options: [opt("Тушить всем миром", `Стройки потеряют ${FIRE.labor} чел.-ч, изба уцелеет.`), opt("Дать сгореть", h ? `Изба сгорит, семья ${h.last} останется без крова.` : "Изба сгорит.")],
+        safe: 0,
+        arg: b.id,
+        pos: [b.lot.cx, b.lot.cy],
+      };
+    },
+    apply: (s, o, c) => {
+      if (o === 0) return { sim: delayWork(s, FIRE.labor), text: "Пожар потушили всем миром: изба уцелела, стройки задержались" };
+      const b = s.buildings[c.arg];
+      if (!b || !isFinishedHouse(b)) return { sim: s, text: "Гореть уже нечему" };
+      const rest = { ...s.buildings };
+      delete rest[b.id];
+      const homeless = Object.values(s.households).some((h) => h.home === b.id);
+      return { sim: refreshServices(syncPeople({ ...s, buildings: rest })), text: `Изба сгорела дотла${homeless ? ": семья осталась без крова" : ""}` };
+    },
+  },
+  {
+    id: "flood",
+    weight: 3,
+    cond: (s) => s.stock.food > 0,
+    make: () => ({
+      title: "Паводок",
+      text: "Река поднялась за ночь и подходит к амбарам. Вода ещё не дошла до зерна, но медлить нельзя.",
+      options: [opt("Копать канавы", `Стройки потеряют ${FLOOD.labor} чел.-ч, вода уйдёт от амбаров.`), opt("Ждать, пока отступит", `Вода подмочит около ${chance(FLOOD.share)} запасов еды.`)],
+      safe: 0,
+      arg: 0,
+    }),
+    apply: (s, o) => {
+      if (o === 0) return { sim: delayWork(s, FLOOD.labor), text: "Канавы отвели воду: стройки задержались, запасы целы" };
+      const lost = s.stock.food * FLOOD.share;
+      return { sim: { ...s, stock: { ...s.stock, food: s.stock.food - lost } }, text: `Вода подмочила запасы: погибло около ${massText(lost)} зерна` };
+    },
+  },
+  {
+    id: "wolves",
+    weight: 3,
+    cond: (s) => calendar(s.gameMinutes).season === 3 && adults(s).length > 0,
+    make: () => ({
+      title: "Волки у околицы",
+      text: "Голодные зимние волки ходят вокруг дворов и ночью воют у изб.",
+      options: [opt("Устроить облаву", `Стройки потеряют ${WOLF.labor} чел.-ч; при облаве может погибнуть охотник (${chance(WOLF.death)}).`), opt("Запереть дворы", `Зима в запертых домах тяжелее: настроение во всех семьях ${WOLF.mood}.`)],
+      safe: 1,
+      arg: 0,
+    }),
+    apply: (s, o, c, rand) => {
+      if (o === 1) return { sim: moodAll(s, WOLF.mood), text: "Дворы заперли: волки ушли ни с чем, зима в запертых домах тяжелее" };
+      const d = delayWork(s, WOLF.labor);
+      const pool = adults(s);
+      if (pool.length === 0 || rand() >= WOLF.death) return { sim: d, text: "Волков отогнали облавой: охотники вернулись живыми" };
+      const r = pick(pool, rand);
+      return { sim: killResident(d, r.id), text: `В облаве ${died(r)}` };
+    },
+  },
+  {
+    id: "raid",
+    weight: 2,
+    cond: (s) => s.stock.food >= RAID.food,
+    make: () => ({
+      title: "Разбойники на дороге",
+      text: "Чужие люди с оружием перегородили дорогу и требуют отдать запасы.",
+      options: [opt("Откупиться", `Уйдёт ${RAID.food} кг еды.`), opt("Дать отпор", `С вероятностью ${chance(RAID.death)} в драке погибнет один из взрослых жителей. Еда останется.`)],
+      safe: 0,
+      arg: 0,
+    }),
+    apply: (s, o, c, rand) => {
+      if (o === 0) {
+        const paid = Math.min(RAID.food, s.stock.food);
+        return { sim: { ...s, stock: { ...s.stock, food: s.stock.food - paid } }, text: `Откупились: ушло ${paid} кг еды` };
+      }
+      const pool = adults(s);
+      if (pool.length === 0 || rand() >= RAID.death) return { sim: s, text: "Разбойники побежали после первого же удара" };
+      const r = pick(pool, rand);
+      return { sim: killResident(s, r.id), text: `В драке с разбойниками ${died(r)}` };
+    },
+  },
+  {
+    id: "collapse",
+    weight: 2,
+    cond: (s) => quarrymen(s).length > 0,
+    make: (s, rand) => {
+      const r = pick(quarrymen(s), rand);
+      const b = s.buildings[r.job!];
+      return {
+        title: "Обвал в карьере",
+        text: `В карьере обвалился свод: ${fullName(r)} оказался под камнями.`,
+        options: [opt("Вытаскивать", `Стройки потеряют ${COLLAPSE.labor} чел.-ч: людей роют из-под камней.`), opt("Работать дальше", `С вероятностью ${chance(COLLAPSE.death)} ${fullName(r)} не выберется.`)],
+        safe: 0,
+        arg: r.id,
+        pos: [b.lot.cx, b.lot.cy],
+      };
+    },
+    apply: (s, o, c, rand) => {
+      if (o === 0) return { sim: delayWork(s, COLLAPSE.labor), text: "Человека вытащили из-под камней: стройки задержались" };
+      const r = s.residents[c.arg];
+      if (!r) return { sim: s, text: "Пострадавший уже ушёл из посёлка" };
+      if (rand() >= COLLAPSE.death) return { sim: s, text: `${fullName(r)} выбрался сам` };
+      return { sim: killResident(s, r.id), text: `Под обвалом ${died(r)}` };
+    },
+  },
+  {
+    id: "hoard",
+    weight: 2,
+    cond: () => true,
+    make: () => ({
+      title: "Находка в земле",
+      text: "Под старым полом нашли глиняный горшок с бронзовыми украшениями и утварью.",
+      options: [opt("Сдать в общину", `Пойдёт в запасы: ${HOARD.wares} шт товаров и ${HOARD.stone} т камня.`), opt("Поделить между семьями", `Каждая семья получит свою вещь: настроение +${HOARD.mood}.`)],
+      safe: 0,
+      arg: 0,
+    }),
+    apply: (s, o) => {
+      if (o === 1) return { sim: moodAll(s, HOARD.mood), text: "Находку поделили между семьями: люди довольны" };
+      return { sim: { ...s, stock: { ...s.stock, wares: s.stock.wares + HOARD.wares, stone: s.stock.stone + HOARD.stone } }, text: `Находку сдали в общину: ${HOARD.wares} шт товаров и ${HOARD.stone} т камня` };
+    },
+  },
+  {
+    id: "minstrels",
+    weight: 3,
+    cond: () => true,
+    make: () => ({
+      title: "Скоморохи",
+      text: "В посёлок пришли скоморохи с дудками и ручным медведем. Просят места у костра и угощения.",
+      options: [opt("Угостить", `Уйдёт ${MINSTREL.food} кг еды, настроение во всех семьях +${MINSTREL.mood}.`), opt("Прогнать", NOTHING)],
+      safe: 1,
+      arg: 0,
+    }),
+    apply: (s, o) => {
+      if (o === 1) return { sim: s, text: "Скоморохов прогнали: ушли дальше по дороге" };
+      if (s.stock.food < MINSTREL.food) return { sim: s, text: "Угостить скоморохов было нечем: ушли дальше" };
+      return { sim: moodAll({ ...s, stock: { ...s.stock, food: s.stock.food - MINSTREL.food } }, MINSTREL.mood), text: `Скоморохов угостили: ушло ${MINSTREL.food} кг еды, люди повеселели` };
     },
   },
 ];

@@ -203,7 +203,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         break;
       }
       case "fisher": {
-        const q = h * RATE.fish * (cal.season === 3 ? RATE.winterFish : 1);
+        const q = (h * RATE.fish * (cal.season === 3 ? RATE.winterFish : 1)) * 3;
         addFood(q);
         made(b.id, q);
         break;

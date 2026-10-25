@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { newTally, observe, summarize } from "./away";
 import { advanceTo, step } from "./clock";
 import { BUILDINGS } from "./buildings";
-import { ANSWER_WITHIN, AUTO, CART, COOLDOWN, DIG_LABOR, EVENT_GAP, EVENT_IDS, eventStep, FEAST, FIRST_EVENT, FROST_MOOD, resolveChoice, RETRY, SHELTER_FOOD, SICK } from "./events";
+import { ANSWER_WITHIN, AUTO, CART, COOLDOWN, DIG_LABOR, EVENT_GAP, EVENT_IDS, eventStep, FEAST, FIRE, FIRST_EVENT, FLOOD, FROST_MOOD, HOARD, MINSTREL, RAID, resolveChoice, RETRY, SHELTER_FOOD, SICK, WOLF } from "./events";
 import { FIELD } from "./fields";
 import { emptyGrowth } from "./growth";
 import { Handler, toSnapshot, type Storage } from "./handler";
@@ -98,7 +98,8 @@ describe("scheduling", () => {
   });
 
   it("draws only kinds whose condition holds and retries later when none does", () => {
-    const bare = { ...noPeople(town()), stock: { food: 10, logs: 0, planks: 0, stone: 0, wares: 0 } };
+    // Hoard and minstrels have no condition: put them on cooldown so the bare town has nothing that fits.
+    const bare = { ...noPeople(town()), stock: { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 }, eventLast: { hoard: SUMMER, minstrels: SUMMER } };
     const s = eventStep(bare);
     expect(s.pending).toBeNull();
     expect(s.nextEvent).toBe(bare.gameMinutes + RETRY);
@@ -381,6 +382,104 @@ describe("the choose command", () => {
     expect(snaps.at(-1)).toBeNull();
     await h.handle({ t: "cmd", id: 3, cmd: { type: "choose", id: "cart", option: 1 } });
     expect(results[2].ok).toBe(false);
+  });
+});
+
+describe("fire", () => {
+  // One finished house with a family, and an unfinished site with done work to take back.
+  const fire = () => eventStep(only(family(noPeople(town([bld(1, "izba"), { ...bld(2, "izba", "building"), done: 10 }])), 1, 2), "fire"));
+  it("putting it out takes labor from the sites and keeps the house", () => {
+    const p = fire();
+    expect(p.pending!.arg).toBe(1);
+    const s = resolveChoice(p, 0, false);
+    expect(s.buildings[1]).toBeDefined();
+    expect(s.buildings[2].done).toBe(0); // the site had 10 person-hours done, fewer than the fire takes
+  });
+  it("letting it burn removes the house and the family has no home", () => {
+    const s = resolveChoice(fire(), 1, false);
+    expect(s.buildings[1]).toBeUndefined();
+    expect(s.households[1].home).toBeNull();
+    expect(s.chronicle.at(-1)!.text).toContain("без крова");
+  });
+});
+
+describe("flood", () => {
+  const flood = () => eventStep(only(town([bld(1, "izba")]), "flood"));
+  it("waiting out the water spoils a share of the food", () => {
+    const p = flood();
+    expect(resolveChoice(p, 1, false).stock.food).toBeCloseTo(2000 * (1 - FLOOD.share));
+  });
+  it("digging ditches keeps the food", () => {
+    expect(resolveChoice(flood(), 0, false).stock.food).toBe(2000);
+  });
+});
+
+describe("wolves", () => {
+  const wolves = (s: SimState) => eventStep(only(s, "wolves"));
+  it("come in winter only", () => {
+    const home = family(noPeople(town([bld(1, "izba")])), 1, 3);
+    expect(wolves({ ...home, gameMinutes: at(10, 9) }).pending).toBeNull();
+    expect(wolves({ ...home, gameMinutes: at(26, 9) }).pending?.id).toBe("wolves");
+  });
+  it("a hunt may cost a hunter", () => {
+    const p = wolves({ ...family(noPeople(town([bld(1, "izba")])), 1, 3), gameMinutes: at(26, 9) });
+    const sizes = new Set<number>();
+    for (let i = 0; i < 40; i++) sizes.add(Object.keys(resolveChoice({ ...p, rng: i * 7919 + 3 }, 0, false).residents).length);
+    expect([...sizes].sort()).toEqual([2, 3]);
+  });
+  it("locking the yards lowers the mood of every family", () => {
+    const p = wolves({ ...family(noPeople(town([bld(1, "izba")])), 1, 3), gameMinutes: at(26, 9) });
+    expect(moods(resolveChoice(p, 1, false))).toEqual(moods(p).map((m) => m + WOLF.mood));
+  });
+});
+
+describe("raid", () => {
+  it("paying the raiders takes food; a fight may cost an adult", () => {
+    const p = eventStep(only(town([bld(1, "izba")]), "raid"));
+    expect(resolveChoice(p, 0, false).stock.food).toBe(2000 - RAID.food);
+    const sizes = new Set<number>();
+    const q = eventStep(only(family(noPeople(town([bld(1, "izba")])), 1, 3), "raid"));
+    for (let i = 0; i < 40; i++) sizes.add(Object.keys(resolveChoice({ ...q, rng: i * 7919 + 3 }, 1, false).residents).length);
+    expect([...sizes].sort()).toEqual([2, 3]);
+  });
+});
+
+describe("collapse", () => {
+  // A quarryman: the first resident of the family is put to work at the quarry.
+  const collapse = () => {
+    const base = family(noPeople(town([bld(1, "izba"), bld(2, "quarry")])), 1, 2);
+    const [first] = Object.keys(base.residents).map(Number);
+    const s = { ...base, residents: { ...base.residents, [first]: { ...base.residents[first], job: 2 } } };
+    return { first, p: eventStep(only(s, "collapse")) };
+  };
+  it("is drawn only when someone works at a quarry", () => {
+    const { first, p } = collapse();
+    expect(p.pending!.arg).toBe(first);
+    expect(eventStep(only(noPeople(town([bld(1, "izba")])), "collapse")).pending).toBeNull();
+  });
+  it("digging him out costs labor and keeps him", () => {
+    const { first, p } = collapse();
+    expect(resolveChoice(p, 0, false).residents[first]).toBeDefined();
+  });
+  it("leaving him may cost his life", () => {
+    const { p } = collapse();
+    const sizes = new Set<number>();
+    for (let i = 0; i < 40; i++) sizes.add(Object.keys(resolveChoice({ ...p, rng: i * 7919 + 3 }, 1, false).residents).length);
+    expect([...sizes].sort()).toEqual([1, 2]);
+  });
+});
+
+describe("hoard and minstrels", () => {
+  it("a find given to the common store adds wares and stone", () => {
+    const s = resolveChoice(eventStep(only(town([bld(1, "izba")]), "hoard")), 0, false);
+    expect(s.stock.wares).toBe(HOARD.wares);
+    expect(s.stock.stone).toBe(HOARD.stone);
+  });
+  it("feeding the minstrels spends food for mood", () => {
+    const p = eventStep(only(family(noPeople(town([bld(1, "izba")])), 1, 2), "minstrels"));
+    const s = resolveChoice(p, 0, false);
+    expect(s.stock.food).toBe(p.stock.food - MINSTREL.food);
+    expect(moods(s)).toEqual(moods(p).map((m) => m + MINSTREL.mood));
   });
 });
 
