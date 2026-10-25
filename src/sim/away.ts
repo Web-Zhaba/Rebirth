@@ -42,10 +42,7 @@ export function observe(t: Tally, prev: SimState, next: SimState): void {
     else if (e.kind === "death") t.deaths++;
     else if (e.kind === "arrival") t.arrivals += people(e.text);
     else if (e.kind === "departure") t.departures += people(e.text);
-  }
-  if (next.chronicle !== prev.chronicle) {
-    const last = prev.chronicle[prev.chronicle.length - 1];
-    for (const e of next.chronicle.slice(last ? next.chronicle.lastIndexOf(last) + 1 : 0)) if (e.kind.startsWith("event:") && e.text.endsWith(AUTO)) t.choices.push(e.text);
+    else if (e.kind === "event" && e.text.endsWith(AUTO)) t.choices.push(e.text);
   }
   if (next.buildings !== prev.buildings) {
     for (const b of Object.values(next.buildings)) {

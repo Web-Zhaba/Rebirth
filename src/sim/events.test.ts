@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { newTally, observe, summarize } from "./away";
 import { advanceTo, step } from "./clock";
 import { BUILDINGS } from "./buildings";
-import { ANSWER_WITHIN, CART, COOLDOWN, DIG_LABOR, EVENT_GAP, EVENT_IDS, eventStep, FEAST, FIRST_EVENT, FROST_MOOD, resolveChoice, RETRY, SHELTER_FOOD, SICK } from "./events";
+import { ANSWER_WITHIN, AUTO, CART, COOLDOWN, DIG_LABOR, EVENT_GAP, EVENT_IDS, eventStep, FEAST, FIRST_EVENT, FROST_MOOD, resolveChoice, RETRY, SHELTER_FOOD, SICK } from "./events";
 import { FIELD } from "./fields";
 import { emptyGrowth } from "./growth";
 import { Handler, toSnapshot, type Storage } from "./handler";
@@ -301,7 +301,8 @@ describe("auto-resolve and offline", () => {
     const late = eventStep({ ...p, gameMinutes: p.pending!.until, nextEvent: 1e12 });
     expect(late.pending).toBeNull();
     expect(late.incoming).toEqual([]);
-    expect(late.chronicle.at(-1)!.text).toMatch(/\(никто не ответил\)$/);
+    expect(late.events.at(-1)!.text).toMatch(/\(никто не ответил\)$/);
+    expect(late.chronicle).toBe(p.chronicle); // routine: the feed only, not the chronicle
   });
   it("step resolves it too", () => {
     const p = eventStep(only(town([bld(1, "izba")]), "cart"));
@@ -319,7 +320,6 @@ describe("auto-resolve and offline", () => {
     const away = summarize(tally, start, end, gap);
     expect(away.choices.length).toBeGreaterThan(0);
     expect(away.choices.every((t) => t.endsWith("(никто не ответил)"))).toBe(true);
-    expect(away.chronicle.some((e) => e.kind.startsWith("event:"))).toBe(true);
   });
 });
 
@@ -381,5 +381,18 @@ describe("the choose command", () => {
     expect(snaps.at(-1)).toBeNull();
     await h.handle({ t: "cmd", id: 3, cmd: { type: "choose", id: "cart", option: 1 } });
     expect(results[2].ok).toBe(false);
+  });
+});
+
+describe("chronicle cleanup", () => {
+  it("a save drops the events nobody answered from the chronicle and keeps the rest", () => {
+    const base = town([bld(1, "izba")]);
+    const chronicle = [
+      { at: 1, kind: "house", text: "Построен первый дом" },
+      { at: 2, kind: "event:cart", text: `Торговая подвода: разъехались${AUTO}` },
+      { at: 3, kind: "event:feast", text: "Праздник урожая: устроили праздник" },
+    ];
+    const save = parseSave({ version: 4, city, sim: { ...base, chronicle } }, NOW);
+    expect(save!.sim.chronicle.map((e) => e.kind)).toEqual(["house", "event:feast"]);
   });
 });

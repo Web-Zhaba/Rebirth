@@ -4,7 +4,7 @@ import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
-import { parseEventLast, parsePending } from "./events";
+import { AUTO, parseEventLast, parsePending } from "./events";
 import { migrateGoals, parseGoals } from "./goals";
 import { emptyLevers, type Levers } from "./levers";
 import { migrateText } from "./legacyText";
@@ -378,7 +378,9 @@ function parseChronicle(v: unknown): ChronicleEntry[] {
   if (!Array.isArray(v)) return [];
   const out: ChronicleEntry[] = [];
   for (const e of v) {
-    if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && typeof e.text === "string") out.push({ at: e.at, kind: e.kind, text: migrateText(e.text) });
+    if (!isRecord(e) || !isNum(e.at) || typeof e.kind !== "string" || typeof e.text !== "string") continue;
+    if (e.kind.startsWith("event:") && e.text.endsWith(AUTO)) continue; // routine an earlier version wrote here (now the feed only)
+    out.push({ at: e.at, kind: e.kind, text: migrateText(e.text) });
   }
   return out.slice(-CHRONICLE_CAP);
 }

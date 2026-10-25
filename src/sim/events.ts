@@ -262,7 +262,8 @@ function generator(s: SimState): { rand: Rand; state: () => number } {
 
 // ---------- resolving ----------
 
-// Applies answer `option` to the pending event: effects, the outcome in the feed and the chronicle.
+// Applies answer `option` to the pending event: effects and the outcome in the feed. Only an event the player answered
+// goes to the chronicle too; the ones that resolve on their own would fill it with routine.
 export function resolveChoice(s: SimState, option: 0 | 1, auto: boolean): SimState {
   const c = s.pending;
   const def = c && BY_ID.get(c.id);
@@ -275,7 +276,7 @@ export function resolveChoice(s: SimState, option: 0 | 1, auto: boolean): SimSta
     ...out.sim,
     rng: out.sim.rng !== s.rng ? out.sim.rng : g.state(), // shelter draws its own arrival time
     events: say(out.sim.events, at, "event", text, c.pos),
-    chronicle: addChronicle(out.sim.chronicle, at, `event:${c.id}`, text),
+    chronicle: auto ? out.sim.chronicle : addChronicle(out.sim.chronicle, at, `event:${c.id}`, text),
   };
 }
 
