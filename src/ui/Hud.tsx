@@ -3,6 +3,7 @@ import { useEffect } from "preact/hooks";
 import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
 import { cutOffEdges, WORK_END, WORK_START } from "../sim/roads";
 import type { City } from "../sim/types";
+import { massText } from "../sim/units";
 import { SERVICE_LIST } from "../sim/services";
 import { OVERLAYS, overlay, tool, ZONE_COLORS, type Overlay } from "../map/tools";
 import { economy, events, people, reset, roads, services, setSpeed, speed, stock, zones } from "../simClient";
@@ -90,7 +91,7 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
   let fieldLine: string | null = null;
   if (eco && eco.fields.assignedHa > 0) {
     if (eco.fields.window === "sowing") fieldLine = `Сев: ${Math.round(eco.fields.sown * 100)} %`;
-    else if (eco.fields.window === "harvest") fieldLine = `Жатва: ${tons(eco.fields.reaped)} из ${tons(eco.fields.expected)} т`;
+    else if (eco.fields.window === "harvest") fieldLine = `Жатва: ${massText(eco.fields.reaped)} из ${massText(eco.fields.expected)}`;
   }
   const ga = (fieldArea / 10000).toFixed(1).replace(".", ",");
   return (

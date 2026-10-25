@@ -1,3 +1,4 @@
+import { DAYS_PER_SEASON, YEAR_DAYS } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, daylight, OFFLINE_CAP, TICK_MS } from "./clock";
 import { Handler, type Storage } from "./handler";
@@ -5,8 +6,8 @@ import type { FromWorker } from "./protocol";
 import { emptyGrowth, seedOf } from "./growth";
 import { emptyRoads } from "./roads";
 import { emptyZones } from "./zones";
-import { migrateLegacy, parseSaveV3 } from "./save";
-import type { City, RoadGraph, SaveV3 } from "./types";
+import { migrateLegacy, parseSave } from "./save";
+import type { City, RoadGraph, SaveV4 } from "./types";
 
 const NOW = 1_800_000_000_000;
 const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
@@ -55,10 +56,10 @@ describe("clock", () => {
   it("calendar start, rollover", () => {
     expect(calendar(0)).toEqual({ year: 1, season: 0, dayOfSeason: 1, dayOfYear: 1, hour: 6, minute: 0 });
     expect(calendar(18 * 60)).toMatchObject({ dayOfSeason: 2, hour: 0, minute: 0 });
-    expect(calendar(90 * 1440)).toMatchObject({ season: 1, dayOfSeason: 1, hour: 6 });
-    const y2 = calendar(360 * 1440);
+    expect(calendar(DAYS_PER_SEASON * 1440)).toMatchObject({ season: 1, dayOfSeason: 1, hour: 6 });
+    const y2 = calendar(YEAR_DAYS * 1440);
     expect(y2).toMatchObject({ year: 2, season: 0, dayOfSeason: 1, dayOfYear: 1 });
-    expect(calendar(359 * 1440)).toMatchObject({ year: 1, season: 3, dayOfSeason: 90, dayOfYear: 360 });
+    expect(calendar((YEAR_DAYS - 1) * 1440)).toMatchObject({ year: 1, season: 3, dayOfSeason: DAYS_PER_SEASON, dayOfYear: YEAR_DAYS });
   });
   it("daylight extremes", () => {
     expect(daylight(0)).toBe(0);
@@ -72,48 +73,48 @@ describe("clock", () => {
 });
 
 describe("save", () => {
-  const valid: SaveV3 = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50, roads: roadsInProgress(), zones: emptyZones(), ...growth(50) } };
+  const valid: SaveV4 = { version: 4, city, sim: { realTime: NOW, gameMinutes: 50, roads: roadsInProgress(), zones: emptyZones(), ...growth(50) } };
   it("accepts valid", () => {
-    expect(parseSaveV3(valid, NOW)).toEqual(valid);
+    expect(parseSave(valid, NOW)).toEqual(valid);
   });
-  it("accepts a v3 save without roads as an empty graph", () => {
-    const old = { version: 3, city, sim: { realTime: NOW, gameMinutes: 50 } };
-    expect(parseSaveV3(old, NOW)).toEqual({ ...old, sim: { ...old.sim, roads: emptyRoads(), zones: emptyZones(), ...growth(50) } });
+  it("accepts a v4 save without roads as an empty graph", () => {
+    const old = { version: 4, city, sim: { realTime: NOW, gameMinutes: 50 } };
+    expect(parseSave(old, NOW)).toEqual({ ...old, sim: { ...old.sim, roads: emptyRoads(), zones: emptyZones(), ...growth(50) } });
   });
   it("rejects broken roads", () => {
     const withRoads = (roads: unknown) => ({ ...valid, sim: { ...valid.sim, roads } });
     const r = roadsInProgress();
-    expect(parseSaveV3(withRoads(null), NOW)).toBeNull();
-    expect(parseSaveV3(withRoads({ ...r, nextId: 8 }), NOW)).toBeNull();
-    expect(parseSaveV3(withRoads({ ...r, nodes: { ...r.nodes, 1: { id: 1, x: NaN, y: 0 } } }), NOW)).toBeNull();
-    expect(parseSaveV3(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], b: 99 } } }), NOW)).toBeNull();
-    expect(parseSaveV3(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], kind: "road" } } }), NOW)).toBeNull();
-    expect(parseSaveV3(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], length: 0 } } }), NOW)).toBeNull();
-    expect(parseSaveV3(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], done: 121 } } }), NOW)).toBeNull();
+    expect(parseSave(withRoads(null), NOW)).toBeNull();
+    expect(parseSave(withRoads({ ...r, nextId: 8 }), NOW)).toBeNull();
+    expect(parseSave(withRoads({ ...r, nodes: { ...r.nodes, 1: { id: 1, x: NaN, y: 0 } } }), NOW)).toBeNull();
+    expect(parseSave(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], b: 99 } } }), NOW)).toBeNull();
+    expect(parseSave(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], kind: "road" } } }), NOW)).toBeNull();
+    expect(parseSave(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], length: 0 } } }), NOW)).toBeNull();
+    expect(parseSave(withRoads({ ...r, edges: { ...r.edges, 6: { ...r.edges[6], done: 121 } } }), NOW)).toBeNull();
   });
   it("rejects garbage", () => {
-    expect(parseSaveV3(null, NOW)).toBeNull();
-    expect(parseSaveV3("x", NOW)).toBeNull();
-    expect(parseSaveV3({ ...valid, version: 2 }, NOW)).toBeNull();
-    expect(parseSaveV3({ ...valid, city: { ...city, name: "" } }, NOW)).toBeNull();
-    expect(parseSaveV3({ ...valid, city: { ...city, name: "x".repeat(41) } }, NOW)).toBeNull();
-    expect(parseSaveV3({ ...valid, city: { ...city, lat: 91 } }, NOW)).toBeNull();
-    expect(parseSaveV3({ ...valid, sim: { realTime: NOW + 120_000, gameMinutes: 0 } }, NOW)).toBeNull();
-    expect(parseSaveV3({ ...valid, sim: { realTime: NOW, gameMinutes: -1 } }, NOW)).toBeNull();
-    expect(parseSaveV3({ ...valid, sim: { realTime: NaN, gameMinutes: 0 } }, NOW)).toBeNull();
+    expect(parseSave(null, NOW)).toBeNull();
+    expect(parseSave("x", NOW)).toBeNull();
+    expect(parseSave({ ...valid, version: 2 }, NOW)).toBeNull();
+    expect(parseSave({ ...valid, city: { ...city, name: "" } }, NOW)).toBeNull();
+    expect(parseSave({ ...valid, city: { ...city, name: "x".repeat(41) } }, NOW)).toBeNull();
+    expect(parseSave({ ...valid, city: { ...city, lat: 91 } }, NOW)).toBeNull();
+    expect(parseSave({ ...valid, sim: { realTime: NOW + 120_000, gameMinutes: 0 } }, NOW)).toBeNull();
+    expect(parseSave({ ...valid, sim: { realTime: NOW, gameMinutes: -1 } }, NOW)).toBeNull();
+    expect(parseSave({ ...valid, sim: { realTime: NaN, gameMinutes: 0 } }, NOW)).toBeNull();
   });
   it("migrates v1 and v2", () => {
     const legacyCity = { ...city, cell: "891234" };
     for (const version of [1, 2]) {
       const raw = JSON.stringify({ version, city: legacyCity, economy: { food: 5 } });
       const s = migrateLegacy(raw, NOW)!;
-      expect(s).toEqual({ version: 3, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
+      expect(s).toEqual({ version: 4, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
       expect(s.city).not.toHaveProperty("cell");
     }
   });
   it("rejects bad legacy", () => {
     expect(migrateLegacy("not json", NOW)).toBeNull();
-    expect(migrateLegacy(JSON.stringify({ version: 3, city }), NOW)).toBeNull();
+    expect(migrateLegacy(JSON.stringify({ version: 4, city }), NOW)).toBeNull();
     expect(migrateLegacy(JSON.stringify({ version: 2, city: { ...city, name: 5 } }), NOW)).toBeNull();
   });
 });
@@ -150,20 +151,20 @@ describe("handler", () => {
     expect(m.migrated).toBe(true);
     expect(m.save?.city).toEqual(city);
     expect(m.away).toBeNull();
-    expect((get() as SaveV3).version).toBe(3);
+    expect((get() as SaveV4).version).toBe(4);
   });
   it("load existing reports away", async () => {
-    const saved: SaveV3 = { version: 3, city, sim: { realTime: NOW - 3_600_000, gameMinutes: 100, roads: emptyRoads(), zones: emptyZones(), ...growth() } };
+    const saved: SaveV4 = { version: 4, city, sim: { realTime: NOW - 3_600_000, gameMinutes: 100, roads: emptyRoads(), zones: emptyZones(), ...growth() } };
     const { h, out, get } = setup(saved);
     await h.handle({ t: "load", legacy: null, now: NOW });
     const m = out.find((x) => x.t === "loaded") as Extract<FromWorker, { t: "loaded" }>;
     expect(m.migrated).toBe(false);
     expect(m.away).toMatchObject({ realMs: 3_600_000, gameMinutes: 3600 });
     expect(m.save?.sim.gameMinutes).toBe(3700);
-    expect((get() as SaveV3).sim.gameMinutes).toBe(3700);
+    expect((get() as SaveV4).sim.gameMinutes).toBe(3700);
   });
   it("short gap gives no away report", async () => {
-    const { h, out } = setup({ version: 3, city, sim: { realTime: NOW - 30_000, gameMinutes: 0, roads: emptyRoads() } });
+    const { h, out } = setup({ version: 4, city, sim: { realTime: NOW - 30_000, gameMinutes: 0, roads: emptyRoads() } });
     await h.handle({ t: "load", legacy: null, now: NOW });
     expect((out[0] as Extract<FromWorker, { t: "loaded" }>).away).toBeNull();
   });
@@ -171,7 +172,7 @@ describe("handler", () => {
     const { h, out, get } = setup();
     await h.handle({ t: "found", city, now: NOW });
     expect(out[0]).toMatchObject({ t: "loaded", migrated: false, away: null });
-    expect(get()).toEqual({ version: 3, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
+    expect(get()).toEqual({ version: 4, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
   });
   it("tick posts snapshot only when time advanced", async () => {
     const { h, out } = setup();
@@ -198,7 +199,7 @@ describe("handler", () => {
     expect(out[1]).toEqual({ t: "cmdResult", id: 7, ok: true });
     const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
     expect(Object.keys(snap.sim.roads.edges)).toHaveLength(1);
-    expect((get() as SaveV3).sim.roads).toEqual(snap.sim.roads);
+    expect((get() as SaveV4).sim.roads).toEqual(snap.sim.roads);
   });
   it("rejected commands change nothing", async () => {
     const { h, out, puts } = setup();

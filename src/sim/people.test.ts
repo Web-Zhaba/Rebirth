@@ -4,6 +4,7 @@ import { BUILDINGS } from "./buildings";
 import { demand, emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import {
+  ageOf,
   builderCount,
   RATES,
   constructionWork,
@@ -23,9 +24,9 @@ import {
 } from "./people";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
-import { parseSaveV3 } from "./save";
-import { YEAR_MIN } from "./time";
-import type { Building, City, Household, Resident, RoadGraph, SaveV3, SimState, TerrainInfo } from "./types";
+import { parseSave } from "./save";
+import { YEAR_MIN, YEAR_SCALE } from "./time";
+import type { Building, City, Household, Resident, RoadGraph, SaveV4, SimState, TerrainInfo } from "./types";
 import { emptyZones, qkey, regenerateCells } from "./zones";
 
 const NOW = 1_800_000_000_000;
@@ -488,10 +489,10 @@ describe("determinism", () => {
 
 describe("save", () => {
   const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
-  const wrap = (sim: Record<string, unknown>) => ({ version: 3, city, sim: { realTime: NOW, gameMinutes: 200, roads: emptyRoads(), ...sim } });
+  const wrap = (sim: Record<string, unknown>) => ({ version: 4, city, sim: { realTime: NOW, gameMinutes: 200, roads: emptyRoads(), ...sim } });
 
   it("the user's save without residents gets the founders", () => {
-    const s = parseSaveV3(wrap({ rng: 12345, buildings: {}, nextBuildingId: 1, lastSpawn: { res: -60, craft: -60, trade: -60 } }), NOW)!;
+    const s = parseSave(wrap({ rng: 12345, buildings: {}, nextBuildingId: 1, lastSpawn: { res: -60, craft: -60, trade: -60 } }), NOW)!;
     expect(Object.keys(s.sim.residents)).toHaveLength(10);
     expect(Object.values(s.sim.households).every((h) => h.home === null)).toBe(true);
     const f = createFounders(12345, 200);
@@ -502,12 +503,51 @@ describe("save", () => {
   it("round-trips people", () => {
     const sim = day(town(houses(3)));
     const raw = JSON.parse(JSON.stringify(sim));
-    const s = parseSaveV3({ version: 3, city, sim: { ...raw, roads: sim.roads, realTime: NOW } }, NOW)!;
+    const s = parseSave({ version: 4, city, sim: { ...raw, roads: sim.roads, realTime: NOW } }, NOW)!;
     expect(s.sim.residents).toEqual(sim.residents);
     expect(s.sim.households).toEqual(sim.households);
     expect(s.sim.events).toEqual(sim.events);
     expect(s.sim.nextPersonId).toBe(sim.nextPersonId);
     expect(s.sim.nextHouseholdId).toBe(sim.nextHouseholdId);
+  });
+  it("a v3 save (360-day year) keeps every age, scales school days and keeps running", () => {
+    const sim = day(town(houses(3)));
+    const raw = JSON.parse(JSON.stringify(sim));
+    const OLD_YEAR = 360 * 1440;
+    const gm = 400 * 1440;
+    const [a, b] = Object.keys(raw.residents);
+    raw.residents[a] = { ...raw.residents[a], born: gm - 30 * OLD_YEAR, school: 0 };
+    raw.residents[b] = { ...raw.residents[b], born: gm - 10 * OLD_YEAR, school: 360 };
+    const v3 = { version: 3, city, sim: { ...raw, roads: sim.roads, realTime: NOW, gameMinutes: gm } };
+    const s = parseSave(v3, NOW)!;
+    expect(s.version).toBe(4);
+    expect(s.sim.gameMinutes).toBe(gm);
+    expect(ageOf(s.sim.residents[Number(a)].born, gm)).toBeCloseTo(30);
+    expect(ageOf(s.sim.residents[Number(b)].born, gm)).toBeCloseTo(10);
+    expect(s.sim.residents[Number(b)].school).toBe(Math.round(360 * YEAR_SCALE));
+    const run = advanceTo(s.sim, NOW + 5 * 1440 * 1000);
+    expect(run.gameMinutes).toBe(gm + 5 * 1440);
+    expect(JSON.stringify(run)).not.toMatch(/NaN|null.*Infinity/);
+    for (const r of Object.values(run.residents)) expect(Number.isFinite(r.born)).toBe(true);
+    expect(Object.keys(run.residents).length).toBeGreaterThan(0);
+  });
+  it("loading a v3 save keeps the original copy once, then writes v4", async () => {
+    const sim = day(town(houses(3)));
+    const v3 = { version: 3, city, sim: { ...JSON.parse(JSON.stringify(sim)), roads: sim.roads, realTime: NOW } };
+    let current: unknown = v3;
+    const kept: [unknown, number][] = [];
+    const storage: Storage = {
+      get: async () => current,
+      put: async (s) => void (current = s),
+      clear: async () => void (current = null),
+      keepOld: async (raw, version) => void kept.push([raw, version]),
+    };
+    const h = new Handler(storage, () => {});
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    expect(kept).toEqual([[v3, 3]]);
+    expect((current as { version: number }).version).toBe(4);
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    expect(kept.length).toBe(1); // a v4 save is not kept again
   });
   it("broken people data resets to founders, the town survives", () => {
     const sim = day(town(houses(3)));
@@ -525,7 +565,7 @@ describe("save", () => {
       { ...keep, households: "x" },
     ];
     for (const b of bad) {
-      const s = parseSaveV3({ version: 3, city, sim: b }, NOW)!;
+      const s = parseSave({ version: 4, city, sim: b }, NOW)!;
       expect(s).not.toBeNull();
       const hs = Object.values(s.sim.households);
       expect(Object.keys(s.sim.residents)).toHaveLength(10);
@@ -539,7 +579,7 @@ describe("save", () => {
     const sim = day(custom(town([building(1, "izba", 100), building(2, "smithy", 400)]), [{ home: 1, people: [{}, {}] }]));
     expect(Object.values(sim.residents).every((r) => r.job === 2)).toBe(true);
     const raw = JSON.parse(JSON.stringify(sim));
-    const s = parseSaveV3({ version: 3, city, sim: { ...raw, roads: sim.roads, realTime: NOW, buildings: {}, nextBuildingId: 3 } }, NOW)!;
+    const s = parseSave({ version: 4, city, sim: { ...raw, roads: sim.roads, realTime: NOW, buildings: {}, nextBuildingId: 3 } }, NOW)!;
     expect(Object.keys(s.sim.residents)).toHaveLength(2);
     expect(s.sim.households[1].home).toBeNull();
     expect(Object.values(s.sim.residents).every((r) => r.job === null && r.commute === null)).toBe(true);
@@ -593,7 +633,7 @@ describe("handler: persistence and query channel", () => {
     };
     const out: FromWorker[] = [];
     const h = new Handler(storage, (m) => out.push(m));
-    return { h, out, puts: () => puts, get: () => stored as SaveV3 };
+    return { h, out, puts: () => puts, get: () => stored as SaveV4 };
   }
 
   it("saves every 10 wall seconds while ticking, not every tick", async () => {
@@ -623,7 +663,7 @@ describe("handler: persistence and query channel", () => {
     expect(b).toBeDefined();
     s = { ...s, buildings: { [b.id]: { ...b, state: "active", done: b.labor } } };
     s = { ...s, households: { ...s.households, 1: { ...s.households[1], home: b.id } } };
-    const { h, out } = setup({ version: 3, city, sim: s });
+    const { h, out } = setup({ version: 4, city, sim: s });
     await h.handle({ t: "load", legacy: null, now: NOW });
     out.length = 0;
     await h.handle({ t: "query", id: 5, q: { type: "building", id: b.id } });

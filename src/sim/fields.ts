@@ -1,23 +1,23 @@
 import { BUILDINGS } from "./buildings";
 import { digDone } from "./excavation";
-import { calendar } from "./time";
+import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
 import type { Building, Field, FieldWork, Resident, SimState, Stock, Window } from "./types";
 
 export const FISH = { kgHour: 0.2, winter: 0.5 }; // kg of food per worker-hour, winter factor
 
 // Field work tuning (design: PLAN.md section 8).
 export const FIELD = {
-  yieldKgHa: 400, // net of seed
-  sowHoursHa: 50,
-  harvestHoursHa: 200,
+  yieldKgHa: 400 * YEAR_SCALE, // per year, net of seed
+  sowHoursHa: 50 * YEAR_SCALE,
+  harvestHoursHa: 200 * YEAR_SCALE,
   reapKgHour: 2,
   haPerJob: 2.5,
   maxJobs: 16,
   radius: 400, // m, from the lot centre of a gumno to the centroid of a field
-  harvestDays: 45, // of autumn
+  harvestDays: DAYS_PER_SEASON / 2, // first half of autumn
 };
-// Day of the year on which the harvest window closes (autumn starts on day 181).
-export const HARVEST_END_DAY = 2 * 90 + FIELD.harvestDays;
+// Day of the year on which the harvest window closes (autumn is the third season).
+export const HARVEST_END_DAY = 2 * DAYS_PER_SEASON + FIELD.harvestDays;
 
 export const haOf = (f: Field): number => f.area / 10_000;
 

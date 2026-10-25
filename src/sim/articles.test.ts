@@ -4,8 +4,8 @@ import { emptyGrowth } from "./growth";
 import { Handler, type Storage } from "./handler";
 import type { ArticleInput, FromWorker } from "./protocol";
 import { emptyRoads } from "./roads";
-import { parseSaveV3 } from "./save";
-import type { City, SaveV3, SimState } from "./types";
+import { parseSave } from "./save";
+import type { City, SaveV4, SimState } from "./types";
 import { emptyZones } from "./zones";
 
 const NOW = 1_800_000_000_000;
@@ -70,20 +70,20 @@ describe("addArticles", () => {
 });
 
 describe("articles in saves", () => {
-  const save = (sim: SimState): unknown => JSON.parse(JSON.stringify({ version: 3, city, sim } satisfies SaveV3));
+  const save = (sim: SimState): unknown => JSON.parse(JSON.stringify({ version: 4, city, sim } satisfies SaveV4));
   it("survive a round trip; a new town and an older save get an empty list", () => {
     expect(emptyGrowth(1).articles).toEqual([]);
     const s = ok(town(), [art(1), art(2, { lang: "en", id: "en:2", url: "https://en.wikipedia.org/?curid=2" })]);
-    expect(parseSaveV3(save(s), NOW)!.sim.articles).toEqual(s.articles);
+    expect(parseSave(save(s), NOW)!.sim.articles).toEqual(s.articles);
     const raw = save(s) as { sim: Record<string, unknown> };
     delete raw.sim.articles;
-    expect(parseSaveV3(raw, NOW)!.sim.articles).toEqual([]);
+    expect(parseSave(raw, NOW)!.sim.articles).toEqual([]);
   });
   it("a malformed record never loses the town; broken entries are dropped", () => {
     for (const junk of [7, "x", {}, null]) {
       const raw = save(town()) as { sim: Record<string, unknown> };
       raw.sim.articles = junk;
-      const p = parseSaveV3(raw, NOW);
+      const p = parseSave(raw, NOW);
       expect(p).not.toBeNull();
       expect(p!.sim.articles).toEqual([]);
     }
@@ -94,7 +94,7 @@ describe("articles in saves", () => {
 
 describe("addArticles through the worker", () => {
   it("is acknowledged, persisted, posted once and a repeat changes nothing", async () => {
-    let stored: unknown = JSON.parse(JSON.stringify({ version: 3, city, sim: town() }));
+    let stored: unknown = JSON.parse(JSON.stringify({ version: 4, city, sim: town() }));
     const storage: Storage = { get: async () => stored, put: async (x) => void (stored = JSON.parse(JSON.stringify(x))), clear: async () => void (stored = undefined) };
     const out: FromWorker[] = [];
     const h = new Handler(storage, (m) => out.push(m));
@@ -105,7 +105,7 @@ describe("addArticles through the worker", () => {
     const snap = snaps[snaps.length - 1];
     expect(snap.articles?.map((a) => a.id)).toEqual(["ru:1"]);
     expect(snap.chronicle?.some((e) => e.text.includes("Милютина"))).toBe(true);
-    expect((stored as SaveV3).sim.articles).toHaveLength(1);
+    expect((stored as SaveV4).sim.articles).toHaveLength(1);
     const before = out.length;
     await h.handle({ t: "cmd", id: 2, cmd: { type: "addArticles", articles: [art(1)] } });
     expect(out.slice(before)).toEqual([{ t: "cmdResult", id: 2, ok: true }]);

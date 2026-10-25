@@ -1,10 +1,11 @@
+import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { advanceBuildings, demand, emptyGrowth, nextRandom, reconcile, seedOf, townStats } from "./growth";
 import { builderCount, peopleStats } from "./people";
 import { addRoad, emptyRoads, removeEdge } from "./roads";
-import { parseSaveV3 } from "./save";
+import { parseSave } from "./save";
 import type { Building, City, RoadGraph, SimState, TerrainInfo, ZoneCell, ZoneType } from "./types";
 import { emptyZones, paintCells, qkey, regenerateCells, signedArea } from "./zones";
 
@@ -196,7 +197,7 @@ describe("construction", () => {
     expect(builderCount(s)).toBe(6);
     expect(step(s).buildings[1].done).toBeCloseTo((6 * BASE_TICK) / 60);
     // two adults get regular jobs: fewer hands on the site
-    const adults = Object.values(s.residents).filter((r) => r.born < -16 * 360 * 1440 + at7);
+    const adults = Object.values(s.residents).filter((r) => r.born < -16 * YEAR_MIN + at7);
     const busy = { ...s.residents };
     for (const r of adults.slice(0, 2)) busy[r.id] = { ...r, job: 99, commute: 5 };
     const s2 = { ...s, residents: busy };
@@ -263,13 +264,13 @@ describe("determinism", () => {
 describe("save", () => {
   const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
   const withSim = (extra: Record<string, unknown>) => ({
-    version: 3,
+    version: 4,
     city,
     sim: { realTime: NOW, gameMinutes: 5, roads: emptyRoads(), ...extra },
   });
 
   it("a save without growth fields loads with defaults", () => {
-    const s = parseSaveV3(withSim({}), NOW)!;
+    const s = parseSave(withSim({}), NOW)!;
     expect(s.sim).toMatchObject(emptyGrowth(seedOf(city.foundedAt), 5));
     expect(Object.keys(s.sim.residents)).toHaveLength(10);
     expect(s.sim.zones).toEqual(emptyZones());
@@ -278,7 +279,7 @@ describe("save", () => {
     const sim = ticks(world(straight(), "res"), 8);
     expect(list(sim).length).toBeGreaterThan(0);
     const raw = JSON.parse(JSON.stringify(sim)) as Record<string, unknown>;
-    const s = parseSaveV3(withSim({ ...raw, roads: sim.roads, realTime: NOW, gameMinutes: 5 }), NOW)!;
+    const s = parseSave(withSim({ ...raw, roads: sim.roads, realTime: NOW, gameMinutes: 5 }), NOW)!;
     expect(s.sim.buildings).toEqual(sim.buildings);
     expect(s.sim.nextBuildingId).toBe(sim.nextBuildingId);
     expect(s.sim.rng).toBe(sim.rng);
@@ -302,15 +303,15 @@ describe("save", () => {
       "x",
     ];
     for (const buildings of bad) {
-      const s = parseSaveV3(withSim({ roads, buildings, nextBuildingId: 2, rng: 5, lastSpawn: { res: 0, craft: 0, trade: 0 } }), NOW)!;
+      const s = parseSave(withSim({ roads, buildings, nextBuildingId: 2, rng: 5, lastSpawn: { res: 0, craft: 0, trade: 0 } }), NOW)!;
       expect(s).not.toBeNull();
       expect(s.sim.buildings).toEqual({});
       expect(s.sim.nextBuildingId).toBe(1);
       expect(s.sim.roads).toEqual(roads);
     }
-    const noNext = parseSaveV3(withSim({ roads, buildings: { 1: b } }), NOW)!;
+    const noNext = parseSave(withSim({ roads, buildings: { 1: b } }), NOW)!;
     expect(noNext.sim.buildings).toEqual({});
-    const badRng = parseSaveV3(withSim({ rng: -3, lastSpawn: { res: "x" } }), NOW)!;
+    const badRng = parseSave(withSim({ rng: -3, lastSpawn: { res: "x" } }), NOW)!;
     expect(badRng.sim).toMatchObject(emptyGrowth(seedOf(city.foundedAt), 5));
   });
 });

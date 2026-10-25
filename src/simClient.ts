@@ -83,7 +83,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
     case "loaded":
       if (m.migrated) {
         try {
-          localStorage.removeItem(LEGACY_KEY); // only after the v3 copy is persisted
+          localStorage.removeItem(LEGACY_KEY); // only after the v4 copy is persisted
         } catch {
           // storage unavailable: nothing to clean up
         }

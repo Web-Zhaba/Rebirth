@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Handler, type Storage, type TerrainSampler } from "./handler";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
-import { parseSaveV3 } from "./save";
-import type { City, RoadGraph, RoadKind, SaveV3, TerrainInfo, ZoneCell } from "./types";
+import { parseSave } from "./save";
+import type { City, RoadGraph, RoadKind, SaveV4, TerrainInfo, ZoneCell } from "./types";
 import { emptyZones, paintCells, qkey, regenerateCells, validateField, type FieldCheck } from "./zones";
 
 const road = (g: RoadGraph, pts: [number, number][], kind: RoadKind = "dirt"): RoadGraph => {
@@ -189,7 +189,7 @@ describe("zones in the worker", () => {
     };
     const out: FromWorker[] = [];
     const h = new Handler(storage, (m) => out.push(m), sampler);
-    return { h, out, get: () => stored as SaveV3 };
+    return { h, out, get: () => stored as SaveV4 };
   }
   const fake: TerrainSampler = async () => meadow;
   const add = (h: Handler, id: number, pts: [number, number][]) =>
@@ -271,9 +271,9 @@ describe("zones in the worker", () => {
 describe("save with zones", () => {
   const NOW = 1_800_000_000_000;
   const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
-  const base = { version: 3, city, sim: { realTime: NOW, gameMinutes: 5, roads: emptyRoads() } };
+  const base = { version: 4, city, sim: { realTime: NOW, gameMinutes: 5, roads: emptyRoads() } };
   it("loads a save without zones as empty zones", () => {
-    expect(parseSaveV3(base, NOW)!.sim.zones).toEqual(emptyZones());
+    expect(parseSave(base, NOW)!.sim.zones).toEqual(emptyZones());
   });
   it("round-trips valid zones and drops broken ones without losing the town", () => {
     const g = road(emptyRoads(), [[0, 0], [80, 0]]);
@@ -284,7 +284,7 @@ describe("save with zones", () => {
       rev: 4,
     };
     const ok = { ...base, sim: { ...base.sim, roads: g, zones } };
-    expect(parseSaveV3(ok, NOW)!.sim.zones).toEqual(zones);
+    expect(parseSave(ok, NOW)!.sim.zones).toEqual(zones);
     const withZones = (z: unknown) => ({ ...base, sim: { ...base.sim, roads: g, zones: z } });
     const broken = [
       null,
@@ -295,7 +295,7 @@ describe("save with zones", () => {
       { ...zones, terrain: { "0:0": { land: "lava", slope: 1 } } },
     ];
     for (const z of broken) {
-      const s = parseSaveV3(withZones(z), NOW)!;
+      const s = parseSave(withZones(z), NOW)!;
       expect(s.sim.zones).toEqual(emptyZones());
       expect(s.sim.roads).toEqual(g);
     }

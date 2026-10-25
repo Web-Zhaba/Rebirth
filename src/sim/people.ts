@@ -3,7 +3,7 @@ import { assignFields, expectedKg, FIELD, idleGumnos, FISH, haOf, HARVEST_END_DA
 import { nextRandom } from "./rng";
 import { covers, SERVICE, servicesIn } from "./services";
 import { WORK_END, WORK_START, workableEdges } from "./roads";
-import { calendar, dayOf, dayStart, YEAR_MIN } from "./time";
+import { calendar, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, BuildingQuery, Household, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
 import { CELL_SIZE } from "./zones";
 
@@ -385,15 +385,15 @@ export function productionScale(s: ArtelState): number {
   return a.employed > 0 ? 1 - a.drafted / a.employed : 1;
 }
 
-// Can the food last a full year? projected = stock + exactly one harvest + the fishers' daily output x 360;
+// Can the food last a full year? projected = stock + exactly one harvest + the fishers' daily output x YEAR_DAYS;
 // the harvest is this year's unreaped expected amount while the window has not closed (a field not sown yet
-// counts in full: 400 kg/ha), otherwise next year's (400 kg/ha of every field a gumno works).
-// need = today's consumption x 360. 0 below 90 % of the need, 1 from 120 %.
+// counts in full: the whole yield), otherwise next year's (the full yield of every field a gumno works).
+// need = today's consumption x YEAR_DAYS. 0 below 90 % of the need, 1 from 120 %.
 export function foodOutlook(s: ArtelState & { households: SimState["households"] }): number {
   const need = foodPerDay(s.residents, s.gameMinutes);
   if (need <= 0) return 1;
   const cal = calendar(s.gameMinutes);
-  const days = 360;
+  const days = YEAR_DAYS;
   let projected = s.stock.food;
   const open = cal.dayOfYear <= HARVEST_END_DAY;
   const assign = assignFields(s.zones.fields, s.buildings);
@@ -614,7 +614,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       const r = w.residents[id];
       const home = w.households[r.household]?.home;
       const care = home != null && covers(s.coverage[home], "healer") ? SERVICE.healerDeathFactor : 1;
-      if (rand() < (deathRate(ageOf(r.born, now)) * care) / 360) {
+      if (rand() < (deathRate(ageOf(r.born, now)) * care) / YEAR_DAYS) {
         say(w, "death", `${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`);
         removePerson(w, r);
       }
@@ -633,7 +633,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
         const r = w.residents[m];
         const age = ageOf(r.born, now);
         if (r.sex !== "f" || r.spouse === null || age < 18 || age > 42) continue;
-        if (rand() < RATES.birthYear / 360) {
+        if (rand() < RATES.birthYear / YEAR_DAYS) {
           const sex = rand() < 0.5 ? "m" : "f";
           const kid = addPerson(w, pick(sex === "m" ? MALE_NAMES : FEMALE_NAMES, rand), surnameFor(h.last, sex), sex, 0, h.id);
           h.members.push(kid.id);

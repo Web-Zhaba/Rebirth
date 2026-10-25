@@ -1,3 +1,4 @@
+import { YEAR_DAYS } from "./time";
 import type { ServiceId } from "./types";
 
 // Service tuning (design: PLAN.md section 9). Reach is road distance in metres.
@@ -25,7 +26,7 @@ export const SERVICE = {
   healerDeathFactor: 0.6,
   schoolFrom: 7, // age of the children who attend
   schoolTo: 15,
-  literateDays: 720, // days of school (2 years) for a child to become literate at 15
+  literateDays: 2 * YEAR_DAYS, // days of school (2 years) for a child to become literate at 15
   literateBoost: 0.2, // a literate worker is this much more productive
   landBase: 20,
   landPerService: 8,

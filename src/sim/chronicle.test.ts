@@ -6,9 +6,9 @@ import { emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
-import { parseSaveV3 } from "./save";
+import { parseSave } from "./save";
 import { YEAR_MIN } from "./time";
-import type { Building, City, Resident, SaveV3, SimState, TerrainInfo } from "./types";
+import type { Building, City, Resident, SaveV4, SimState, TerrainInfo } from "./types";
 import { emptyZones, qkey, regenerateCells } from "./zones";
 
 const NOW = 1_800_000_000_000;
@@ -29,7 +29,7 @@ function setup(initial: unknown) {
   let stored: unknown = initial;
   const storage: Storage = { get: async () => stored, put: async (s) => void (stored = s), clear: async () => void (stored = undefined) };
   const out: FromWorker[] = [];
-  return { h: new Handler(storage, (m) => out.push(m)), out, get: () => stored as SaveV3 };
+  return { h: new Handler(storage, (m) => out.push(m)), out, get: () => stored as SaveV4 };
 }
 
 const bld = (id: number, template: string, state: Building["state"], level = 1, zone: Building["zone"] = "placed"): Building => ({
@@ -144,15 +144,15 @@ describe("chronicle triggers", () => {
 describe("save", () => {
   it("defaults to an empty chronicle and round-trips entries", () => {
     const s = grower();
-    const save: SaveV3 = { version: 3, city, sim: s };
+    const save: SaveV4 = { version: 4, city, sim: s };
     const { chronicle: _c, ...noChronicle } = s;
-    expect(parseSaveV3({ ...save, sim: noChronicle }, NOW)!.sim.chronicle).toEqual([]);
+    expect(parseSave({ ...save, sim: noChronicle }, NOW)!.sim.chronicle).toEqual([]);
     const entries = [{ at: 5, kind: "pop:25", text: "Население достигло 25 человек" }];
-    const back = parseSaveV3(JSON.parse(JSON.stringify({ ...save, sim: { ...s, chronicle: entries } })), NOW)!;
+    const back = parseSave(JSON.parse(JSON.stringify({ ...save, sim: { ...s, chronicle: entries } })), NOW)!;
     expect(back.sim.chronicle).toEqual(entries);
-    const broken = parseSaveV3({ ...save, sim: { ...s, chronicle: [...entries, { at: "x" }, 5, null, { at: 1, kind: "k", text: 3 }] } }, NOW)!;
+    const broken = parseSave({ ...save, sim: { ...s, chronicle: [...entries, { at: "x" }, 5, null, { at: 1, kind: "k", text: 3 }] } }, NOW)!;
     expect(broken.sim.chronicle).toEqual(entries);
-    expect(parseSaveV3({ ...save, sim: { ...s, chronicle: "nope" } }, NOW)!.sim.chronicle).toEqual([]);
+    expect(parseSave({ ...save, sim: { ...s, chronicle: "nope" } }, NOW)!.sim.chronicle).toEqual([]);
   });
 });
 
@@ -161,7 +161,7 @@ describe("catch-up", () => {
 
   it("chunked catch-up through the handler equals a single advanceTo", async () => {
     const start = grower(NOW - GAP);
-    const { h, out, get } = setup({ version: 3, city, sim: start });
+    const { h, out, get } = setup({ version: 4, city, sim: start });
     await h.handle({ t: "load", legacy: null, now: NOW });
     const loaded = out.find((m) => m.t === "loaded") as Extract<FromWorker, { t: "loaded" }>;
     const direct = advanceTo(start, NOW);
@@ -189,7 +189,7 @@ describe("catch-up", () => {
 
   it("commands and queries arriving during catch-up wait and apply in order afterwards", async () => {
     const start = grower(NOW - GAP);
-    const { h, out } = setup({ version: 3, city, sim: start });
+    const { h, out } = setup({ version: 4, city, sim: start });
     const p = h.handle({ t: "load", legacy: null, now: NOW });
     const c1 = h.handle({ t: "cmd", id: 1, cmd: { type: "removeRoad", edgeId: 9999 } });
     const c2 = h.handle({ t: "cmd", id: 2, cmd: { type: "paintZones", keys: [], zone: "none" } });

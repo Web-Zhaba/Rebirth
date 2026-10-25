@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { BUILDINGS, houseCapacity } from "../sim/buildings";
 import { DIG, revealedArea } from "../sim/excavation";
 import { SERVICES } from "../sim/services";
+import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
 import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
@@ -76,7 +77,7 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
               </div>
               <div>Засеяно: {pct(p.fields.sown)}</div>
               <div>
-                Сжато: {tons(p.fields.reaped)} из {tons(p.fields.expected)} т
+                Сжато: {massText(p.fields.reaped)} из {massText(p.fields.expected)}
               </div>
             </>
           ) : (

@@ -11,16 +11,18 @@ import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
-import { migrateLegacy, parseSaveV3 } from "./save";
+import { migrateLegacy, parseSave } from "./save";
 import { dayOf } from "./time";
-import type { BuildingQuery, ChronicleEntry, ClientSave, Field, Finds, RoadGraph, SaveV3, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
+import type { BuildingQuery, ChronicleEntry, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 
 export interface Storage {
   get(): Promise<unknown>;
-  put(save: SaveV3): Promise<void>;
+  put(save: SaveV4): Promise<void>;
   clear(): Promise<void>;
+  // Stores a pre-migration save once per version, never overwriting an earlier copy.
+  keepOld?(raw: unknown, version: number): Promise<void>;
 }
 
 const AWAY_MIN_MS = 60_000;
@@ -54,7 +56,7 @@ function inspect(sim: SimState, id: number): BuildingQuery | null {
   return q;
 }
 
-const toClientSave = (save: SaveV3): ClientSave => ({ version: 3, city: save.city, sim: { ...toSnapshot(save.sim), zones: save.sim.zones, chronicle: save.sim.chronicle, finds: save.sim.finds, articles: save.sim.articles } });
+const toClientSave = (save: SaveV4): ClientSave => ({ version: 4, city: save.city, sim: { ...toSnapshot(save.sim), zones: save.sim.zones, chronicle: save.sim.chronicle, finds: save.sim.finds, articles: save.sim.articles } });
 const ENRICH_BATCH = 32;
 const ENRICH_RETRY_MS = 30_000;
 
@@ -62,7 +64,7 @@ const ENRICH_RETRY_MS = 30_000;
 export type TerrainSampler = (frame: Frame, x: number, y: number) => Promise<TerrainInfo>;
 
 export class Handler {
-  private save: SaveV3 | null = null;
+  private save: SaveV4 | null = null;
   private postedRev = -1; // zones rev the main thread already has
   private postedChronicle: ChronicleEntry[] | null = null; // the chronicle array the main thread already has
   private postedFinds: Finds | null = null;
@@ -105,8 +107,8 @@ export class Handler {
           }
           return;
         case "found": {
-          const save: SaveV3 = {
-            version: 3,
+          const save: SaveV4 = {
+            version: 4,
             city: msg.city,
             sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(msg.city.foundedAt)) },
           };
@@ -199,7 +201,11 @@ export class Handler {
   }
 
   private async load(legacy: string | null, now: number): Promise<void> {
-    let save = parseSaveV3(await this.storage.get(), now);
+    const raw = await this.storage.get();
+    // An older save is kept as it was before its first migrated copy overwrites it (a way back).
+    const version = typeof raw === "object" && raw !== null ? (raw as { version?: unknown }).version : undefined;
+    if (version === 3) await this.storage.keepOld?.(raw, 3);
+    let save = parseSave(raw, now);
     let migrated = false;
     if (!save && legacy) {
       save = migrateLegacy(legacy, now);
@@ -223,7 +229,7 @@ export class Handler {
     this.enrich();
   }
 
-  private setSave(save: SaveV3 | null): void {
+  private setSave(save: SaveV4 | null): void {
     this.save = save;
     this.postedRev = save ? save.sim.zones.rev : -1;
     this.postedChronicle = save ? save.sim.chronicle : null;

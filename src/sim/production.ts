@@ -2,6 +2,7 @@ import { BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE } from "./bu
 import { assignedHa, assignFields, expectedKg, FIELD, FISH, haOf, remainingHours, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScale } from "./people";
+import { massText } from "./units";
 import { covers, SERVICE, serviceMood } from "./services";
 import { calendar, dayOf } from "./time";
 import type { Building, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
@@ -40,7 +41,6 @@ function say(events: TownEvent[], at: number, kind: EventKind, text: string): To
   return [...events, { at, kind, text }].slice(-MAX_EVENTS);
 }
 
-const tonnes = (kg: number): string => `${(kg / 1000).toFixed(1).replace(".", ",")} т`;
 
 // Flags of the calendar year (the event flags start over every year).
 const flagsFor = (f: ProdFlags, year: number): ProdFlags => (f.year === year ? f : { ...f, year, sowing: false, harvest: false, done: false, closed: false });
@@ -251,7 +251,7 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
     }
     if (work.length > 0 && left <= 1e-6) {
       flags = { ...flags, done: true };
-      events = say(events, s.gameMinutes, "farm", `Урожай собран: ${tonnes(got)}`);
+      events = say(events, s.gameMinutes, "farm", `Урожай собран: ${massText(got)}`);
     }
   }
   return { ...s, stock, events, buildings, prod: { ...s.prod, fields, today, flags } };
@@ -358,7 +358,7 @@ export function dailyEconomy(s: SimState): SimState {
       lost += Math.max(0, expectedKg(f, w) - w.reaped);
     }
     flags = { ...flags, closed: true };
-    if (lost >= 1) events = say(events, now, "farm", `Зерно осталось в поле и пропало: ${tonnes(lost)}`);
+    if (lost >= 1) events = say(events, now, "farm", `Зерно осталось в поле и пропало: ${massText(lost)}`);
   }
   // progress of fields that are gone or of earlier years is dropped
   const live = new Set(s.zones.fields.map((f) => f.id));

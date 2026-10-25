@@ -309,7 +309,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
 export type ClientState = SimSnapshot & { zones: ZoneState; chronicle: ChronicleEntry[]; finds: Finds; articles: StoredArticle[] };
 
 export interface ClientSave {
-  version: 3;
+  version: 4;
   city: City;
   sim: ClientState;
 }
@@ -357,8 +357,8 @@ export type BuildingQuery =
       service?: { id: ServiceId; reach: number; covered: number; houses: number; working: boolean };
     };
 
-export interface SaveV3 {
-  version: 3;
+export interface SaveV4 {
+  version: 4;
   city: City;
   sim: SimState;
 }

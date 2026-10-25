@@ -6,9 +6,9 @@ import { emptyGrowth, makeBuilding } from "./growth";
 import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
-import { parseSaveV3 } from "./save";
+import { parseSave } from "./save";
 import { PACE, payMaterials, produceStep } from "./production";
-import type { Building, City, Resident, SaveV3, SimState, ZoneCell } from "./types";
+import type { Building, City, Resident, SaveV4, SimState, ZoneCell } from "./types";
 import { emptyZones } from "./zones";
 
 const NOW = 1_800_000_000_000;
@@ -164,13 +164,13 @@ describe("rebuild on old foundations", () => {
 });
 
 describe("saves", () => {
-  const save = (sim: SimState): unknown => JSON.parse(JSON.stringify({ version: 3, city, sim } satisfies SaveV3));
+  const save = (sim: SimState): unknown => JSON.parse(JSON.stringify({ version: 4, city, sim } satisfies SaveV4));
   it("a new town has empty finds and an older save gets the default", () => {
     expect(emptyGrowth(1).finds).toEqual({ foundations: [], pois: [], streets: [] });
     const s = town([dig()]);
     const raw = save(s) as { sim: Record<string, unknown> };
     delete raw.sim.finds;
-    const p = parseSaveV3(raw, NOW)!;
+    const p = parseSave(raw, NOW)!;
     expect(p.sim.finds).toEqual({ foundations: [], pois: [], streets: [] });
     expect(p.sim.buildings[1].radius).toBe(15);
   });
@@ -179,7 +179,7 @@ describe("saves", () => {
     const r = recordFinds(s, cmd({ foundations: [found("a")], pois: [{ id: "p", name: "Храм", cls: "x", x: 1.234, y: 2 }], streets: [{ id: "s", name: "Улица" }] }));
     if (!r.ok) throw new Error(r.reason);
     s = { ...r.sim, buildings: { ...r.sim.buildings, 7: { ...makeBuilding(BUILDINGS.izba, cell(30), cell(30), 7, 0), onRuins: true } } };
-    const p = parseSaveV3(save(s), NOW)!;
+    const p = parseSave(save(s), NOW)!;
     expect(p.sim.finds).toEqual(s.finds);
     expect(p.sim.buildings[1].radius).toBe(42.5);
     expect(p.sim.buildings[7].onRuins).toBe(true);
@@ -189,13 +189,13 @@ describe("saves", () => {
     for (const junk of [7, "x", [], { foundations: 5, pois: null, streets: {} }]) {
       const raw = save(s) as { sim: Record<string, unknown> };
       raw.sim.finds = junk;
-      const p = parseSaveV3(raw, NOW);
+      const p = parseSave(raw, NOW);
       expect(p).not.toBeNull();
       expect(p!.sim.finds).toEqual({ foundations: [], pois: [], streets: [] });
     }
     const raw = save(s) as { sim: Record<string, unknown> };
     raw.sim.finds = { foundations: [{ id: "ok", ring: square(0, 0, 3), area: 9, digId: 1, at: 0 }, { id: "bad", ring: [[0, 0]], area: 1, digId: 1, at: 0 }], pois: [], streets: [{ id: "s", name: "A", kind: "street", digId: 1, at: 0 }, { nope: 1 }] };
-    const p = parseSaveV3(raw, NOW)!;
+    const p = parseSave(raw, NOW)!;
     expect(p.sim.finds.foundations.map((f) => f.id)).toEqual(["ok"]);
     expect(p.sim.finds.streets).toHaveLength(1);
   });
@@ -206,7 +206,7 @@ describe("recordFinds through the worker", () => {
     const road = addRoad(emptyRoads(), [[0, 0], [100, 0]], "dirt", 1, [0]);
     if (!road.ok) throw new Error(road.reason);
     const s = { ...town([dig()]), roads: road.graph };
-    let stored: unknown = JSON.parse(JSON.stringify({ version: 3, city, sim: { ...s, realTime: NOW } }));
+    let stored: unknown = JSON.parse(JSON.stringify({ version: 4, city, sim: { ...s, realTime: NOW } }));
     const storage: Storage = { get: async () => stored, put: async (x) => void (stored = JSON.parse(JSON.stringify(x))), clear: async () => void (stored = undefined) };
     const out: FromWorker[] = [];
     const h = new Handler(storage, (m) => out.push(m));
@@ -216,7 +216,7 @@ describe("recordFinds through the worker", () => {
     const snap = out.filter((m): m is Extract<FromWorker, { t: "snapshot" }> => m.t === "snapshot").pop()!;
     expect(snap.chronicle?.some((e) => e.text.includes("Милютина"))).toBe(true);
     expect(snap.sim.digs[0]).toMatchObject({ id: 1, foundations: 1, streets: 1 });
-    expect((stored as SaveV3).sim.finds.foundations).toHaveLength(1);
+    expect((stored as SaveV4).sim.finds.foundations).toHaveLength(1);
     await h.handle({ t: "cmd", id: 2, cmd: { type: "recordFinds", digId: 1, foundations: [found("a", 100)], pois: [], streets: [] } });
     expect(out.filter((m) => m.t === "cmdResult").pop()).toEqual({ t: "cmdResult", id: 2, ok: true });
     await h.handle({ t: "cmd", id: 3, cmd: { type: "recordFinds", digId: 99, foundations: [], pois: [], streets: [] } });

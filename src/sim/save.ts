@@ -7,6 +7,7 @@ import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
+import { YEAR_MIN, YEAR_SCALE } from "./time";
 import type {
   Building,
   ChronicleEntry,
@@ -22,7 +23,7 @@ import type {
   RoadEdge,
   RoadGraph,
   RoadNode,
-  SaveV3,
+  SaveV4,
   Site,
   Stock,
   TerrainInfo,
@@ -369,10 +370,30 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   return g;
 }
 
-export function parseSaveV3(value: unknown, now: number): SaveV3 | null {
+// v3 had a 360-day year. Game time and every timestamp stay as they are (the date is re-read in the
+// new calendar); `born` is rescaled so each resident keeps their age in years, school days scale with the year.
+const YEAR_MIN_V3 = 360 * 1440;
+function fromV3(v: Record<string, unknown>): Record<string, unknown> {
+  const sim = v.sim;
+  if (!isRecord(sim) || !isNum(sim.gameMinutes) || !isRecord(sim.residents)) return { ...v, version: 4 };
+  const now = sim.gameMinutes;
+  const residents: Record<string, unknown> = {};
+  for (const [k, r] of Object.entries(sim.residents)) {
+    if (!isRecord(r) || !isNum(r.born)) {
+      residents[k] = r;
+      continue;
+    }
+    const school = isNum(r.school) ? Math.round(r.school * YEAR_SCALE) : r.school;
+    residents[k] = { ...r, born: now - (now - r.born) * (YEAR_MIN / YEAR_MIN_V3), school };
+  }
+  return { ...v, version: 4, sim: { ...sim, residents } };
+}
+
+export function parseSave(value: unknown, now: number): SaveV4 | null {
   if (typeof value !== "object" || value === null) return null;
-  const v = value as Record<string, unknown>;
-  if (v.version !== 3) return null;
+  let v = value as Record<string, unknown>;
+  if (v.version === 3) v = fromV3(v);
+  if (v.version !== 4) return null;
   const city = parseCity(v.city);
   if (!city) return null;
   const sim = v.sim as Record<string, unknown> | null | undefined;
@@ -384,11 +405,11 @@ export function parseSaveV3(value: unknown, now: number): SaveV3 | null {
   // Cells are rebuilt from roads on load, so broken zone data only costs the paint,
   // never the whole town (a rejected save would send the player back to founding).
   const zones = parseZones(sim.zones) ?? emptyZones();
-  return { version: 3, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...parseGrowth(sim, city, sim.gameMinutes) } };
+  return { version: 4, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...parseGrowth(sim, city, sim.gameMinutes) } };
 }
 
 // Old localStorage saves (v1, v2): keep the city, start a fresh village.
-export function migrateLegacy(raw: string, now: number): SaveV3 | null {
+export function migrateLegacy(raw: string, now: number): SaveV4 | null {
   let v: unknown;
   try {
     v = JSON.parse(raw);
@@ -400,5 +421,5 @@ export function migrateLegacy(raw: string, now: number): SaveV3 | null {
   if (o.version !== 1 && o.version !== 2) return null;
   const city = parseCity(o.city);
   if (!city) return null;
-  return { version: 3, city, sim: { realTime: now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(city.foundedAt)) } };
+  return { version: 4, city, sim: { realTime: now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(city.foundedAt)) } };
 }

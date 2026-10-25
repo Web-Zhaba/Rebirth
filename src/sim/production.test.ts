@@ -1,28 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { advanceTo, calendar, step } from "./clock";
 import { BARN_CAP, BUILDINGS, foodCapacity, FOOD_CAMP_CAP } from "./buildings";
-import { assignFields, jobsOf } from "./fields";
+import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { Handler, type Storage } from "./handler";
 import { builderCount, dailyStep, foodPerDay, peopleStats, queryBuilding, RATES } from "./people";
 import { dailyEconomy, economyStats, HAND_HOURS, PACE, payMaterials, produceStep } from "./production";
 import type { FromWorker } from "./protocol";
+import { massText } from "./units";
 import { addRoad, emptyRoads } from "./roads";
-import { parseSaveV3 } from "./save";
-import { YEAR_MIN } from "./time";
-import type { Building, City, Field, Household, Resident, RoadGraph, SaveV3, SimState, Site, TerrainInfo } from "./types";
+import { parseSave } from "./save";
+import { YEAR_DAYS, YEAR_MIN } from "./time";
+import type { Building, City, Field, Household, Resident, RoadGraph, SaveV4, SimState, Site, TerrainInfo } from "./types";
 import { emptyZones, paintCells, qkey, regenerateCells } from "./zones";
 
 const NOW = 1_800_000_000_000;
 const meadow: TerrainInfo = { land: "meadow", slope: 0 };
 const NO_SITE: Site = { forest: 0, water: 0, rock: 0 };
 
-// gameMinutes of `hour`:00 on day-of-year `day` (1..360) of year `year`.
-const at = (day: number, hour = 0, year = 1) => ((year - 1) * 360 + day - 1) * 1440 + hour * 60 - 360;
-const NOON = at(100, 12); // summer
-const SPRING_NOON = at(30, 12);
-const HARVEST_NOON = at(190, 12);
-const WINTER_NOON = at(300, 12);
+// gameMinutes of `hour`:00 on day-of-year `day` (1..YEAR_DAYS) of year `year`.
+const at = (day: number, hour = 0, year = 1) => ((year - 1) * YEAR_DAYS + day - 1) * 1440 + hour * 60 - 360;
+const NOON = at(12, 12); // summer
+const SPRING_NOON = at(4, 12);
+const HARVEST_NOON = at(18, 12);
+const WINTER_NOON = at(28, 12);
 
 const road = (pts: [number, number][], labor = 0): RoadGraph => {
   const r = addRoad(emptyRoads(), pts, "dirt", 1, pts.slice(1).map(() => labor));
@@ -140,7 +141,7 @@ describe("storage", () => {
     expect(s.prod.flags.rot).toBeCloseTo(0.4 * 3 - 0.1);
     expect(s.events).toHaveLength(0);
     s = { ...s, prod: { ...s.prod, flags: { ...s.prod.flags, rot: 480 } } };
-    const d = dailyEconomy({ ...s, gameMinutes: at(101) });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.events.filter((e) => e.text.startsWith("Пропало"))).toHaveLength(1);
     expect(d.events[0].text).toContain("480 кг");
     expect(d.prod.flags.rot).toBe(0);
@@ -153,7 +154,7 @@ describe("storage", () => {
   it("daily rot trims food above capacity (a barn was demolished)", () => {
     let s = folk(town([]), [{ home: null, adults: 1 }]);
     s = { ...s, stock: { ...s.stock, food: 5000 } };
-    const d = dailyEconomy({ ...s, gameMinutes: at(101) });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.stock.food).toBe(FOOD_CAMP_CAP);
     expect(d.events[0].text).toContain("не хватает амбаров");
   });
@@ -163,7 +164,7 @@ describe("food", () => {
   it("adults eat 0.7 kg and children 0.45 kg a day", () => {
     let s = busy(folk(town([]), [{ home: null, adults: 2, kids: 2 }]));
     expect(foodPerDay(s.residents, s.gameMinutes)).toBeCloseTo(2.3);
-    const d = dailyEconomy({ ...s, gameMinutes: at(101) });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.stock.food).toBeCloseTo(s.stock.food - 2.3);
     expect(d.prod.flags.hungry).toBe(false);
   });
@@ -171,21 +172,21 @@ describe("food", () => {
     let s = folk(town([]), [{ home: 1, adults: 1 }, { home: null, adults: 1, kids: 2 }]);
     s = busy({ ...s, buildings: { 1: bld(1, "izba", 0) } });
     s = { ...s, stock: { ...s.stock, food: 1 } }; // needs 0.7 + 0.7 + 0.9 = 2.3
-    const d = dailyEconomy({ ...s, gameMinutes: at(101) });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.stock.food).toBe(0);
     expect(d.events.map((e) => e.text)).toEqual(["Провизия закончилась, люди голодают"]);
     // fed = 1 / 2.3: both households move a quarter of the way towards 10 + 45 fed (+10 with a house)
     const fed = 1 / 2.3;
     expect(d.households[1].mood).toBeCloseTo(60 + (10 + 45 * fed + 10 - 60) / 4);
     expect(d.households[2].mood).toBeCloseTo(60 + (10 + 45 * fed - 60) / 4);
-    const again = dailyEconomy({ ...d, gameMinutes: at(102) });
+    const again = dailyEconomy({ ...d, gameMinutes: at(14) });
     expect(again.events).toHaveLength(1);
     expect(again.prod.flags.hungry).toBe(true);
   });
   it("files yesterday's output", () => {
     let s = folk(town([bld(1, "woodcutter", 50, "active", { forest: 1, water: 0, rock: 0 })]), [{ home: null, adults: 2, job: 1 }]);
     s = work(s);
-    const d = dailyEconomy({ ...s, gameMinutes: at(101) });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.prod.today).toEqual({});
     expect(d.prod.yesterday[1]).toBeCloseTo(2 * 0.25 * PACE);
     expect(economyStats(d).yesterday.logs).toBeCloseTo(2);
@@ -237,9 +238,9 @@ describe("producers", () => {
   it("only employed workers produce, and only during work hours", () => {
     const s = folk(town([bld(1, "pottery", 50)]), [{ home: null, adults: 3 }]);
     expect(work(s).stock.wares).toBe(20); // nobody employed
-    const w = folk(town([bld(1, "pottery", 50)], { gm: at(100, 12) }), [{ home: null, adults: 3, job: 1 }]);
+    const w = folk(town([bld(1, "pottery", 50)], { gm: at(12, 12) }), [{ home: null, adults: 3, job: 1 }]);
     expect(step(w).stock.wares).toBeGreaterThan(20);
-    const night = { ...w, gameMinutes: at(100, 22) };
+    const night = { ...w, gameMinutes: at(12, 22) };
     expect(step(night).stock.wares).toBe(20);
   });
 });
@@ -249,36 +250,54 @@ describe("fields", () => {
     folk(town([bld(1, "gumno", 200), bld(2, "barn", 500), ...extra], { gm, fields: [FIELD10()] }), [{ home: null, adults: farmers, job: 1 }]);
 
   it("sowing, harvest and the remainder lost", () => {
-    // 10 ha x 50 h = 500 person-hours of sowing
+    const SOW = FIELD.sowHoursHa * 10; // person-hours of sowing for the 10 ha
+    const HARV = FIELD.harvestHoursHa * 10;
+    const YIELD = FIELD.yieldKgHa * 10; // reaped at 2 kg per hour, so HARV hours
     let s = farm(SPRING_NOON);
-    s = work(s, 62.5); // 4 farmers x 62.5 h = 250 h: half sown
+    s = work(s, SOW / 8); // 4 farmers x SOW / 8 h = half sown
     expect(s.events.map((e) => e.text)).toEqual(["Начался сев"]);
     expect(economyStats(s).fields.sown).toBeCloseTo(0.5);
-    expect(economyStats(s).fields.expected).toBeCloseTo(2000);
-    s = work(s, 62.5);
+    expect(economyStats(s).fields.expected).toBeCloseTo(YIELD / 2);
+    s = work(s, SOW / 8);
     expect(economyStats(s).fields.sown).toBeCloseTo(1);
-    s = work(s, 62.5); // nothing left to sow
-    expect(s.prod.fields[1].sowH).toBeCloseTo(500);
+    s = work(s, SOW / 8); // nothing left to sow
+    expect(s.prod.fields[1].sowH).toBeCloseTo(SOW);
     expect(s.events).toHaveLength(1);
-    // harvest: 200 h/ha x 10 ha = 2000 h, 2 kg per hour = 4 t
+    // harvest: half of it in the first go
     s = { ...s, gameMinutes: HARVEST_NOON };
     const food0 = s.stock.food;
-    s = work(s, 250); // 1000 h
-    expect(s.stock.food - food0).toBeCloseTo(2000);
-    expect(s.prod.fields[1].reaped).toBeCloseTo(2000);
+    s = work(s, HARV / 8); // 4 farmers x HARV / 8 h
+    expect(s.stock.food - food0).toBeCloseTo(YIELD / 2);
+    expect(s.prod.fields[1].reaped).toBeCloseTo(YIELD / 2);
     expect(s.events.map((e) => e.text)).toEqual(["Начался сев", "Началась жатва"]);
     // the window ends with half the grain still standing
-    const lost = dailyEconomy({ ...s, gameMinutes: at(226) });
-    expect(lost.events.at(-1)!.text).toBe("Зерно осталось в поле и пропало: 2,0 т");
+    const lost = dailyEconomy({ ...s, gameMinutes: at(HARVEST_END_DAY + 1) });
+    expect(lost.events.at(-1)!.text).toBe(`Зерно осталось в поле и пропало: ${massText(YIELD / 2)}`);
     expect(lost.prod.flags.closed).toBe(true);
-    expect(dailyEconomy({ ...lost, gameMinutes: at(227) }).events).toHaveLength(lost.events.length); // told once
-    // finish instead: done event with the tonnes
-    const done = work(s, 250);
-    expect(done.prod.fields[1].reaped).toBeCloseTo(4000);
-    expect(done.events.at(-1)!.text).toBe("Урожай собран: 4,0 т");
-    expect(work(done, 250).events).toHaveLength(done.events.length);
-    expect(dailyEconomy({ ...done, gameMinutes: at(226) }).events).toHaveLength(done.events.length); // nothing lost
-    expect(done.prod.today[1]).toBeCloseTo(4000);
+    expect(dailyEconomy({ ...lost, gameMinutes: at(HARVEST_END_DAY + 2) }).events).toHaveLength(lost.events.length); // told once
+    // finish instead: done event with the amount
+    const done = work(s, HARV / 8);
+    expect(done.prod.fields[1].reaped).toBeCloseTo(YIELD);
+    expect(done.events.at(-1)!.text).toBe(`Урожай собран: ${massText(YIELD)}`);
+    expect(work(done, HARV / 8).events).toHaveLength(done.events.length);
+    expect(dailyEconomy({ ...done, gameMinutes: at(HARVEST_END_DAY + 1) }).events).toHaveLength(done.events.length); // nothing lost
+    expect(done.prod.today[1]).toBeCloseTo(YIELD);
+  });
+  it("a field sown in the first spring is harvested in the first autumn: 35.6 kg per sown hectare", () => {
+    // founding at spring day 1; the harvest window is days 17-20
+    let s = farm(at(1, 12));
+    expect(calendar(s.gameMinutes)).toMatchObject({ season: 0, dayOfSeason: 1 });
+    s = work(s, 12); // one work day of 4 farmers (48 h) covers the 44.4 h of sowing
+    expect(s.prod.fields[1].sowH).toBeCloseTo(FIELD.sowHoursHa * 10);
+    const food0 = s.stock.food;
+    for (let day = 17; day <= HARVEST_END_DAY; day++) {
+      expect(windowAt(at(day, 12))).toBe("harvest");
+      s = work({ ...s, gameMinutes: at(day, 12) }, 12);
+    }
+    expect(windowAt(at(HARVEST_END_DAY + 1, 12))).toBeNull();
+    expect(s.prod.fields[1].reaped).toBeCloseTo((400 * 32 / 360) * 10);
+    expect(s.stock.food - food0).toBeCloseTo(s.prod.fields[1].reaped);
+    expect(s.events.at(-1)!.text).toBe("Урожай собран: 356 кг");
   });
   it("what was not sown cannot be harvested, and progress starts over each year", () => {
     let s = farm(HARVEST_NOON);
@@ -287,9 +306,9 @@ describe("fields", () => {
     expect(s.prod.fields[1]?.reaped ?? 0).toBe(0);
     s = farm(SPRING_NOON);
     s = work(s, 200);
-    const next = { ...s, gameMinutes: at(30, 12, 2) };
+    const next = { ...s, gameMinutes: at(4, 12, 2) };
     expect(economyStats(next).fields.sown).toBe(0);
-    expect(dailyEconomy({ ...next, gameMinutes: at(30, 0, 2) }).prod.fields).toEqual({});
+    expect(dailyEconomy({ ...next, gameMinutes: at(4, 0, 2) }).prod.fields).toEqual({});
   });
   it("farmers work only inside the windows; otherwise they join the artel", () => {
     const people = (gm: number) => farm(gm, 4);
@@ -311,7 +330,7 @@ describe("fields", () => {
     expect(builderCount(sown(mk(HARVEST_NOON)))).toBe(3);
     const reaped = { ...mk(HARVEST_NOON) };
     expect(builderCount({ ...reaped, prod: { ...reaped.prod, fields: { 1: { year: 1, sowH: 500, harvH: 2000, reaped: 4000 } } } })).toBe(6); // harvest done
-    expect(builderCount(mk(at(240, 12)))).toBe(6); // after the first 45 days of autumn
+    expect(builderCount(mk(at(22, 12)))).toBe(6); // after the first 45 days of autumn
     expect(builderCount(mk(WINTER_NOON))).toBe(6);
     expect(peopleStats(mk(NOON)).builders).toBe(6);
     expect(peopleStats(mk(SPRING_NOON)).builders).toBe(3);
@@ -401,7 +420,7 @@ describe("construction materials", () => {
 describe("mood", () => {
   it("moves a quarter of the way to 10 + 45 fed + 10 wares + 10 house", () => {
     let s = busy(folk(town([bld(1, "izba", 0)]), [{ home: 1, adults: 2 }, { home: null, adults: 2 }]));
-    const d = dailyEconomy({ ...s, gameMinutes: at(101) });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.households[1].mood).toBeCloseTo(60 + (65 - 60) / 4);
     expect(d.households[2].mood).toBeCloseTo(60 + (55 - 60) / 4);
   });
@@ -409,7 +428,7 @@ describe("mood", () => {
     const specs: HSpec[] = [{ home: null, adults: 1, job: 1 }, ...Array.from({ length: 13 }, () => ({ home: null, adults: 2, kids: 2 }))];
     let s = busy(folk(town([bld(1, "shop", 50)]), specs));
     s = { ...s, stock: { ...s.stock, wares: 100 } };
-    const d = dailyEconomy({ ...s, gameMinutes: at(101) });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     // one trader serves 12 of the 14 households
     const took = s.stock.wares - d.stock.wares; // the one-person household is served on some days only
     expect(took).toBeGreaterThanOrEqual(0.05 + 0.2 * 11 - 1e-9);
@@ -417,11 +436,11 @@ describe("mood", () => {
     const lifted = Object.values(d.households).filter((h) => h.mood > 59);
     expect(lifted).toHaveLength(12);
     // no wares: nothing is handed out
-    const dry = dailyEconomy({ ...s, stock: { ...s.stock, wares: 0 }, gameMinutes: at(101) });
+    const dry = dailyEconomy({ ...s, stock: { ...s.stock, wares: 0 }, gameMinutes: at(13) });
     expect(dry.stock.wares).toBe(0);
     expect(Object.values(dry.households).every((h) => Math.abs(h.mood - 58.75) < 1e-9)).toBe(true);
     // the next day starts from another household
-    const d2 = dailyEconomy({ ...s, gameMinutes: at(102) });
+    const d2 = dailyEconomy({ ...s, gameMinutes: at(14) });
     const a = Object.values(d.households).filter((h) => h.mood > 59).map((h) => h.id).join();
     const b = Object.values(d2.households).filter((h) => h.mood > 59).map((h) => h.id).join();
     expect(a).not.toBe(b);
@@ -443,7 +462,7 @@ describe("mood", () => {
     s = { ...s, stock: { ...s.stock, food: 0 } };
     let m = s.households[1].mood;
     for (let d = 0; d < 12; d++) {
-      s = dailyEconomy({ ...s, gameMinutes: at(101 + d) });
+      s = dailyEconomy({ ...s, gameMinutes: at(13 + d) });
       expect(s.households[1].mood).toBeLessThan(m); // moving towards 10 + 10 = 20
       m = s.households[1].mood;
     }
@@ -463,7 +482,7 @@ describe("mood", () => {
   });
   it("immigration is scaled by the food outlook and by mood", () => {
     const base = folk(town([bld(1, "izba", 0), bld(2, "izba", 50), bld(3, "izba", 90, "planned")]), [{ home: 1, adults: 2, mood: 100 }]);
-    const need = foodPerDay(base.residents, base.gameMinutes) * 360; // a full year, no harvest or fishers
+    const need = foodPerDay(base.residents, base.gameMinutes) * YEAR_DAYS; // a full year, no harvest or fishers
     // stock for an outlook of o: (stock / need - 0.9) / 0.3 = o
     const run = (o: number, mood = 100, rand = 0.3) => {
       const s = { ...base, stock: { ...base.stock, food: need * (0.9 + 0.3 * o) }, households: { 1: { ...base.households[1], mood } } };
@@ -565,7 +584,7 @@ describe("placement", () => {
     const e = edgeId(s);
     s = placeBuilding(s, t("gumno"), e, 1, 3, NO_SITE);
     // paint everything (the barn lot included) so only the occupancy rule keeps the lot free
-    s = { ...s, gameMinutes: at(100, 12), zones: { ...s.zones, cells: paintCells(s.zones.cells, s.zones.cells.map((c) => c.key), "res") } };
+    s = { ...s, gameMinutes: at(12, 12), zones: { ...s.zones, cells: paintCells(s.zones.cells, s.zones.cells.map((c) => c.key), "res") } };
     s = { ...s, lastSpawn: { res: -1e9, craft: -1e9, trade: -1e9 } };
     for (let k = 0; k < 400; k++) s = step(s);
     const grown = Object.values(s.buildings).filter((b) => b.id !== 1);
@@ -597,14 +616,14 @@ describe("placement", () => {
 describe("handler: placeBuilding and demolish", () => {
   const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
   async function boot(s: SimState) {
-    const save: SaveV3 = { version: 3, city, sim: { ...s, realTime: NOW } };
+    const save: SaveV4 = { version: 4, city, sim: { ...s, realTime: NOW } };
     let stored: unknown = save;
     const storage: Storage = { get: async () => stored, put: async (v) => void (stored = v), clear: async () => void (stored = undefined) };
     const out: FromWorker[] = [];
     const h = new Handler(storage, (m) => out.push(m));
     await h.handle({ t: "load", legacy: null, now: NOW });
     out.length = 0;
-    return { h, out, get: () => stored as SaveV3 };
+    return { h, out, get: () => stored as SaveV4 };
   }
   const spec = { template: "barn", side: 1 as const, i: 3, site: NO_SITE };
 
@@ -667,7 +686,7 @@ describe("handler: placeBuilding and demolish", () => {
 
 describe("save", () => {
   const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
-  const wrap = (sim: object) => ({ version: 3, city, sim: { realTime: NOW, gameMinutes: 50, ...sim } });
+  const wrap = (sim: object) => ({ version: 4, city, sim: { realTime: NOW, gameMinutes: 50, ...sim } });
   const full = () => {
     const s = folk(town([bld(1, "barn", 50)], { gm: 50 }), [{ home: null, adults: 2, mood: 73 }]);
     return { ...s, realTime: NOW };
@@ -677,7 +696,7 @@ describe("save", () => {
     const s = { ...full(), stock: { food: 5, logs: 6, planks: 7, stone: 8, wares: 9 } };
     s.buildings[1].site = { forest: 0.3, water: 0.2, rock: 0.1 };
     s.prod = { ...s.prod, fields: { 1: { year: 1, sowH: 3, harvH: 0, reaped: 0 } }, today: { 1: 2 }, yesterday: { 1: 3 } };
-    const parsed = parseSaveV3(JSON.parse(JSON.stringify({ version: 3, city, sim: s })), NOW)!;
+    const parsed = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: s })), NOW)!;
     expect(parsed.sim.stock).toEqual(s.stock);
     expect(parsed.sim.prod).toEqual(s.prod);
     expect(parsed.sim.households[1].mood).toBe(73);
@@ -692,21 +711,21 @@ describe("save", () => {
     for (const b of Object.values<Record<string, unknown>>(old.buildings)) delete b.paid;
     old.buildings[1].state = "planned";
     old.buildings[1].done = 0;
-    const p = parseSaveV3({ version: 3, city, sim: old }, NOW)!;
+    const p = parseSave({ version: 4, city, sim: old }, NOW)!;
     expect(p.sim.stock).toEqual({ food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 });
     expect(p.sim.prod).toEqual({ fields: {}, flags: { year: 1, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 }, today: {}, yesterday: {} });
     expect(p.sim.households[1].mood).toBe(60);
     expect(p.sim.buildings[1].paid).toBe(false); // still planned
     old.buildings[1].state = "building";
     old.buildings[1].done = 5;
-    expect(parseSaveV3({ version: 3, city, sim: old }, NOW)!.sim.buildings[1].paid).toBe(true);
+    expect(parseSave({ version: 4, city, sim: old }, NOW)!.sim.buildings[1].paid).toBe(true);
   });
   it("broken stock, progress and mood fall back without losing the town", () => {
     const s = JSON.parse(JSON.stringify(full()));
     s.stock = { food: -1, logs: 0, planks: 0, stone: 0, wares: 0 };
     s.prod = { fields: { 1: { year: 1, sowH: "x" } }, flags: 5, today: { a: 1, 2: -4 }, yesterday: null };
     s.households[1].mood = "high";
-    const p = parseSaveV3({ version: 3, city, sim: s }, NOW)!;
+    const p = parseSave({ version: 4, city, sim: s }, NOW)!;
     expect(p.sim.stock.food).toBe(1750);
     expect(p.sim.prod.fields).toEqual({});
     expect(p.sim.prod.today).toEqual({});
@@ -717,13 +736,13 @@ describe("save", () => {
   it("an invalid placed building resets the buildings only", () => {
     const s = JSON.parse(JSON.stringify(full()));
     s.buildings[1].site = { forest: 3, water: 0, rock: 0 };
-    const p = parseSaveV3({ version: 3, city, sim: s }, NOW)!;
+    const p = parseSave({ version: 4, city, sim: s }, NOW)!;
     expect(p.sim.buildings).toEqual({});
     expect(Object.keys(p.sim.residents)).toHaveLength(2);
-    expect(parseSaveV3(wrap({}), NOW)!.sim.stock.food).toBe(1750);
+    expect(parseSave(wrap({}), NOW)!.sim.stock.food).toBe(1750);
     const bad = JSON.parse(JSON.stringify(full()));
     bad.buildings[1].zone = "res"; // barn is a placed template
-    expect(parseSaveV3({ version: 3, city, sim: bad }, NOW)!.sim.buildings).toEqual({});
+    expect(parseSave({ version: 4, city, sim: bad }, NOW)!.sim.buildings).toEqual({});
   });
 });
 
@@ -732,7 +751,7 @@ describe("determinism with production", () => {
     let s = folk(
       town([bld(1, "gumno", 200), bld(2, "woodcutter", 300, "active", { forest: 0.5, water: 0, rock: 0 }), bld(3, "sawpit", 400), bld(4, "pottery", 500), bld(5, "izba", 600, "planned")], {
         fields: [FIELD10()],
-        gm: at(88, 0),
+        gm: at(6, 0),
       }),
       [{ home: null, adults: 4, job: 1 }, { home: null, adults: 2, job: 2 }, { home: null, adults: 2, job: 3 }, { home: null, adults: 2, job: 4 }, { home: null, adults: 3, kids: 2 }],
     );
@@ -748,7 +767,7 @@ describe("determinism with production", () => {
     }
     const once = advanceTo(s, t);
     expect(m).toEqual(once);
-    expect(calendar(once.gameMinutes).dayOfYear).toBeGreaterThanOrEqual(93);
+    expect(calendar(once.gameMinutes).dayOfYear).toBeGreaterThanOrEqual(11);
     expect(once.stock.wares).toBeGreaterThan(20);
     expect(Object.keys(once.prod.fields).length).toBe(1);
   });

@@ -4,7 +4,7 @@ import { Handler, type Storage } from "./handler";
 import { emptyGrowth, seedOf } from "./growth";
 import type { FromWorker, ToWorker } from "./protocol";
 import { emptyRoads } from "./roads";
-import { parseSaveV3 } from "./save";
+import { parseSave } from "./save";
 import type { City, SimState } from "./types";
 import { emptyZones } from "./zones";
 
@@ -96,7 +96,7 @@ describe("handler pace", () => {
     await h.handle({ t: "speed", speed: 0, now: NOW });
     h.tick(NOW + 5000);
     await h.handle({ t: "flush" });
-    expect(parseSaveV3(stored(), NOW + 5000)).not.toBeNull();
+    expect(parseSave(stored(), NOW + 5000)).not.toBeNull();
   });
   it("hidden for more than 5 minutes runs at the offline rate until the tab is visible again", async () => {
     const { h, gm } = setup();

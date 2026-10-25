@@ -1,3 +1,4 @@
+import { DAYS_PER_SEASON, YEAR_DAYS } from "../sim/time";
 import { describe, expect, it } from "vitest";
 import { findsToEntries, formatDate, newestFirst, unseenCount } from "./notebookLogic";
 
@@ -16,8 +17,8 @@ describe("newestFirst", () => {
 describe("formatDate", () => {
   it("shows year, season and day of season", () => {
     expect(formatDate(0)).toBe("Год 1, весна, день 1");
-    expect(formatDate(90 * 1440)).toBe("Год 1, лето, день 1");
-    expect(formatDate(360 * 1440)).toBe("Год 2, весна, день 1");
+    expect(formatDate(DAYS_PER_SEASON * 1440)).toBe("Год 1, лето, день 1");
+    expect(formatDate(YEAR_DAYS * 1440)).toBe("Год 2, весна, день 1");
   });
 });
 
