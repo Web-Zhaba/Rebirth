@@ -97,7 +97,7 @@ function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
   let fieldLine: string | null = null;
   if (eco && eco.fields.assignedHa > 0) {
     if (eco.fields.window === "sowing") fieldLine = `Сев: ${Math.round(eco.fields.sown * 100)} %`;
-    else if (eco.fields.window === "harvest") fieldLine = `Жатва: ${massText(eco.fields.reaped)} из ${massText(eco.fields.expected)}`;
+    else if (eco.fields.window === "harvest") fieldLine = `Уборка урожая: ${massText(eco.fields.reaped)} из ${massText(eco.fields.expected)}`;
   }
   const clearing = (state.value?.clearings ?? []).filter((c) => !isCleared(c));
   const clearLabor = clearing.reduce((a, c) => a + c.labor, 0);
@@ -205,22 +205,22 @@ function OrdersTab() {
     <div class="rs-list orders" role="group" aria-label="Распоряжения">
       <div class="orders-row">
         <Button
-          aria-label="Страда"
+          aria-label="Долгий день"
           aria-pressed={lv.strada}
           variant={lv.strada ? "primary" : "default"}
           title="Работа с 05 до 21 часа: на треть больше труда, но настроение ниже на 8"
           onClick={() => act({ type: "setSchedule", strada: !lv.strada })}
         >
-          {lv.strada ? "Страда: до 21:00" : "Обычный день: 07–19"}
+          {lv.strada ? "Долгий день: до 21:00" : "Обычный день: 07–19"}
         </Button>
       </div>
-      <div class="orders-row" role="radiogroup" aria-label="Пайки">
+      <div class="orders-row" role="radiogroup" aria-label="Нормы еды">
         {RATION_IDS.map((id) => (
           <Button
             key={id}
             role="radio"
             aria-checked={lv.rations === id}
-            aria-label={`Пайки: ${RATIONS[id].name.toLowerCase()}`}
+            aria-label={`Нормы еды: ${RATIONS[id].name.toLowerCase()}`}
             variant={lv.rations === id ? "primary" : "default"}
             title={`Еда ${RATIONS[id].food * 100 - 100 > 0 ? "+" : ""}${Math.round(RATIONS[id].food * 100 - 100)} %, настроение ${RATIONS[id].mood > 0 ? "+" : ""}${RATIONS[id].mood}`}
             onClick={() => act({ type: "setRations", rations: id })}
@@ -234,7 +234,7 @@ function OrdersTab() {
           Призвать поселенцев
         </Button>
       </div>
-      <div class={block ? "people-note" : "hud-date"}>{block ?? `Стоит ${CALL.food} кг провизии и ${CALL.wares} шт утвари`}</div>
+      <div class={block ? "people-note" : "hud-date"}>{block ?? `Стоит ${CALL.food} кг еды и ${CALL.wares} шт товаров`}</div>
       <div class="rs-danger">
         <Button variant="danger" icon="trash" onClick={() => setConfirming(true)}>
           Начать заново

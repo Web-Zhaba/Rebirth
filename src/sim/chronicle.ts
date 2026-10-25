@@ -6,21 +6,21 @@ export const POP_MILESTONES = [25, 50, 100, 250, 500, 1000];
 
 // "Построена первая ..." for the first finished building of each template (the first house has its own entry).
 const FIRST_BUILT: Record<string, string> = {
-  izba5: "Построен первый пятистенок",
+  izba5: "Построен первый большой дом",
   smithy: "Построена первая кузница",
   carpentry: "Построена первая столярная мастерская",
   pottery: "Построена первая гончарня",
-  shop: "Построена первая лавка",
-  tavern: "Построен первый постоялый двор",
-  gumno: "Построено первое гумно",
-  woodcutter: "Построена первая делянка лесоруба",
-  sawpit: "Построена первая пильня",
-  quarry: "Построена первая каменоломня",
-  fisher: "Построена первая избушка рыбака",
-  barn: "Построен первый амбар",
+  shop: "Построен первый магазин",
+  tavern: "Построена первая таверна",
+  gumno: "Построена первая ферма",
+  woodcutter: "Построена первая лесозаготовка",
+  sawpit: "Построена первая лесопилка",
+  quarry: "Построен первый карьер",
+  fisher: "Построен первый рыболовный причал",
+  barn: "Построен первый склад",
   well: "Построен первый колодец",
   market: "Построен первый рынок",
-  chapel: "Построена первая часовня",
+  chapel: "Построен первый храм",
   school: "Построена первая школа",
   healer: "Построена первая лечебница",
   dig: "Заложен первый раскоп",
@@ -87,7 +87,7 @@ export function recordChronicle(prev: SimState, next: SimState): SimState {
   }
 
   if (next.prod.flags.hungry !== prev.prod.flags.hungry) {
-    if (next.prod.flags.hungry) add("famine", "Провизия закончилась: в поселении голод");
+    if (next.prod.flags.hungry) add("famine", "Еда закончилась: в поселении голод");
     else add("famineEnd", "Голод закончился");
   }
 

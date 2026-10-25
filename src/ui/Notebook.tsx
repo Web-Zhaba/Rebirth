@@ -22,7 +22,7 @@ type Tab = "finds" | "history" | "chronicle";
 const TABS: [Tab, string][] = [
   ["finds", "Находки"],
   ["history", "История"],
-  ["chronicle", "Летопись"],
+  ["chronicle", "Хроника"],
 ];
 const KIND_ICON: Record<Find["kind"], IconName> = { poi: "find", street: "street", foundations: "foundations" };
 
@@ -110,7 +110,7 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
               ))}
             {tab === "chronicle" &&
               (chronicle.length === 0 ? (
-                <div class="notebook-empty">Летопись пуста: история города только начинается.</div>
+                <div class="notebook-empty">Хроника пуста: история города только начинается.</div>
               ) : (
                 newestFirst(chronicle).map((c, i) => (
                   <div class="notebook-entry" key={`${c.at}-${i}`}>

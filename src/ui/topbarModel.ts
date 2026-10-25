@@ -43,8 +43,8 @@ export interface Warning {
 export function warnings(args: { food: number; eco: EconomyStats; builders: number; queue: number; logs: number; building: number }): Warning[] {
   const { food, eco, builders, queue, logs, building } = args;
   const out: Warning[] = [];
-  if (eco.foodPerDay > 0 && food < eco.foodPerDay) out.push({ id: "famine", text: "Голод: провизия закончилась" });
-  else if (eco.foodPerDay > 0 && eco.foodDays < LOW_FOOD_DAYS) out.push({ id: "lowfood", text: `Провизии на ${Math.floor(eco.foodDays)} дн.` });
+  if (eco.foodPerDay > 0 && food < eco.foodPerDay) out.push({ id: "famine", text: "Голод: еда закончилась" });
+  else if (eco.foodPerDay > 0 && eco.foodDays < LOW_FOOD_DAYS) out.push({ id: "lowfood", text: `Еды на ${Math.floor(eco.foodDays)} дн.` });
   else if (eco.foodPerDay > 0 && eco.outlook < 1) out.push({ id: "outlook", text: "Запасов на год не хватит" });
   if (queue > 0 && builders === 0) out.push({ id: "nohands", text: "Некому строить" });
   if (building > 0 && logs < 0.05) out.push({ id: "nologs", text: "Не хватает брёвен" });

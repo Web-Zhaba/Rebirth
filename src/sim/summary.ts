@@ -52,11 +52,11 @@ export function daySummary(s: SimState): DaySummary {
 
   const made = madeToday(s);
   const parts: string[] = [];
-  if (made.food >= 1) parts.push(`провизии ${massText(made.food)}`);
+  if (made.food >= 1) parts.push(`еды ${massText(made.food)}`);
   if (made.logs >= 0.05) parts.push(`брёвен ${volume(made.logs)} м³`);
   if (made.planks >= 0.05) parts.push(`досок ${volume(made.planks)} м³`);
   if (made.stone >= 0.05) parts.push(`камня ${volume(made.stone)} т`);
-  if (made.wares >= 0.05) parts.push(`утвари ${volume(made.wares)} шт.`);
+  if (made.wares >= 0.05) parts.push(`товаров ${volume(made.wares)} шт.`);
   if (parts.length > 0) lines.push({ kind: "made", text: `Сделано: ${parts.join(", ")}` });
 
   const seen = new Set<string>();
@@ -65,7 +65,7 @@ export function daySummary(s: SimState): DaySummary {
     seen.add(e.text);
     lines.push({ kind: "problem", text: e.text, ...(e.pos ? { pos: e.pos } : {}) });
   }
-  if (s.prod.flags.hungry && !seen.has("Провизия закончилась, люди голодают")) lines.push({ kind: "problem", text: "Люди голодают" });
+  if (s.prod.flags.hungry && !seen.has("Еда закончилась, люди голодают")) lines.push({ kind: "problem", text: "Люди голодают" });
   const idle = peopleStats(s).unemployed;
   if (idle > 0) lines.push({ kind: "problem", text: `Без дела: ${idle} ${plural(idle, "взрослый", "взрослых", "взрослых")}` });
 

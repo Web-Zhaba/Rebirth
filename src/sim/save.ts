@@ -7,6 +7,7 @@ import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { parseEventLast, parsePending } from "./events";
 import { migrateGoals, parseGoals } from "./goals";
 import { emptyLevers, type Levers } from "./levers";
+import { migrateText } from "./legacyText";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
@@ -290,7 +291,7 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     for (const e of sim.events) {
       if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && EVENT_KINDS.includes(e.kind) && typeof e.text === "string") {
         const pos = parsePos(e.pos);
-        events.push(pos ? { at: e.at, kind: e.kind as EventKind, text: e.text, pos } : { at: e.at, kind: e.kind as EventKind, text: e.text });
+        events.push(pos ? { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text), pos } : { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text) });
       }
     }
   }
@@ -357,9 +358,16 @@ function parseSummary(v: unknown): DaySummary | null {
   const lines: SummaryLine[] = [];
   for (const l of v.lines.slice(0, 40)) {
     if (!isRecord(l) || typeof l.kind !== "string" || !SUMMARY_KINDS.includes(l.kind) || typeof l.text !== "string") continue;
-    lines.push({ kind: l.kind as SummaryLine["kind"], text: l.text.slice(0, 200), ...(isPoint(l.pos) ? { pos: [l.pos[0], l.pos[1]] as [number, number] } : {}) });
+    lines.push({ kind: l.kind as SummaryLine["kind"], text: migrateText(l.text.slice(0, 200)), ...(isPoint(l.pos) ? { pos: [l.pos[0], l.pos[1]] as [number, number] } : {}) });
   }
   return { at: v.at, lines };
+}
+
+// A pending choice written with the old vocabulary gets the universal words.
+function migratePending(p: ReturnType<typeof parsePending>): ReturnType<typeof parsePending> {
+  if (!p) return p;
+  const opt = (o: { label: string; effect: string }) => ({ label: migrateText(o.label), effect: migrateText(o.effect) });
+  return { ...p, title: migrateText(p.title), text: migrateText(p.text), options: [opt(p.options[0]), opt(p.options[1])] };
 }
 
 // Broken entries are dropped, never the whole chronicle.
@@ -367,7 +375,7 @@ function parseChronicle(v: unknown): ChronicleEntry[] {
   if (!Array.isArray(v)) return [];
   const out: ChronicleEntry[] = [];
   for (const e of v) {
-    if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && typeof e.text === "string") out.push({ at: e.at, kind: e.kind, text: e.text });
+    if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && typeof e.text === "string") out.push({ at: e.at, kind: e.kind, text: migrateText(e.text) });
   }
   return out.slice(-CHRONICLE_CAP);
 }
@@ -433,7 +441,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.chronicle = parseChronicle(sim.chronicle);
   g.summary = parseSummary(sim.summary);
   g.levers = parseLevers(sim.levers);
-  g.pending = parsePending(sim.pending);
+  g.pending = migratePending(parsePending(sim.pending));
   g.eventLast = parseEventLast(sim.eventLast);
   if (isNum(sim.nextEvent)) g.nextEvent = sim.nextEvent; // else the default of a fresh town: three game days from now
   g.finds = parseFinds(sim.finds);

@@ -9,6 +9,10 @@ describe("suggestNames", () => {
     expect(new Set(a).size).toBe(NAME_CHOICES);
     for (const n of a) expect(SETTLEMENT_NAMES).toContain(n);
   });
+  it("offers neutral descriptive names", () => {
+    expect(SETTLEMENT_NAMES).toContain("Речной");
+    for (const old of ["Заречье", "Починок", "Выселки", "Слобода"]) expect(SETTLEMENT_NAMES).not.toContain(old);
+  });
   it("varies with the place", () => {
     const sets = new Set([suggestNames(56.3, 44.0)[0], suggestNames(55.1, 37.2)[0], suggestNames(59.9, 30.3)[0], suggestNames(51.5, 46.0)[0]]);
     expect(sets.size).toBeGreaterThan(1);

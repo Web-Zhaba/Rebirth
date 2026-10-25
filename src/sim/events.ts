@@ -95,8 +95,8 @@ const EVENTS: EventDef[] = [
     cond: (s) => freeHouse(s) !== undefined && s.stock.food >= SHELTER_FOOD * 2,
     make: () => ({
       title: "Странники просят приюта",
-      text: "К околице вышла семья странников: дорога была долгой, они просят крова. В посёлке есть свободный дом.",
-      options: [opt("Принять", `В свободный дом переедет семья, на дорогу ей уйдёт ${SHELTER_FOOD} кг провизии.`), opt("Отказать", NOTHING)],
+      text: "К окраине посёлка вышла семья странников: дорога была долгой, они просят крова. В посёлке есть свободный дом.",
+      options: [opt("Принять", `В свободный дом переедет семья, на дорогу ей уйдёт ${SHELTER_FOOD} кг еды.`), opt("Отказать", NOTHING)],
       safe: 1,
       arg: 0,
     }),
@@ -107,7 +107,7 @@ const EVENTS: EventDef[] = [
       const [r, rng] = nextRandom(s.rng);
       const arrive = s.gameMinutes + CALL.minMinutes + r * (CALL.maxMinutes - CALL.minMinutes);
       const incoming = [...s.incoming, { house, arrive }].sort((a, b) => a.arrive - b.arrive);
-      return { sim: { ...s, rng, incoming, stock: { ...s.stock, food: s.stock.food - SHELTER_FOOD } }, text: `Странников приняли: семья переедет в свободный дом (${SHELTER_FOOD} кг провизии на дорогу)` };
+      return { sim: { ...s, rng, incoming, stock: { ...s.stock, food: s.stock.food - SHELTER_FOOD } }, text: `Странников приняли: семья переедет в свободный дом (${SHELTER_FOOD} кг еды на дорогу)` };
     },
   },
   {
@@ -116,7 +116,7 @@ const EVENTS: EventDef[] = [
     cond: (s) => s.stock.wares >= CART.wares || s.stock.food >= CART.food * 2,
     make: (s, rand) => {
       const byWares = s.stock.wares >= CART.wares && (s.stock.food < CART.food * 2 || rand() < 0.5);
-      const give = byWares ? `${CART.wares} шт утвари` : `${CART.food} кг провизии`;
+      const give = byWares ? `${CART.wares} шт товаров` : `${CART.food} кг еды`;
       const get = byWares ? `${CART.planks} м³ досок` : `${CART.stone} т камня`;
       return {
         title: "Торговая телега",
@@ -129,11 +129,11 @@ const EVENTS: EventDef[] = [
     apply: (s, o, c) => {
       if (o === 1) return { sim: s, text: "Торговца проводили без обмена" };
       if (c.arg === 0) {
-        if (s.stock.wares < CART.wares) return { sim: s, text: "Обмен не состоялся: не хватило утвари" };
-        return { sim: { ...s, stock: { ...s.stock, wares: s.stock.wares - CART.wares, planks: s.stock.planks + CART.planks } }, text: `Обменяли ${CART.wares} шт утвари на ${CART.planks} м³ досок` };
+        if (s.stock.wares < CART.wares) return { sim: s, text: "Обмен не состоялся: не хватило товаров" };
+        return { sim: { ...s, stock: { ...s.stock, wares: s.stock.wares - CART.wares, planks: s.stock.planks + CART.planks } }, text: `Обменяли ${CART.wares} шт товаров на ${CART.planks} м³ досок` };
       }
-      if (s.stock.food < CART.food) return { sim: s, text: "Обмен не состоялся: не хватило провизии" };
-      return { sim: { ...s, stock: { ...s.stock, food: s.stock.food - CART.food, stone: s.stock.stone + CART.stone } }, text: `Обменяли ${CART.food} кг провизии на ${CART.stone} т камня` };
+      if (s.stock.food < CART.food) return { sim: s, text: "Обмен не состоялся: не хватило еды" };
+      return { sim: { ...s, stock: { ...s.stock, food: s.stock.food - CART.food, stone: s.stock.stone + CART.stone } }, text: `Обменяли ${CART.food} кг еды на ${CART.stone} т камня` };
     },
   },
   {
@@ -142,16 +142,16 @@ const EVENTS: EventDef[] = [
     cond: (s) => standingKg(s) > 50,
     make: (s) => ({
       title: "Ранний заморозок",
-      text: "Ударил ранний заморозок, а жатва ещё идёт. Колосья на корню могут пострадать.",
+      text: "Ударил ранний заморозок, а уборка урожая ещё идёт. Колосья на корню могут пострадать.",
       options: [
-        opt("Поднять всех на жатву", `Урожай цел, но настроение во всех семьях ${FROST_MOOD}.`),
+        opt("Поднять всех на уборку", `Урожай цел, но настроение во всех семьях ${FROST_MOOD}.`),
         opt("Принять потерю", `Пропадёт пятая часть несжатого зерна (около ${massText(standingKg(s) * FROST_LOSS)}).`),
       ],
       safe: 0,
       arg: 0,
     }),
     apply: (s, o) => {
-      if (o === 0) return { sim: moodAll(s, FROST_MOOD), text: "Всех подняли на жатву: урожай спасён, люди устали" };
+      if (o === 0) return { sim: moodAll(s, FROST_MOOD), text: "Всех подняли на уборку урожая: урожай спасён, люди устали" };
       const year = calendar(s.gameMinutes).year;
       const assign = assignFields(s.zones.fields, s.buildings);
       const fields = { ...s.prod.fields };
@@ -178,7 +178,7 @@ const EVENTS: EventDef[] = [
       return {
         title: "Находка на раскопе",
         text: "На раскопе наткнулись на что-то необычное: ниже, кажется, есть ещё слой.",
-        options: [opt("Копать глубже", `Артель потеряет около ${DIG_LABOR} чел.-ч на стройках, раскоп расширится и откроет больше находок.`), opt("Идти дальше", NOTHING)],
+        options: [opt("Копать глубже", `Строители потеряют около ${DIG_LABOR} чел.-ч на стройках, раскоп расширится и откроет больше находок.`), opt("Идти дальше", NOTHING)],
         safe: 1,
         arg: d.id,
         pos: [d.lot.cx, d.lot.cy],
@@ -201,16 +201,16 @@ const EVENTS: EventDef[] = [
       const kg = Math.max(FEAST.minKg, Math.round(popOf(s) * FEAST.kgPerPerson));
       return {
         title: "Праздник урожая",
-        text: "Хлеб убран, закрома полны. Люди просят отпраздновать.",
-        options: [opt("Устроить пир", `Уйдёт ${kg} кг провизии, настроение +${FEAST.mood} во всех семьях.`), opt("Обойтись", NOTHING)],
+        text: "Урожай собран, склады полны. Люди просят отпраздновать.",
+        options: [opt("Устроить пир", `Уйдёт ${kg} кг еды, настроение +${FEAST.mood} во всех семьях.`), opt("Обойтись", NOTHING)],
         safe: 1,
         arg: kg,
       };
     },
     apply: (s, o, c) => {
       if (o === 1) return { sim: s, text: "Праздник отложили: обошлись без пира" };
-      if (s.stock.food < c.arg) return { sim: s, text: "Праздник не состоялся: не хватило провизии" };
-      return { sim: moodAll({ ...s, stock: { ...s.stock, food: s.stock.food - c.arg } }, FEAST.mood), text: `Устроили пир: ушло ${c.arg} кг провизии, люди повеселели` };
+      if (s.stock.food < c.arg) return { sim: s, text: "Праздник не состоялся: не хватило еды" };
+      return { sim: moodAll({ ...s, stock: { ...s.stock, food: s.stock.food - c.arg } }, FEAST.mood), text: `Устроили пир: ушло ${c.arg} кг еды, люди повеселели` };
     },
   },
   {
@@ -223,8 +223,8 @@ const EVENTS: EventDef[] = [
       const home = s.buildings[h.home!];
       return {
         title: "Больная семья",
-        text: `В семье ${h.last} (${h.members.length} чел.) слегли от хвори. Лекаря рядом нет.`,
-        options: [opt("Выходить", `Уйдёт ${SICK.food} кг провизии, семья поправится.`), opt("Ждать", `С вероятностью ${Math.round(SICK.death * 100)}% умрёт один из членов семьи.`)],
+        text: `В семье ${h.last} (${h.members.length} чел.) заболели. Врача рядом нет.`,
+        options: [opt("Ухаживать", `Уйдёт ${SICK.food} кг еды, семья поправится.`), opt("Ждать", `С вероятностью ${Math.round(SICK.death * 100)}% умрёт один из членов семьи.`)],
         safe: 0,
         arg: h.id,
         pos: [home.lot.cx, home.lot.cy],
@@ -234,8 +234,8 @@ const EVENTS: EventDef[] = [
       const h = s.households[c.arg];
       if (!h) return { sim: s, text: "Больная семья уехала: помогать некому" };
       const lacking = o === 0 && s.stock.food < SICK.food; // nothing to nurse them with
-      if (o === 0 && !lacking) return { sim: { ...s, stock: { ...s.stock, food: s.stock.food - SICK.food } }, text: `Больную семью выходили: ушло ${SICK.food} кг провизии` };
-      const why = lacking ? ", провизии на уход не хватило" : "";
+      if (o === 0 && !lacking) return { sim: { ...s, stock: { ...s.stock, food: s.stock.food - SICK.food } }, text: `Больную семью вылечили: ушло ${SICK.food} кг еды` };
+      const why = lacking ? ", еды на уход не хватило" : "";
       if (rand() >= SICK.death) return { sim: s, text: `Больная семья справилась сама${why}` };
       const id = h.members[Math.min(h.members.length - 1, Math.floor(rand() * h.members.length))];
       const r = s.residents[id];

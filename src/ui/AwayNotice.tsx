@@ -33,11 +33,11 @@ function realDuration(ms: number): string {
 function produced(a: Away): string[] {
   const p = a.produced;
   const out: string[] = [];
-  if (p.food >= 1) out.push(`провизия ${NUM.format(p.food / 1000)} т`);
+  if (p.food >= 1) out.push(`еда ${NUM.format(p.food / 1000)} т`);
   if (p.logs >= 0.05) out.push(`брёвна ${NUM.format(p.logs)} м³`);
   if (p.planks >= 0.05) out.push(`доски ${NUM.format(p.planks)} м³`);
   if (p.stone >= 0.05) out.push(`камень ${NUM.format(p.stone)} т`);
-  if (p.wares >= 0.5) out.push(`утварь ${Math.round(p.wares)} шт.`);
+  if (p.wares >= 0.5) out.push(`товары ${Math.round(p.wares)} шт.`);
   return out;
 }
 
@@ -118,7 +118,7 @@ export function AwayNotice() {
       )}
       {a.chronicle.length > 0 && (
         <>
-          <h3 class="away-sub">Летопись</h3>
+          <h3 class="away-sub">Хроника</h3>
           <ul class="away-chronicle">
             {a.chronicle.map((e, i) => (
               <li key={i}>{e.text}</li>

@@ -105,7 +105,7 @@ describe("chronicle triggers", () => {
     const ev = { at: 1000, kind: "farm" as const, text: "Урожай собран: 2,3 т" };
     const harvested = recordChronicle(s, { ...s, events: [...s.events, ev] });
     expect(harvested.chronicle).toEqual([{ at: 1000, kind: "harvest", text: "Урожай собран: 2,3 т" }]);
-    const other = recordChronicle(s, { ...s, events: [...s.events, { at: 1000, kind: "farm", text: "Началась жатва" }] });
+    const other = recordChronicle(s, { ...s, events: [...s.events, { at: 1000, kind: "farm", text: "Началась уборка урожая" }] });
     expect(other.chronicle).toEqual([]);
     const hungry = { ...s, prod: { ...s.prod, flags: { ...s.prod.flags, hungry: true } } };
     const a = recordChronicle(s, hungry);
@@ -157,7 +157,7 @@ describe("save", () => {
   it("keeps the position of an event, drops a malformed one, loads events without it", () => {
     const s = grower();
     const events = [
-      { at: 5, kind: "built", text: "Достроено: изба", pos: [1.5, -2] },
+      { at: 5, kind: "built", text: "Достроено: дом", pos: [1.5, -2] },
       { at: 6, kind: "shortage", text: "Не хватает брёвен", pos: [1, "x"] },
       { at: 7, kind: "birth", text: "Родился" },
     ];

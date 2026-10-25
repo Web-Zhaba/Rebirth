@@ -52,25 +52,25 @@ const T = (
 // izba should take about one game day of the founding party's work. Materials are m3 / m3 / t
 // (logs, planks, stone); the labor of placed buildings is not in the design table, chosen here.
 export const BUILDINGS: Record<string, BuildingTemplate> = {
-  izba: T("izba", "Изба", "res", 2, 3, 6, 7, 5, 100, 5, [25, 2, 2]),
-  izba5: T("izba5", "Пятистенок", "res", 2, 4, 7, 9, 6, 150, 7, [40, 4, 3]),
+  izba: T("izba", "Дом", "res", 2, 3, 6, 7, 5, 100, 5, [25, 2, 2]),
+  izba5: T("izba5", "Большой дом", "res", 2, 4, 7, 9, 6, 150, 7, [40, 4, 3]),
   smithy: T("smithy", "Кузница", "craft", 2, 2, 6, 5, 4, 90, 3, [10, 1, 5]),
   carpentry: T("carpentry", "Столярная мастерская", "craft", 2, 3, 8, 6, 5, 110, 4, [22, 3, 2]),
   pottery: T("pottery", "Гончарня", "craft", 2, 2, 6, 5, 4, 75, 3, [10, 1, 4]),
-  shop: T("shop", "Лавка", "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1]),
-  tavern: T("tavern", "Постоялый двор", "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8]),
-  gumno: T("gumno", "Гумно", "placed", 1, 2, 8, 10, 6, 120, 0, [30, 4, 3]),
-  woodcutter: T("woodcutter", "Лесоруб", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 0.5, 0]),
-  sawpit: T("sawpit", "Пильня", "placed", 1, 1, 6, 4, 3, 50, 2, [5, 1, 0]),
-  quarry: T("quarry", "Каменоломня", "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0]),
-  fisher: T("fisher", "Рыбак", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0]),
-  barn: T("barn", "Амбар", "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2]),
+  shop: T("shop", "Магазин", "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1]),
+  tavern: T("tavern", "Таверна", "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8]),
+  gumno: T("gumno", "Ферма", "placed", 1, 2, 8, 10, 6, 120, 0, [30, 4, 3]),
+  woodcutter: T("woodcutter", "Лесозаготовка", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 0.5, 0]),
+  sawpit: T("sawpit", "Лесопилка", "placed", 1, 1, 6, 4, 3, 50, 2, [5, 1, 0]),
+  quarry: T("quarry", "Карьер", "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0]),
+  fisher: T("fisher", "Рыболовный причал", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0]),
+  barn: T("barn", "Склад", "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2]),
   // Services (PLAN.md section 9); labor and materials chosen here, like the placed buildings above.
   well: T("well", "Колодец", "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3]),
   market: T("market", "Рынок", "placed", 2, 2, 12, 12, 4, 160, 4, [30, 6, 2]),
-  chapel: T("chapel", "Часовня", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6]),
+  chapel: T("chapel", "Храм", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6]),
   school: T("school", "Школа", "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3]),
-  healer: T("healer", "Лекарь", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1]),
+  healer: T("healer", "Лечебница", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1]),
   // Excavation (PLAN.md section 12).
   dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0]),
 };

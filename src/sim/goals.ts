@@ -18,7 +18,7 @@ type Slice = Pick<SimState, "buildings" | "residents" | "stock" | "prod" | "zone
 
 export interface GoalDef {
   id: string;
-  title: string; // «Построить 2 избы»
+  title: string; // «Построить 2 дома»
   reward: string; // what it pays, shown up front
   target: number;
   unit: string; // "", "м³", "га"
@@ -50,50 +50,50 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 // Chain order = the order of the plan table.
 export const GOALS: GoalDef[] = [
-  { id: "izbas2", title: "Построить 2 избы", reward: "пильня, амбар", target: 2, unit: "", unlocks: ["sawpit", "barn"], value: (s) => countWhere(s, (b) => b.zone === "res") },
+  { id: "izbas2", title: "Построить 2 дома", reward: "лесопилка, склад", target: 2, unit: "", unlocks: ["sawpit", "barn"], value: (s) => countWhere(s, (b) => b.zone === "res") },
   {
     id: "logs20",
     title: "Накопить 20 м³ брёвен",
-    reward: "каменоломня, ремесленная зона",
+    reward: "карьер, ремесленная зона",
     target: 20,
     unit: "м³",
     unlocks: ["quarry", "zone:craft"],
     value: (s) => s.stock.logs,
     // The founding stock already holds the logs: they count once the town makes its own (a woodcutter or a clearing).
     gate: (s) => exists(s, (b) => b.template === "woodcutter") || s.clearings.some((c) => c.done >= c.labor),
-    gateHint: "нужен лесоруб или вырубка",
+    gateHint: "нужна лесозаготовка или вырубка",
   },
-  { id: "sow2", title: "Засеять 2 га", reward: "рыбак, +1 семья", target: 2, unit: "га", unlocks: ["fisher"], families: 1, value: (s) => round1(sownHa(s)) },
+  { id: "sow2", title: "Засеять 2 га", reward: "рыболовный причал, +1 семья", target: 2, unit: "га", unlocks: ["fisher"], families: 1, value: (s) => round1(sownHa(s)) },
   { id: "dig", title: "Открыть раскоп", reward: "первая статья в тетради", target: 1, unit: "", unlocks: [], value: (s) => countWhere(s, (b) => b.template === "dig") },
   { id: "pop25", title: "25 жителей", reward: "торговая зона, рынок", target: 25, unit: "", unlocks: ["zone:trade", "market"], value: (s) => Object.keys(s.residents).length },
   {
     id: "harvest",
     title: "Первый урожай",
-    reward: "часовня, праздник урожая",
+    reward: "храм, праздник урожая",
     target: 1,
     unit: "",
     unlocks: ["chapel"],
     value: (s) => (s.chronicle.some((e) => e.kind === "harvest") || s.prod.flags.done ? 1 : 0),
   },
-  { id: "pop50", title: "50 жителей", reward: "школа, лекарь", target: 50, unit: "", unlocks: ["school", "healer"], value: (s) => Object.keys(s.residents).length },
-  { id: "craft5", title: "5 ремесленных построек", reward: "улучшение изб", target: 5, unit: "", unlocks: ["upgrade"], value: (s) => countWhere(s, (b) => b.zone === "craft") },
+  { id: "pop50", title: "50 жителей", reward: "школа, лечебница", target: 50, unit: "", unlocks: ["school", "healer"], value: (s) => Object.keys(s.residents).length },
+  { id: "craft5", title: "5 ремесленных построек", reward: "расширение домов", target: 5, unit: "", unlocks: ["upgrade"], value: (s) => countWhere(s, (b) => b.zone === "craft") },
 ];
 
 const GOAL_BY_ID = new Map(GOALS.map((g) => [g.id, g]));
 
 // What each unlock key is called in the reward lines.
 export const UNLOCK_NAME: Record<string, string> = {
-  sawpit: "пильня",
-  barn: "амбар",
-  quarry: "каменоломня",
-  fisher: "рыбак",
+  sawpit: "лесопилка",
+  barn: "склад",
+  quarry: "карьер",
+  fisher: "рыболовный причал",
   market: "рынок",
-  chapel: "часовня",
+  chapel: "храм",
   school: "школа",
-  healer: "лекарь",
+  healer: "лечебница",
   "zone:craft": "ремесленная зона",
   "zone:trade": "торговая зона",
-  upgrade: "улучшение изб",
+  upgrade: "расширение домов",
 };
 
 // The goal that opens each unlock.

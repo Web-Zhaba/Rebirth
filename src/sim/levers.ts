@@ -8,7 +8,7 @@ export interface Levers {
   priority: number | null; // site served first: a building id, or -id of a clearing
   toloka: { site: number; until: number } | null; // site key and the gameMinutes the call lasts to (the end of that workday)
   tolokaReady: number; // gameMinutes from which a new толока may be called
-  strada: boolean; // «страда»: the long workday
+  strada: boolean; // «Долгий день»: the long workday
   rations: Rations;
 }
 
@@ -21,7 +21,7 @@ export const TOLOKA_COOLDOWN = 3 * 1440; // game minutes
 export const CALL = { food: 300, wares: 10, minMinutes: 360, maxMinutes: 1440 }; // cost of a call for settlers; arrival window
 
 export const RATIONS: Record<Rations, { name: string; food: number; mood: number }> = {
-  reduced: { name: "Скромные", food: 0.75, mood: -10 },
+  reduced: { name: "Урезанные", food: 0.75, mood: -10 },
   normal: { name: "Обычные", food: 1, mood: 0 },
   generous: { name: "Щедрые", food: 1.25, mood: 8 },
 };
@@ -30,7 +30,7 @@ export const RATIONS: Record<Rations, { name: string; food: number; mood: number
 type Source = { levers?: Levers } | Levers | undefined | null;
 const pick = (l: Source): Levers | undefined => (l && "rations" in l ? l : (l as { levers?: Levers } | null | undefined)?.levers);
 
-// Work hours of the day: 07-19, or 05-21 in the «страда».
+// Work hours of the day: 07-19, or 05-21 in the «Долгий день».
 export const workHours = (l?: Source): { start: number; end: number } => (pick(l)?.strada ? STRADA : WORKDAY);
 export const isWorkHour = (hour: number, l?: Source): boolean => {
   const w = workHours(l);

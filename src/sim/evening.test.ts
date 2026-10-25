@@ -115,7 +115,7 @@ describe("evening home crafts", () => {
   });
   it("the evening wares count in the day's output", () => {
     const s = eveningStep(homes(evening()), 10);
-    expect(daySummary(s).lines.find((l) => l.kind === "made")?.text).toContain("утвари");
+    expect(daySummary(s).lines.find((l) => l.kind === "made")?.text).toContain("товаров");
   });
 });
 
@@ -179,7 +179,7 @@ describe("day summary", () => {
     expect(by("built")).toEqual([{ kind: "built", text: "Построено: Изба", pos: [100, 5] }]);
     expect(by("arrived")[0]).toMatchObject({ pos: [9, 9] });
     expect(by("born")[0].text).toBe("Родилось: 1");
-    expect(by("made")[0].text).toContain("утвари");
+    expect(by("made")[0].text).toContain("товаров");
     expect(by("problem")[0]).toMatchObject({ pos: [50, 5] });
     expect(s.summary!.lines.some((l) => l.text.includes("Вчера"))).toBe(false);
   });

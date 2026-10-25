@@ -39,11 +39,11 @@ export function templateIcon(template: string): IconName {
 
 // What a workplace makes, in the nominative, with the icon of the good.
 export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: IconName }> = {
-  food: { name: "провизия", unit: "кг", icon: "food" },
+  food: { name: "еда", unit: "кг", icon: "food" },
   logs: { name: "брёвна", unit: "м³", icon: "log" },
   planks: { name: "доски", unit: "м³", icon: "planks" },
   stone: { name: "камень", unit: "т", icon: "stone" },
-  wares: { name: "утварь", unit: "шт", icon: "wares" },
+  wares: { name: "товары", unit: "шт", icon: "wares" },
 };
 
 // Hands one site can use at once (a толока lifts the limit).

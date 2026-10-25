@@ -159,7 +159,7 @@ describe("storage", () => {
     s = { ...s, stock: { ...s.stock, food: 5000 } };
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.stock.food).toBe(FOOD_CAMP_CAP);
-    expect(d.events[0].text).toContain("не хватает амбаров");
+    expect(d.events[0].text).toContain("не хватает складов");
   });
 });
 
@@ -177,7 +177,7 @@ describe("food", () => {
     s = { ...s, stock: { ...s.stock, food: 1 } }; // needs 0.7 + 0.7 + 0.9 = 2.3
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.stock.food).toBe(0);
-    expect(d.events.map((e) => e.text)).toEqual(["Провизия закончилась, люди голодают"]);
+    expect(d.events.map((e) => e.text)).toEqual(["Еда закончилась, люди голодают"]);
     // fed = 1 / 2.3: both households move a quarter of the way towards 10 + 45 fed (+10 with a house)
     const fed = 1 / 2.3;
     expect(d.households[1].mood).toBeCloseTo(60 + (10 + 45 * fed + 10 - 60) / 4);
@@ -272,7 +272,7 @@ describe("fields", () => {
     s = work(s, HARV / 8); // 4 farmers x HARV / 8 h
     expect(s.stock.food - food0).toBeCloseTo(YIELD / 2);
     expect(s.prod.fields[1].reaped).toBeCloseTo(YIELD / 2);
-    expect(s.events.map((e) => e.text)).toEqual(["Начался сев", "Началась жатва"]);
+    expect(s.events.map((e) => e.text)).toEqual(["Начался сев", "Началась уборка урожая"]);
     // the window ends with half the grain still standing
     const lost = dailyEconomy({ ...s, gameMinutes: at(HARVEST_END_DAY + 1) });
     expect(lost.events.at(-1)!.text).toBe(`Зерно осталось в поле и пропало: ${massText(YIELD / 2)}`);

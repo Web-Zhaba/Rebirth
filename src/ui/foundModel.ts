@@ -1,23 +1,23 @@
 import type { Site } from "../sim/types";
 
-// Old Russian settlement names offered when founding a town.
+// Neutral descriptive settlement names offered when founding a town.
 export const SETTLEMENT_NAMES = [
-  "Заречье",
-  "Озёрки",
-  "Сосновка",
-  "Берёзовка",
-  "Подгорное",
-  "Луговое",
-  "Ключи",
-  "Займище",
-  "Починок",
-  "Выселки",
-  "Слобода",
-  "Борки",
-  "Дубрава",
-  "Горки",
-  "Лукоморье",
-  "Ольховка",
+  "Речной",
+  "Лесной",
+  "Луговой",
+  "Холмистый",
+  "Озёрный",
+  "Каменный",
+  "Новый Берег",
+  "Тихая Долина",
+  "Северный",
+  "Южный",
+  "Зелёный Мыс",
+  "Ясная Поляна",
+  "Светлый",
+  "Солнечный",
+  "Ключевой",
+  "Новая Гавань",
 ];
 
 export const NAME_CHOICES = 5;
@@ -38,8 +38,8 @@ export function siteNotes(site: Site, slope: number | null, river: boolean): str
   const out: string[] = [];
   if (river) out.push("Река рядом: вода и рыба под рукой");
   if (site.water >= 0.3) out.push("Много воды вокруг, застраивать тесно");
-  if (site.forest >= 0.6) out.push("Густой лес: брёвна рядом, но пашню придётся расчищать");
-  else if (site.forest < 0.05 && site.water < 0.3) out.push("Открытая земля: удобно под пашню, леса поблизости мало");
+  if (site.forest >= 0.6) out.push("Густой лес: брёвна рядом, но поля придётся расчищать");
+  else if (site.forest < 0.05 && site.water < 0.3) out.push("Открытая земля: удобно под поля, леса поблизости мало");
   if (site.rock >= 0.2) out.push("Камень или песок рядом");
   if (slope !== null && slope >= 10) out.push("Крутой склон: строить будет трудно");
   return out;

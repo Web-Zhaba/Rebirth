@@ -178,7 +178,7 @@ describe("rations", () => {
   it("the command validates and logs", () => {
     const s = ok(setRations(base, "reduced"));
     expect(s.levers.rations).toBe("reduced");
-    expect(s.chronicle.at(-1)?.text).toContain("скромные");
+    expect(s.chronicle.at(-1)?.text).toContain("урезанные");
     expect(setRations(base, "huge" as never)).toMatchObject({ ok: false });
   });
 });
@@ -188,8 +188,8 @@ describe("call for settlers", () => {
   it("refuses without a vacant house, food or wares", () => {
     expect(callSettlers(stocked(world([site(1)])))).toMatchObject({ ok: false, reason: expect.stringContaining("дома") });
     const h = world([house(1)]);
-    expect(callSettlers({ ...h, stock: { ...h.stock, food: 100, wares: 20 } })).toMatchObject({ ok: false, reason: expect.stringContaining("провизии") });
-    expect(callSettlers({ ...h, stock: { ...h.stock, food: 1000, wares: 2 } })).toMatchObject({ ok: false, reason: expect.stringContaining("утвари") });
+    expect(callSettlers({ ...h, stock: { ...h.stock, food: 100, wares: 20 } })).toMatchObject({ ok: false, reason: expect.stringContaining("еды") });
+    expect(callSettlers({ ...h, stock: { ...h.stock, food: 1000, wares: 2 } })).toMatchObject({ ok: false, reason: expect.stringContaining("товаров") });
   });
   it("spends food and wares, promises the house and the family arrives within a day", () => {
     const s0 = stocked(world([house(1)]));

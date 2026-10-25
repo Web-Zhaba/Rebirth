@@ -63,13 +63,13 @@ describe("goals chain", () => {
     expect(s.goals).toEqual(initialGoals());
     for (const t of ["sawpit", "barn", "quarry", "fisher", "market", "chapel", "school", "healer", "craft", "trade"]) expect(lockReason(s, t)).toMatch(/^Откроется: /);
     for (const t of ["path", "dirt", "bulldoze", "res", "field", "clear", "clearing", "gumno", "woodcutter", "well", "dig"]) expect(lockReason(s, t)).toBeNull();
-    expect(lockReason(s, "sawpit")).toBe("Откроется: Построить 2 избы");
+    expect(lockReason(s, "sawpit")).toBe("Откроется: Построить 2 дома");
   });
 
   it("shows progress of the active goals", () => {
     const v = goalViews(town([bld(1, "izba")]));
     expect(v.map((g) => [g.id, g.value, g.target])).toEqual([["izbas2", 1, 2], ["logs20", 20, 20], ["sow2", 0, 2]]);
-    expect(v[1].hint).toBe("нужен лесоруб или вырубка");
+    expect(v[1].hint).toBe("нужна лесозаготовка или вырубка");
   });
 
   it("2 izbas unlock the sawpit and the barn, and the chain fills the slot", () => {
@@ -80,7 +80,7 @@ describe("goals chain", () => {
     expect(isUnlocked(s.goals, "quarry")).toBe(false);
     expect(ids(s)).toEqual(["logs20", "sow2", "dig"]);
     expect(s.chronicle.at(-1)).toMatchObject({ kind: "goal:izbas2" });
-    expect(s.chronicle.at(-1)!.text).toContain("открыто: пильня, амбар");
+    expect(s.chronicle.at(-1)!.text).toContain("открыто: лесопилка, склад");
     expect(s.events.map((e) => e.kind)).toEqual(["goal", "unlock"]);
     expect(checkGoals(s)).toBe(s); // nothing more to pay
   });
@@ -211,7 +211,7 @@ describe("locks", () => {
     const s = world();
     const e = Number(Object.keys(s.roads.edges)[0]);
     const { send } = await boot(s);
-    expect(await send({ type: "placeBuilding", template: "barn", edge: e, side: 1, i: 3, site })).toMatchObject({ ok: false, reason: "Откроется: Построить 2 избы" });
+    expect(await send({ type: "placeBuilding", template: "barn", edge: e, side: 1, i: 3, site })).toMatchObject({ ok: false, reason: "Откроется: Построить 2 дома" });
     const keys = s.zones.cells.slice(0, 2).map((c) => c.key);
     expect(await send({ type: "paintZones", keys, zone: "craft" })).toMatchObject({ ok: false, reason: "Откроется: Накопить 20 м³ брёвен" });
     expect(await send({ type: "paintZones", keys, zone: "trade" })).toMatchObject({ ok: false, reason: "Откроется: 25 жителей" });

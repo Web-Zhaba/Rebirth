@@ -86,12 +86,12 @@ export function SiteLevers({ siteKey }: { siteKey: number }) {
       </Button>
       <Button
         icon="crowd"
-        aria-label="Толока"
+        aria-label="Общий сбор"
         title="Все взрослые идут на эту стройку до конца рабочего дня, прочие дела стоят"
         disabled={wait > 0 || running}
         onClick={() => act({ type: "callToloka", key: siteKey })}
       >
-        {running ? "Толока идёт" : wait > 0 ? `Толока (через ${waitText(wait)})` : "Толока"}
+        {running ? "Общий сбор идёт" : wait > 0 ? `Общий сбор (через ${waitText(wait)})` : "Общий сбор"}
       </Button>
     </div>
   );

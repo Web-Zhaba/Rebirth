@@ -35,7 +35,7 @@ export function setPriority(s: SimState, key: number | null): LeverResult {
   const site = siteInfo(s, key);
   if (!site) return fail("Здесь нечего строить");
   if (s.levers.priority === key) return { ok: true, sim: s };
-  return done(set(s, { priority: key }), `Артель берётся за ${site.name} в первую очередь`);
+  return done(set(s, { priority: key }), `Строители берутся за ${site.name} в первую очередь`);
 }
 
 // Minutes until a толока can be called again; 0 when it can.
@@ -45,11 +45,11 @@ export function callToloka(s: SimState, key: number): LeverResult {
   if (!Number.isInteger(key) || key === 0) return fail("Некорректная стройка");
   const site = siteInfo(s, key);
   if (!site) return fail("Здесь нечего строить");
-  if (tolokaActive(s.levers, s.gameMinutes)) return fail("Толока уже идёт");
-  if (tolokaWait(s) > 0) return fail("Толоку недавно звали: люди ещё отдыхают");
-  if (!isWorkHour(calendar(s.gameMinutes).hour, s.levers)) return fail("Толоку зовут в рабочие часы");
+  if (tolokaActive(s.levers, s.gameMinutes)) return fail("Общий сбор уже идёт");
+  if (tolokaWait(s) > 0) return fail("Общий сбор недавно объявляли: люди ещё отдыхают");
+  if (!isWorkHour(calendar(s.gameMinutes).hour, s.levers)) return fail("Общий сбор объявляют в рабочие часы");
   if (countResidents(s.residents, s.gameMinutes).adults === 0) return fail("Некого звать");
-  return done(set(s, { toloka: { site: key, until: workEndAt(s.gameMinutes, s.levers) }, tolokaReady: s.gameMinutes + TOLOKA_COOLDOWN }), `Толока: все взрослые идут на ${site.name}, остальные дела стоят до вечера`);
+  return done(set(s, { toloka: { site: key, until: workEndAt(s.gameMinutes, s.levers) }, tolokaReady: s.gameMinutes + TOLOKA_COOLDOWN }), `Общий сбор: все взрослые идут на ${site.name}, остальные дела стоят до вечера`);
 }
 
 export function setSchedule(s: SimState, strada: boolean): LeverResult {
@@ -57,21 +57,21 @@ export function setSchedule(s: SimState, strada: boolean): LeverResult {
   if (s.levers.strada === strada) return { ok: true, sim: s };
   const next = set(s, { strada });
   const w = workHours(next);
-  return done(next, strada ? `Страда: работают с ${w.start} до ${w.end} часов, люди устают` : `Обычный распорядок: работа с ${w.start} до ${w.end} часов`);
+  return done(next, strada ? `Долгий день: работают с ${w.start} до ${w.end} часов, люди устают` : `Обычный распорядок: работа с ${w.start} до ${w.end} часов`);
 }
 
 export function setRations(s: SimState, rations: Rations): LeverResult {
-  if (typeof rations !== "string" || !Object.hasOwn(RATIONS, rations)) return fail("Неизвестные пайки");
+  if (typeof rations !== "string" || !Object.hasOwn(RATIONS, rations)) return fail("Неизвестные нормы еды");
   if (s.levers.rations === rations) return { ok: true, sim: s };
-  return done(set(s, { rations }), `Пайки: ${RATIONS[rations].name.toLowerCase()}`);
+  return done(set(s, { rations }), `Нормы еды: ${RATIONS[rations].name.toLowerCase()}`);
 }
 
 // Why a call for settlers cannot be made now, or null.
 export function callBlock(s: Pick<SimState, "stock" | "buildings" | "households" | "incoming">): string | null {
   const promised = new Set(s.incoming.map((f) => f.house));
   if (!vacantHouses(s.buildings, s.households).some((id) => !promised.has(id))) return "Нет свободного дома для новой семьи";
-  if (s.stock.food < CALL.food) return `Не хватает провизии: нужно ${CALL.food} кг`;
-  if (s.stock.wares < CALL.wares) return `Не хватает утвари: нужно ${CALL.wares} шт`;
+  if (s.stock.food < CALL.food) return `Не хватает еды: нужно ${CALL.food} кг`;
+  if (s.stock.wares < CALL.wares) return `Не хватает товаров: нужно ${CALL.wares} шт`;
   return null;
 }
 
@@ -84,7 +84,7 @@ export function callSettlers(s: SimState): LeverResult {
   const arrive = s.gameMinutes + CALL.minMinutes + r * (CALL.maxMinutes - CALL.minMinutes);
   const incoming = [...s.incoming, { house, arrive }].sort((a, b) => a.arrive - b.arrive);
   const next: SimState = { ...s, rng, incoming, stock: { ...s.stock, food: s.stock.food - CALL.food, wares: s.stock.wares - CALL.wares } };
-  return done(next, `Позвали поселенцев: ушло ${CALL.food} кг провизии и ${CALL.wares} шт утвари, семья будет в течение суток`);
+  return done(next, `Позвали поселенцев: ушло ${CALL.food} кг еды и ${CALL.wares} шт товаров, семья будет в течение суток`);
 }
 
 // End of each tick: a priority whose site is finished is dropped; a толока ends with the workday or with its site.

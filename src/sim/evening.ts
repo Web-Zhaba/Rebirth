@@ -6,7 +6,7 @@ import type { SimState } from "./types";
 
 // Evenings (PLAN-pace.md section 7): home crafts and gatherings between the end of work and the night.
 export const EVENING = {
-  from: 19, // hour: the normal workday is over (see workHours for the «страда»)
+  from: 19, // hour: the normal workday is over (see workHours for the «Долгий день»)
   to: 22, // hour: the night begins and the day summary is made
   waresPerAdultHour: 0.01, // pieces an adult at home makes
   winter: 2, // multiplier of the winter evening
@@ -14,7 +14,7 @@ export const EVENING = {
   tavernReach: 600, // m of road from a staffed tavern
 };
 
-// The evening starts when work ends (19:00, or 21:00 in the «страда»).
+// The evening starts when work ends (19:00, or 21:00 in the «Долгий день»).
 export const isEvening = (hour: number, levers?: Levers): boolean => hour >= workHours(levers).end && hour < EVENING.to;
 
 // Adults living in a finished house (tent dwellers have no hearth to sit at).
@@ -33,7 +33,7 @@ export function adultsAtHome(s: Pick<SimState, "residents" | "households" | "bui
 export const eveningRate = (s: Pick<SimState, "residents" | "households" | "buildings" | "gameMinutes">): number =>
   adultsAtHome(s) * EVENING.waresPerAdultHour * (calendar(s.gameMinutes).season === 3 ? EVENING.winter : 1);
 
-// One tick of `dt` hours of посиделки. Call in evening hours only. The wares count toward the day's output under key 0.
+// One tick of `dt` hours of вечерние ремёсла. Call in evening hours only. The wares count toward the day's output under key 0.
 export function eveningStep(s: SimState, dt: number): SimState {
   const q = eveningRate(s) * dt;
   if (!(q > 0)) return s;

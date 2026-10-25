@@ -335,7 +335,7 @@ export function canPlace(
   if (t.id === "quarry") {
     for (const c of cells) {
       const land = s.zones.terrain[qkey(c.cx, c.cy)]?.land;
-      if (land === "water" || land === "wetland") return NO_PLACE("Каменоломню нельзя ставить на воде и болоте");
+      if (land === "water" || land === "wetland") return NO_PLACE("Карьер нельзя ставить на воде и болоте");
     }
   }
   return { ok: true };
@@ -388,7 +388,7 @@ export function reportBuilt(before: Record<number, Building>, after: Record<numb
     if (!was) continue;
     const pos: [number, number] = [b.lot.cx, b.lot.cy];
     if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `Достроено: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
-    else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", "Изба перестроена", pos);
+    else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", "Дом расширен", pos);
   }
   return out;
 }

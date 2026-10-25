@@ -74,7 +74,7 @@ const GOODS: { id: Good; icon: IconName; title: string; cap: string }[] = [
   { id: "logs", icon: "log", title: "Брёвна", cap: "брёвна" },
   { id: "planks", icon: "planks", title: "Доски", cap: "доски" },
   { id: "stone", icon: "stone", title: "Камень", cap: "камень" },
-  { id: "wares", icon: "wares", title: "Утварь", cap: "утварь" },
+  { id: "wares", icon: "wares", title: "Товары", cap: "товары" },
 ];
 
 export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
@@ -166,12 +166,12 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
             value={`${tons(st.food)} т`}
             delta={perDay(net, "кг")}
             dir={deltaDir(net)}
-            caption={eco.foodPerDay > 0 ? `на ${eco.foodDays >= 999 ? "999+" : Math.floor(eco.foodDays)} дн.` : "провизия"}
+            caption={eco.foodPerDay > 0 ? `на ${eco.foodDays >= 999 ? "999+" : Math.floor(eco.foodDays)} дн.` : "еда"}
             tone={eco.foodPerDay > 0 && st.food < eco.foodPerDay ? "bad" : eco.foodPerDay > 0 && eco.foodDays < LOW_FOOD_DAYS ? "warn" : undefined}
-            title="Провизия"
+            title="Еда"
             tip={
               <>
-                <Row label="В амбарах" value={`${tons(st.food)} из ${tons(eco.foodCap)} т`} />
+                <Row label="На складах" value={`${tons(st.food)} из ${tons(eco.foodCap)} т`} />
                 {eco.foodPerDay > 0 && <Row label="Хватит на" value={`${eco.foodDays >= 999 ? "999+" : Math.floor(eco.foodDays)} дн.`} />}
                 <Row label="Сделано вчера" value={`+${amount(eco.yesterday.food)} кг`} />
                 <Row label="Собирают за день" value={`+${amount(eco.forage)} кг`} />
@@ -196,7 +196,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
                     <Row label="На складе" value={`${text(g.id)} ${GOOD_UNIT[g.id]}`} />
                     <Row label="Сделано вчера" value={`${made > 0 ? "+" : ""}${amount(made)} ${GOOD_UNIT[g.id]}`} />
                     {g.id === "logs" && clearing.length > 0 && <Row label="Вырубка уже дала" value={`+${amount(clearGot)} из ${amount(clearAll)} м³`} />}
-                    {g.id === "wares" && eco.eveningWares > 0 && <Row label="Посиделки, 19–22 ч" value={`+${eco.eveningWares.toFixed(2).replace(".", ",")} шт/ч`} />}
+                    {g.id === "wares" && eco.eveningWares > 0 && <Row label="Вечерние ремёсла, 19–22 ч" value={`+${eco.eveningWares.toFixed(2).replace(".", ",")} шт/ч`} />}
                   </>
                 }
               />

@@ -13,9 +13,9 @@ export interface ServiceInfo {
 export const SERVICE_LIST: ServiceInfo[] = [
   { id: "well", name: "Вода", reach: 150, mood: 8, color: "#4f86a8" },
   { id: "market", name: "Рынок", reach: 800, mood: 5, color: "#c9803a" },
-  { id: "chapel", name: "Часовня", reach: 1000, mood: 7, color: "#8e6bb0" },
+  { id: "chapel", name: "Храм", reach: 1000, mood: 7, color: "#8e6bb0" },
   { id: "school", name: "Школа", reach: 800, mood: 3, color: "#3f9a76" },
-  { id: "healer", name: "Лекарь", reach: 1000, mood: 2, color: "#c4504a" },
+  { id: "healer", name: "Лечебница", reach: 1000, mood: 2, color: "#c4504a" },
 ];
 export const SERVICES = Object.fromEntries(SERVICE_LIST.map((s) => [s.id, s])) as Record<ServiceId, ServiceInfo>;
 export const SERVICE_IDS: ServiceId[] = SERVICE_LIST.map((s) => s.id);

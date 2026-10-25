@@ -3,9 +3,9 @@ import { rewardParts } from "./goalsModel";
 
 describe("rewardParts", () => {
   it("splits a reward line and picks icons", () => {
-    expect(rewardParts("пильня, амбар")).toEqual([
-      { text: "пильня", icon: "sawpit" },
-      { text: "амбар", icon: "barn" },
+    expect(rewardParts("лесопилка, склад")).toEqual([
+      { text: "лесопилка", icon: "sawpit" },
+      { text: "склад", icon: "barn" },
     ]);
   });
   it("falls back to a flag", () => {

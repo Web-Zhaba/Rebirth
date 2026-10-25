@@ -82,7 +82,7 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
       {site && template === "woodcutter" && <div>Лес вокруг: {pct(site.forest)}</div>}
       {site && template === "fisher" && <div>Вода рядом: {pct(site.water)}</div>}
       {site && template === "quarry" && <div>Камень и песок: {pct(site.rock)}</div>}
-      {p.storage !== undefined && <div>Склад: +{tons(p.storage)} т провизии</div>}
+      {p.storage !== undefined && <div>Склад: +{tons(p.storage)} т еды</div>}
       {p.fields && (
         <div>
           {p.fields.count > 0 ? (

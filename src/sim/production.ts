@@ -262,7 +262,7 @@ export function produceStep(s: SimState, dt: number, scale: number = productionS
           made(b.id, kg);
           if (!flags.harvest) {
             flags = { ...flags, harvest: true };
-            events = say(events, s.gameMinutes, "farm", "Началась жатва", [b.lot.cx, b.lot.cy]);
+            events = say(events, s.gameMinutes, "farm", "Началась уборка урожая", [b.lot.cx, b.lot.cy]);
           }
         }
         break;
@@ -309,7 +309,7 @@ export function dailyEconomy(s: SimState): SimState {
   const fed = need > 0 ? eaten / need : 1;
   if (fed < 1 - EPS && !flags.hungry) {
     flags = { ...flags, hungry: true };
-    events = say(events, now, "food", "Провизия закончилась, люди голодают");
+    events = say(events, now, "food", "Еда закончилась, люди голодают");
   } else if (fed >= 1 - EPS && flags.hungry) flags = { ...flags, hungry: false };
   const cap = foodCapacity(s.buildings);
   if (stock.food > cap) {
@@ -317,7 +317,7 @@ export function dailyEconomy(s: SimState): SimState {
     stock.food = cap;
   }
   if (flags.rot >= 1) {
-    events = say(events, now, "food", `Пропало ${Math.round(flags.rot)} кг провизии: не хватает амбаров`);
+    events = say(events, now, "food", `Пропало ${Math.round(flags.rot)} кг еды: не хватает складов`);
     flags = { ...flags, rot: 0 };
   }
 
