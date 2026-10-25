@@ -7,6 +7,7 @@ import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
+import { attachPlaceLabels } from "./map/placeLabels";
 import { attachPlaceTool } from "./map/placeTool";
 import { attachReachLayer } from "./map/reachLayer";
 import { attachRoadLayer } from "./map/roadLayer";
@@ -25,6 +26,7 @@ import { App } from "./ui/App";
 // Read it before creating the map, which writes its own hash on construction.
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
+attachPlaceLabels(map);
 attachZoneLayer(map); // zones beneath everything else we add
 attachRuinsLayer(map, oldWorld, frame); // old foundations and streets, beneath the roads
 attachExcavation();

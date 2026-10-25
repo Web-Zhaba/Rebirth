@@ -40,6 +40,7 @@ tiles hold the buildings and streets that excavation reveals later.
 |---|---|---|
 | Terrain | AWS Terrain Tiles, Terrarium PNG | Used at z11 only: higher zooms include building/canopy heights. Absolute heights in dense cities read 20–30 m high; slopes are fine. |
 | Nature + buried city | OpenFreeMap vector tiles (OpenMapTiles schema), TileJSON `https://tiles.openfreemap.org/planet` | Nature from z12, waterways from z14, buildings/streets/POIs from z14 for excavation. |
+| Place search | Photon (komoot) `https://photon.komoot.io/api/?q=…&osm_tag=place` | Founding screen only; debounced 400 ms, biased to the map centre. |
 | Historical entries | Wikipedia `list=geosearch` + `prop=extracts` | Russian first, English fallback; CC BY-SA attribution. |
 
 ## 4. Done so far (commits on `main`)
@@ -54,6 +55,9 @@ tiles hold the buildings and streets that excavation reveals later.
 - **S0–S8** real-scale simulation: local metric frame and worker-hosted sim, roads, zones, growth,
   residents, production, services, visible life, idle catch-up and chronicle (section 7).
 - **E1** excavation: dig sites reveal the buried OSM city, finds are saved, rebuild on old foundations.
+- **F1** finding a place: search by name (Photon), «где я» (browser geolocation) and faint old place names
+  (OMT `place` layer, `src/map/placeLabels.ts`): on before founding, off after unless the player switches them on
+  (founding search box or the layer bar).
 - **E2** notebook: finds, Wikipedia articles unlocked by digs (saved with the town) and the chronicle.
 
 Next: pace and balance in `PLAN-pace.md`, interface in `PLAN-ui.md`.

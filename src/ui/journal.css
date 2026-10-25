@@ -271,3 +271,101 @@
   min-width: 3ch;
   text-align: right;
 }
+
+/* Finding a place before founding: search, own location, old place names. */
+.place-search {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: min(340px, calc(100vw - 72px)); /* clear of the zoom buttons on the right */
+  padding: var(--sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.place-search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.place-search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  border: var(--bw) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--pencil);
+}
+
+.place-search-field:focus-within {
+  outline: 2px solid var(--info);
+  outline-offset: 1px;
+}
+
+.place-search-field input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  padding: var(--sp-2) 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+.place-search .icon-btn[aria-pressed="true"],
+.place-search .icon-btn[aria-pressed="true"]:hover:not(:disabled) {
+  background-color: var(--ink);
+  color: var(--paper);
+}
+
+.place-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  border-top: var(--bw-hair) solid var(--rule-soft);
+}
+
+.place-hits li {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
+}
+
+.place-hits li[aria-selected="true"] {
+  background: var(--paper-shade);
+}
+
+.place-hit-kind,
+.place-hit-where,
+.place-search-msg,
+.place-search-credit {
+  color: var(--pencil);
+  font-size: var(--fs-sm);
+}
+
+.place-search-credit {
+  font-size: var(--fs-xs, 11px);
+  color: var(--pencil-faint);
+}
+
+.place-search-credit a {
+  color: inherit;
+}
+
+/* The founding hint moves under the search box where they would meet. */
+@media (max-width: 760px) {
+  .hint {
+    top: 120px;
+  }
+}

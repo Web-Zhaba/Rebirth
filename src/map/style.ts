@@ -24,6 +24,7 @@ export const C = {
 };
 
 export const MEADOW_COLOR = C.meadow;
+export const PLACE_LABELS_LAYER = "place-labels";
 
 const OMT_ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ' +
@@ -123,6 +124,30 @@ export function rewildedStyle(): StyleSpecification {
         paint: {
           "line-color": C.water,
           "line-width": ["interpolate", ["exponential", 1.4], ["zoom"], 8, 0.6, 14, 3, 18, 12],
+        },
+      },
+      // Names of the old towns and villages, faint like pencil notes in an atlas, to find a place by.
+      // Hidden by default; placeLabels.ts switches it.
+      {
+        id: PLACE_LABELS_LAYER,
+        type: "symbol",
+        source: "omt",
+        "source-layer": "place",
+        filter: ["in", ["get", "class"], ["literal", ["city", "town", "village", "hamlet"]]],
+        layout: {
+          visibility: "none",
+          "text-field": ["coalesce", ["get", "name:ru"], ["get", "name"]],
+          "text-font": ["Noto Sans Italic"],
+          "text-size": ["match", ["get", "class"], "city", 15, "town", 13.5, "village", 12, 11],
+          "symbol-sort-key": ["coalesce", ["get", "rank"], 99],
+          "text-max-width": 8,
+          "text-padding": 4,
+        },
+        paint: {
+          "text-color": PALETTE.ink2,
+          "text-opacity": 0.75,
+          "text-halo-color": PALETTE.paperRaised,
+          "text-halo-width": 1.4,
         },
       },
     ],

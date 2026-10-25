@@ -14,6 +14,7 @@ const LINKS: { name: string; href: string; what: string }[] = [
   { name: "Mapzen / AWS Open Data", href: "https://registry.opendata.aws/terrain-tiles/", what: "высоты рельефа (Terrain Tiles)" },
   { name: "MapLibre GL JS", href: "https://maplibre.org", what: "отрисовка карты, лицензия BSD-3-Clause" },
   { name: "Звуки интерфейса", href: "https://developer.mozilla.org/docs/Web/API/Web_Audio_API", what: "синтезируются в игре средствами Web Audio API, без сторонних файлов" },
+  { name: "Photon (komoot)", href: "https://photon.komoot.io", what: "поиск мест по названию перед основанием, данные OpenStreetMap" },
   { name: "Википедия", href: "https://ru.wikipedia.org", what: "статьи о найденных местах, CC BY-SA 4.0 (ссылка на каждую статью в записной книжке)" },
 ];
 

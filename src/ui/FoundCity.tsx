@@ -9,6 +9,7 @@ import type { Site } from "../sim/types";
 import { Icon } from "./Icon";
 import { Button, Panel } from "./kit";
 import { siteNotes, suggestNames } from "./foundModel";
+import { PlaceSearch } from "./PlaceSearch";
 import "./journal.css";
 
 interface Point {
@@ -110,6 +111,7 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
 
   return (
     <>
+      <PlaceSearch map={map} />
       <Panel class="hint">{msg || "Выберите место для нового поселения"}</Panel>
       {point && (
         <Panel class="found" role="group" aria-label="Основание поселения">

@@ -21,4 +21,5 @@ The in-game «Об игре» dialog (the info button at the right end of the to
 - Map data: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL), served as vector tiles by [OpenFreeMap](https://openfreemap.org) in the [OpenMapTiles](https://www.openmaptiles.org/) schema (© OpenMapTiles).
 - Terrain: Mapzen / [AWS Open Data](https://registry.opendata.aws/terrain-tiles/) Terrain Tiles (Terrarium encoding). The map attribution strings are in `src/map/style.ts`.
 - Map rendering: [MapLibre GL JS](https://maplibre.org), BSD-3-Clause.
+- Place search before founding: [Photon](https://photon.komoot.io) by komoot, over OpenStreetMap data (© OpenStreetMap contributors, ODbL).
 - Article extracts in the notebook: Wikipedia, CC BY-SA 4.0, each with a link to its article.

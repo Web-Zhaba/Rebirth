@@ -61,6 +61,9 @@ import PhStack from "~icons/ph/stack";
 import PhTrash from "~icons/ph/trash";
 import PhWarning from "~icons/ph/warning";
 import PhX from "~icons/ph/x-bold";
+import PhSearch from "~icons/ph/magnifying-glass-bold";
+import PhGpsFix from "~icons/ph/gps-fix-bold";
+import PhSignpost from "~icons/ph/signpost-bold";
 
 export type IconComponent = (props: JSX.IntrinsicElements["svg"]) => JSX.Element;
 
@@ -84,6 +87,10 @@ export const ICONS = {
   mood: PhSmiley,
   info: PhInfo,
   settings: PhGear,
+  // Finding a place before founding: search, own location, old place names
+  search: PhSearch,
+  locate: PhGpsFix,
+  placeNames: PhSignpost,
   // Inspector and town panel: priority, volunteers, waiting, the town button
   flag: PhFlag,
   build: PhHammer,

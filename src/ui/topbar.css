@@ -291,6 +291,14 @@ button.city-name-btn:hover .city-name {
   white-space: nowrap;
 }
 
+/* Between the exclusive overlays and the independent place names switch. */
+.layer-sep {
+  width: var(--bw-hair);
+  align-self: stretch;
+  margin: 2px var(--sp-1);
+  background: var(--rule-soft);
+}
+
 .layer-group .icon-btn {
   width: 30px;
   height: 30px;

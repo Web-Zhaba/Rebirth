@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { OVERLAY_COLORS, OVERLAYS, overlay, TRAFFIC_STOPS, type Overlay } from "../map/tools";
 import { compactScreen } from "../map/motion";
+import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { IconButton, Tooltip } from "./kit";
@@ -102,6 +103,10 @@ export function LayerBar() {
                 <IconButton icon={LAYER_ICON[o.id]} label={o.label} title={undefined} aria-pressed={cur === o.id} onClick={() => (overlay.value = o.id)} />
               </Tooltip>
             ))}
+            <span class="layer-sep" aria-hidden="true" />
+            <Tooltip text="Старые названия">
+              <IconButton icon="placeNames" label="Старые названия" title={undefined} aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
+            </Tooltip>
           </div>
           <Legend id={cur} />
         </>
