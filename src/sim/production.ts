@@ -113,11 +113,12 @@ export function payMaterials(
   personHours: number,
   foundations: readonly { ring: [number, number][] }[] = [],
   crewHours = Infinity, // no crew limit: sites are served one after another
-  clearings: readonly Clearing[] = [], // each takes its crew before the buildings
+  clearings: readonly Clearing[] = [],
+  first = false, // the clearings take their crews before the buildings (see clearingsFirst)
 ): { buildings: Record<number, Building>; stock: Stock } {
   let out = buildings;
   let st = stock;
-  for (const id of allocateLabor(buildings, personHours, crewHours, clearings).keys()) {
+  for (const id of allocateLabor(buildings, personHours, crewHours, clearings, first).keys()) {
     let b = buildings[id];
     // A finished house being upgraded is served like a building under construction.
     const up = b.state === "active" ? b.upgrade : undefined;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocateClearings, allocateLabor, BUILDINGS, CREW } from "./buildings";
+import { allocateClearings, allocateLabor, BUILDINGS, clearingsFirst, CREW } from "./buildings";
 import { BASE_TICK, step } from "./clock";
 import { CLEARING, clearedAt, clearingLabor, clearingLogs, isCleared, landOver, nextClearingId, validateClearing } from "./clearing";
 import { advanceClearings, emptyGrowth, seedOf } from "./growth";
@@ -72,29 +72,39 @@ describe("clearing math", () => {
   });
 });
 
-describe("allocation: roads, clearings, buildings", () => {
+describe("allocation: roads, buildings and clearings", () => {
   const bs = { 1: site(1), 2: site(2) };
   const cs = [clearing(1)];
-  it("a crew each in order, clearings before buildings", () => {
+  it("a crew each in order, clearings after the buildings", () => {
     const a = allocateLabor(bs, 25, 10, cs);
     const c = allocateClearings(bs, cs, 25, 10);
+    expect([a.get(1), a.get(2), c.get(1)]).toEqual([10, 10, 5]);
+    expect(allocateClearings(bs, cs, 15, 10).size).toBe(0); // the buildings take all of it
+  });
+  it("clearings first: they take their crew before the buildings", () => {
+    const a = allocateLabor(bs, 25, 10, cs, true);
+    const c = allocateClearings(bs, cs, 25, 10, true);
     expect([c.get(1), a.get(1), a.get(2)]).toEqual([10, 10, 5]);
-    expect(allocateLabor(bs, 15, 10, cs).get(2)).toBeUndefined(); // the clearing and the first building take all of it
-    expect(allocateLabor(bs, 15, 10, cs).get(1)).toBe(5);
-    expect(allocateClearings(bs, cs, 15, 10).get(1)).toBe(10);
+    expect(allocateLabor(bs, 15, 10, cs, true).get(2)).toBeUndefined();
+  });
+  it("first while the stock cannot pay the logs of an izba", () => {
+    expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs, planks: 0, stone: 0, wares: 0 })).toBe(false);
+    expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs - 1, planks: 0, stone: 0, wares: 0 })).toBe(true);
   });
   it("what the crews leave goes to the first site that still has work, never wasted", () => {
     const a = allocateLabor(bs, 100, 10, cs);
     const c = allocateClearings(bs, cs, 100, 10);
-    expect(c.get(1)).toBe(80);
-    expect(a.get(1)).toBe(10);
+    expect(a.get(1)).toBe(80);
     expect(a.get(2)).toBe(10);
+    expect(c.get(1)).toBe(10);
     expect([...a.values(), ...c.values()].reduce((x, y) => x + y, 0)).toBeCloseTo(100);
+    const f = allocateClearings(bs, cs, 100, 10, true);
+    expect(f.get(1)).toBe(80);
   });
   it("only clearings remain: they take what a crew can, then the rest", () => {
     expect(allocateClearings({}, cs, 25, 10).get(1)).toBe(25);
   });
-  it("in a tick roads come first, then clearings, then buildings", () => {
+  it("in a tick roads come first, then buildings, then clearings; clearings first when logs run short", () => {
     const hours = (builderCount(state([])) * BASE_TICK) / 60;
     const crew = (CREW * BASE_TICK) / 60;
     expect(hours).toBeGreaterThan(crew);
@@ -103,12 +113,17 @@ describe("allocation: roads, clearings, buildings", () => {
     const a = step(busy);
     expect(a.clearings[0].done).toBe(0);
     expect(a.buildings[1].done).toBe(0);
-    // a built road: the clearing takes its crew first, the building gets what is left
+    // a built road and logs in stock: the building takes its crew first, the clearing gets what is left
     const s = { ...state([clearing(1)]), buildings: { 1: site(1) } };
-    const b = step(s);
-    expect(b.clearings[0].done).toBeCloseTo(crew);
-    expect(b.buildings[1].done).toBeCloseTo(hours - crew);
-    expect(b.stock.logs).toBeGreaterThan(s.stock.logs);
+    const rich = { ...s, stock: { ...s.stock, logs: 100 } };
+    const b = step(rich);
+    expect(b.buildings[1].done).toBeCloseTo(crew);
+    expect(b.clearings[0].done).toBeCloseTo(hours - crew);
+    expect(b.stock.logs).toBeGreaterThan(rich.stock.logs);
+    // no logs: the clearing first
+    const poor = step({ ...s, stock: { ...s.stock, logs: 0 } });
+    expect(poor.clearings[0].done).toBeCloseTo(crew);
+    expect(poor.buildings[1].done).toBeCloseTo(hours - crew);
   });
   it("a clearing is construction work: the unemployed are builders, not idle", () => {
     expect(builderCount(state([clearing(1)]))).toBeGreaterThanOrEqual(builderCount(state([])));

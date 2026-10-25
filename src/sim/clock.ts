@@ -1,6 +1,6 @@
 import { recordChronicle } from "./chronicle";
 import { dailyServices } from "./coverage";
-import { allocateClearings, CREW } from "./buildings";
+import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
 import { builderCount, dailyStep, immigrationStep, productionScale } from "./people";
 import { dailyEconomy, payMaterials, produceStep, reportShortages } from "./production";
@@ -56,14 +56,15 @@ export function step(s: SimState): SimState {
   let events = s.events;
   let clearUse = new Map<number, number>();
   if (working) {
-    // The artel (every adult without a regular job): roads first; of the hands left, a crew to each forest clearing,
-    // the rest to buildings, which take their materials from the stock when work on them starts.
+    // The artel (every adult without a regular job): roads first; the hands left go to buildings, which take their
+    // materials from the stock when work on them starts, and to forest clearings, ahead of the buildings when logs run short.
     const r = spendOnRoads(s.roads, (builderCount(s) * BASE_TICK) / 60);
     roads = r.roads;
     const crew = (CREW * BASE_TICK) / 60; // person-hours of one crew in a tick
-    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations, crew, s.clearings);
-    clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew);
-    buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings);
+    const first = clearingsFirst(s.stock);
+    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations, crew, s.clearings, first);
+    clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first);
+    buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings, first);
     stock = paid.stock;
     events = reportShortages(s.buildings, paid.buildings, s.stock, events, s.gameMinutes);
     events = reportBuilt(s.buildings, buildings, events, s.gameMinutes);

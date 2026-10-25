@@ -350,9 +350,9 @@ export function placeBuilding(s: SimState, t: BuildingTemplate, edge: number, si
 
 // Spends person-hours on the open sites as allocateLabor splits them (a crew of CREW hands each, oldest first);
 // returns the same record when nothing changed. `crewHours` is the work of one crew in this tick.
-export function advanceBuildings(buildings: Record<number, Building>, personHours: number, crewHours = Infinity, clearings: readonly Clearing[] = []): Record<number, Building> {
+export function advanceBuildings(buildings: Record<number, Building>, personHours: number, crewHours = Infinity, clearings: readonly Clearing[] = [], first = false): Record<number, Building> {
   let out = buildings;
-  for (const [id, use] of allocateLabor(buildings, personHours, crewHours, clearings)) {
+  for (const [id, use] of allocateLabor(buildings, personHours, crewHours, clearings, first)) {
     const b = buildings[id];
     if (out === buildings) out = { ...buildings };
     if (b.state === "active") {

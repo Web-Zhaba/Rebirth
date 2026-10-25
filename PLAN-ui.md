@@ -20,6 +20,8 @@ Companion to `PLAN.md` and `PLAN-pace.md`.
 
 ## 2. Style direction (decided in U0)
 
+**Chosen: A. «Полевой атлас»** (user's pick, 2026-10-25). B and C below are kept for reference only.
+
 All three share the hard rules: opaque surfaces only, no `backdrop-filter`, no blurred shadows
 (borders or a hard 1–2 px offset shadow instead), one accent per meaning, numbers in tabular figures.
 
@@ -49,7 +51,7 @@ data go into an «Об игре» dialog (U6).
 
 | # | Milestone | Done when |
 |---|---|---|
-| U0 | Style board | A static page with the same four screens (top bar, build bar, building inspector, notebook) in directions A, B and C over a real map screenshot, published for review. The user picks one; the choice is recorded in section 2. **Board published** (claude.ai artifact «Rebirth — доска стилей»); choice pending. |
+| U0 | Style board | A static page with the same four screens (top bar, build bar, building inspector, notebook) in directions A, B and C over a real map screenshot, published for review. The user picks one; the choice is recorded in section 2. **Done**: board published (claude.ai artifact «Rebirth — доска стилей»); the user chose A «Полевой атлас». |
 | U1 | Foundations | Design tokens as CSS custom properties (colors, type scale, 4 px spacing, radii, borders, shadows, z-layers); fonts; the icon pipeline and an `Icon` component; base components (Panel, Button, IconButton, Tooltip, Stat, Tabs, Dialog, ProgressBar). Every panel opaque; 📖 ◉ ≡ ▫ × replaced by icons; a unit test fails on any emoji or pictograph in `src/`. |
 | U2 | Top bar | City, date with a day-phase icon, speed controls (`PLAN-pace.md` P1), population, food with days left, logs, planks, stone, wares, mood — each an icon + tabular number + daily delta; tooltip with the breakdown. Layers become an icon button group with a legend. Warnings as icon + text, never color alone. |
 | U3 | Build bar | Category tabs (Дороги, Зоны, Хозяйство, Службы, Прошлое) with icon buttons; hover card with name, purpose, labor, materials, jobs, site rule and reach; locked items show their goal (P6). Hotkeys: F1–F5 categories (1–3 and P/Space already set the speed, P1), Q–Y items, B demolish, Esc. Placement shows cost and ETA next to the cursor and tints invalid spots. |
