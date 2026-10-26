@@ -1,7 +1,7 @@
 import type { Street, XY } from "./oldworld";
 
 // A street as the snap sees it: id and class say which old street a road end sits on.
-type SnapStreet = Pick<Street, "pts" | "name"> & Partial<Pick<Street, "id" | "cls">>;
+type SnapStreet = Pick<Street, "pts" | "name" | "bridge"> & Partial<Pick<Street, "id" | "cls">>;
 
 export interface OldSnap {
   x: number;
@@ -9,6 +9,7 @@ export interface OldSnap {
   name?: string;
   id?: string;
   cls?: string;
+  bridge?: true;
   vertex: boolean;
 }
 
@@ -50,8 +51,55 @@ export function snapToOldStreets(p: { x: number; y: number }, streets: readonly 
   return best;
 }
 
-const tagOf = (s: SnapStreet): Pick<OldSnap, "name" | "id" | "cls"> => ({
+const tagOf = (s: SnapStreet): Pick<OldSnap, "name" | "id" | "cls" | "bridge"> => ({
   ...(s.name ? { name: s.name } : {}),
   ...(s.id !== undefined ? { id: s.id } : {}),
   ...(s.cls !== undefined ? { cls: s.cls } : {}),
+  ...(s.bridge ? { bridge: true as const } : {}),
 });
+
+// The revealed polylines of the old street called `name` (one street can be several ways), with their class. Pure.
+export function streetPolylines(streets: readonly Pick<Street, "pts" | "name" | "cls">[], name: string): { pts: XY[]; cls: string }[] {
+  return streets.filter((s) => s.name === name && s.pts.length >= 2).map((s) => ({ pts: s.pts, cls: s.cls }));
+}
+
+const ptKey = (p: XY): string => `${p[0]},${p[1]}`;
+
+// The ends of every old street: where ways meet, so a restored street has to keep these vertices. Pure.
+export function streetJunctions(streets: readonly Pick<Street, "pts">[]): Set<string> {
+  const out = new Set<string>();
+  for (const s of streets) {
+    if (s.pts.length === 0) continue;
+    out.add(ptKey(s.pts[0]));
+    out.add(ptKey(s.pts[s.pts.length - 1]));
+  }
+  return out;
+}
+
+// An old street as a road can follow it. A surveyed line is denser than the road graph accepts, so every
+// segment is made at least `minSeg` long: plain vertices too close are dropped, while the ends and the `keep`
+// junctions stay (of two pins too close the later goes, but the end only gives way to nothing but the start).
+// Null when the whole line is shorter than one segment. Pure.
+export function roadLine(pts: readonly XY[], minSeg: number, keep: ReadonlySet<string>): XY[] | null {
+  const out: XY[] = [];
+  const fixed: boolean[] = [];
+  const far = (a: XY, b: XY) => Math.hypot(a[0] - b[0], a[1] - b[1]) >= minSeg;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const end = i === pts.length - 1;
+    const pin = i === 0 || end || keep.has(ptKey(p));
+    let skip = false;
+    while (out.length > 0 && !far(out[out.length - 1], p)) {
+      if (!pin || (fixed[fixed.length - 1] && !(end && out.length > 1))) {
+        skip = true;
+        break;
+      }
+      out.pop();
+      fixed.pop();
+    }
+    if (skip) continue;
+    out.push(p);
+    fixed.push(pin);
+  }
+  return out.length >= 2 ? out : null;
+}

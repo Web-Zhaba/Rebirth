@@ -9,7 +9,7 @@ import type { Frame } from "../world/frame";
 import { landAt } from "../world/landcover";
 import { fieldDraft, hoverKeys, paintPreview } from "./zoneLayer";
 import { etaText } from "./buildCost";
-import { flash, isBrushTool, mapMpp, MIN_ZONE_ZOOM, tool, type BrushTool } from "./tools";
+import { flash, isBrushTool, mapMpp, MIN_ZONE_ZOOM, setSpacePan, syncPan, tool, type BrushTool } from "./tools";
 
 const BRUSH_PX = 16;
 const MIN_BRUSH_M = 6;
@@ -67,7 +67,6 @@ export function attachZoneTool(map: maplibregl.Map): void {
   let cursor: { x: number; y: number } | null = null; // px
   let local: Pt | null = null; // m
   let spaceDown = false;
-  let panOff = false;
 
   // ----- cell lookup -----
   let indexFor: unknown = null;
@@ -114,15 +113,6 @@ export function attachZoneTool(map: maplibregl.Map): void {
   };
   const clearingActive = () => tool.value === "clearing";
   const fieldActive = () => tool.value === "field" || clearingActive(); // both are drawn as a polygon
-
-  // Dragging paints, so the map must not pan under a brush (hold Space to pan).
-  const applyPan = () => {
-    const want = activeBrush() !== null && map.getZoom() >= MIN_ZONE_ZOOM && !spaceDown;
-    if (want === panOff) return;
-    panOff = want;
-    if (want) map.dragPan.disable();
-    else map.dragPan.enable();
-  };
 
   const radiusM = (lat: number) => Math.max(MIN_BRUSH_M, BRUSH_PX * mapMpp(lat, map.getZoom()));
 
@@ -434,7 +424,8 @@ export function attachZoneTool(map: maplibregl.Map): void {
     if (e.key === " " && activeBrush()) {
       spaceDown = true;
       hoverKeys.value = [];
-      applyPan();
+      setSpacePan(true);
+      syncPan(map);
       return;
     }
     if (!fieldActive() && !activeBrush()) return;
@@ -448,14 +439,15 @@ export function attachZoneTool(map: maplibregl.Map): void {
   const onKeyUp = (e: KeyboardEvent) => {
     if (e.key !== " ") return;
     spaceDown = false;
-    applyPan();
+    setSpacePan(false);
+    syncPan(map);
   };
 
   map.on("mousemove", onMove);
   map.on("click", onClick);
   map.on("mousedown", onDown);
   map.on("contextmenu", onContext);
-  map.on("zoom", applyPan);
+  map.on("zoom", () => syncPan(map));
   window.addEventListener("mouseup", onUp);
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
@@ -475,7 +467,8 @@ export function attachZoneTool(map: maplibregl.Map): void {
     hoverKeys.value = [];
     resetField();
     busy = false;
+    if (!activeBrush()) spaceDown = false;
     if (inflight === 0) paintPreview.value = null;
-    applyPan();
+    syncPan(map);
   });
 }

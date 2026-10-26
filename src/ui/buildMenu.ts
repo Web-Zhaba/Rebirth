@@ -18,7 +18,7 @@ export interface Category {
 }
 
 export const CATEGORIES: Category[] = [
-  { id: "roads", label: "Дороги", tools: ["path", "dirt", "footbridge", "bridge", "bulldoze"] },
+  { id: "roads", label: "Дороги", tools: ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore"] },
   { id: "zones", label: "Зоны", tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
   { id: "food", label: "Еда", tools: ["gumno", "garden", "hunter", "fisher", "forager", "orchard"] },
   { id: "farm", label: "Ресурсы", tools: ["woodcutter", "sawpit", "quarry", "barn", "cellar", "apiary"] },
@@ -40,6 +40,7 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   footbridge: "footbridge",
   bridge: "bridge",
   bulldoze: "bulldoze",
+  restore: "street",
   res: "res",
   craft: "craft",
   trade: "trade",
@@ -72,6 +73,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   footbridge: "Канатный мостик",
   bridge: "Свайный мост",
   bulldoze: "Снос",
+  restore: "Старые улицы",
   res: "Жильё",
   craft: "Ремесло",
   trade: "Торговля",
@@ -88,6 +90,7 @@ const PURPOSE: Record<Tool, string> = {
   footbridge: "Подвесной мостик над водой: только для пешеходов, узкий и лёгкий",
   bridge: "Широкий мост на сваях над водой: по нему проедут грузы",
   bulldoze: "Снести участок дороги вместе с планами вдоль него",
+  restore: "Проложить заново раскопанную улицу целиком: старая тропа станет тропой, улица — дорогой",
   res: "Размечает участки под жильё: сюда придут новые семьи",
   craft: "Размечает участки под мастерские: кузница, столярня, гончарня",
   trade: "Размечает участки под магазины и таверну",

@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
+import { isBridge, oldStreetKind, ROAD_KINDS } from "../sim/roads";
 import { PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
 import type { OldWorld, XY } from "../world/oldworld";
@@ -37,7 +38,8 @@ export const WALL_THICKNESS = 0.5; // m
 const FONT = ["Noto Sans Regular"];
 const MAJOR = new Set(["motorway", "trunk", "primary", "secondary", "tertiary"]);
 
-export const streetWidth = (cls: string): number => (MAJOR.has(cls) ? 10 : 6);
+// Major streets wide, footways and tracks as narrow as the path they come back as, the rest in between.
+export const streetWidth = (cls: string): number => (MAJOR.has(cls) ? 10 : oldStreetKind(cls, false) === "path" ? ROAD_KINDS.path.width : 6);
 
 // ---------- pure geometry ----------
 
@@ -156,7 +158,12 @@ export function attachRuinsLayer(
         minzoom: 12,
         layout: { "line-cap": "butt", "line-join": "round" },
         // Solid and faint: at real width, dashes read as rows of small houses.
-        paint: { "line-color": PALETTE.warn, "line-width": realWidth(k), "line-opacity": 0.3 },
+        // Old bridges darker and stronger, so a dig shows where a bridge will come back.
+        paint: {
+          "line-color": ["case", ["get", "bridge"], PALETTE.pencil, PALETTE.warn],
+          "line-width": realWidth(k),
+          "line-opacity": ["case", ["get", "bridge"], 0.6, 0.3],
+        },
       },
       beneath,
     );
@@ -248,7 +255,7 @@ export function attachRuinsLayer(
       .filter((s) => s.pts.length >= 2)
       .map((s) => ({
         type: "Feature",
-        properties: { w: streetWidth(s.cls), ...(s.name ? { name: s.name } : {}) },
+        properties: { w: streetWidth(s.cls), bridge: isBridge(oldStreetKind(s.cls, s.bridge === true)), ...(s.name ? { name: s.name } : {}) },
         geometry: { type: "LineString", coordinates: s.pts.map(([x, y]) => f.toLngLat(x, y)) },
       }));
     const pois: GeoJSON.Feature[] = w.pois.map((p) => ({

@@ -24,6 +24,7 @@ export interface Street {
   id: string;
   cls: string;
   name?: string;
+  bridge?: true; // the way runs on a bridge
   pts: XY[];
 }
 export interface Poi {
@@ -312,6 +313,7 @@ export function parseOldWorldTile(
           const s: Street = { id: `${tag}#${i}.${k++}`, cls, pts: piece };
           const name = own ?? matchStreetName(piece, named);
           if (name) s.name = name;
+          if (f.properties.brunnel === "bridge") s.bridge = true;
           out.streets.push(s);
         }
       }

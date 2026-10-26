@@ -1,6 +1,6 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, toolMsg, tool, SITE_RADIUS, type Tool } from "../map/tools";
+import { flash, isRoadTool, ROAD_MODES, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/goals";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
@@ -9,21 +9,21 @@ import type { GrowthWhy } from "../sim/types";
 import { people, state } from "../simClient";
 import { CATEGORIES, CATEGORY_KEYS, categoryOf, ITEM_KEY_LABEL, toolForKey, toolInfo, toolLabel, TOOL_ICON, type CategoryId } from "./buildMenu";
 import { Icon } from "./Icon";
-import { Tabs, Tooltip } from "./kit";
+import { Segmented, Tabs, Tooltip } from "./kit";
 
 const category = signal<CategoryId>("roads");
 
-const ROAD_HINT = "Клик — точка, ПКМ или Esc — закончить";
+const ROAD_HINT: Record<RoadMode, string> = {
+  straight: "Протяните от начала до конца — прямая; Shift — угол 15°, Пробел — двигать карту, ПКМ или Esc — закончить",
+  arc: "Протяните от начала до конца (или клик, клик), затем движение мышью — изгиб, клик — готово; Shift — угол 15°, ПКМ или Esc — отмена",
+};
 const BRUSH_HINT = "Тяните — закрасить, Shift+клик — вся сторона дороги, Пробел — двигать карту, Esc — выйти";
 const PLACE_HINT = "Клик — поставить у дороги, ПКМ или Esc — выйти";
 const service = (id: keyof typeof SERVICES, tail: string) => `${PLACE_HINT}. Подсветка дорог — охват ${SERVICES[id].reach} м по дорогам${tail}`;
 
-const HINT: Record<Tool, string> = {
-  path: ROAD_HINT,
-  dirt: ROAD_HINT,
-  footbridge: ROAD_HINT,
-  bridge: ROAD_HINT,
+const HINT: Partial<Record<Tool, string>> = {
   bulldoze: "Клик по участку — снести, Esc — выйти",
+  restore: "Наведите на раскопанную улицу — она подсветится целиком с ценой, клик — восстановить, Esc — выйти",
   res: BRUSH_HINT,
   craft: BRUSH_HINT,
   trade: BRUSH_HINT,
@@ -176,6 +176,9 @@ export function BuildBar() {
   const msg = toolMsg.value;
   const goals = state.value?.goals;
   const growth = active === "res" || active === "craft" || active === "trade" ? ADVICE[people.value?.growth?.[active] ?? "ok"] : null;
+  const mode = roadMode.value;
+  const drawsRoad = !!active && isRoadTool(active) && active !== "bulldoze" && active !== "restore";
+  const hint = active ? (drawsRoad ? ROAD_HINT[mode] : HINT[active]) : null;
   return (
     <div class="build-bar">
       <div class="bb-lines" aria-live="polite">
@@ -183,10 +186,11 @@ export function BuildBar() {
           <div class="road-msg">{msg}</div>
         ) : (
           <div class="road-hint">
-            {active ? HINT[active] : typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? "Два пальца — наклон" : "Правая кнопка — наклон"}
+            {hint ?? (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? "Два пальца — наклон" : "Правая кнопка — наклон")}
             {growth && <div>{growth}</div>}
           </div>
         )}
+        {drawsRoad && <Segmented label="Режим дороги" value={mode} onChange={(m) => (roadMode.value = m)} options={ROAD_MODES.map((o) => ({ id: o.id, label: o.label, title: o.title }))} />}
         {active && !msg && <CostLine t={active} />}
       </div>
       <div class="bb-panel panel">

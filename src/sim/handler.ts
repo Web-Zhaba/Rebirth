@@ -561,7 +561,7 @@ function validateAddRoad(cmd: Extract<Cmd, { type: "addRoad" }>): string | null 
   const { pts, labor, kind, snapTol } = cmd;
   if (typeof kind !== "string" || !Object.hasOwn(ROAD_KINDS, kind)) return "Неизвестный вид дороги";
   if (!finite(snapTol) || snapTol <= 0 || snapTol > 1000) return "Некорректный допуск";
-  if (!Array.isArray(pts) || pts.length < 2 || pts.length > 64) return "Некорректная линия";
+  if (!Array.isArray(pts) || pts.length < 2 || pts.length > 512) return "Некорректная линия";
   if (!pts.every((p) => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6)) {
     return "Некорректная линия";
   }

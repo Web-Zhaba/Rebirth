@@ -9,6 +9,7 @@ import {
   ROAD_KINDS,
   segmentCost,
   segmentKind,
+  oldStreetKind,
   snapPoint,
   workableEdges,
   type TerrainProfile,
@@ -244,14 +245,22 @@ describe("construction", () => {
   });
 });
 
-describe("segmentKind", () => {
-  it("a road over water on an old footpath is a footbridge, on another old street a pile bridge", () => {
-    expect(segmentKind("path", true, "path")).toBe("footbridge");
-    expect(segmentKind("dirt", true, "primary")).toBe("bridge");
+describe("old streets as roads", () => {
+  it("dashed ways are paths and footbridges, other streets dirt roads and pile bridges", () => {
+    expect(oldStreetKind("path", false)).toBe("path");
+    expect(oldStreetKind("track", false)).toBe("path");
+    expect(oldStreetKind("residential", false)).toBe("dirt");
+    expect(oldStreetKind("minor", false)).toBe("dirt");
+    expect(oldStreetKind("path", true)).toBe("footbridge");
+    expect(oldStreetKind("tertiary", true)).toBe("bridge");
   });
-  it("keeps the chosen kind on land, off old streets, or when it is already a bridge", () => {
-    expect(segmentKind("dirt", false, "primary")).toBe("dirt");
-    expect(segmentKind("path", true, null)).toBe("path");
-    expect(segmentKind("bridge", true, "path")).toBe("bridge");
+  it("a road drawn along an old bridge is that bridge", () => {
+    expect(segmentKind("path", { cls: "path", bridge: true })).toBe("footbridge");
+    expect(segmentKind("path", { cls: "minor", bridge: true })).toBe("bridge");
+  });
+  it("keeps the chosen kind off old bridges, or when it is already a bridge", () => {
+    expect(segmentKind("dirt", { cls: "minor", bridge: false })).toBe("dirt");
+    expect(segmentKind("path", null)).toBe("path");
+    expect(segmentKind("bridge", { cls: "path", bridge: true })).toBe("bridge");
   });
 });

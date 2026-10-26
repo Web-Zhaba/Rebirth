@@ -37,6 +37,11 @@
   text-align: center;
 }
 
+/* Road drawing mode: straight or arc. */
+.bb-lines .seg {
+  font-size: var(--fs-sm);
+}
+
 .road-msg {
   font-size: var(--fs-md);
   color: var(--bad);

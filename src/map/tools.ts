@@ -1,22 +1,31 @@
 import { play } from "../ui/sound";
+import type maplibregl from "maplibre-gl";
 import { signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import { isRoadKind } from "../sim/roads";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
-export type RoadTool = RoadKind | "bulldoze";
+export type RoadTool = RoadKind | "bulldoze" | "restore"; // restore: rebuild a revealed old street as a whole
+// How a road segment is drawn: dragged straight between two points, or an arc through a bend point.
+export type RoadMode = "straight" | "arc";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
 export type ZoneTool = BrushTool | "field" | "clearing";
 export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
-export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || isRoadKind(t);
+export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || isRoadKind(t);
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
 export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
 export const tool = signal<Tool | null>(null);
+// Road drawing mode, shared by every road kind; kept between tools.
+export const roadMode = signal<RoadMode>("straight");
+export const ROAD_MODES: { id: RoadMode; label: string; title: string }[] = [
+  { id: "straight", label: "Прямая", title: "Прямая: протяните от начала до конца" },
+  { id: "arc", label: "Дуга", title: "Дуга: протяните начало и конец, затем движение мышью задаёт изгиб" },
+];
 // Brief message about a rejected action, shown by the toolbar.
 export const toolMsg = signal<string | null>(null);
 
@@ -29,6 +38,23 @@ export function flash(text: string): void {
 }
 
 export const MIN_ZONE_ZOOM = 15;
+export const MIN_ROAD_ZOOM = 14;
+
+// Drawing tools own the drag: the map must not pan under them (Space pans temporarily).
+let panOff = false;
+let spaceHeld = false;
+export const setSpacePan = (on: boolean): void => {
+  spaceHeld = on;
+};
+export function syncPan(map: maplibregl.Map): void {
+  const t = tool.value;
+  const zoom = map.getZoom();
+  const want = !!t && !spaceHeld && (isRoadTool(t) ? zoom >= MIN_ROAD_ZOOM : isBrushTool(t) ? zoom >= MIN_ZONE_ZOOM : false);
+  if (want === panOff) return;
+  panOff = want;
+  if (want) map.dragPan.disable();
+  else map.dragPan.enable();
+}
 
 const EQUATOR_M = 40075016.686;
 // Meters of ground per screen pixel (MapLibre uses 512 px tiles).

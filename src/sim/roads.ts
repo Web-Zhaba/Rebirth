@@ -255,11 +255,19 @@ export interface TerrainProfile {
 // Piers and pillars standing in the water, per metre of bridge.
 const WATER_MULT = 1.5;
 
-// A road over water along a revealed old street is a bridge of the street's kind: a footpath gets a footbridge,
-// any other street a pile bridge. Elsewhere the road kind stands as chosen.
-export function segmentKind(kind: RoadKind, water: boolean, oldStreetCls: string | null): RoadKind {
-  if (!water || oldStreetCls === null || isBridge(kind)) return kind;
-  return oldStreetCls === "path" ? "footbridge" : "bridge";
+// Old-map ways drawn dashed (footways, paths, field tracks) come back as paths and their bridges as footbridges;
+// every other street as a dirt road and its bridges as pile bridges.
+const FOOT_CLASSES = ["path", "track"];
+export function oldStreetKind(cls: string, bridge: boolean): RoadKind {
+  const foot = FOOT_CLASSES.includes(cls);
+  if (bridge) return foot ? "footbridge" : "bridge";
+  return foot ? "path" : "dirt";
+}
+
+// A road drawn along a revealed old bridge is that bridge; elsewhere the kind stands as chosen.
+export function segmentKind(kind: RoadKind, along: { cls: string; bridge: boolean } | null): RoadKind {
+  if (!along?.bridge || isBridge(kind)) return kind;
+  return oldStreetKind(along.cls, true);
 }
 
 const LAND_MULT: Record<Exclude<Land, "water">, number> = {

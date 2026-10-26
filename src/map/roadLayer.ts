@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { cutOffEdges, ROAD_KINDS, workableEdges } from "../sim/roads";
+import { roadChains, type RoadState } from "./roadChains";
 import { PALETTE } from "../ui/palette";
 import { city, frame, roads } from "../simClient";
 
@@ -26,7 +27,8 @@ export function attachRoadLayer(map: maplibregl.Map): void {
   const addLayers = (lat: number) => {
     const k = 512 / (EQUATOR_M * Math.cos((lat * Math.PI) / 180));
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    const common = { source: SRC, layout: { "line-cap": "butt", "line-join": "round" } } as const;
+    // Round caps fill the joint where two chains meet; round joins smooth every bend inside a chain.
+    const common = { source: SRC, layout: { "line-cap": "round", "line-join": "round" } } as const;
     map.addLayer({
       ...common,
       id: "roads-casing",
@@ -77,22 +79,19 @@ export function attachRoadLayer(map: maplibregl.Map): void {
     if (!styled) addLayers(c.lat); // one city per page load
     const active = new Set(workableEdges(g));
     const cut = cutOffEdges(g);
-    const features: GeoJSON.Feature[] = Object.values(g.edges).map((e) => {
-      const a = g.nodes[e.a];
-      const b = g.nodes[e.b];
-      const built = e.done >= e.labor;
-      return {
-        type: "Feature",
-        properties: {
-          id: e.id,
-          kind: e.kind,
-          w: ROAD_KINDS[e.kind].width,
-          state: built ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting",
-          progress: e.labor > 0 ? e.done / e.labor : 1,
-        },
-        geometry: { type: "LineString", coordinates: [f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y)] },
-      };
-    });
+    const stateOf = (e: { id: number; done: number; labor: number }): RoadState =>
+      e.done >= e.labor ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting";
+    const features: GeoJSON.Feature[] = roadChains(g, stateOf).map((ch) => ({
+      type: "Feature",
+      properties: { id: ch.id, kind: ch.kind, w: ROAD_KINDS[ch.kind].width, state: ch.state },
+      geometry: {
+        type: "LineString",
+        coordinates: ch.nodes.map((id) => {
+          const n = g.nodes[id];
+          return f.toLngLat(n.x, n.y);
+        }),
+      },
+    }));
     (map.getSource(SRC) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
   };
 
