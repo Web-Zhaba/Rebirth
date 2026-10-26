@@ -15,6 +15,7 @@ import { settingsOpen } from "./SettingsDialog";
 import { rightPanel, togglePanel } from "./panels";
 import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
+import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -112,6 +113,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
   const clearAll = clearing.reduce((a, c) => a + clearingLogs(c.area, c.forest), 0);
   const mood = eco ? Math.round(eco.avgMood) : 0;
   const net = eco ? foodNet(eco) : 0;
+  const wx = weatherChip(state.value?.weather, cal.season);
   const text = (id: Good) => (st ? (id === "wares" ? String(Math.floor(st[id])) : amount(st[id])) : "");
 
   return (
@@ -147,6 +149,26 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
       </div>
       {p && st && eco && (
         <div class="stats">
+          {wx && (
+            <BarStat
+              icon={wx.icon}
+              value={wx.temp}
+              caption={wx.word}
+              title={`Погода: ${wx.word}`}
+              tip={
+                <>
+                  {wx.rows.map((r) => (
+                    <Row key={r.label} label={r.label} value={r.value} />
+                  ))}
+                  {wx.notes.map((n) => (
+                    <span key={n} class="tip-note">
+                      {n}
+                    </span>
+                  ))}
+                </>
+              }
+            />
+          )}
           <BarStat
             icon="person"
             value={String(p.pop)}
@@ -198,6 +220,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
                     <Row label="На складе" value={`${text(g.id)} ${GOOD_UNIT[g.id]}`} />
                     <Row label="Сделано вчера" value={`${made > 0 ? "+" : ""}${amount(made)} ${GOOD_UNIT[g.id]}`} />
                     {g.id === "logs" && clearing.length > 0 && <Row label="Вырубка уже дала" value={`+${amount(clearGot)} из ${amount(clearAll)} м³`} />}
+                    {g.id === "logs" && eco.brushwood > 0 && <Row label="Хворост, без дров в запасе" value={`+${amount(eco.brushwood)} м³ в день`} />}
                     {g.id === "wares" && eco.eveningWares > 0 && <Row label="Вечерние ремёсла, 19–22 ч" value={`+${eco.eveningWares.toFixed(2).replace(".", ",")} шт/ч`} />}
                   </>
                 }

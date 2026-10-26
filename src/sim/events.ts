@@ -9,6 +9,7 @@ import { refreshServices } from "./coverage";
 import { covers } from "./services";
 import { calendar, DAY_MIN } from "./time";
 import { massText } from "./units";
+import { floodRisk, lightFrost } from "./weatherEffects";
 import type { Building, ChoiceOption, ServiceId, SimState, TownChoice } from "./types";
 
 // Events with choices (PLAN-pace.md section 10). One event every one to two game days, drawn by the sim generator from
@@ -71,7 +72,7 @@ function standingKg(s: SimState): number {
   for (const f of s.zones.fields) {
     if (!assign.has(f.id)) continue;
     const w = workOf(s.prod.fields, f.id, year);
-    kg += Math.max(0, expectedKg(f, w) - w.reaped);
+    kg += Math.max(0, expectedKg(f, w, s.weather.crop) - w.reaped);
   }
   return kg;
 }
@@ -164,7 +165,8 @@ const EVENTS: EventDef[] = [
   {
     id: "frost",
     weight: 6,
-    cond: (s) => standingKg(s) > 50,
+    // With weather: a light frost night (a harder one has already cost grain, see nightFrost); calm: a random draw.
+    cond: (s) => standingKg(s) > 50 && (!s.weather.site || lightFrost(s.weather)),
     make: (s) => ({
       title: "Ранний заморозок",
       text: "Ударил ранний заморозок, а уборка урожая ещё идёт. Колосья на корню могут пострадать.",
@@ -184,8 +186,8 @@ const EVENTS: EventDef[] = [
       for (const f of s.zones.fields) {
         if (!assign.has(f.id)) continue;
         const w = workOf(fields, f.id, year);
-        const total = FIELD.yieldKgHa * haOf(f);
-        const exp = expectedKg(f, w);
+        const total = FIELD.yieldKgHa * haOf(f) * s.weather.crop;
+        const exp = expectedKg(f, w, s.weather.crop);
         const gone = Math.max(0, exp - w.reaped) * FROST_LOSS;
         if (gone <= 0) continue;
         lost += gone;
@@ -295,7 +297,7 @@ const EVENTS: EventDef[] = [
   {
     id: "flood",
     weight: 3,
-    cond: (s) => s.stock.food > 0,
+    cond: (s) => s.stock.food > 0 && (!s.weather.site || floodRisk(s.weather)),
     make: () => ({
       title: "Паводок",
       text: "Река поднялась за ночь и подходит к складам. Вода ещё не дошла до зерна, но медлить нельзя.",

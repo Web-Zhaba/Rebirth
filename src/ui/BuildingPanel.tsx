@@ -84,6 +84,8 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
     <div class="prod">
       {site && template === "woodcutter" && <div>Лес вокруг: {pct(site.forest)}</div>}
       {site && template === "fisher" && <div>Вода рядом: {pct(site.water)}</div>}
+      {site && template === "forager" && <div>Лес вокруг: {pct(site.forest)}</div>}
+      {p.orchard && <div>{p.orchard.ripeDays > 0 ? `Деревья растут: ещё ${p.orchard.ripeDays} дн.` : `Урожай этого года: ${pct(p.orchard.quality)}`}</div>}
       {p.storage !== undefined && <div>Склад: +{tons(p.storage)} т еды</div>}
       {p.fields && (
         <div>

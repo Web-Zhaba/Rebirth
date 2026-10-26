@@ -3,13 +3,14 @@ import { initialGoals, isUnlocked, zoneKey } from "./goals";
 import { FIRST_EVENT } from "./events";
 import { emptyLevers } from "./levers";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
-import { fieldCentroid, jobsOf } from "./fields";
+import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
 import { clearingLogs } from "./clearing";
 import { emptyProd, emptyStock, handHours, say } from "./production";
 import { nextRandom } from "./rng";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, Clearing, Demand, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
+import { emptyWeather } from "./weather";
 import { CELL_SIZE, paintCells, pointInPolygon, qkey, qpoint, regenerateCells } from "./zones";
 
 export { nextRandom };
@@ -35,7 +36,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "goals" | "pending" | "nextEvent" | "eventLast"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "goals" | "pending" | "nextEvent" | "eventLast" | "weather"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -61,6 +62,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     pending: null,
     nextEvent: now + FIRST_EVENT,
     eventLast: {},
+    weather: emptyWeather(),
     ...f.people,
   };
 }
@@ -292,7 +294,7 @@ export function spawnBuildings(s: SimState): SimState {
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
 
 const NO_PLACE = (reason: string): PlaceCheck => ({ ok: false, reason });
-export const PLACE_MIN = { forest: 0.1, water: 0.05 }; // site shares the woodcutter and the fisher need
+export const PLACE_MIN = { forest: 0.1, water: 0.05, foragerForest: FORAGER_FOREST }; // site shares the woodcutter, the fisher and the forager need
 
 const BLOCK_REASON: Record<string, string> = {
   road: "Здесь дорога",
@@ -332,7 +334,8 @@ export function canPlace(
   }
   if (t.id === "woodcutter" && site.forest < PLACE_MIN.forest) return NO_PLACE("Рядом мало леса (нужно от 10 %)");
   if (t.id === "fisher" && site.water < PLACE_MIN.water) return NO_PLACE("Рядом нет воды (нужно от 5 %)");
-  if (t.id === "quarry" || t.id === "garden") {
+  if (t.id === "forager" && site.forest < PLACE_MIN.foragerForest) return NO_PLACE("Рядом мало леса (нужно от 20 %)");
+  if (t.id === "quarry" || t.id === "garden" || t.id === "orchard" || t.id === "apiary") {
     for (const c of cells) {
       const land = s.zones.terrain[qkey(c.cx, c.cy)]?.land;
       if (land === "water" || land === "wetland") return NO_PLACE(`${t.name} нельзя ставить на воде и болоте`);

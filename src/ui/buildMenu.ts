@@ -20,8 +20,8 @@ export interface Category {
 export const CATEGORIES: Category[] = [
   { id: "roads", label: "Дороги", tools: ["path", "dirt", "bulldoze"] },
   { id: "zones", label: "Зоны", tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
-  { id: "food", label: "Еда", tools: ["gumno", "garden", "hunter", "fisher"] },
-  { id: "farm", label: "Ресурсы", tools: ["woodcutter", "sawpit", "quarry", "barn"] },
+  { id: "food", label: "Еда", tools: ["gumno", "garden", "hunter", "fisher", "forager", "orchard"] },
+  { id: "farm", label: "Ресурсы", tools: ["woodcutter", "sawpit", "quarry", "barn", "cellar", "apiary"] },
   { id: "services", label: "Службы", tools: ["well", "market", "chapel", "school", "healer"] },
   { id: "past", label: "Прошлое", tools: ["dig"] },
 ];
@@ -51,6 +51,10 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   fisher: "fisher",
   garden: "garden",
   hunter: "hunter",
+  forager: "forager",
+  orchard: "orchard",
+  apiary: "apiary",
+  cellar: "cellar",
   barn: "barn",
   well: "well",
   market: "market",
@@ -91,7 +95,11 @@ const PURPOSE: Record<Tool, string> = {
   fisher: "Ловит рыбу, еда без полей",
   garden: "Огород у дома: овощи летом и осенью, зимой не даёт ничего",
   hunter: "Охотник приносит дичь, зимой и осенью больше всего",
+  forager: "Ягоды, грибы и орехи: летом и осенью, весной немного, зимой и под снегом ничего",
+  orchard: "Фруктовый сад: плодоносит через год после посадки, осенью; заморозки в цвету и засуха снижают урожай",
+  apiary: "Пасека: мёд летом и осенью, пчёлы летают только в тёплую сухую тихую погоду",
   barn: "Склад: добавляет места для запасов еды",
+  cellar: "Погреб: хранит запасы лучше склада, меньше портится в жару и сырость",
   well: "Вода рядом с домами: настроение и здоровье",
   market: "Раздаёт товары по домам и радует людей",
   chapel: "Место для общей жизни: настроение людей",
@@ -105,7 +113,10 @@ const SITE: Partial<Record<Tool, string>> = {
   dirt: "Между двумя точками на суше, уклон не круче 12 %",
   woodcutter: `В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`,
   fisher: `У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`,
+  forager: `В лесу: от ${Math.round(PLACE_MIN.foragerForest * 100)} % леса в ${SITE_RADIUS.forager} м вокруг`,
   quarry: "Не на воде и не на болоте; камень добывается на любой суше",
+  orchard: "Не на воде и не на болоте",
+  apiary: "Не на воде и не на болоте",
   clearing: `Контур до ${CLEARING.maxArea / 10000} га, не дальше ${CLEARING.reach} м от построенной дороги`,
   field: "Замкнутый контур на суше, не через дорогу и не поверх другого поля",
 };
@@ -140,9 +151,9 @@ export function toolInfo(t: Tool): ToolInfo {
   let reach: string | null = null;
   if (isService(t)) reach = `Охват ${SERVICES[t].reach} м по дорогам`;
   else if (t === "gumno") reach = `Поля до ${FIELD.radius} м от фермы`;
-  else if (t === "woodcutter" || t === "fisher") reach = `Радиус ${SITE_RADIUS[t]} м`;
+  else if (t === "woodcutter" || t === "fisher" || t === "forager") reach = `Радиус ${SITE_RADIUS[t]} м`;
   else if (t === "dig") reach = `Вскрывает ${DIG.startRadius} м, потом растёт до ${DIG.maxRadius} м и снимается сам`;
-  else if (t === "garden" || t === "hunter") {
+  else if (t === "garden" || t === "hunter" || t === "orchard" || t === "apiary") {
     // The best season with every job filled, a full working day.
     const rate = FOOD_RATE[t];
     reach = `Даёт до ${Math.round(Math.max(...rate.season) * rate.kgHour * BUILDINGS[t].jobs * workLength())} кг еды в день`;

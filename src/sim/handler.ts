@@ -18,6 +18,7 @@ import { SERVICES, isService } from "./services";
 import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
 import { migrateLegacy, parseSave } from "./save";
 import { dayOf } from "./time";
+import { startWeather, type WeatherState } from "./weather";
 import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
@@ -73,6 +74,9 @@ const ENRICH_RETRY_MS = 30_000;
 // Looks up land type and slope at a local point. Injected so tests need no network.
 export type TerrainSampler = (frame: Frame, x: number, y: number) => Promise<TerrainInfo>;
 
+// Ground elevation in meters at a point. Injected so tests need no network; none means 0 m.
+export type ElevationSampler = (lng: number, lat: number) => Promise<number>;
+
 export class Handler {
   private save: SaveV4 | null = null;
   private postedRev = -1; // zones rev the main thread already has
@@ -95,7 +99,20 @@ export class Handler {
     private storage: Storage,
     private post: (msg: FromWorker) => void,
     private sampler?: TerrainSampler,
+    private elevation?: ElevationSampler,
   ) {}
+
+  // The weather of a town: its site (elevation sampled once; 0 m when that fails) and the spin-up before `t`.
+  private async weatherFor(city: SaveV4["city"], t: number): Promise<WeatherState> {
+    let elev = 0;
+    try {
+      const e = await this.elevation?.(city.lng, city.lat);
+      if (typeof e === "number" && Number.isFinite(e)) elev = e;
+    } catch {
+      // founding never waits for the DEM
+    }
+    return startWeather({ lat: city.lat, lng: city.lng, elev, seed: seedOf(city.foundedAt), phase: city.lat < 0 ? 0.5 : 0 }, t);
+  }
 
   // Resolves when no terrain enrichment is running (for tests).
   async idle(): Promise<void> {
@@ -123,6 +140,7 @@ export class Handler {
             city: msg.city,
             sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(msg.city.foundedAt)) },
           };
+          save.sim.weather = await this.weatherFor(msg.city, 0);
           this.setSave(save);
           await this.storage.put(save);
           this.post({ t: "loaded", save: toClientSave(save), migrated: false, away: null });
@@ -229,6 +247,7 @@ export class Handler {
       this.post({ t: "loaded", save: null, migrated: false, away: null });
       return;
     }
+    if (!save.sim.weather.site) save = { ...save, sim: { ...save.sim, weather: await this.weatherFor(save.city, save.sim.gameMinutes) } };
     const realMs = now - save.sim.realTime;
     const { sim, tally } = await this.catchUp(save.sim, now);
     const away = realMs > AWAY_MIN_MS ? summarize(tally, save.sim, sim, realMs) : null;

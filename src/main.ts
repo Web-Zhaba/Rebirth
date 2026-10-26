@@ -1,6 +1,6 @@
 import "./style.css";
 import { render, h } from "preact";
-import { effect } from "@preact/signals";
+import { computed, effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
 import { attachArticles } from "./map/articles";
 import { attachBadgeLayer } from "./map/badgeLayer";
@@ -14,12 +14,13 @@ import { attachRoadLayer } from "./map/roadLayer";
 import { attachRuinsLayer } from "./map/ruinsLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachLifeLayer } from "./map/lifeLayer";
+import { attachCloudLayer } from "./map/cloudLayer";
 import { attachNightTint } from "./map/nightLayer";
 import { attachTrafficLayer } from "./map/trafficLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
 import { attachZoneTool } from "./map/zoneTool";
 import * as simClient from "./simClient";
-import { city, frame, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
+import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
 import { App } from "./ui/App";
 
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
@@ -39,6 +40,13 @@ attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLig
 attachNightTint(map, gameClock); // dusk tint of the map itself; sits just under the lights
 attachReachLayer(map);
 attachCityMarker(map);
+attachCloudLayer(map, {
+  clock: gameClock,
+  site: computed(() => {
+    const w = state.value?.weather?.site;
+    return w ? { seed: w.seed, phase: w.phase } : null;
+  }),
+}); // clouds above everything on the map, visible only on the far globe views
 attachRoadTool(map);
 attachZoneTool(map);
 attachPlaceTool(map);

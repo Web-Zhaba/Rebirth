@@ -5,6 +5,10 @@ import Abacus from "~icons/game-icons/abacus";
 import AncientColumns from "~icons/game-icons/ancient-columns";
 import AxeInLog from "~icons/game-icons/axe-in-log";
 import Barn from "~icons/game-icons/barn";
+import Beehive from "~icons/game-icons/beehive";
+import CellarBarrels from "~icons/game-icons/cellar-barrels";
+import FruitTree from "~icons/game-icons/fruit-tree";
+import Mushrooms from "~icons/game-icons/mushrooms";
 import Bulldozer from "~icons/game-icons/bulldozer";
 import Church from "~icons/game-icons/church";
 import DigHole from "~icons/game-icons/dig-hole";
@@ -33,6 +37,12 @@ import Moon from "~icons/game-icons/moon";
 import Person from "~icons/game-icons/person";
 import Planks from "~icons/game-icons/planks";
 import Sun from "~icons/game-icons/sun";
+import SunCloud from "~icons/game-icons/sun-cloud";
+import Raining from "~icons/game-icons/raining";
+import Snowing from "~icons/game-icons/snowing";
+import LightningStorm from "~icons/game-icons/lightning-storm";
+import WindSlap from "~icons/game-icons/wind-slap";
+import Tornado from "~icons/game-icons/tornado";
 import Sunrise from "~icons/game-icons/sunrise";
 import Sunset from "~icons/game-icons/sunset";
 import StoneBlock from "~icons/game-icons/stone-block";
@@ -40,6 +50,7 @@ import Village from "~icons/game-icons/village";
 import Well from "~icons/game-icons/well";
 import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
+import PhCloud from "~icons/ph/cloud";
 import PhCaretDown from "~icons/ph/caret-down-bold";
 import PhCaretUp from "~icons/ph/caret-up-bold";
 import PhHammer from "~icons/ph/hammer";
@@ -93,6 +104,7 @@ export const ICONS = {
   search: PhSearch,
   locate: PhGpsFix,
   placeNames: PhSignpost,
+  clouds: PhCloud,
   // Inspector and town panel: priority, volunteers, waiting, the town button
   flag: PhFlag,
   build: PhHammer,
@@ -117,6 +129,15 @@ export const ICONS = {
   day: Sun,
   evening: Sunset,
   night: Moon,
+  // Weather chip (game-icons)
+  weatherClear: Sun,
+  weatherPartly: SunCloud,
+  weatherOvercast: PhCloud,
+  weatherRain: Raining,
+  weatherDownpour: LightningStorm,
+  weatherSnow: Snowing,
+  weatherBlizzard: WindSlap,
+  weatherHurricane: Tornado,
   // Notebook entries (game-icons): point of interest, street, foundations
   find: MagnifyingGlass,
   street: Road,
@@ -137,6 +158,10 @@ export const ICONS = {
   fisher: FishingPole,
   garden: Carrot,
   hunter: Deer,
+  forager: Mushrooms,
+  orchard: FruitTree,
+  apiary: Beehive,
+  cellar: CellarBarrels,
   barn: Barn,
   well: Well,
   market: Shop,

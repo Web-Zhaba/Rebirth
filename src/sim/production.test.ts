@@ -579,6 +579,18 @@ describe("placement", () => {
     expect(canPlace(wet, t("quarry"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
     expect(canPlace(wet, t("barn"), e, 1, 3, NO_SITE)).toEqual({ ok: true }); // the barn lot is one cell deep
   });
+  it("forager needs 20 % forest; orchard and apiary stay off water and wetland", () => {
+    const s = base();
+    const e = edgeId(s);
+    expect(canPlace(s, t("forager"), e, 1, 3, { forest: 0.19, water: 0, rock: 0 })).toMatchObject({ ok: false });
+    expect(canPlace(s, t("forager"), e, 1, 3, { forest: 0.2, water: 0, rock: 0 })).toEqual({ ok: true });
+    const cell = s.zones.cells.find((c) => c.edge === e && c.side === 1 && c.i === 3 && c.depth === 0)!;
+    const wet = { ...s, zones: { ...s.zones, terrain: { ...s.zones.terrain, [qkey(cell.cx, cell.cy)]: { land: "wetland", slope: 0 } as TerrainInfo } } };
+    for (const id of ["orchard", "apiary"]) {
+      expect(canPlace(s, t(id), e, 1, 3, NO_SITE)).toEqual({ ok: true });
+      expect(canPlace(wet, t(id), e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
+    }
+  });
   it("placing adds a planned building and clears the painted zone under it", () => {
     let s = base();
     const e = edgeId(s);
@@ -733,6 +745,20 @@ describe("save", () => {
     const bad = JSON.parse(JSON.stringify({ version: 4, city, sim: { ...sim, incoming: [{ house: 1, arrive: 400 }, { house: 9, arrive: 1 }, { house: 1, arrive: "x" }, null, { house: 1, arrive: 5 }] } }));
     expect(parseSave(bad, NOW)!.sim.incoming).toEqual([{ house: 1, arrive: 400 }]);
   });
+  it("round-trips an orchard's ripening and its year", () => {
+    const s = full();
+    s.buildings[1] = { ...s.buildings[1], template: "orchard", zone: "placed", ripe: 1234 };
+    const sim = { ...s, prod: { ...s.prod, orchard: { year: 2, frost: 4, stress: 1.5, days: 8, hot: 2 } } };
+    const p = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW)!;
+    expect(p.sim.buildings[1].ripe).toBe(1234);
+    expect(p.sim.prod.orchard).toEqual({ year: 2, frost: 4, stress: 1.5, days: 8, hot: 2 });
+    const old = JSON.parse(JSON.stringify({ version: 4, city, sim }));
+    delete old.sim.prod.orchard;
+    delete old.sim.buildings[1].ripe;
+    const q = parseSave(old, NOW)!.sim;
+    expect(q.prod.orchard).toEqual({ year: 1, frost: 0, stress: 0, days: 0, hot: 0 });
+    expect(q.buildings[1].ripe).toBeUndefined();
+  });
   it("older saves get the founding stock, mood 60, empty progress and paid buildings", () => {
     const s = full();
     const old = JSON.parse(JSON.stringify(s));
@@ -744,7 +770,7 @@ describe("save", () => {
     old.buildings[1].done = 0;
     const p = parseSave({ version: 4, city, sim: old }, NOW)!;
     expect(p.sim.stock).toEqual(FOUNDING_STOCK);
-    expect(p.sim.prod).toEqual({ fields: {}, flags: { year: 1, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 }, today: {}, yesterday: {} });
+    expect(p.sim.prod).toEqual({ fields: {}, flags: { year: 1, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 }, today: {}, yesterday: {}, orchard: { year: 1, frost: 0, stress: 0, days: 0, hot: 0 } });
     expect(p.sim.households[1].mood).toBe(60);
     expect(p.sim.buildings[1].paid).toBe(false); // still planned
     old.buildings[1].state = "building";

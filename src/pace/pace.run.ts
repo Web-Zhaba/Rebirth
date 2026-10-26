@@ -9,13 +9,14 @@ import type { Cmd, FromWorker } from "../sim/protocol";
 import { segmentCost, type TerrainProfile } from "../sim/roads";
 import { dayOf } from "../sim/time";
 import type { ClientState, Site, ZoneCell } from "../sim/types";
+import { emptyWeather } from "../sim/weather";
 
 // Pacing harness (PLAN-pace.md P0): plays a fixed build order through the real Handler on a flat synthetic
 // site, driving it with a fake wall clock, and reports the real time (at speed 1x) of each pacing milestone.
 
-declare const process: { stdout: { write(s: string): void }; stderr: { write(s: string): void } }; // no @types/node in the project
+declare const process: { stdout: { write(s: string): void }; stderr: { write(s: string): void }; env: Record<string, string | undefined> }; // no @types/node in the project
 
-const T0 = 1_800_000_000_000; // fake wall clock at founding
+const T0 = 1_800_000_000_000 + Number(process.env.PACE_SEED ?? 0); // fake wall clock at founding (PACE_SEED varies the world seed)
 const CAP_DAYS = 400;
 const STEP_MS = 2500; // fake wall time per h.tick(): ten worker intervals, about one tick at 1x
 const NONE: Site = { forest: 0, water: 0, rock: 0 };
@@ -33,8 +34,11 @@ it("pacing harness", async () => {
     else if (m.t === "error") throw new Error(m.message);
   };
   // Flat meadow: no network, no slopes, no water.
-  const h = new Handler(mem, post, async () => ({ land: "meadow", slope: 0 }));
-  await h.handle({ t: "found", city: { name: "Тест", lat: 59.12, lng: 37.9, foundedAt: T0 }, now: T0 });
+  // PACE_WEATHER=1: a temperate site (lat 50, 200 m) with the real weather; otherwise the calm state, as before the weather.
+  const weather = process.env.PACE_WEATHER === "1";
+  const h = new Handler(mem, post, async () => ({ land: "meadow", slope: 0 }), async () => 200);
+  await h.handle({ t: "found", city: { name: "Тест", lat: weather ? 50 : 59.12, lng: 37.9, foundedAt: T0 }, now: T0 });
+  if (!weather) h["save"]!.sim.weather = emptyWeather();
 
   let now = T0;
   let seq = 0;
@@ -180,6 +184,8 @@ it("pacing harness", async () => {
       const key = `${e.at}|${e.kind}|${e.text}`;
       if (isNotice(e.kind) && !seen.has(key)) {
         seen.add(key);
+        if (process.env.PACE_DEBUG && (e.kind === "farm" || e.kind === "food" || e.text.startsWith("Дров"))) process.stderr.write(`d${dayOf(e.at) + 1} ${e.kind}: ${e.text}
+`);
         feedAt.push(now - T0);
         quiet.push(now - T0 - quietSince);
         quietSince = now - T0;

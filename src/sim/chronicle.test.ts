@@ -9,6 +9,7 @@ import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { YEAR_MIN } from "./time";
 import type { Building, City, Resident, SaveV4, SimState, TerrainInfo } from "./types";
+import { startWeather } from "./weather";
 import { emptyZones, qkey, regenerateCells } from "./zones";
 
 const NOW = 1_800_000_000_000;
@@ -170,7 +171,8 @@ describe("catch-up", () => {
   const GAP = 5 * 1440 * 1000; // five game days
 
   it("chunked catch-up through the handler equals a single advanceTo", async () => {
-    const start = grower(NOW - GAP);
+    // a save with a weather site: the handler adds one to a save without it, which would make the direct run differ
+    const start = { ...grower(NOW - GAP), weather: startWeather({ lat: 50, lng: 30, elev: 0, seed: 7, phase: 0 }) };
     const { h, out, get } = setup({ version: 4, city, sim: start });
     await h.handle({ t: "load", legacy: null, now: NOW });
     const loaded = out.find((m) => m.t === "loaded") as Extract<FromWorker, { t: "loaded" }>;

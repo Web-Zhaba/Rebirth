@@ -42,6 +42,7 @@ import type {
   ZoneState,
   ZoneType,
 } from "./types";
+import { emptyWeather, type DayStats, type Weather, type WeatherSite, type WeatherState } from "./weather";
 import { emptyZones } from "./zones";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -194,6 +195,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (raw.template === DIG.template) out[id].radius = isNum(raw.radius) && raw.radius >= DIG.startRadius ? Math.min(DIG.maxRadius, raw.radius) : DIG.startRadius;
     if (raw.onRuins === true) out[id].onRuins = true;
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
+    if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
     if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
     const up = raw.upgrade;
     if (up !== undefined && raw.state === "active" && isRecord(up) && isNum(up.labor) && up.labor > 0 && isNum(up.done) && up.done >= 0 && up.done <= up.labor) {
@@ -273,7 +275,7 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     const mood = isNum(h.mood) ? Math.min(100, Math.max(0, h.mood)) : MOOD_START;
     // Saves from before the flag: the founding households arrived at minute 0.
     const founder = typeof h.founder === "boolean" ? h.founder : h.arrived === 0;
-    households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood };
+    households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood, ...(h.cold === true ? { cold: true as const } : {}) };
   }
   if (seen.size !== Object.keys(residents).length) return null; // a resident in no household
   for (const r of Object.values(residents)) {
@@ -335,6 +337,9 @@ function parseProd(v: unknown): ProdState {
   }
   out.today = numRecord(v.today);
   out.yesterday = numRecord(v.yesterday);
+  // Saves from before the orchard: a year with nothing counted.
+  const o = v.orchard;
+  if (isRecord(o) && Number.isInteger(o.year)) out.orchard = { year: o.year as number, frost: num(o.frost, 0, 400, 0), stress: num(o.stress, 0, 400, 0), days: num(o.days, 0, 400, 0), hot: num(o.hot, 0, 400, 0) };
   return out;
 }
 
@@ -414,6 +419,43 @@ function parseIncoming(v: unknown, buildings: Record<number, Building>): Incomin
   return out;
 }
 
+const num = (v: unknown, lo: number, hi: number, d: number): number => (isNum(v) ? Math.min(hi, Math.max(lo, v)) : d);
+
+function parseDay(v: unknown, d: DayStats): DayStats {
+  if (!isRecord(v)) return d;
+  return { min: num(v.min, -90, 70, d.min), max: num(v.max, -90, 70, d.max), rain: num(v.rain, 0, 1000, 0) };
+}
+
+function parseWeatherSite(v: unknown): WeatherSite | null {
+  if (!isRecord(v) || !isNum(v.lat) || !isNum(v.lng) || !isNum(v.seed)) return null;
+  return { lat: num(v.lat, -90, 90, 0), lng: num(v.lng, -180, 180, 0), elev: num(v.elev, -500, 9000, 0), seed: v.seed >>> 0, phase: num(v.phase, 0, 1, 0) };
+}
+
+// Saves from before the weather have none: the calm state (the handler gives the town a site on load).
+function parseWeather(v: unknown): WeatherState {
+  const d = emptyWeather();
+  if (!isRecord(v)) return d;
+  const site = parseWeatherSite(v.site);
+  if (!site) return d;
+  const n = isRecord(v.now) ? v.now : {};
+  const now: Weather = { temp: num(n.temp, -90, 70, d.now.temp), cloud: num(n.cloud, 0, 1, 0), precip: num(n.precip, 0, 200, 0), snow: n.snow === true, wind: num(n.wind, 0, 100, 0) };
+  return {
+    site,
+    now,
+    soil: num(v.soil, 0, 1, d.soil),
+    snowpack: num(v.snowpack, 0, 20, 0),
+    frozen: num(v.frozen, 0, 1, 0),
+    ice: num(v.ice, 0, 1, 0),
+    gdd: num(v.gdd, 0, 20000, 0),
+    stress: num(v.stress, 0, 1000, 0),
+    stressDays: num(v.stressDays, 0, 1000, 0),
+    frost: num(v.frost, 0, 1, 1),
+    crop: num(v.crop, 0, 1.2, 1),
+    day: parseDay(v.day, d.day),
+    yesterday: parseDay(v.yesterday, d.yesterday),
+  };
+}
+
 // Saves from before growth have none of these fields: defaults, not an error. Broken buildings
 // reset the buildings only; a broken generator state or spawn clock is replaced by a default.
 // Saves without (or with broken) residents get the founders back.
@@ -451,6 +493,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   if (isNum(sim.nextEvent)) g.nextEvent = sim.nextEvent; // else the default of a fresh town: three game days from now
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
+  g.weather = parseWeather(sim.weather);
   const ls = sim.lastSpawn;
   if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
     g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };

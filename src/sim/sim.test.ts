@@ -172,7 +172,8 @@ describe("handler", () => {
     const { h, out, get } = setup();
     await h.handle({ t: "found", city, now: NOW });
     expect(out[0]).toMatchObject({ t: "loaded", migrated: false, away: null });
-    expect(get()).toEqual({ version: 4, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() } });
+    expect(get()).toEqual({ version: 4, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth(), weather: (get() as SaveV4).sim.weather } });
+    expect((get() as SaveV4).sim.weather.site).toMatchObject({ lat: city.lat, lng: city.lng });
   });
   it("tick posts snapshot only when time advanced", async () => {
     const { h, out } = setup();

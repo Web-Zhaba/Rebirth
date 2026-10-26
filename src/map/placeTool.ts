@@ -144,6 +144,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
   const siteText = (id: PlaceTool, site: Site, t: BuildingTemplate, center: Pt): string => {
     if (id === "woodcutter") return `Лес вокруг: ${pct(site.forest)}`;
     if (id === "fisher") return `Вода рядом: ${pct(site.water)}`;
+    if (id === "forager") return `Лес вокруг: ${pct(site.forest)}`;
     if (id === "gumno") {
       let n = 0;
       let ha = 0;
@@ -233,7 +234,7 @@ ${costText(t.labor, t.materials)}` };
       ],
     });
     // Circle of the site: woodcutter and fisher reach, and the fields a farmstead can work.
-    const r = id === "gumno" ? FIELD.radius : id === "woodcutter" || id === "fisher" ? v.radius : id === "dig" ? DIG.startRadius : undefined;
+    const r = id === "gumno" ? FIELD.radius : id === "woodcutter" || id === "fisher" || id === "forager" ? v.radius : id === "dig" ? DIG.startRadius : undefined;
     if (r === undefined) {
       source("place-radius")?.setData(empty());
       return;

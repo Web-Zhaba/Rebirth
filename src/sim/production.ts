@@ -1,13 +1,15 @@
 import { leverMood } from "./levers";
-import { allocateLabor, BARN_CAP, BUILDINGS, FOUNDING_STOCK, foodCapacity, UPGRADE, type Materials, type SiteLever } from "./buildings";
-import { assignedHa, assignFields, expectedKg, FIELD, foodKgHour, haOf, remainingHours, sowCredit, windowAt, workOf } from "./fields";
+import { allocateLabor, BUILDINGS, CELLAR_CAP, FOUNDING_STOCK, foodCapacity, storageOf, UPGRADE, type Materials, type SiteLever } from "./buildings";
+import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
 import { buildingPriority } from "./jobs";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, SERVICE, serviceMood } from "./services";
-import { calendar, dayOf } from "./time";
+import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
+import { applyFrost } from "./weather";
+import { buildFactor, EFFECTS, emptyOrchard, fieldWork, firewoodDaily, frostNight, moodShift, orchardDay, orchardQuality, spoilage, workFactor } from "./weatherEffects";
 import type { Building, Clearing, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
 
 // Building materials come PACE times faster than in history; food and wares do not.
@@ -37,7 +39,7 @@ const EPS = 1e-9;
 
 export const emptyStock = (): Stock => ({ ...FOUNDING_STOCK });
 export const emptyFlags = (year = 1): ProdFlags => ({ year, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 });
-export const emptyProd = (): ProdState => ({ fields: {}, flags: emptyFlags(), today: {}, yesterday: {} });
+export const emptyProd = (): ProdState => ({ fields: {}, flags: emptyFlags(), today: {}, yesterday: {}, orchard: emptyOrchard() });
 
 export function say(events: TownEvent[], at: number, kind: EventKind, text: string, pos?: [number, number]): TownEvent[] {
   return [...events, pos ? { at, kind, text, pos } : { at, kind, text }].slice(-MAX_EVENTS);
@@ -179,7 +181,9 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     if (n === 0) continue;
     // Literate hands make a workshop more productive.
     const eff = b.zone === "craft" ? n + SERVICE.literateBoost * (workers.lit.get(b.id) ?? 0) : n;
-    const h = eff * dt * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
+    const wf = workFactor(b.template, s.weather); // rain, frost, storms
+    if (wf <= 0) continue;
+    const h = eff * dt * wf * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
     switch (b.template) {
       case "woodcutter": {
         const q = h * RATE.logs * PACE * (b.site?.forest ?? 0);
@@ -203,8 +207,13 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
       }
       case "fisher":
       case "garden":
-      case "hunter": {
-        const q = h * foodKgHour(b.template, cal.season);
+      case "hunter":
+      case "forager":
+      case "apiary":
+      case "orchard": {
+        // fruit trees bear a year after they were planted, and the year decides how much
+        const bear = b.template !== "orchard" ? 1 : bears(b, s.gameMinutes) ? orchardQuality(s.prod.orchard) : 0;
+        const q = h * foodKgHour(b.template, cal.season) * bear;
         addFood(q);
         made(b.id, q);
         break;
@@ -242,7 +251,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         assign ??= assignFields(s.zones.fields, s.buildings);
         const mine = s.zones.fields.filter((f) => assign!.get(f.id) === b.id);
         const rem = mine.map((f) => {
-          return remainingHours(f, workOf(fields, f.id, cal.year), win);
+          return remainingHours(f, workOf(fields, f.id, cal.year), win, s.weather.crop);
         });
         const total = rem.reduce((m, r) => m + r, 0);
         if (total <= EPS) break;
@@ -281,7 +290,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     let got = 0;
     for (const f of work) {
       const w = workOf(fields, f.id, cal.year);
-      left += expectedKg(f, w) - w.reaped;
+      left += expectedKg(f, w, s.weather.crop) - w.reaped;
       got += w.reaped;
     }
     if (work.length > 0 && left <= 1e-6) {
@@ -294,6 +303,29 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
 
 // ---------- daily ----------
 
+// A night frost in the window (a fifth of the fields sown, harvest not closed) takes yield potential from the weather and
+// the grain it stood for; reported as a farm event. Once per night: the caller runs at 00:00.
+function nightFrost(s: SimState, events: TownEvent[]): { weather: SimState["weather"]; events: TownEvent[] } {
+  const w = s.weather;
+  const cal = calendar(s.gameMinutes);
+  if (!frostNight(w) || cal.dayOfYear > HARVEST_END_DAY) return { weather: w, events };
+  const assign = assignFields(s.zones.fields, s.buildings);
+  let sown = 0;
+  let need = 0;
+  for (const f of s.zones.fields) {
+    if (!assign.has(f.id)) continue;
+    sown += Math.min(workOf(s.prod.fields, f.id, cal.year).sowH, FIELD.sowHoursHa * haOf(f));
+    need += FIELD.sowHoursHa * haOf(f);
+  }
+  if (need <= 0 || sown / need < EFFECTS.frostSown) return { weather: w, events };
+  const next = applyFrost(w, w.yesterday.min);
+  if (next === w) return { weather: w, events };
+  const standing = (crop: number) => s.zones.fields.reduce((m, f) => (assign.has(f.id) ? m + Math.max(0, expectedKg(f, workOf(s.prod.fields, f.id, cal.year), crop) - workOf(s.prod.fields, f.id, cal.year).reaped) : m), 0);
+  const loss = standing(w.crop) - standing(next.crop);
+  const text = `Заморозок: ночью ${Math.round(w.yesterday.min)} °C, урожай потерял ${Math.round((1 - next.frost / w.frost) * 100)} %${loss >= 1 ? ` (около ${massText(loss)} зерна)` : ""}`;
+  return { weather: next, events: say(events, s.gameMinutes, "farm", text) };
+}
+
 // 00:00: yesterday's output is filed, people eat, wares are handed out, moods move, the harvest window
 // is settled, food above the barns' capacity rots. Runs before the people's daily step.
 export function dailyEconomy(s: SimState): SimState {
@@ -302,12 +334,21 @@ export function dailyEconomy(s: SimState): SimState {
   let flags = flagsFor(s.prod.flags, cal.year);
   let events = s.events;
   const stock = { ...s.stock };
+  const frost = nightFrost(s, events);
+  events = frost.events;
+  let buildings = s.buildings;
+  for (const b of Object.values(s.buildings)) {
+    if (b.template !== "orchard" || b.state !== "active" || b.ripe !== undefined) continue;
+    if (buildings === s.buildings) buildings = { ...buildings };
+    buildings[b.id] = { ...b, ripe: now + ORCHARD_YEARS * YEAR_MIN }; // finished: the trees take a year to bear
+  }
+  const orchard = orchardDay(s.prod.orchard, s.weather, calendar(now - 60).year, calendar(now - 60).season); // the day that ended
 
   // the idle adults gather food for the town (as far as the barns hold it)
   stock.food += Math.max(0, Math.min(forageKg(s), foodCapacity(s.buildings) - stock.food));
 
   // food
-  const need = foodPerDay(s.residents, now, s.levers);
+  const need = foodPerDay(s.residents, now, s.levers, s.weather);
   const eaten = Math.min(stock.food, need);
   stock.food -= eaten;
   const fed = need > 0 ? eaten / need : 1;
@@ -316,12 +357,21 @@ export function dailyEconomy(s: SimState): SimState {
     events = say(events, now, "food", "Еда закончилась, люди голодают");
   } else if (fed >= 1 - EPS && flags.hungry) flags = { ...flags, hungry: false };
   const cap = foodCapacity(s.buildings);
+  // heat and damp spoil the stock; what lies in cellars and barns suffers less (cellars hold the best)
+  let barns = 0;
+  let cellars = 0;
+  for (const b of Object.values(s.buildings)) if (b.state === "active") b.template === "cellar" ? (cellars += CELLAR_CAP) : (barns += storageOf(b.template));
+  const inCellar = stock.food > 0 ? Math.min(1, cellars / stock.food) : 0;
+  const inBarn = stock.food > 0 ? Math.min(1 - inCellar, barns / stock.food) : 0;
+  const spoiled = stock.food * spoilage(s.weather, inBarn, inCellar);
+  stock.food -= spoiled;
+  flags = { ...flags, rot: flags.rot + spoiled };
   if (stock.food > cap) {
     flags = { ...flags, rot: flags.rot + stock.food - cap };
     stock.food = cap;
   }
-  if (flags.rot >= 1) {
-    events = say(events, now, "food", `Пропало ${Math.round(flags.rot)} кг еды: не хватает складов`);
+  if (flags.rot >= (s.weather.site ? EFFECTS.rotReport : 1)) {
+    events = say(events, now, "food", `Пропало ${Math.round(flags.rot)} кг еды: ${s.weather.site ? "жара, сырость, не хватает складов" : "не хватает складов"}`);
     flags = { ...flags, rot: 0 };
   }
 
@@ -357,8 +407,24 @@ export function dailyEconomy(s: SimState): SimState {
     slots--;
   }
 
+  // firewood: every household burns by the cold of the day that ended; those the logs do not reach stay cold
+  const cold = new Set<number>();
+  const wood = firewoodDaily(s.weather);
+  stock.logs += brushwood(s, wood * ids.length); // the idle gather brushwood when the logs will not last the day
+  if (wood > 0) {
+    for (const id of ids) {
+      if (stock.logs >= wood - EPS) stock.logs = Math.max(0, stock.logs - wood);
+      else {
+        stock.logs = 0;
+        cold.add(id);
+      }
+    }
+    if (cold.size > 0 && !Object.values(s.households).some((h) => h.cold)) events = say(events, now, "shortage", "Дров нет, люди мёрзнут");
+  }
+
   // mood
   const households: Record<number, Household> = {};
+  const weatherMood = moodShift(s.weather);
   const idle = idleResidents(s);
   const gather = gatherHouses(s); // evening gatherings: a tavern in reach or a chapel
   for (const h of Object.values(s.households)) {
@@ -378,8 +444,11 @@ export function dailyEconomy(s: SimState): SimState {
       return age >= SERVICE.schoolFrom && age < SERVICE.schoolTo;
     });
     const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) : 0;
-    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers)));
-    households[h.id] = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep };
+    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0)));
+    const next: Household = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep };
+    if (cold.has(h.id)) next.cold = true;
+    else delete next.cold;
+    households[h.id] = next;
   }
 
   // the harvest window is over: whatever stands unreaped is lost
@@ -392,7 +461,7 @@ export function dailyEconomy(s: SimState): SimState {
     for (const f of s.zones.fields) {
       if (!assign.has(f.id)) continue;
       const w = workOf(fields, f.id, cal.year);
-      lost += Math.max(0, expectedKg(f, w) - w.reaped);
+      lost += Math.max(0, expectedKg(f, w, s.weather.crop) - w.reaped);
       got += w.reaped;
     }
     flags = { ...flags, closed: true };
@@ -411,7 +480,14 @@ export function dailyEconomy(s: SimState): SimState {
     delete fields[Number(key)];
   }
 
-  return { ...s, stock, events, households, prod: { fields, flags, today: {}, yesterday: s.prod.today } };
+  return { ...s, stock, events, buildings, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard } };
+}
+
+// m3 of brushwood the idle adults gather in a day: only when a household is cold or the stock is below the day's
+// burning (`demand`, m3); a third less under snow.
+export function brushwood(s: SimState, demand: number): number {
+  if (demand <= 0 || (s.stock.logs >= demand && !Object.values(s.households).some((h) => h.cold))) return 0;
+  return idleResidents(s).size * EFFECTS.brush.m3 * (s.weather.snowpack > EFFECTS.groundSnow ? EFFECTS.brush.snow : 1);
 }
 
 // ---------- aggregates and inspector ----------
@@ -423,6 +499,9 @@ export const GOOD: Record<string, keyof Stock> = {
   fisher: "food",
   garden: "food",
   hunter: "food",
+  forager: "food",
+  orchard: "food",
+  apiary: "food",
   gumno: "food",
   pottery: "wares",
   smithy: "wares",
@@ -430,7 +509,7 @@ export const GOOD: Record<string, keyof Stock> = {
 };
 
 export function economyStats(s: SimState): EconomyStats {
-  const need = foodPerDay(s.residents, s.gameMinutes, s.levers);
+  const need = foodPerDay(s.residents, s.gameMinutes, s.levers, s.weather);
   const yesterday: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
   for (const [key, n] of Object.entries(s.prod.yesterday)) {
     const b = s.buildings[Number(key)];
@@ -453,13 +532,19 @@ export function economyStats(s: SimState): EconomyStats {
     sownH += Math.min(w.sowH, FIELD.sowHoursHa * haOf(f));
     sowNeed += FIELD.sowHoursHa * haOf(f);
     reaped += w.reaped;
-    expected += expectedKg(f, w);
+    expected += expectedKg(f, w, s.weather.crop);
   }
   let moods = 0;
   let hs = 0;
+  let unheated = 0;
+  let unheatedPeople = 0;
   for (const h of Object.values(s.households)) {
     moods += h.mood;
     hs++;
+    if (h.cold) {
+      unheated++;
+      unheatedPeople += h.members.length;
+    }
   }
   return {
     foodCap: foodCapacity(s.buildings),
@@ -469,18 +554,24 @@ export function economyStats(s: SimState): EconomyStats {
     fields: { count: s.zones.fields.length, ha, assignedHa: aHa, sown: sowNeed > 0 ? sownH / sowNeed : 0, reaped, expected, window: windowAt(s.gameMinutes) },
     avgMood: hs > 0 ? moods / hs : 0,
     forage: forageKg(s),
+    brushwood: brushwood(s, firewoodDaily(s.weather) * hs),
     outlook: foodOutlook(s),
     eveningWares: eveningRate(s),
+    fieldWork: fieldWork(s.weather),
+    buildFactor: buildFactor(s.weather),
+    firewood: firewoodDaily(s.weather) * hs,
+    unheated: { households: unheated, people: unheatedPeople },
   };
 }
 
 // Production details for the inspector; undefined for buildings that produce nothing (houses, shops).
 export function productionInfo(s: SimState, b: Building): ProductionInfo | undefined {
   const good = GOOD[b.template];
-  if (!good && b.template !== "barn") return undefined;
+  if (!good && !storageOf(b.template)) return undefined;
   const info: ProductionInfo = { good: good ?? null, yesterday: s.prod.yesterday[b.id] ?? 0 };
   if (b.site) info.site = b.site;
-  if (b.template === "barn") info.storage = BARN_CAP;
+  if (storageOf(b.template)) info.storage = storageOf(b.template);
+  if (b.template === "orchard") info.orchard = { ripeDays: b.ripe === undefined ? ORCHARD_YEARS * YEAR_DAYS : Math.max(0, Math.ceil((b.ripe - s.gameMinutes) / DAY_MIN)), quality: orchardQuality(s.prod.orchard) };
   if (b.template === "sawpit" && s.stock.logs <= EPS) info.missing = "брёвна";
   if (b.template === "smithy" && s.stock.logs <= EPS) info.missing = "брёвна (на уголь)";
   if (b.template === "carpentry" && s.stock.planks <= EPS) info.missing = "доски";
@@ -497,7 +588,7 @@ export function productionInfo(s: SimState, b: Building): ProductionInfo | undef
       sownH += Math.min(w.sowH, FIELD.sowHoursHa * haOf(f));
       need += FIELD.sowHoursHa * haOf(f);
       reaped += w.reaped;
-      expected += expectedKg(f, w);
+      expected += expectedKg(f, w, s.weather.crop);
     }
     info.fields = { count: mine.length, ha: assignedHa(b.id, s.zones.fields, assign), sown: need > 0 ? sownH / need : 0, reaped, expected };
   }

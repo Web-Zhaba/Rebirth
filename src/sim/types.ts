@@ -2,6 +2,8 @@ import type { JobGroup } from "./buildings";
 import type { Levers } from "./levers";
 import type { GoalView } from "./goals";
 import type { Land } from "../world/landcover";
+import type { WeatherState } from "./weather";
+import type { OrchardYear } from "./weatherEffects";
 
 export interface City {
   name: string;
@@ -104,6 +106,7 @@ export interface Building {
   onRuins?: boolean; // started on an old foundation: no stone, less labor
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
+  ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -143,6 +146,7 @@ export interface Household {
   arrived: number; // gameMinutes
   founder: boolean; // came with the founding party: never emigrates
   mood: number; // 0..100
+  cold?: true; // no firewood at the last midnight: mood target down, death rate up (weather only)
 }
 
 export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "event";
@@ -258,6 +262,7 @@ export interface ProdState {
   flags: ProdFlags;
   today: Record<number, number>; // building id -> units made since 00:00 (kg of grain for a gumno)
   yesterday: Record<number, number>;
+  orchard: OrchardYear; // what this year has done to the fruit trees (frost at the blossom, drought, heat)
 }
 
 // Goals and unlocks (PLAN-pace.md section 9; sim/goals.ts holds the table).
@@ -321,6 +326,7 @@ export interface SimState extends PeopleState {
   pending: TownChoice | null; // the event waiting for an answer, one at a time (P7)
   nextEvent: number; // gameMinutes from which the next event may be drawn
   eventLast: Record<string, number>; // gameMinutes each event kind was last put
+  weather: WeatherState; // climate at the town (PLAN-weather.md)
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
@@ -345,8 +351,13 @@ export interface EconomyStats {
   fields: { count: number; ha: number; assignedHa: number; sown: number; reaped: number; expected: number; window: Window };
   avgMood: number;
   forage: number; // kg of food a day the idle adults gather
+  brushwood: number; // m3 of firewood a day the idle adults gather (only while the town is short of fuel)
   outlook: number; // 0..1, can the food last to the end of the next harvest window
   eveningWares: number; // pieces an hour the adults at home make at 19-22 (doubles in winter)
+  fieldWork: number; // share of the field work the weather allows right now (1 = calm)
+  buildFactor: number; // share of the artel's hours the weather allows right now
+  firewood: number; // m3 a day the households burn at today's cold
+  unheated: { households: number; people: number }; // without firewood since the last midnight
 }
 
 export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";
@@ -444,7 +455,8 @@ export interface ProductionInfo {
   yesterday: number; // units made yesterday (kg of grain for a gumno)
   site?: Site;
   missing?: string; // input the workshop lacks
-  storage?: number; // kg of food a barn holds
+  storage?: number; // kg of food a barn or cellar holds
+  orchard?: { ripeDays: number; quality: number }; // days until the trees bear (0 = they do); share of the full yield this year allows
   fields?: { count: number; ha: number; sown: number; reaped: number; expected: number };
 }
 

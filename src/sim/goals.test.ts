@@ -62,6 +62,13 @@ describe("saved goals", () => {
     expect(g!.unlocks).toEqual(expect.arrayContaining(["hunter", "garden", "fisher"]));
     expect(isUnlocked(g!, "hunter")).toBe(true);
   });
+  it("the alternative food opens in steps: forager and cellar early, apiary at 25 people, orchard after the harvest", () => {
+    const g = parseGoals({ done: ["izbas2"], unlocks: [], families: 0, notebook: false, feast: false })!;
+    for (const k of ["forager", "cellar"]) expect(isUnlocked(g, k)).toBe(true);
+    for (const k of ["apiary", "orchard"]) expect(isUnlocked(g, k)).toBe(false);
+    const later = parseGoals({ done: ["izbas2", "pop25", "harvest"], unlocks: [], families: 0, notebook: false, feast: false })!;
+    for (const k of ["apiary", "orchard"]) expect(isUnlocked(later, k)).toBe(true);
+  });
 });
 
 describe("goals chain", () => {
@@ -288,7 +295,7 @@ describe("migration and save", () => {
     const g = { done: ["izbas2", "nope"], unlocks: ["sawpit", "barn", "bogus"], families: 2, notebook: true, feast: true };
     const raw = { version: 4, city, sim: { ...JSON.parse(JSON.stringify(town())), goals: g } };
     const sim = parseSave(raw, NOW + 1)!.sim;
-    expect(sim.goals).toEqual({ done: ["izbas2"], unlocks: ["sawpit", "barn", "hunter"], families: 2, notebook: true, feast: true, logsMade: 0 });
+    expect(sim.goals).toEqual({ done: ["izbas2"], unlocks: ["sawpit", "barn", "hunter", "cellar", "forager"], families: 2, notebook: true, feast: true, logsMade: 0 });
     const again = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW + 1)!.sim;
     expect(again.goals).toEqual(sim.goals);
   });

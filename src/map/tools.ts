@@ -6,12 +6,12 @@ import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 export type RoadTool = RoadKind | "bulldoze";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
 export type ZoneTool = BrushTool | "field" | "clearing";
-export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "barn" | "dig" | ServiceId;
+export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "path" || t === "dirt" || t === "bulldoze";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
-export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "barn", "dig", "well", "market", "chapel", "school", "healer"];
+export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
@@ -68,4 +68,4 @@ export const TRAFFIC_STOPS: { n: number; color: string; width: number }[] = [
 export const placeReach = signal<{ x: number; y: number; range: number; color: string } | null>(null);
 
 // Radius (m) of the terrain around a lot that matters to a placed building.
-export const SITE_RADIUS: Partial<Record<PlaceTool, number>> = { woodcutter: 150, fisher: 100 };
+export const SITE_RADIUS: Partial<Record<PlaceTool, number>> = { woodcutter: 150, fisher: 100, forager: 150 };
