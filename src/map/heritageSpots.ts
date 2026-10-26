@@ -102,3 +102,16 @@ export function selectHints(world: Pick<OldWorld, "foundations" | "spots">, disc
   }
   return out;
 }
+
+// The typed old building whose panel is open (a foundation id); client only.
+export const selectedSite = signal<string | null>(null);
+
+// The smallest typed foundation whose ring holds the point, or null.
+export function typedAt(x: number, y: number, list: readonly TypedFoundation[]): TypedFoundation | null {
+  let best: TypedFoundation | null = null;
+  for (const t of list) {
+    if (best && t.area >= best.area) continue;
+    if (t.ring.length >= 3 && pointInRing(x, y, t.ring)) best = t;
+  }
+  return best;
+}

@@ -1,0 +1,38 @@
+/* Heritage panel (PLAN-research.ru.md section 7): a typed old building and the two ways to restore it. */
+.her-opts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.her-opts legend {
+  padding: 0 0 var(--sp-1);
+  color: var(--pencil);
+}
+.her-opt {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--bw) solid var(--rule);
+  background: var(--paper-shade);
+  cursor: pointer;
+}
+.her-opt.her-picked {
+  border-color: var(--ink);
+}
+.her-opt.her-closed {
+  cursor: default;
+  opacity: 0.75;
+}
+.her-opt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-sm);
+}
+.her-gain {
+  font-weight: 700;
+}

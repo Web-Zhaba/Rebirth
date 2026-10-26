@@ -4,7 +4,7 @@ import type { AdminOp } from "./admin";
 import type { Away } from "./away";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
-import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, Site, StoredArticle, ZoneState, ZoneType } from "./types";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, RestoreMode, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
 export type { Away };
 
@@ -31,6 +31,8 @@ export type Cmd =
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "demolish"; id: number }
+  // Order the restoration of a typed old building (a foundation with a kind), as a monument or in working order.
+  | { type: "restoreSite"; siteId: string; mode: RestoreMode }
   // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
   | { type: "setPriority"; key: number | null }
   | { type: "callToloka"; key: number }

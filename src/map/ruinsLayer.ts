@@ -4,7 +4,9 @@ import { isBridge, oldStreetKind, ROAD_KINDS } from "../sim/roads";
 import { DOMAIN_COLORS, PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
 import { ringCentroid, type OldWorld, type XY } from "../world/oldworld";
-import { hintSpots, typedFoundations } from "./heritageSpots";
+import { pointInPolygon } from "../sim/zones";
+import { hintSpots, selectedSite, typedAt, typedFoundations } from "./heritageSpots";
+import { tool } from "./tools";
 
 const SRC_WALLS = "ruins-walls";
 const SRC_FLOORS = "ruins-floors";
@@ -152,6 +154,7 @@ export function attachRuinsLayer(
   let disposeEffect: (() => void) | null = null;
   let disposeShown: (() => void) | null = null;
   let disposed = false;
+  let sc: typeof import("../simClient") | null = null; // loaded lazily: the pure parts of this file are tested without the worker
 
   const applyShown = () => {
     for (const id of RUIN_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", ruinsShown.peek() ? "visible" : "none");
@@ -167,7 +170,7 @@ export function attachRuinsLayer(
     );
     // Notable buildings: floor in the colour of their domain.
     map.addLayer(
-      { id: "ruins-typed-fill", type: "fill", source: SRC_TYPED, minzoom: 13, paint: { "fill-color": ["get", "c"], "fill-opacity": 0.5 } },
+      { id: "ruins-typed-fill", type: "fill", source: SRC_TYPED, minzoom: 13, paint: { "fill-color": ["get", "c"], "fill-opacity": ["match", ["get", "s"], "restored", 0.12, "restoring", 0.3, "lost", 0.2, 0.5] } },
       beneath,
     );
     map.addLayer(
@@ -206,7 +209,7 @@ export function attachRuinsLayer(
         source: SRC_TYPED,
         minzoom: 13,
         layout: { "line-join": "round" },
-        paint: { "line-color": ["get", "c"], "line-width": 2, "line-opacity": 0.95 },
+        paint: { "line-color": ["get", "c"], "line-width": ["match", ["get", "s"], "restoring", 3.5, "restored", 1, 2], "line-opacity": ["match", ["get", "s"], "lost", 0.45, 0.95] },
       },
       beneath,
     );
@@ -325,6 +328,7 @@ export function attachRuinsLayer(
         geometry: { type: "LineString", coordinates: s.pts.map(([x, y]) => f.toLngLat(x, y)) },
       }));
     const typedList = typedFoundations.value;
+    const stateOf = new Map((sc?.finds.value?.foundations ?? []).flatMap((x) => (x.state ? [[x.id, x.state] as const] : [])));
     const typedNameSet = new Set(typedList.flatMap((t) => (t.name ? [t.name] : []))); // labelled by the typed layer instead
     const pois: GeoJSON.Feature[] = w.pois
       .filter((p) => !typedNameSet.has(p.name))
@@ -338,7 +342,8 @@ export function attachRuinsLayer(
     for (const t of typedList) {
       if (t.ring.length < 3) continue;
       const outer = t.ring.map(([x, y]) => f.toLngLat(x, y));
-      typed.push({ type: "Feature", properties: { c: DOMAIN_COLORS[t.domain] }, geometry: { type: "Polygon", coordinates: [close(outer)] } });
+      const st = stateOf.get(t.id) ?? "";
+      typed.push({ type: "Feature", properties: { c: st === "lost" ? PALETTE.pencilFaint : DOMAIN_COLORS[t.domain], s: st }, geometry: { type: "Polygon", coordinates: [close(outer)] } });
       if (t.name) typedNames.push({ type: "Feature", properties: { name: t.name }, geometry: { type: "Point", coordinates: f.toLngLat(...ringCentroid(t.ring)) } });
     }
     const hints: GeoJSON.Feature[] = hintSpots.value.map((h) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: f.toLngLat(h.x, h.y) } }));
@@ -353,6 +358,16 @@ export function attachRuinsLayer(
     set(SRC_HINTS, hints);
   };
 
+  // A click on a typed old building opens its panel; a real building on the same ground wins, empty ground deselects.
+  const onClick = (e: maplibregl.MapMouseEvent) => {
+    const f = frame.value;
+    if (!ready || tool.value || !f) return;
+    const [x, y] = f.toLocal(e.lngLat.lng, e.lngLat.lat);
+    const onBuilding = Object.values(sc?.buildings.value ?? {}).some((b) => pointInPolygon(x, y, b.footprint));
+    selectedSite.value = onBuilding ? null : (typedAt(x, y, typedFoundations.value)?.id ?? null);
+  };
+  map.on("click", onClick);
+
   const run = () => {
     if (disposed) return;
     disposeEffect = effect(apply);
@@ -361,11 +376,16 @@ export function attachRuinsLayer(
       applyShown();
     });
   };
-  if (map.isStyleLoaded()) run();
-  else map.once("load", run);
+  void import("../simClient").then((m) => {
+    sc = m;
+    if (disposed) return;
+    if (map.isStyleLoaded()) run();
+    else map.once("load", run);
+  });
 
   return () => {
     disposed = true;
+    map.off("click", onClick);
     disposeEffect?.();
     disposeShown?.();
   };

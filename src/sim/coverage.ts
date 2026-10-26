@@ -3,6 +3,7 @@ import { isUnlocked } from "./tech";
 import { ageOf, buildNet, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
 import { countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import { classPupils, schoolSeats } from "./school";
+import { finishedMonuments, monumentLand, monumentsNear } from "./monuments";
 import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
 
 // ---------- coverage ----------
@@ -46,6 +47,7 @@ const bkey = (bx: number, by: number) => bx * 65536 + by;
 // 20 + 8 per covered service + 0.3 x (mood of the households within 100 m - 50), clamped to 0..100.
 export function computeLandValue(s: Pick<SimState, "buildings" | "households">, coverage: Record<number, number>): Record<number, number> {
   const out: Record<number, number> = {};
+  const monuments = finishedMonuments(s.buildings);
   const grid = new Map<number, { x: number; y: number; mood: number }[]>();
   for (const h of Object.values(s.households)) {
     const home = h.home === null ? undefined : s.buildings[h.home];
@@ -72,7 +74,7 @@ export function computeLandValue(s: Pick<SimState, "buildings" | "households">, 
       }
     }
     const moodTerm = n > 0 ? SERVICE.landMoodWeight * (sum / n - 50) : 0;
-    const v = SERVICE.landBase + SERVICE.landPerService * countServices(coverage[b.id]) + moodTerm;
+    const v = SERVICE.landBase + SERVICE.landPerService * countServices(coverage[b.id]) + moodTerm + monumentLand(monumentsNear(monuments, b.lot.cx, b.lot.cy));
     out[b.id] = Math.round(Math.min(100, Math.max(0, v)));
   }
   return out;

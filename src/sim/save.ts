@@ -164,8 +164,10 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (raw.side !== 1 && raw.side !== -1) return null;
     const lot = raw.lot;
     if (!isRecord(lot) || !isNum(lot.cx) || !isNum(lot.cy) || !isNum(lot.angle)) return null;
-    if (!Number.isInteger(lot.w) || !Number.isInteger(lot.d) || (lot.w as number) < 1 || (lot.d as number) < 1) return null;
-    if (!Array.isArray(raw.footprint) || raw.footprint.length !== 4 || !raw.footprint.every(isPoint)) return null;
+    // A restored old building has the real ring as its footprint and a lot that is a free-sized box (PLAN-research.ru.md section 7).
+    const isSite = typeof raw.siteId === "string" && raw.siteId.length > 0 && raw.siteId.length <= 200;
+    if (isSite ? !isNum(lot.w) || !isNum(lot.d) || (lot.w as number) <= 0 || (lot.d as number) <= 0 : !Number.isInteger(lot.w) || !Number.isInteger(lot.d) || (lot.w as number) < 1 || (lot.d as number) < 1) return null;
+    if (!Array.isArray(raw.footprint) || (isSite ? raw.footprint.length < 3 || raw.footprint.length > 64 : raw.footprint.length !== 4) || !raw.footprint.every(isPoint)) return null;
     if (!isNum(raw.height) || raw.height <= 0) return null;
     if (typeof raw.state !== "string" || !STATES.includes(raw.state)) return null;
     if (!isNum(raw.labor) || raw.labor <= 0 || !isNum(raw.done) || raw.done < 0 || raw.done > raw.labor) return null;
@@ -199,6 +201,14 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     // Saves from before excavation: a dig site starts at its first radius.
     if (raw.template === DIG.template) out[id].radius = isNum(raw.radius) && raw.radius >= DIG.startRadius ? Math.min(DIG.maxRadius, raw.radius) : DIG.startRadius;
     if (raw.onRuins === true) out[id].onRuins = true;
+    if (isSite) {
+      out[id].siteId = raw.siteId as string;
+      if (raw.restoreMode === "monument" || raw.restoreMode === "working") out[id].restoreMode = raw.restoreMode;
+      if (isNum(raw.restoreWeight) && raw.restoreWeight > 0) out[id].restoreWeight = Math.min(1000, raw.restoreWeight);
+      if (isPoint(raw.door)) out[id].door = [raw.door[0], raw.door[1]];
+      const m = raw.materials;
+      if (isRecord(m) && isNum(m.logs) && isNum(m.planks) && isNum(m.stone) && m.logs >= 0 && m.planks >= 0 && m.stone >= 0) out[id].materials = { logs: m.logs, planks: m.planks, stone: m.stone };
+    }
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
     if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
     if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
@@ -212,7 +222,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
 }
 
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "event"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "event"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);

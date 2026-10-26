@@ -1,4 +1,4 @@
-import type { JobGroup } from "./buildings";
+import type { JobGroup, Materials } from "./buildings";
 import type { Levers } from "./levers";
 import type { DomainId } from "./domains";
 import type { Land } from "../world/landcover";
@@ -83,6 +83,8 @@ export interface ZoneState {
   rev: number; // bumped on every change of cells, fields or terrain
 }
 
+export type RestoreMode = "monument" | "working";
+
 export type BuildingState = "planned" | "building" | "active";
 
 export interface Building {
@@ -108,6 +110,12 @@ export interface Building {
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
+  // A restored old building (PLAN-research.ru.md section 7): the footprint is the real ring (3..64 points), the lot its oriented box.
+  siteId?: string; // the foundation it stands on
+  restoreMode?: RestoreMode;
+  restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
+  door?: [number, number]; // point of the ring nearest to the road: where services, jobs and walks reach the building
+  materials?: Materials; // cost by area, instead of the template's
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -151,7 +159,7 @@ export interface Household {
   cold?: true; // no firewood at the last midnight: mood target down, death rate up (weather only)
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "event"; // goal and unlock are no longer made: old saves still carry them
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage" | "event"; // goal and unlock are no longer made: old saves still carry them
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -177,7 +185,11 @@ export interface FoundFoundation {
   cls?: string; // kind of a notable old building (heritage.ts), from a POI inside the ring
   name?: string;
   height?: number; // m
+  state?: FoundState; // absent = untouched; set once a restoration is ordered
 }
+
+// "lost": the restored building was demolished; the site can never be restored again.
+export type FoundState = "restoring" | "restored" | "lost";
 
 // A named place (kind = OSM class) or street (kind "street", no position) found by a dig.
 export interface FoundPlace {
@@ -437,6 +449,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
   research: ResearchView;
+  heritageMul: number; // scarcity multiplier of the next restoration, 1..3
   callBlock: string | null; // why a call for settlers cannot be made now, or null
 };
 

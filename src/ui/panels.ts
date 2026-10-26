@@ -1,11 +1,12 @@
 import { batch, effect, signal } from "@preact/signals";
 import { selectedBuilding } from "../map/buildingLayer";
+import { selectedSite } from "../map/heritageSpots";
 import { tool } from "../map/tools";
 import { selectedClearing } from "../map/zoneLayer";
 
 // The right-hand slot (PLAN-ui.md section 5) holds one panel at a time: the inspector of the selected
-// building or clearing, the town panel, the notebook or the science panel.
-export type RightPanel = "inspector" | "town" | "notebook" | "tech";
+// building or clearing, the town panel, the notebook, the science panel or an old building to restore.
+export type RightPanel = "inspector" | "town" | "notebook" | "tech" | "heritage";
 
 export const rightPanel = signal<RightPanel | null>(null);
 
@@ -17,6 +18,7 @@ export function openPanel(p: RightPanel | null): void {
       selectedBuilding.value = null;
       selectedClearing.value = null;
     }
+    if (p !== "heritage") selectedSite.value = null;
     rightPanel.value = p;
   });
 }
@@ -29,8 +31,19 @@ export const togglePanel = (p: RightPanel): void => openPanel(rightPanel.peek() 
 // A click on the map selects something: the inspector takes the slot; deselecting frees it.
 effect(() => {
   const selected = selectedBuilding.value !== null || selectedClearing.value !== null;
-  if (selected) rightPanel.value = "inspector";
-  else if (rightPanel.peek() === "inspector") rightPanel.value = null;
+  if (selected) {
+    rightPanel.value = "inspector";
+    selectedSite.value = null;
+  } else if (rightPanel.peek() === "inspector") rightPanel.value = null;
+});
+
+// A typed old building selected on the map opens its panel; deselecting frees the slot.
+effect(() => {
+  if (selectedSite.value !== null) {
+    selectedBuilding.value = null;
+    selectedClearing.value = null;
+    rightPanel.value = "heritage";
+  } else if (rightPanel.peek() === "heritage") rightPanel.value = null;
 });
 
 // Esc closes the open panel, unless a dialog or a map tool wants the key.

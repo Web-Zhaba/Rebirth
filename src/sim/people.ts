@@ -310,8 +310,9 @@ export function walkMetres(tree: Tree, p: Spot, q: Spot): number {
   return p.off + road + q.off;
 }
 
-// Midpoint of the lot edge that faces the road (the door).
+// Midpoint of the lot edge that faces the road (the door); a restored old building has its door set on its ring.
 export function lotFront(b: Building): [number, number] {
+  if (b.door) return b.door;
   const { cx, cy, angle, d } = b.lot;
   const vx = -Math.sin(angle) * b.side;
   const vy = Math.cos(angle) * b.side;

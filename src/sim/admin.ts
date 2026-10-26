@@ -4,6 +4,7 @@ import { refreshServices } from "./coverage";
 import { syncPeople } from "./people";
 import { isCleared } from "./clearing";
 import { UPGRADE } from "./buildings";
+import { completeRestorations } from "./restore";
 import type { Building, RoadGraph, SimState } from "./types";
 
 // Admin panel: cheats on the simulation. Nothing here is reachable from play, only from the admin panel's commands.
@@ -57,7 +58,7 @@ export function finishAll(s: SimState): SimState {
   const open = new Map(s.clearings.filter((c) => !isCleared(c)).map((c) => [c.id, c.labor - c.done]));
   if (roads === s.roads && buildings === s.buildings && open.size === 0) return s;
   const cleared = advanceClearings({ ...s, roads, buildings }, open);
-  return refreshServices(syncPeople(cleared));
+  return refreshServices(syncPeople(completeRestorations(cleared)));
 }
 
 export const grantStock = (s: SimState): SimState => ({

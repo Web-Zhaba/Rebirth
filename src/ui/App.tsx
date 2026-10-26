@@ -10,6 +10,7 @@ import { BuildingPanel } from "./BuildingPanel";
 import { CentreColumn } from "./CentreColumn";
 import { ClearingPanel } from "./ClearingPanel";
 import { FoundCity } from "./FoundCity";
+import { HeritagePanel } from "./HeritagePanel";
 import { HotkeysDialog } from "./HotkeysDialog";
 import { Hud } from "./Hud";
 import { NotebookHost } from "./NotebookHost";
@@ -36,6 +37,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <ClearingPanel />}
       {c && <TownPanel city={c} map={map} />}
       {c && <TechPanel />}
+      {c && <HeritagePanel />}
       {c && <NotebookHost />}
       {c && <BuildBar />}
       {c && <AdminPanel />}

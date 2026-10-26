@@ -5,6 +5,8 @@ import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { resolveChoice } from "./events";
+import { scarcity } from "./heritage";
+import { loseSite, restoreSite } from "./restore";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
 import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
@@ -50,7 +52,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -501,12 +503,17 @@ export class Handler {
           this.save = { ...this.save, sim: r.sim };
         } else return reject("Неизвестная команда");
         return await this.finishCommand(id);
+      } else if (cmd.type === "restoreSite") {
+        const r = restoreSite(sim, cmd.siteId, cmd.mode);
+        if (!r.ok) return reject(r.reason);
+        this.save = { ...this.save, sim: r.sim };
+        return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");
         const gone = sim.buildings[cmd.id];
         const rest = { ...sim.buildings };
         delete rest[cmd.id];
-        this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, buildings: rest, finds: keepRevealed(sim.finds, gone) })) };
+        this.save = { ...this.save, sim: refreshServices(syncPeople(loseSite({ ...sim, buildings: rest, finds: keepRevealed(sim.finds, gone) }, gone))) };
         return await this.finishCommand(id);
       } else {
         return reject("Неизвестная команда");

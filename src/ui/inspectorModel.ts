@@ -32,6 +32,7 @@ const TRADE = new Set(["shop", "tavern"]);
 // Icon of a building template: houses and zone buildings share their zone's icon, placed ones have their own.
 export function templateIcon(template: string): IconName {
   if (BUILDINGS[template]?.zone === "res") return "res";
+  if (template === "restored") return "foundations";
   if (CRAFT.has(template)) return "craft";
   if (TRADE.has(template)) return "trade";
   return template in BUILDINGS ? (template as IconName) : "res";

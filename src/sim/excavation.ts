@@ -271,6 +271,7 @@ export function parseFinds(v: unknown): Finds {
       if (isStr(r.cls, 60)) fd.cls = r.cls;
       if (isStr(r.name, 200)) fd.name = r.name;
       if (isNum(r.height) && r.height >= 0 && r.height <= MAX_HEIGHT) fd.height = r.height;
+      if (r.state === "restoring" || r.state === "restored" || r.state === "lost") fd.state = r.state;
       out.foundations.push(fd);
     }
   }

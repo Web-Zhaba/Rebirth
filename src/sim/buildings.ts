@@ -98,7 +98,12 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   cellar: T("cellar", "Погреб", "placed", 1, 1, 5, 5, 2, 70, 0, [10, 3, 4], "services"),
   // Excavation (PLAN.md section 12).
   dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0], "services"),
+  // A restored old building kept as a monument (sim/restore.ts): no jobs, no residents; its size, cost and shape come from the foundation.
+  restored: T("restored", "Памятник", "placed", 1, 1, 8, 8, 8, 100, 0, [10, 2, 3], null),
 };
+
+// Materials of a building: its own (a restored old building is priced by its area) or its template's.
+export const materialsOf = (b: Pick<Building, "template" | "materials">): Materials | undefined => b.materials ?? BUILDINGS[b.template]?.materials;
 
 // Rebuilding an izba into level 2 (PLAN.md section 9): taken like construction, the family stays.
 export const UPGRADE = { template: "izba", labor: 60, materials: { logs: 10, planks: 2, stone: 0 } as Materials, residents: 2, height: 1.5 };

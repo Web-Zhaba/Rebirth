@@ -1,5 +1,5 @@
 import { leverMood } from "./levers";
-import { allocateLabor, BUILDINGS, CELLAR_CAP, FOUNDING_STOCK, foodCapacity, storageOf, UPGRADE, type Materials, type SiteLever } from "./buildings";
+import { allocateLabor, BUILDINGS, CELLAR_CAP, FOUNDING_STOCK, foodCapacity, materialsOf, storageOf, UPGRADE, type Materials, type SiteLever } from "./buildings";
 import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
@@ -8,6 +8,7 @@ import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, SERVICE, serviceMood } from "./services";
+import { finishedMonuments, monumentMood, monumentsNear } from "./monuments";
 import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
 import { applyFrost } from "./weather";
 import { buildFactor, EFFECTS, emptyOrchard, fieldWork, firewoodDaily, frostNight, moodShift, orchardDay, orchardQuality, spoilage, workFactor } from "./weatherEffects";
@@ -60,7 +61,7 @@ export function reportShortages(before: Record<number, Building>, after: Record<
     const up = b.state === "active" ? b.upgrade : undefined;
     const wasUp = was.state === "active" ? was.upgrade : undefined;
     if (up ? !(up.paid && wasUp && !wasUp.paid) : !(b.paid && !was.paid)) continue;
-    const m = up ? UPGRADE.materials : BUILDINGS[b.template]?.materials;
+    const m = up ? UPGRADE.materials : materialsOf(b);
     if (!m) continue;
     const hand = up ? up.labor > (wasUp?.labor ?? 0) : (b.hand ?? 0) > 0;
     for (const g of ["logs", "planks", "stone"] as const) {
@@ -129,9 +130,9 @@ export function payMaterials(
     // A finished house being upgraded is served like a building under construction.
     const up = b.state === "active" ? b.upgrade : undefined;
     if (up ? up.paid : b.paid) continue;
-    const m = up ? UPGRADE.materials : BUILDINGS[b.template]?.materials;
-    // A new building whose footprint overlaps an old foundation needs no stone and 25 % less labor.
-    const ruins = !up && onOldFoundation(b.footprint, foundations);
+    const m = up ? UPGRADE.materials : materialsOf(b);
+    // A new building whose footprint overlaps an old foundation needs no stone and 25 % less labor (a restoration has its own price).
+    const ruins = !up && !b.siteId && onOldFoundation(b.footprint, foundations);
     let hand = 0;
     const next = { ...st };
     if (m) {
@@ -427,6 +428,7 @@ export function dailyEconomy(s: SimState): SimState {
   const weatherMood = moodShift(s.weather);
   const idle = idleResidents(s);
   const gather = gatherHouses(s); // evening gatherings: a tavern in reach or a chapel
+  const monuments = finishedMonuments(s.buildings);
   for (const h of Object.values(s.households)) {
     let adults = 0;
     let idlers = 0;
@@ -443,7 +445,8 @@ export function dailyEconomy(s: SimState): SimState {
       const age = r ? ageOf(r.born, now) : 0;
       return age >= SERVICE.schoolFrom && age < SERVICE.schoolTo;
     });
-    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) : 0;
+    const home = h.home !== null ? s.buildings[h.home] : undefined;
+    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMood(monumentsNear(monuments, home.lot.cx, home.lot.cy)) : 0) : 0;
     const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0)));
     const next: Household = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep };
     if (cold.has(h.id)) next.cold = true;

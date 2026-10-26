@@ -2,14 +2,15 @@ import { DIG, emptyFinds } from "./excavation";
 import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { FIRST_EVENT } from "./events";
 import { emptyLevers } from "./levers";
-import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
+import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
 import { createFounders, peopleStats, vacantHouses } from "./people";
 import { clearingLogs } from "./clearing";
+import { cellSquare, HERITAGE_TAKEN, overlapsHeritage, standing } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
 import { nextRandom } from "./rng";
 import { distToEdge, ROAD_KINDS } from "./roads";
-import type { Building, Clearing, Demand, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
+import type { Building, Clearing, Demand, Finds, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
 import { emptyWeather } from "./weather";
 import { CELL_SIZE, paintCells, pointInPolygon, qkey, qpoint, regenerateCells } from "./zones";
 
@@ -218,13 +219,14 @@ interface Lot {
   fits: [BuildingTemplate, ZoneCell][]; // template and the far corner cell of its lot
 }
 
-function findLots(s: Pick<SimState, "roads" | "buildings" | "zones">, zone: ZoneType): Lot[] {
+function findLots(s: Pick<SimState, "roads" | "buildings" | "zones"> & { finds?: Finds }, zone: ZoneType): Lot[] {
+  const old = s.finds ? standing(s.finds) : [];
   const built = new Set<number>();
   for (const e of Object.values(s.roads.edges)) if (e.done >= e.labor) built.add(e.id);
   const occ = occupancy(s.buildings);
   const free = new Map<string, ZoneCell>();
   for (const c of s.zones.cells) {
-    if (c.zone === zone && !c.block && built.has(c.edge) && !occ(c.cx, c.cy)) free.set(c.key, c);
+    if (c.zone === zone && !c.block && built.has(c.edge) && !occ(c.cx, c.cy) && !(old.length > 0 && overlapsHeritage(old, cellSquare(c)))) free.set(c.key, c);
   }
   const starts = [...free.values()].filter((c) => c.depth === 0);
   starts.sort((p, q) => p.edge - q.edge || q.side - p.side || p.i - q.i);
@@ -255,7 +257,7 @@ export function growthAdvice(s: SimState, dem: Demand, builders: number): Growth
     const sites = open.filter((b) => b.zone === zone);
     if (sites.length > 0) {
       if (builders === 0) return "hands";
-      if (sites.some((b) => !b.paid && b.state === "planned" && handHours(BUILDINGS[b.template]?.materials ?? { logs: 0, planks: 0, stone: 0 }, s.stock) > 0)) return "materials";
+      if (sites.some((b) => !b.paid && b.state === "planned" && handHours(materialsOf(b) ?? { logs: 0, planks: 0, stone: 0 }, s.stock) > 0)) return "materials";
     }
     if (dem[zone] < 1) return sites.length > 0 ? "ok" : "demand";
     return findLots(s, zone).length > 0 ? "ok" : "lots";
@@ -308,7 +310,7 @@ const BLOCK_REASON: Record<string, string> = {
 // Can `t` stand on the lot whose depth-0 start cell is (edge, side, i)? The lot is t.w x t.d cells.
 // Shared by the worker (which enforces it) and the placement tool (which previews it).
 export function canPlace(
-  s: Pick<SimState, "roads" | "zones" | "buildings">,
+  s: Pick<SimState, "roads" | "zones" | "buildings"> & { finds?: Finds },
   t: BuildingTemplate,
   edge: number,
   side: 1 | -1,
@@ -322,6 +324,7 @@ export function canPlace(
   const byKey = new Map<string, ZoneCell>();
   for (const c of s.zones.cells) if (c.edge === edge && c.side === side) byKey.set(c.key, c);
   const occ = occupancy(s.buildings);
+  const old = s.finds ? standing(s.finds) : [];
   const cells: ZoneCell[] = [];
   for (let a = 0; a < t.w; a++) {
     for (let d = 0; d < t.d; d++) {
@@ -329,6 +332,7 @@ export function canPlace(
       if (!c) return NO_PLACE("Не хватает места вдоль дороги");
       if (c.block) return NO_PLACE(BLOCK_REASON[c.block] ?? "Место занято");
       if (occ(c.cx, c.cy)) return NO_PLACE("Место занято зданием");
+      if (old.length > 0 && overlapsHeritage(old, cellSquare(c))) return NO_PLACE(HERITAGE_TAKEN);
       cells.push(c);
     }
   }
@@ -390,6 +394,7 @@ export function reportBuilt(before: Record<number, Building>, after: Record<numb
     const was = before[b.id];
     if (!was) continue;
     const pos: [number, number] = [b.lot.cx, b.lot.cy];
+    if (b.siteId) continue; // a restoration has its own notice
     if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `Достроено: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
     else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", "Дом расширен", pos);
   }
@@ -452,6 +457,7 @@ export function reconcile(buildings: Record<number, Building>, roads: RoadGraph,
 }
 
 function survives(b: Building, edges: RoadEdge[], roads: RoadGraph, hash: Map<number, ZoneCell[]>): boolean {
+  if (b.siteId) return true; // a restored old building stands on its own ring, not on a lot
   const [vx, vy] = away(b.lot.angle, b.side);
   const front = (CELL_SIZE * b.lot.d) / 2;
   const fx = b.lot.cx - vx * front;

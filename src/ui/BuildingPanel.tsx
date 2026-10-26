@@ -1,5 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, houseCapacity, JOB_NAMES, type JobGroup, type Materials, UPGRADE } from "../sim/buildings";
+import { BUILDINGS, houseCapacity, JOB_NAMES, materialsOf, type JobGroup, type Materials, UPGRADE } from "../sim/buildings";
+import { domainName } from "../sim/domains";
+import { heritageDomain, kindName, siteTitle } from "../sim/heritage";
+import { SPEED } from "../sim/research";
 import { upgradeBlockers } from "../sim/coverage";
 import { queuedLabel } from "../sim/clock";
 import { handHours } from "../sim/production";
@@ -7,7 +10,7 @@ import { DIG, revealedArea } from "../sim/excavation";
 import { SERVICE, SERVICES } from "../sim/services";
 import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
-import type { BuildingQuery, ProductionInfo, Stock } from "../sim/types";
+import type { Building, BuildingQuery, FoundFoundation, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
 import { tool } from "../map/tools";
 import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simClient";
@@ -33,8 +36,7 @@ const MATERIALS: [keyof Materials, string, string][] = [
 ];
 
 // What a site under construction takes from the stock, and the hand-made hours its shortfall adds.
-function SiteMaterials({ template, paid, hand, st }: { template: string; paid: boolean; hand?: number; st: Stock | null }) {
-  const m = BUILDINGS[template]?.materials;
+function SiteMaterials({ m, paid, hand, st }: { m: Materials | undefined; paid: boolean; hand?: number; st: Stock | null }) {
   if (!m) return null;
   const need = MATERIALS.filter(([g]) => m[g] > 0)
     .map(([g, name, unit]) => `${name} ${num(m[g])} ${unit}`)
@@ -52,6 +54,26 @@ function SiteMaterials({ template, paid, hand, st }: { template: string; paid: b
       ) : (
         <div class="people-note">{paid ? "Хватило запасов склада" : "Запасов склада хватает"}</div>
       )}
+    </div>
+  );
+}
+
+// A restored old building: its real name, the way it was restored and what it adds to the research.
+function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined }) {
+  const domain = heritageDomain(site?.cls);
+  const w = b.restoreWeight ?? 0;
+  return (
+    <div class="prod">
+      <div>
+        Восстановленная постройка{site?.cls ? ` · ${kindName(site.cls)}` : ""}
+      </div>
+      <div>Назначение: {b.restoreMode === "working" ? `в деле (как «${BUILDINGS[b.template]?.name.toLowerCase()}»)` : "памятник"}</div>
+      {domain && (
+        <div class="people-note">
+          {w > 0 ? `Вклад в науку: +${num(w * SPEED.restored * 100)} % к скорости: ${domainName(domain)}` : `Область: ${domainName(domain)}; вклад появится, когда постройка будет готова`}
+        </div>
+      )}
+      {b.restoreMode === "monument" && b.state === "active" && <div class="people-note">Дома в 200 м довольнее, земля там дороже.</div>}
     </div>
   );
 }
@@ -148,6 +170,7 @@ export function BuildingPanel() {
   const id = selectedBuilding.value;
   const b = id === null ? undefined : buildings.value?.[id];
   const t = b ? BUILDINGS[b.template] : undefined;
+  const site = b?.siteId ? state.value?.finds.foundations.find((f) => f.id === b.siteId) : undefined;
   const shown = !!b && !!t && !tool.value && rightPanel.value === "inspector";
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const snap = state.value;
@@ -161,7 +184,7 @@ export function BuildingPanel() {
   if (!b || !t || !shown) return null;
   const upgrading = b.state === "active" && !!b.upgrade;
   const queued = b.state === "active" && !upgrading ? null : queuedLabel(gameClock.value, state.value?.levers); // «начнут в 07:00» outside work hours
-  const shortfall = b.state === "planned" && !b.paid && handHours(t.materials, stock.value ?? EMPTY_STOCK) > 0;
+  const shortfall = b.state === "planned" && !b.paid && handHours(materialsOf(b) ?? t.materials, stock.value ?? EMPTY_STOCK) > 0;
   const chip = buildingStatus(b, info, shortfall);
   const jobs = info?.kind === "workplace" ? info.capacity : t.jobs;
   const capacity =
@@ -185,10 +208,12 @@ export function BuildingPanel() {
   const residents = info?.kind === "house" ? info.households.reduce((a, h) => a + h.people.length, 0) : 0;
   return (
     <div class="rs-panel inspector panel" role="region" aria-label={`Здание: ${t.name}`}>
-      <InspectorHead icon={templateIcon(b.template)} title={t.name} chip={chip} onClose={closePanel} />
+      <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} onClose={closePanel} />
       <div class="insp-sub">
-        {t.along} × {t.deep} м, высота {b.height} м{b.zone === "res" && b.state === "active" ? ` · уровень ${b.level}` : ""}
+        {site ? `${Math.round(site.area)} м², высота ${b.height} м` : `${t.along} × ${t.deep} м, высота ${b.height} м`}
+        {b.zone === "res" && b.state === "active" ? ` · уровень ${b.level}` : ""}
       </div>
+      {b.siteId && <Restored b={b} site={site} />}
       {b.onRuins && <div class="people-note">{b.state === "active" ? "Стоит на старом фундаменте" : "Строится на старом фундаменте"}</div>}
       {left > 0 && (
         <div class="insp-block">
@@ -206,7 +231,7 @@ export function BuildingPanel() {
           {weatherBuild.pct} %{weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
         </Line>
       )}
-      {b.state !== "active" && <SiteMaterials template={b.template} paid={b.paid} hand={b.hand} st={stock.value} />}
+      {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} st={stock.value} />}
       {upgradeNote && (
         <div class="prod">
           {upgradeNote.length > 0 ? (
@@ -312,7 +337,7 @@ export function BuildingPanel() {
       </div>
       {confirming && (
         <Confirm title={`Снести: ${t.name}?`} okLabel="Снести" onOk={onDemolish} onCancel={() => setConfirming(false)}>
-          {occupied ? (info?.kind === "house" ? "Здесь живут люди, они останутся без дома." : "Здесь работают люди, они останутся без места.") : "Здание будет снесено."}
+          {b.siteId ? "Постройка будет утрачена навсегда: восстановить её снова нельзя. Полученные идеи останутся." : occupied ? (info?.kind === "house" ? "Здесь живут люди, они останутся без дома." : "Здесь работают люди, они останутся без места.") : "Здание будет снесено."}
           {b.state !== "planned" && b.paid ? " Потраченные материалы не вернутся." : ""}
         </Confirm>
       )}
