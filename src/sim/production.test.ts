@@ -1,4 +1,4 @@
-import { allUnlocked } from "./goals";
+import { allUnlocked } from "./tech";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, step } from "./clock";
 import { BARN_CAP, BUILDINGS, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
@@ -77,7 +77,7 @@ function town(bs: Building[], opts: { gm?: number; fields?: Field[]; roads?: Roa
     roads,
     zones: { cells, fields, terrain, rev: 1 },
     ...emptyGrowth(7, gm),
-    goals: allUnlocked(),
+    progress: allUnlocked(),
     stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 }, // a bare camp, not the founding stock
     buildings,
     nextBuildingId: bs.length + 1,

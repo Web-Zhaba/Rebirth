@@ -1,5 +1,5 @@
 import { BUILDINGS, UPGRADE } from "./buildings";
-import { isUnlocked } from "./goals";
+import { isUnlocked } from "./tech";
 import { ageOf, buildNet, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
 import { countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import { classPupils, schoolSeats } from "./school";
@@ -98,9 +98,9 @@ export function upgradeShortfall(land: number, services: number | undefined, moo
 }
 
 // Why a finished izba is not upgraded yet, for the inspector; empty when it is upgraded or nothing is left to do.
-export function upgradeBlockers(s: Pick<SimState, "goals" | "coverage" | "landValue">, b: Building, mood: number | undefined): string[] {
+export function upgradeBlockers(s: Pick<SimState, "progress" | "coverage" | "landValue">, b: Building, mood: number | undefined): string[] {
   if (b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) return [];
-  const out = isUnlocked(s.goals, "upgrade") ? [] : ["откроется с пятью ремесленными постройками"];
+  const out = isUnlocked(s.progress, "upgrade") ? [] : ["откроется с технологией «Просторное жильё»"];
   return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood)];
 }
 
@@ -127,7 +127,7 @@ export function dailyServices(s: SimState): SimState {
   for (const h of Object.values(s.households)) if (h.home !== null) moodAt.set(h.home, h.mood);
   let buildings = s.buildings;
   for (const b of Object.values(s.buildings)) {
-    if (!isUnlocked(s.goals, "upgrade") || b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) continue;
+    if (!isUnlocked(s.progress, "upgrade") || b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) continue;
     const good = upgradeShortfall(landValue[b.id] ?? 0, coverage[b.id], moodAt.get(b.id)).length === 0;
     const streak = good ? b.streak + 1 : 0;
     let next: Building = b;

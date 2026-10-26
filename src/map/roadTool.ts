@@ -2,7 +2,7 @@ import { play } from "../ui/sound";
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
-import { lockReason } from "../sim/goals";
+import { lockReason } from "../sim/tech";
 import { addRoad, cutOffEdges, distToEdge, isRoadKind, MIN_SEGMENT, oldStreetKind, ROAD_KINDS, segmentCost, segmentKind, snapPoint, type Snap } from "../sim/roads";
 import type { RoadKind } from "../sim/types";
 import { frame, gameClock, roads, sendCmd, state } from "../simClient";
@@ -375,8 +375,8 @@ export function attachRoadTool(map: maplibregl.Map): void {
 
   // Restore tool: the old street under the cursor is drawn whole and priced; a click builds every way of it that fits.
   const lockOf = (k: RoadKind): string | null => {
-    const goals = state.peek()?.goals;
-    return goals ? lockReason({ goals }, k) : null;
+    const progress = state.peek()?.progress;
+    return progress ? lockReason({ progress }, k) : null;
   };
 
   const drawRestore = (r: Restore) => {

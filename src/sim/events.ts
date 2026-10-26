@@ -4,6 +4,7 @@ import { assignFields, expectedKg, FIELD, haOf, windowAt, workOf } from "./field
 import { CALL } from "./levers";
 import { ageOf, fullName, isAdultAge, isFinishedHouse, killResident, syncPeople, vacantHouses } from "./people";
 import { say } from "./production";
+import { cropOf } from "./tech";
 import { nextRandom } from "./rng";
 import { refreshServices } from "./coverage";
 import { covers } from "./services";
@@ -72,7 +73,7 @@ function standingKg(s: SimState): number {
   for (const f of s.zones.fields) {
     if (!assign.has(f.id)) continue;
     const w = workOf(s.prod.fields, f.id, year);
-    kg += Math.max(0, expectedKg(f, w, s.weather.crop) - w.reaped);
+    kg += Math.max(0, expectedKg(f, w, cropOf(s)) - w.reaped);
   }
   return kg;
 }
@@ -186,8 +187,8 @@ const EVENTS: EventDef[] = [
       for (const f of s.zones.fields) {
         if (!assign.has(f.id)) continue;
         const w = workOf(fields, f.id, year);
-        const total = FIELD.yieldKgHa * haOf(f) * s.weather.crop;
-        const exp = expectedKg(f, w, s.weather.crop);
+        const total = FIELD.yieldKgHa * haOf(f) * cropOf(s);
+        const exp = expectedKg(f, w, cropOf(s));
         const gone = Math.max(0, exp - w.reaped) * FROST_LOSS;
         if (gone <= 0) continue;
         lost += gone;
@@ -222,7 +223,7 @@ const EVENTS: EventDef[] = [
   },
   {
     id: "feast",
-    weight: 0, // put when the harvest goal sets goals.feast
+    weight: 0, // put once, by the first finished harvest (feastDue)
     cond: () => false,
     make: (s) => {
       const kg = Math.max(FEAST.minKg, Math.round(popOf(s) * FEAST.kgPerPerson));
@@ -458,18 +459,22 @@ function put(s: SimState, id: string, body: Body, next: number): SimState {
   return { ...s, pending: c, nextEvent: next, eventLast: { ...s.eventLast, [id]: at }, events: say(s.events, at, "event", `Событие: ${c.title}`, c.pos) };
 }
 
+// The harvest feast is owed once: the first harvest is finished and no feast was ever put.
+const feastDue = (s: SimState): boolean => s.eventLast.feast === undefined && (s.prod.flags.done || s.chronicle.some((e) => e.kind === "harvest"));
+
 // Every tick: an event past its deadline resolves with the safe option; with none waiting, the harvest feast comes
-// as soon as goals.feast is set, else a drawn event when the time is due.
+// as soon as it is due, else a drawn event when the time is due.
 export function eventStep(s: SimState): SimState {
   let cur = s;
   if (cur.pending && cur.gameMinutes >= cur.pending.until) cur = resolveChoice(cur, cur.pending.safe, true);
   if (cur.pending) return cur;
   const hour = calendar(cur.gameMinutes).hour;
   if (hour < HOURS.from || hour >= HOURS.to) return cur;
-  if (!cur.goals.feast && cur.gameMinutes < cur.nextEvent) return cur;
+  const feast = feastDue(cur);
+  if (!feast && cur.gameMinutes < cur.nextEvent) return cur;
   const g = generator(cur);
   let def: EventDef | undefined;
-  if (cur.goals.feast) def = BY_ID.get("feast");
+  if (feast) def = BY_ID.get("feast");
   else {
     const fit = EVENTS.filter((e) => e.weight > 0 && cur.gameMinutes - (cur.eventLast[e.id] ?? -Infinity) >= COOLDOWN && e.cond(cur));
     if (fit.length === 0) return { ...cur, nextEvent: cur.gameMinutes + RETRY };
@@ -478,7 +483,7 @@ export function eventStep(s: SimState): SimState {
   }
   const body = def!.make(cur, g.rand);
   const next = cur.gameMinutes + EVENT_GAP.min + g.rand() * EVENT_GAP.span;
-  const base: SimState = { ...cur, rng: g.state(), goals: def!.id === "feast" ? { ...cur.goals, feast: false } : cur.goals };
+  const base: SimState = { ...cur, rng: g.state() };
   return put(base, def!.id, body, def!.id === "feast" ? Math.max(cur.nextEvent, next) : next);
 }
 

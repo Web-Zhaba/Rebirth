@@ -5,7 +5,8 @@ import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { AUTO, parseEventLast, parsePending } from "./events";
-import { migrateGoals, parseGoals } from "./goals";
+import { parseProgress } from "./research";
+import { migrateProgress } from "./tech";
 import { emptyLevers, type Levers } from "./levers";
 import { migrateText } from "./legacyText";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
@@ -208,7 +209,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
 }
 
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "event"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "event"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -541,8 +542,8 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   // never the whole town (a rejected save would send the player back to founding).
   const zones = parseZones(sim.zones) ?? emptyZones();
   const growth = parseGrowth(sim, city, sim.gameMinutes);
-  // A save without goals is an existing town: it gets every unlock its buildings prove and every goal already met, silently.
-  growth.goals = parseGoals(sim.goals) ?? migrateGoals({ ...growth, zones, gameMinutes: sim.gameMinutes });
+  // A save without progress is an existing town: it gets the techs its old goals and buildings prove, silently.
+  growth.progress = parseProgress(sim.progress) ?? migrateProgress({ ...growth, zones }, sim.goals);
   return { version: 4, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...growth } };
 }
 

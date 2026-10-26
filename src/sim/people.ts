@@ -8,6 +8,7 @@ import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
+import { cropOf } from "./tech";
 import { foodNeedFactor, mortalityFactor, orchardQuality } from "./weatherEffects";
 import type { WeatherState } from "./weather";
 import { CELL_SIZE } from "./zones";
@@ -469,7 +470,7 @@ export function foodOutlook(s: ArtelState & { households: SimState["households"]
   let projected = s.stock.food;
   const open = cal.dayOfYear <= HARVEST_END_DAY;
   const assign = assignFields(s.zones.fields, s.buildings);
-  const crop = s.weather?.crop ?? 1;
+  const crop = cropOf(s);
   for (const f of s.zones.fields) {
     if (!assign.has(f.id)) continue;
     const w = workOf(s.prod.fields, f.id, cal.year);

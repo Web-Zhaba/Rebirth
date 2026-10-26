@@ -91,6 +91,7 @@ export function AwayNotice() {
           </Row>
         )}
         <Row icon="craft" label="Построено">{a.built > 0 ? `${a.built} ${plural(a.built, "здание", "здания", "зданий")}` : "ничего нового"}</Row>
+        {a.researched?.length > 0 && <Row icon="scroll" label="Изучено">{a.researched.join(", ")}</Row>}
         <Row icon="field" label="Сделано">{goods.length > 0 ? goods.join(", ") : "ничего"}</Row>
       </ul>
       {problems.length > 0 && (

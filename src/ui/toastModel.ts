@@ -28,6 +28,8 @@ export const KIND_ICON: Record<EventKind, IconName> = {
   order: "flag",
   goal: "check",
   unlock: "lock",
+  tech: "scroll",
+  era: "flag",
   event: "scroll",
 };
 
@@ -46,14 +48,16 @@ export const KIND_TONE: Record<EventKind, ToastTone> = {
   order: "info",
   goal: "ok",
   unlock: "ok",
+  tech: "ok",
+  era: "ok",
   event: "warn",
 };
 
-const IMPORTANT = new Set<EventKind>(["goal", "unlock", "event", "shortage", "death"]);
+const IMPORTANT = new Set<EventKind>(["goal", "unlock", "tech", "era", "event", "shortage", "death"]);
 export const isImportant = (k: EventKind): boolean => IMPORTANT.has(k);
 
 // The sound a fresh event gets: a finished building or a goal chimes; event cards have their own «notify».
-export const soundFor = (k: EventKind): "finished" | null => (k === "built" || k === "goal" ? "finished" : null);
+export const soundFor = (k: EventKind): "finished" | null => (k === "built" || k === "goal" || k === "tech" || k === "era" ? "finished" : null);
 
 export const MAX_TOASTS = 4;
 export const MAX_NEW = 5; // news taken per snapshot; a burst beyond this is history, not news

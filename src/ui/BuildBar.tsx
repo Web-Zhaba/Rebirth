@@ -1,7 +1,7 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
 import { flash, isRoadTool, ROAD_MODES, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
-import { lockReason } from "../sim/goals";
+import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
 import { SERVICES } from "../sim/services";
@@ -59,10 +59,10 @@ const ADVICE: Record<GrowthWhy, string | null> = {
   materials: "Растёт медленно: не хватает материалов, часть работы делают вручную",
 };
 
-// Why a tool is closed (the goal that opens it), or null. Before the town is loaded nothing is locked.
+// Why a tool is closed (the tech that opens it), or null. Before the town is loaded nothing is locked.
 const lockOf = (t: Tool): string | null => {
-  const goals = state.peek()?.goals;
-  return goals ? lockReason({ goals }, t) : null;
+  const progress = state.peek()?.progress;
+  return progress ? lockReason({ progress }, t) : null;
 };
 
 const isTyping = (el: HTMLElement | null) => !!el && (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable || !!el.closest("dialog"));
@@ -174,7 +174,7 @@ export function BuildBar() {
   const active = tool.value;
   const cat = CATEGORIES.find((c) => c.id === category.value)!;
   const msg = toolMsg.value;
-  const goals = state.value?.goals;
+  const progress = state.value?.progress;
   const growth = active === "res" || active === "craft" || active === "trade" ? ADVICE[people.value?.growth?.[active] ?? "ok"] : null;
   const mode = roadMode.value;
   const drawsRoad = !!active && isRoadTool(active) && active !== "bulldoze" && active !== "restore";
@@ -211,7 +211,7 @@ export function BuildBar() {
         />
         <div class="bb-items" role="group" aria-label={cat.label}>
           {cat.tools.map((t, i) => {
-            const lock = goals ? lockReason({ goals }, t) : null;
+            const lock = progress ? lockReason({ progress }, t) : null;
             return (
             <Tooltip key={t} side="top" align={i >= 4 ? "end" : "start"} text={<Card t={t} lock={lock} />}>
               <button

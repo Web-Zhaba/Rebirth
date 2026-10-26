@@ -1,5 +1,6 @@
 import { BUILDINGS } from "./buildings";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
+import { cropOf } from "./tech";
 import { fieldWork } from "./weatherEffects";
 import type { Building, Field, FieldWork, Resident, SimState, Stock, Window } from "./types";
 
@@ -111,7 +112,7 @@ export function remainingHours(f: Field, w: FieldWork, win: Window, crop = 1): n
 // Sowing progress per hour of work now: 1 in spring, less in the late days.
 export const sowCredit = (gameMinutes: number): number => (calendar(gameMinutes).season === 0 ? 1 : LATE_SOWING.credit);
 
-type Idle = Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod" | "stock"> & Partial<Pick<SimState, "weather">>;
+type Idle = Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod" | "stock"> & Partial<Pick<SimState, "weather" | "progress">>;
 
 // Active gumnos with no work for their farmers right now.
 export function idleGumnos(s: Idle): Set<number> {
@@ -128,7 +129,7 @@ export function idleGumnos(s: Idle): Set<number> {
   const left = new Map<number, number>();
   for (const f of s.zones.fields) {
     const g = assign.get(f.id);
-    if (g !== undefined) left.set(g, (left.get(g) ?? 0) + remainingHours(f, workOf(s.prod.fields, f.id, year), win, s.weather?.crop));
+    if (g !== undefined) left.set(g, (left.get(g) ?? 0) + remainingHours(f, workOf(s.prod.fields, f.id, year), win, cropOf(s)));
   }
   for (const b of gumnos) if ((left.get(b.id) ?? 0) <= 1e-9) out.add(b.id);
   return out;

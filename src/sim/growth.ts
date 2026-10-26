@@ -1,5 +1,5 @@
 import { DIG, emptyFinds } from "./excavation";
-import { initialGoals, isUnlocked, zoneKey } from "./goals";
+import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { FIRST_EVENT } from "./events";
 import { emptyLevers } from "./levers";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
@@ -36,7 +36,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "goals" | "pending" | "nextEvent" | "eventLast" | "weather"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "progress" | "pending" | "nextEvent" | "eventLast" | "weather"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -58,7 +58,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     attract: 0,
     summary: null,
     levers: emptyLevers(),
-    goals: initialGoals(),
+    progress: initialProgress(),
     pending: null,
     nextEvent: now + FIRST_EVENT,
     eventLast: {},
@@ -269,7 +269,7 @@ export function spawnBuildings(s: SimState): SimState {
   for (const zone of ZONE_ORDER) {
     if (cur.gameMinutes - cur.lastSpawn[zone] < SPAWN_INTERVAL) continue;
     const key = zoneKey(zone);
-    if (key && !isUnlocked(cur.goals, key)) continue; // a zone still locked does not grow
+    if (key && !isUnlocked(cur.progress, key)) continue; // a zone still locked does not grow
     if (demand(cur)[zone] < 1) continue;
     const lots = findLots(cur, zone);
     if (lots.length === 0) continue;
@@ -416,7 +416,7 @@ export function advanceClearings(s: SimState, use: Map<number, number>): SimStat
     events = say(events, s.gameMinutes, "clearing", `Вырубка закончена: ${(c.area / 10_000).toFixed(2).replace(".", ",")} га, брёвен +${Math.round(clearingLogs(c.area, c.forest))} м³`, fieldCentroid(c));
   }
   const zones = finished.length > 0 ? clearTerrain(s.zones, s.roads, finished) : s.zones;
-  return { ...s, clearings, events, zones, stock: { ...s.stock, logs: s.stock.logs + logs }, goals: { ...s.goals, logsMade: s.goals.logsMade + logs } };
+  return { ...s, clearings, events, zones, stock: { ...s.stock, logs: s.stock.logs + logs } };
 }
 
 // Sampled forest inside the polygons becomes meadow; the cells are regenerated (rev bumped) when anything changed.

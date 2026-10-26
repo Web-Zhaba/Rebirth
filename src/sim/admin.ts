@@ -1,5 +1,5 @@
 import { advanceClearings } from "./growth";
-import { ALL_UNLOCKS } from "./goals";
+import { nextEra as nextEraOf, researchAll } from "./research";
 import { refreshServices } from "./coverage";
 import { syncPeople } from "./people";
 import { isCleared } from "./clearing";
@@ -17,7 +17,8 @@ export type AdminOp =
   | { k: "free"; on: boolean } // session mode: whatever is started finishes at once, without materials
   | { k: "finish" } // finish everything under way now
   | { k: "stock" }
-  | { k: "unlock" }
+  | { k: "unlock" } // every tech researched
+  | { k: "era" } // the next era at once
   | { k: "reveal"; x: number; y: number; r: number }; // reveal the buried old city in a disc
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -64,7 +65,8 @@ export const grantStock = (s: SimState): SimState => ({
   stock: { food: s.stock.food + ADMIN.grant, logs: s.stock.logs + ADMIN.grant, planks: s.stock.planks + ADMIN.grant, stone: s.stock.stone + ADMIN.grant, wares: s.stock.wares + ADMIN.grant },
 });
 
-export const unlockAll = (s: SimState): SimState => ({ ...s, goals: { ...s.goals, unlocks: [...ALL_UNLOCKS] } });
+export const unlockAll = (s: SimState): SimState => researchAll(s);
+export const nextEra = (s: SimState): SimState => nextEraOf(s);
 
 export type AdminResult = { ok: true; sim: SimState } | { ok: false; reason: string };
 

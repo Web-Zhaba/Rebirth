@@ -1,5 +1,6 @@
 import { newEvents } from "./chronicle";
 import { AUTO } from "./events";
+import { techOf } from "./tech";
 import type { ChronicleEntry, SimState, Stock } from "./types";
 
 // What happened while the player was away; counted step by step during the catch-up.
@@ -13,6 +14,7 @@ export interface Away {
   arrivals: number; // people
   departures: number; // people
   built: number; // buildings finished
+  researched: string[]; // names of the techs researched
   produced: Stock; // goods made (food from fields and fishing)
   chronicle: ChronicleEntry[];
   choices: string[]; // events that resolved on their own, with the outcome
@@ -71,6 +73,7 @@ export function summarize(t: Tally, start: SimState, end: SimState, realMs: numb
     arrivals: t.arrivals,
     departures: t.departures,
     built: t.built,
+    researched: end.progress.techs.filter((id) => !start.progress.techs.includes(id)).map((id) => techOf(id)?.name ?? id),
     produced: t.produced,
     chronicle: end.chronicle.filter((e) => e.at > start.gameMinutes),
     choices: t.choices,

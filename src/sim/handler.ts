@@ -1,11 +1,12 @@
-import { finishAll, grantStock, reveal, unlockAll } from "./admin";
+import { finishAll, grantStock, nextEra, reveal, unlockAll } from "./admin";
 import { newTally, observe, summarize, type Tally } from "./away";
 import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { resolveChoice } from "./events";
-import { goalViews, lockReason } from "./goals";
+import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
+import { lockReason } from "./tech";
 import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
@@ -49,7 +50,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), goalViews: goalViews(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -470,6 +471,11 @@ export class Handler {
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
+      } else if (cmd.type === "startResearch" || cmd.type === "queueResearch" || cmd.type === "cancelResearch") {
+        const r = cmd.type === "startResearch" ? startResearch(sim, cmd.techId) : cmd.type === "queueResearch" ? queueResearch(sim, cmd.techId) : cancelResearch(sim, cmd.techId);
+        if (!r.ok) return reject(r.reason);
+        this.save = { ...this.save, sim: r.sim };
+        return await this.finishCommand(id);
       } else if (cmd.type === "choose") {
         if (!sim.pending || sim.pending.id !== cmd.id) return reject("Это событие уже решено");
         if (cmd.option !== 0 && cmd.option !== 1) return reject("Некорректный ответ");
@@ -484,6 +490,7 @@ export class Handler {
         } else if (op.k === "finish") this.save = { ...this.save, sim: finishAll(sim) };
         else if (op.k === "stock") this.save = { ...this.save, sim: grantStock(sim) };
         else if (op.k === "unlock") this.save = { ...this.save, sim: unlockAll(sim) };
+        else if (op.k === "era") this.save = { ...this.save, sim: nextEra(sim) };
         else if (op.k === "reveal") {
           const r = reveal(sim, op.x, op.y, op.r);
           if (!r.ok) return reject(r.reason);

@@ -4,6 +4,7 @@ import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, H
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
 import { buildingPriority } from "./jobs";
+import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, SERVICE, serviceMood } from "./services";
@@ -162,7 +163,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
   let fields = s.prod.fields;
   let events = s.events;
   let buildings = s.buildings;
-  let logsCut = 0;
+  const shopMul = workshopMul(s.progress);
   const cap = foodCapacity(s.buildings);
   const addFood = (kg: number) => {
     const take = Math.max(0, Math.min(kg, cap - stock.food));
@@ -183,12 +184,11 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     const eff = b.zone === "craft" ? n + SERVICE.literateBoost * (workers.lit.get(b.id) ?? 0) : n;
     const wf = workFactor(b.template, s.weather); // rain, frost, storms
     if (wf <= 0) continue;
-    const h = eff * dt * wf * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
+    const h = eff * dt * wf * (b.zone === "craft" ? shopMul : 1) * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
     switch (b.template) {
       case "woodcutter": {
         const q = h * RATE.logs * PACE * (b.site?.forest ?? 0);
         stock.logs += q;
-        logsCut += q;
         made(b.id, q);
         break;
       }
@@ -251,7 +251,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         assign ??= assignFields(s.zones.fields, s.buildings);
         const mine = s.zones.fields.filter((f) => assign!.get(f.id) === b.id);
         const rem = mine.map((f) => {
-          return remainingHours(f, workOf(fields, f.id, cal.year), win, s.weather.crop);
+          return remainingHours(f, workOf(fields, f.id, cal.year), win, cropOf(s));
         });
         const total = rem.reduce((m, r) => m + r, 0);
         if (total <= EPS) break;
@@ -290,7 +290,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     let got = 0;
     for (const f of work) {
       const w = workOf(fields, f.id, cal.year);
-      left += expectedKg(f, w, s.weather.crop) - w.reaped;
+      left += expectedKg(f, w, cropOf(s)) - w.reaped;
       got += w.reaped;
     }
     if (work.length > 0 && left <= 1e-6) {
@@ -298,7 +298,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
       events = say(events, s.gameMinutes, "farm", `Урожай собран: ${massText(got)}`);
     }
   }
-  return { ...s, stock, events, buildings, goals: { ...s.goals, logsMade: s.goals.logsMade + logsCut }, prod: { ...s.prod, fields, today, flags } };
+  return { ...s, stock, events, buildings, prod: { ...s.prod, fields, today, flags } };
 }
 
 // ---------- daily ----------
@@ -321,7 +321,7 @@ function nightFrost(s: SimState, events: TownEvent[]): { weather: SimState["weat
   const next = applyFrost(w, w.yesterday.min);
   if (next === w) return { weather: w, events };
   const standing = (crop: number) => s.zones.fields.reduce((m, f) => (assign.has(f.id) ? m + Math.max(0, expectedKg(f, workOf(s.prod.fields, f.id, cal.year), crop) - workOf(s.prod.fields, f.id, cal.year).reaped) : m), 0);
-  const loss = standing(w.crop) - standing(next.crop);
+  const loss = standing(w.crop * fieldYieldMul(s.progress)) - standing(next.crop * fieldYieldMul(s.progress));
   const text = `Заморозок: ночью ${Math.round(w.yesterday.min)} °C, урожай потерял ${Math.round((1 - next.frost / w.frost) * 100)} %${loss >= 1 ? ` (около ${massText(loss)} зерна)` : ""}`;
   return { weather: next, events: say(events, s.gameMinutes, "farm", text) };
 }
@@ -461,7 +461,7 @@ export function dailyEconomy(s: SimState): SimState {
     for (const f of s.zones.fields) {
       if (!assign.has(f.id)) continue;
       const w = workOf(fields, f.id, cal.year);
-      lost += Math.max(0, expectedKg(f, w, s.weather.crop) - w.reaped);
+      lost += Math.max(0, expectedKg(f, w, cropOf(s)) - w.reaped);
       got += w.reaped;
     }
     flags = { ...flags, closed: true };
@@ -532,7 +532,7 @@ export function economyStats(s: SimState): EconomyStats {
     sownH += Math.min(w.sowH, FIELD.sowHoursHa * haOf(f));
     sowNeed += FIELD.sowHoursHa * haOf(f);
     reaped += w.reaped;
-    expected += expectedKg(f, w, s.weather.crop);
+    expected += expectedKg(f, w, cropOf(s));
   }
   let moods = 0;
   let hs = 0;
@@ -588,7 +588,7 @@ export function productionInfo(s: SimState, b: Building): ProductionInfo | undef
       sownH += Math.min(w.sowH, FIELD.sowHoursHa * haOf(f));
       need += FIELD.sowHoursHa * haOf(f);
       reaped += w.reaped;
-      expected += expectedKg(f, w, s.weather.crop);
+      expected += expectedKg(f, w, cropOf(s));
     }
     info.fields = { count: mine.length, ha: assignedHa(b.id, s.zones.fields, assign), sown: need > 0 ? sownH / need : 0, reaped, expected };
   }

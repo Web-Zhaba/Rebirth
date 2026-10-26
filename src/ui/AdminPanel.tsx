@@ -53,7 +53,8 @@ export function AdminPanel() {
       <div class="admin-grid">
         <Button onClick={() => void run({ k: "finish" })}>Достроить всё</Button>
         <Button onClick={() => void run({ k: "stock" })}>+{ADMIN.grant} ресурсов</Button>
-        <Button onClick={() => void run({ k: "unlock" })}>Открыть всё</Button>
+        <Button onClick={() => void run({ k: "unlock" })}>Изучить всё</Button>
+        <Button onClick={() => void run({ k: "era" })}>Следующая эпоха</Button>
         <Button onClick={() => setSpeed(speed.value === 4 ? 1 : 4)}>Скорость {speed.value === 4 ? "×1" : "×4"}</Button>
       </div>
       <div class="admin-sub">Исследовать кликом по карте, радиус:</div>

@@ -9,7 +9,7 @@ const chance = (p: number) => `${Math.round(p * 100)}%`;
 import { FIELD } from "./fields";
 import { emptyGrowth } from "./growth";
 import { Handler, toSnapshot, type Storage } from "./handler";
-import { allUnlocked } from "./goals";
+import { allUnlocked } from "./tech";
 import { emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { DAY_MIN } from "./time";
@@ -48,7 +48,7 @@ function town(bs: Building[] = [], gm = SUMMER): SimState {
   const buildings: Record<number, Building> = {};
   for (const b of bs) buildings[b.id] = b;
   const s: SimState = { realTime: NOW, gameMinutes: gm, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(7, gm), buildings, nextBuildingId: bs.length + 1 };
-  return { ...s, goals: allUnlocked(), stock: { food: 2000, logs: 0, planks: 0, stone: 0, wares: 0 }, nextEvent: gm };
+  return { ...s, progress: allUnlocked(), stock: { food: 2000, logs: 0, planks: 0, stone: 0, wares: 0 }, nextEvent: gm };
 }
 
 const person = (id: number, household: number, born = -1e6): Resident => ({ id, first: "Иван", last: "Тестов", sex: "m", born, household, spouse: null, job: null, commute: null, idleDays: 0, literate: false, school: 0 });
@@ -235,19 +235,20 @@ describe("dig", () => {
 describe("feast", () => {
   const harvested = (): SimState => {
     const s = family(town([bld(1, "izba")], AUTUMN), 1, 4);
-    return { ...s, goals: { ...s.goals, feast: true }, nextEvent: AUTUMN + 5 * DAY_MIN };
+    return { ...s, chronicle: [{ at: AUTUMN - 1, kind: "harvest", text: "Урожай собран" }], nextEvent: AUTUMN + 5 * DAY_MIN };
   };
-  it("comes from goals.feast, consumes it, and ignores the schedule", () => {
+  it("comes from the first harvest, once, and ignores the schedule", () => {
     const s = eventStep(harvested());
     expect(s.pending?.id).toBe("feast");
-    expect(s.goals.feast).toBe(false);
+    expect(s.eventLast.feast).toBeDefined();
+    expect(eventStep({ ...resolveChoice(s, 1, false), nextEvent: AUTUMN + 99 * DAY_MIN }).pending).toBeNull();
     expect(s.nextEvent).toBeGreaterThanOrEqual(AUTUMN + 5 * DAY_MIN);
   });
   it("waits for a pending event, keeping the flag", () => {
     const p = eventStep(harvested());
     const busy = { ...harvested(), pending: { ...p.pending!, id: "cart" } };
     const s = eventStep(busy);
-    expect(s.goals.feast).toBe(true);
+    expect(s.eventLast.feast).toBeUndefined();
     expect(s.pending!.id).toBe("cart");
   });
   it("the feast spends food for mood", () => {

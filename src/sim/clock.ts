@@ -6,7 +6,8 @@ import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from 
 import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales, rebalanceJobs, syncPeople } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
 import { eventStep } from "./events";
-import { goalStep } from "./goals";
+import { eraStep, researchStep } from "./research";
+import { buildSpeedMul } from "./tech";
 import { settleLevers } from "./leverCmds";
 import { daySummary } from "./summary";
 import { dailyEconomy, payMaterials, produceStep, reportShortages, say } from "./production";
@@ -90,7 +91,7 @@ export function step(s: SimState): SimState {
     // materials from the stock when work on them starts, and to forest clearings, ahead of the buildings when logs run short.
     // On a толока every hand goes to its site, none to the roads.
     const toloka = tolokaActive(s.levers, s.gameMinutes);
-    const bf = buildFactor(s.weather); // rain, cold and storms cut the hours and the crew
+    const bf = buildFactor(s.weather) * buildSpeedMul(s.progress); // rain, cold and storms cut the hours and the crew
     const hours = (builderCount(s) * BASE_TICK * bf) / 60;
     const r = toloka ? { roads: s.roads, left: hours } : spendOnRoads(s.roads, hours);
     roads = r.roads;
@@ -108,12 +109,12 @@ export function step(s: SimState): SimState {
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScales(s));
   else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
   cur = retireDigs(cur);
-  let next: SimState = weatherStep({ ...cur, gameMinutes: s.gameMinutes + BASE_TICK });
+  let next: SimState = researchStep(weatherStep({ ...cur, gameMinutes: s.gameMinutes + BASE_TICK }), BASE_TICK);
   // A workplace finished in this tick hires at once, not at the next midnight.
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
-  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = dailyServices(dailyStep(dailyEconomy(next))); // a tick crossed 00:00
-  return recordChronicle(s, settleLevers(spawnBuildings(eventStep(goalStep(s, immigrationStep(next, BASE_TICK))))));
+  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = eraStep(dailyServices(dailyStep(dailyEconomy(next)))); // a tick crossed 00:00
+  return recordChronicle(s, settleLevers(spawnBuildings(eventStep(immigrationStep(next, BASE_TICK)))));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.

@@ -1,7 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import type { City } from "../sim/types";
 import { LeftPanel } from "./LeftPanel";
-import { GoalsTracker } from "./GoalsTracker";
 import { EventCard } from "./EventCard";
 import { Toasts } from "./Toasts";
 import { TopBar, Warnings } from "./TopBar";
@@ -15,7 +14,6 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
       <div class="side-col">
         <Warnings />
         <LeftPanel />
-        <GoalsTracker />
         <EventCard map={map} />
         <Toasts map={map} />
       </div>

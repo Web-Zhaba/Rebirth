@@ -1,4 +1,4 @@
-import { allUnlocked } from "./goals";
+import { allUnlocked } from "./tech";
 import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
@@ -35,7 +35,7 @@ function world(g: RoadGraph, zone: ZoneFn, gameMinutes = 0): SimState {
     const z = typeof zone === "function" ? zone(c) : zone;
     return !c.block && z !== "none" ? { ...c, zone: z } : c;
   });
-  return { realTime: NOW, gameMinutes, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(42), goals: allUnlocked() };
+  return { realTime: NOW, gameMinutes, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(42), progress: allUnlocked() };
 }
 
 const ticks = (s: SimState, n: number) => {

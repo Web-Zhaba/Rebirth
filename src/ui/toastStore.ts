@@ -3,11 +3,9 @@ import { catchUp, state } from "../simClient";
 import { play } from "./sound";
 import { diffEvents, isImportant, pushToast, soundFor, type Toast } from "./toastModel";
 
-// The stack of toasts and the goal flash, fed from the snapshot's event ring. The first snapshot after a load, a new town
+// The stack of toasts, fed from the snapshot's event ring. The first snapshot after a load, a new town
 // or a catch-up is only a baseline: history is never replayed.
 export const toasts = signal<Toast[]>([]);
-// Bumped when a goal is completed (kind "goal"); the tracker highlights itself and shows the line for a moment.
-export const goalFlash = signal<{ n: number; text: string } | null>(null);
 
 let seen: Set<string> | null = null;
 let nextId = 1;
@@ -30,7 +28,6 @@ effect(() => {
   let list = toasts.peek();
   for (const e of r.fresh) {
     list = pushToast(list, { id: nextId++, kind: e.kind, text: e.text, pos: e.pos, important: isImportant(e.kind) });
-    if (e.kind === "goal") goalFlash.value = { n: (goalFlash.peek()?.n ?? 0) + 1, text: e.text };
   }
   toasts.value = list;
 });

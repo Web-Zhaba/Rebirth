@@ -41,6 +41,10 @@ export type Cmd =
   // Jobs: hiring priority of a job group (or of construction), and the staff limit of a workplace.
   | { type: "setJobPriority"; group: JobKey; priority: Priority }
   | { type: "setStaff"; id: number; staff: number }
+  // Research: start one when none is under way, queue (at most three), cancel the active one or drop a queued one.
+  | { type: "startResearch"; techId: string }
+  | { type: "queueResearch"; techId: string }
+  | { type: "cancelResearch"; techId: string }
   // The answer to the pending event: its id and the option (0 or 1).
   | { type: "choose"; id: string; option: 0 | 1 }
   // Admin panel cheats.

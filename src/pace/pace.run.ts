@@ -8,6 +8,7 @@ import { isFinishedHouse } from "../sim/people";
 import type { Cmd, FromWorker } from "../sim/protocol";
 import { segmentCost, type TerrainProfile } from "../sim/roads";
 import { dayOf } from "../sim/time";
+import { isUnlocked, TECHS } from "../sim/tech";
 import type { ClientState, Site, ZoneCell } from "../sim/types";
 import { emptyWeather } from "../sim/weather";
 
@@ -91,7 +92,7 @@ it("pacing harness", async () => {
   };
   const roadBuilt = (x: number) => Object.values(st.roads.edges).every((e) => e.done >= e.labor || Math.min(st.roads.nodes[e.a].x, st.roads.nodes[e.b].x) > x);
   const houses = () => Object.values(st.buildings).filter(isFinishedHouse).length;
-  const unlocked = (key: string) => st.goals.unlocks.includes(key);
+  const unlocked = (key: string) => isUnlocked(st.progress, key);
   const ready = (n: number) => houses() >= n && roadBuilt(200);
   // Out of lots: residential demand has asked for a house for a whole game day and none has appeared.
   let resCount = 0;
@@ -135,7 +136,7 @@ it("pacing harness", async () => {
     { when: () => true, run: () => extendRoad(200) },
     { when: () => true, run: () => paint("residential zone 0-120 m", "res", (c) => c.cx <= 120 && c.zone === "none") },
     { when: () => ready(3), run: () => place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 }) },
-    // a sensible player waits for the goals: the sawpit comes with the 2nd izba, the craft zone with 20 m3 of logs
+    // a sensible player waits for the research: the sawpit comes with carpentry, the craft zone with crafts
     { when: () => unlocked("sawpit") && roadBuilt(200), run: () => placeFirst("sawpit", -1, 140) },
     { when: () => ready(5), run: () => place("well", -1, 170) },
     { when: () => ready(3) && unlocked("zone:craft"), run: () => paint("craft zone 130-170 m", "craft", (c) => c.cx >= 130 && c.cx <= 170 && c.zone === "none" && !c.block) },
@@ -153,9 +154,10 @@ it("pacing harness", async () => {
   // ----- milestones -----
   const marks: { label: string; hit: () => boolean; at?: { ms: number; day: number; pop: number } }[] = [
     { label: "First house finished", hit: () => houses() >= 1 },
-    { label: "Goal: 20 m3 of logs (craft zone opens)", hit: () => st.goals.done.includes("logs20") },
-    { label: "Goal: 2 ha sown (fisher, a family)", hit: () => st.goals.done.includes("sow2") },
-    { label: "Goal: 2 izbas (sawpit, barn open)", hit: () => st.goals.done.includes("izbas2") },
+    { label: "First tech", hit: () => st.progress.techs.length >= 1 },
+    { label: "Craft zone open (crafts)", hit: () => unlocked("zone:craft") },
+    { label: "Half of era I techs", hit: () => st.progress.techs.length >= 8 },
+    { label: "Era II", hit: () => st.progress.era >= 2 },
     { label: "Sawpit finished", hit: () => Object.values(st.buildings).some((b) => b.template === "sawpit" && b.state === "active") },
     { label: "Gumno finished", hit: () => Object.values(st.buildings).some((b) => b.template === "gumno" && b.state === "active") },
     { label: "5 houses finished", hit: () => houses() >= 5 },
@@ -204,6 +206,14 @@ it("pacing harness", async () => {
         done.add(i);
         await steps[i].run();
       }
+    }
+    // The queue is kept full in tree order; the bot waits for nothing else.
+    const rs = st.progress.research;
+    for (const t of TECHS) {
+      if (t.era > st.progress.era || st.progress.techs.includes(t.id) || rs.active?.techId === t.id || rs.queue.includes(t.id)) continue;
+      if (rs.queue.length + (rs.active ? 1 : 0) >= 3) break;
+      if (!(await send(`research ${t.id}`, { type: "queueResearch", techId: t.id }))) break;
+      break;
     }
     await tillMore();
     // The zone ran out of lots: lengthen the road and zone the new stretch.

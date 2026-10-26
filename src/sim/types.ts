@@ -1,6 +1,6 @@
 import type { JobGroup } from "./buildings";
 import type { Levers } from "./levers";
-import type { GoalView } from "./goals";
+import type { DomainId } from "./domains";
 import type { Land } from "../world/landcover";
 import type { WeatherState } from "./weather";
 import type { OrchardYear } from "./weatherEffects";
@@ -150,7 +150,7 @@ export interface Household {
   cold?: true; // no firewood at the last midnight: mood target down, death rate up (weather only)
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "event";
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "event"; // goal and unlock are no longer made: old saves still carry them
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -173,6 +173,9 @@ export interface FoundFoundation {
   area: number; // m2
   digId: number;
   at: number; // gameMinutes
+  cls?: string; // kind of a notable old building (heritage.ts), from a POI inside the ring
+  name?: string;
+  height?: number; // m
 }
 
 // A named place (kind = OSM class) or street (kind "street", no position) found by a dig.
@@ -266,14 +269,22 @@ export interface ProdState {
   orchard: OrchardYear; // what this year has done to the fruit trees (frost at the blossom, drought, heat)
 }
 
-// Goals and unlocks (PLAN-pace.md section 9; sim/goals.ts holds the table).
-export interface GoalsState {
-  done: string[]; // goal ids paid, in the order they finished
-  unlocks: string[]; // unlock keys: template ids, "zone:craft", "zone:trade", "upgrade"
-  families: number; // free families owed by goals that wait for a vacant house
-  notebook: boolean; // the dig goal was paid: the notebook's first article prompt is out
-  feast: boolean; // the harvest goal was paid: P7 turns this into the harvest feast event
-  logsMade: number; // m3 of logs the town cut itself (woodcutters, clearings); the founding stock does not count
+// Research and eras (PLAN-research.ru.md section 4; sim/tech.ts holds the tree, sim/research.ts the rules).
+export interface ProgressState {
+  era: number; // 1..2
+  techs: string[]; // researched, in the order they finished
+  research: { active: { techId: string; done: number } | null; queue: string[] }; // done: days of work so far; queue holds at most 3
+  insights: string[]; // received and not yet used up (a tech insight goes when its tech is researched)
+  restored: Partial<Record<DomainId, number>>; // weighted sum of restored old buildings per domain
+}
+
+// The research as the main thread shows it.
+export interface ResearchView {
+  active: { techId: string; share: number; etaMinutes: number } | null; // share 0..1 of the work, eta in game minutes at the current speed
+  queue: string[];
+  speeds: Record<DomainId, number>; // research speed per domain, 1..2
+  era: number;
+  eraTwoMet: boolean; // the conditions of era II hold
 }
 
 // A family that decided to come: the house is promised to them; the family itself is made on arrival.
@@ -323,7 +334,7 @@ export interface SimState extends PeopleState {
   landValue: Record<number, number>; // house id -> 0..100
   summary: DaySummary | null; // «Итоги дня» of the last 22:00
   levers: Levers; // player levers (P5)
-  goals: GoalsState; // goals and unlocks (P6)
+  progress: ProgressState; // researched techs, the research under way, eras
   pending: TownChoice | null; // the event waiting for an answer, one at a time (P7)
   nextEvent: number; // gameMinutes from which the next event may be drawn
   eventLast: Record<string, number>; // gameMinutes each event kind was last put
@@ -424,7 +435,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
-  goalViews: GoalView[]; // the active goals with progress
+  research: ResearchView;
   callBlock: string | null; // why a call for settlers cannot be made now, or null
 };
 

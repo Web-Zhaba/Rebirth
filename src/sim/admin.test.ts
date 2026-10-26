@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ADMIN, finishAll, grantStock, reveal, unlockAll } from "./admin";
 import { isCleared } from "./clearing";
 import { digInfos } from "./excavation";
-import { ALL_UNLOCKS } from "./goals";
 import { emptyGrowth, seedOf } from "./growth";
+import { allResearched } from "./tech";
 import { addRoad, emptyRoads } from "./roads";
 import type { SimState } from "./types";
 import { emptyZones } from "./zones";
@@ -30,7 +30,8 @@ describe("admin", () => {
   it("grants goods and unlocks everything", () => {
     const s = base();
     expect(grantStock(s).stock.logs).toBe(s.stock.logs + ADMIN.grant);
-    expect(unlockAll(s).goals.unlocks).toEqual(ALL_UNLOCKS);
+    expect(unlockAll(s).progress.techs).toEqual(allResearched().techs);
+    expect(unlockAll(s).progress.era).toBe(2);
   });
 
   it("reveals a disc that shows up as a dig and rejects bad input", () => {

@@ -1,4 +1,4 @@
-import { allUnlocked } from "./goals";
+import { allUnlocked } from "./tech";
 import { describe, expect, it } from "vitest";
 import { advanceTo } from "./clock";
 import { BUILDINGS, houseCapacity, UPGRADE } from "./buildings";
@@ -55,7 +55,7 @@ function bld(id: number, template: string, x: number, state: Building["state"] =
 function town(bs: Building[], roads: RoadGraph = roadAlong(), gm = NOON): SimState {
   const buildings: Record<number, Building> = {};
   for (const b of bs) buildings[b.id] = b;
-  return { realTime: NOW, gameMinutes: gm, roads, zones: emptyZones(), ...emptyGrowth(7, gm), goals: allUnlocked(), stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 }, buildings, nextBuildingId: bs.length + 1 };
+  return { realTime: NOW, gameMinutes: gm, roads, zones: emptyZones(), ...emptyGrowth(7, gm), progress: allUnlocked(), stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 }, buildings, nextBuildingId: bs.length + 1 };
 }
 
 interface HSpec {
