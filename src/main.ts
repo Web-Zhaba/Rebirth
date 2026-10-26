@@ -16,7 +16,9 @@ import { attachRoadTool } from "./map/roadTool";
 import { attachLifeLayer } from "./map/lifeLayer";
 import { attachClouds } from "./map/clouds/attach";
 import { attachNightTint } from "./map/nightLayer";
+import { attachPrecipitation } from "./map/precipLayer";
 import { attachTrafficLayer } from "./map/trafficLayer";
+import { attachWeatherLayer } from "./map/weatherLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
 import { attachZoneTool } from "./map/zoneTool";
 import * as simClient from "./simClient";
@@ -44,6 +46,7 @@ const cloudSite = computed(() => {
   const w = state.value?.weather?.site;
   return w ? { seed: w.seed, phase: w.phase } : null;
 });
+const weatherNow = computed(() => state.value?.weather ?? null);
 // Clouds above everything on the map, visible only on the far globe views; their ground shadows at every zoom, just
 // under the night tint (so the lights stay bright).
 attachClouds(map, {
@@ -51,6 +54,8 @@ attachClouds(map, {
   site: cloudSite,
   extraLayers: [{ beforeId: "night-tint", load: async () => (await import("./map/clouds/cloudShadows")).createShadowLayer(map, { clock: gameClock, site: cloudSite }) }],
 });
+attachWeatherLayer(map, { weather: weatherNow, clock: gameClock });
+attachPrecipitation(map, { weather: weatherNow });
 attachRoadTool(map);
 attachZoneTool(map);
 attachPlaceTool(map);

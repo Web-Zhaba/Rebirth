@@ -63,6 +63,7 @@ uniform float uRBase;           // shell radii, planet = 1
 uniform float uRTop;
 uniform int uSteps;
 uniform int uLightSteps;
+uniform float uFade;            // zoom fade, 1 far out, 0 close up: the deck dissolves as it falls
 uniform vec4 uFlash[MAX_FLASH]; // xyz direction of a lightning strike, w intensity
 uniform int uFlashCount;
 uniform float uOrbit;           // 1 on the whole-globe views, 0 from zoom ~3.4: large systems come from the cube, noise only at edges
@@ -172,6 +173,10 @@ float cloudDensity(vec3 p, vec3 d, float h, vec4 w, bool fine, float t0, float w
   deck = deck * deck * (3.0 - 2.0 * deck);
   deck = max(deck, 0.62 * sstep(0.78, 0.97, w.r) * (0.75 + 0.25 * s));   // overcast: a continuous sheet with soft relief
   float dens = mix(close, deck, uOrbit) * prof;
+  // Zoom dissolve: approaching the deck, the thin parts go first and only the dense cores are left, so the layer
+  // breaks up instead of dimming as a whole.
+  float cut = (1.0 - uFade) * 0.7;
+  dens = (dens - cut) / max(1.0 - cut, 0.001);
   if (dens <= 0.0) return 0.0;
 
   if (fine && uDetailOn > 0.5) {
@@ -368,5 +373,7 @@ void main() {
   c += texture2D(tMap, uv + uTexel * vec2(-0.8, 0.8)) * 0.16;
   c += texture2D(tMap, uv + uTexel * vec2(0.8, -0.8)) * 0.16;
   c += texture2D(tMap, uv + uTexel * vec2(-0.8, -0.8)) * 0.16;
-  gl_FragColor = c * uFade;
+  // The density dissolve already does most of the work; the alpha only lets the last cores go, so the layer never
+  // dims uniformly while it is still dense.
+  gl_FragColor = c * smoothstep(0.02, 0.35, uFade);
 }`;

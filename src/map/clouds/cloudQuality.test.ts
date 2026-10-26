@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CUBE_SIZE } from "./constants";
+import { CUBE_SIZE, FADE_FROM, FADE_TO } from "./constants";
 import { cloudOpacity, effectiveQuality, FLASH_FRAME_MS, MARCH_CLOCK_MIN, needsMarch, PRESETS, smoothstep, targetSize, type MadeMarch } from "./cloudQuality";
 
 describe("presets", () => {
@@ -24,19 +24,27 @@ describe("presets", () => {
 describe("cloudOpacity", () => {
   it("is on far out, off close up, smooth between", () => {
     expect(cloudOpacity(1.5)).toBe(1);
-    expect(cloudOpacity(5)).toBe(1);
-    expect(cloudOpacity(6.5)).toBe(0);
+    expect(cloudOpacity(FADE_FROM)).toBe(1);
+    expect(cloudOpacity(FADE_TO)).toBe(0);
     expect(cloudOpacity(10)).toBe(0);
-    const mid = cloudOpacity(5.75);
+    const mid = cloudOpacity((FADE_FROM + FADE_TO) / 2);
     expect(mid).toBeGreaterThan(0.4);
     expect(mid).toBeLessThan(0.6);
     expect(smoothstep(0, 1, 0.5)).toBeCloseTo(0.5);
+  });
+  it("never steps by more than a hair between nearby zooms", () => {
+    let prev = cloudOpacity(FADE_FROM);
+    for (let z = FADE_FROM + 0.05; z <= FADE_TO; z += 0.05) {
+      const v = cloudOpacity(z);
+      expect(prev - v).toBeLessThan(0.04);
+      prev = v;
+    }
   });
 });
 
 describe("needsMarch", () => {
   const matrix = Float64Array.from({ length: 16 }, (_, i) => i + 0.5);
-  const key = { matrix, width: 960, height: 540, clock: 1000, version: 3, quality: "medium" as const, generation: 0, flash: false };
+  const key = { matrix, width: 960, height: 540, clock: 1000, fade: 1, version: 3, quality: "medium" as const, generation: 0, flash: false };
   const made: MadeMarch = { ...key, at: 1000 };
   it("marches the first time and then reuses the target", () => {
     expect(needsMarch(null, key, false, 1000)).toBe(true);
@@ -47,6 +55,7 @@ describe("needsMarch", () => {
     m2[5] += 1e-9;
     expect(needsMarch(made, { ...key, matrix: m2 }, false, 1100)).toBe(true);
     expect(needsMarch(made, { ...key, width: 961 }, false, 1100)).toBe(true);
+    expect(needsMarch(made, { ...key, fade: 0.5 }, false, 1100)).toBe(true);
     expect(needsMarch(made, { ...key, quality: "low" }, false, 1100)).toBe(true);
     expect(needsMarch(made, { ...key, version: 4 }, false, 1100)).toBe(true);
     expect(needsMarch(made, { ...key, generation: 1 }, false, 1100)).toBe(true);

@@ -4,6 +4,7 @@ import { compactScreen } from "../map/motion";
 import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
 import { cloudsOn, toggleClouds } from "../map/clouds/settings";
 import { ruinsShown, toggleRuins } from "../map/ruinsLayer";
+import { toggleWeatherMap, weatherMapOn } from "../map/weatherSettings";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { IconButton } from "./kit";
@@ -107,6 +108,7 @@ export function LayerBar() {
             <span class="layer-sep" aria-hidden="true" />
             <IconButton icon="placeNames" label="Старые названия" aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
             <IconButton icon="dig" label="Старый город" aria-pressed={ruinsShown.value} onClick={toggleRuins} />
+            <IconButton icon="weatherRain" label="Погода на карте" aria-pressed={weatherMapOn.value} onClick={toggleWeatherMap} />
             <IconButton icon="clouds" label="Облака" aria-pressed={cloudsOn.value} onClick={toggleClouds} />
           </div>
           <Legend id={cur} />

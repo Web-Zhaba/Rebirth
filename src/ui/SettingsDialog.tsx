@@ -3,6 +3,7 @@ import { signal } from "@preact/signals";
 import { CLOUD_QUALITIES, cloudQuality, highQualityAvailable, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { Dialog, Segmented, type SegmentOption } from "./kit";
 import { play, setSoundEnabled, setSoundVolume, soundEnabled, soundVolume } from "./sound";
+import { setWeatherSound, weatherSoundOn } from "./weatherSound";
 
 const CLOUD_LABELS: Record<CloudQuality, { label: string; title: string }> = {
   low: { label: "Низкое", title: "Низкое" },
@@ -34,12 +35,16 @@ export function SettingsDialog() {
             max={100}
             step={5}
             value={pct}
-            disabled={!soundEnabled.value}
+            disabled={!soundEnabled.value && !weatherSoundOn.value}
             aria-valuetext={`${pct}%`}
             onInput={(e) => setSoundVolume(Number((e.target as HTMLInputElement).value) / 100)}
             onChange={() => play("click")}
           />
           <span class="settings-val">{pct}%</span>
+        </label>
+        <label class="settings-row" title="Дождь, ветер и снег; громкость общая со звуком">
+          <input type="checkbox" checked={weatherSoundOn.value} onChange={(e) => setWeatherSound((e.target as HTMLInputElement).checked)} />
+          <span>Шум погоды</span>
         </label>
         <div class="settings-row">
           <span>Качество облаков</span>

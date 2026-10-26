@@ -188,6 +188,19 @@ button.city-name-btn:hover .city-name {
   gap: var(--sp-4);
 }
 
+/* The value of a weather factor: warning or broken, never colour alone (the words carry it too). */
+.tip-row.tip-warn > span:last-child {
+  color: var(--warn-text);
+}
+
+.tip-row.tip-bad > span:last-child {
+  color: var(--bad);
+}
+
+.tip-section {
+  margin-top: var(--sp-2);
+}
+
 .tip-note {
   display: block;
   margin-top: var(--sp-1);

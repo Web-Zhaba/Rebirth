@@ -18,7 +18,7 @@ import {
 } from "three";
 import { sunDirection, TUNING } from "../../sim/weather";
 import { DAY_MIN } from "../../sim/time";
-import { CLOUD_BASE_M, CLOUD_TOP_M, CUBE_SIZE, GLOBE_EXAGGERATION } from "./constants";
+import { CLOUD_BASE_M, CLOUD_TOP_M, CUBE_SIZE, FADE_TAU_MS, GLOBE_EXAGGERATION } from "./constants";
 import { cloudOpacity, smoothstep, effectiveQuality, MIN_OPACITY, needsMarch, PRESETS, targetSize, FLASH_FRAME_MS, type MadeMarch } from "./cloudQuality";
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, MARCH_FRAG } from "./cloudShaders";
 import { EARTH_RADIUS_M, lngLatToSphere, transformPoint, weatherToSphere } from "./frame";
@@ -78,7 +78,9 @@ export function createCloudLayer(map: maplibregl.Map, opts: CloudOptions): mapli
   let target: WebGLRenderTarget | null = null;
   let made: MadeMarch | null = null;
   let active = false; // this frame draws the clouds (set by prerender, read by render)
-  let fade = 0;
+  let fade = 0; // eased zoom fade of this frame (prerender), used by the march and the composite
+  let fadeAt = 0;
+  let fadeReady = false;
   let lastCam: Vector3 | null = null;
   const lastSun = new Vector3(0, 0, 1);
   let stopEffect: (() => void) | null = null;
@@ -158,6 +160,7 @@ export function createCloudLayer(map: maplibregl.Map, opts: CloudOptions): mapli
         uRTop: { value: 1 },
         uSteps: { value: 48 },
         uLightSteps: { value: 5 },
+        uFade: { value: 1 },
         uFlash: { value: flashes },
         uFlashCount: { value: 0 },
         uOrbit: { value: 1 },
@@ -211,6 +214,22 @@ export function createCloudLayer(map: maplibregl.Map, opts: CloudOptions): mapli
       repaintTimer = 0;
       map.triggerRepaint();
     }, FLASH_FRAME_MS);
+  };
+
+  // A zoom jump (wheel tick, double click, fly-to) must not blink the deck: the fade follows its target with a time
+  // constant and the layer keeps asking for frames until it settles.
+  const easeFade = (target: number, now: number): number => {
+    if (!fadeReady) {
+      fadeReady = true;
+      fadeAt = now;
+      fade = target;
+      return fade;
+    }
+    const dt = Math.min(Math.max(now - fadeAt, 0), 100);
+    fadeAt = now;
+    fade += (target - fade) * (1 - Math.exp(-dt / FADE_TAU_MS));
+    if (Math.abs(target - fade) < 0.002) fade = target;
+    return fade;
   };
 
   const layer: maplibregl.CustomLayerInterface = {
@@ -300,9 +319,16 @@ export function createCloudLayer(map: maplibregl.Map, opts: CloudOptions): mapli
       const g = gl as WebGL2RenderingContext;
       collect(g);
       const site = opts.site.peek();
-      fade = cloudOpacity(map.getZoom());
       why = "off/site/fade";
-      if (!cloudsOn.peek() || !site || fade <= MIN_OPACITY) return;
+      if (!cloudsOn.peek() || !site) {
+        fadeReady = false;
+        return;
+      }
+      const now = performance.now();
+      const targetFade = cloudOpacity(map.getZoom());
+      fade = easeFade(targetFade, now);
+      if (fade !== targetFade) map.triggerRepaint();
+      if (fade <= MIN_OPACITY) return;
       const frame = host.frame(args.defaultProjectionData);
       why = `transition ${frame.transition}`;
       if (frame.transition <= 0 || !frame.inv) return;
@@ -330,8 +356,9 @@ export function createCloudLayer(map: maplibregl.Map, opts: CloudOptions): mapli
       const sun = debug.sun ?? weatherToSphere(sunDirection(clock, site.phase));
       lastSun.set(sun[0], sun[1], sun[2]);
       flashCount = computeFlashes(wt.storms, wt.stormCount);
-      const now = performance.now();
-      const key = { matrix: frame.main, width: size.width, height: size.height, clock, version: wt.version, quality, generation: host.generation, flash: flashCount > 0 };
+      // The dissolve depends on the fade, so a change of the fade makes the cached march stale; 1/256 is invisible.
+      const fadeKey = Math.round(fade * 256) / 256;
+      const key = { matrix: frame.main, width: size.width, height: size.height, clock, fade: fadeKey, version: wt.version, quality, generation: host.generation, flash: flashCount > 0 };
       if (!needsMarch(made, key, flashCount > 0, now)) return;
 
       const t0 = now;
@@ -349,6 +376,7 @@ export function createCloudLayer(map: maplibregl.Map, opts: CloudOptions): mapli
       u.uRTop.value = 1 + CLOUD_TOP_RADIUS;
       u.uSteps.value = preset.steps;
       u.uLightSteps.value = preset.lightSteps;
+      u.uFade.value = fade;
       u.uFlashCount.value = flashCount;
       u.uOrbit.value = 1 - smoothstep(2.6, 3.4, map.getZoom());
       const tgt = target;
@@ -369,11 +397,10 @@ export function createCloudLayer(map: maplibregl.Map, opts: CloudOptions): mapli
       if (!host || !comp || !compScene || !target || !active || !made) return;
       const t0 = performance.now();
       const g = gl as WebGL2RenderingContext;
-      const f = cloudOpacity(map.getZoom());
       timed(g, gpu.comp, () => {
         host!.draw((r) => {
           comp!.uniforms.tMap.value = target!.texture;
-          comp!.uniforms.uFade.value = f;
+          comp!.uniforms.uFade.value = fade;
           comp!.uniforms.uTexel.value.set(1 / target!.width, 1 / target!.height);
           r.render(compScene!, ortho);
         });

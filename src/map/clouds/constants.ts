@@ -11,8 +11,12 @@ export const CLOUD_TOP_M = 12000;
 export const GLOBE_EXAGGERATION = 4;
 
 // The volume is fully drawn below FADE_FROM and gone from FADE_TO up; the ground shadows take over from there.
-export const FADE_FROM = 5;
+// The band is deliberately wide: over 2.5 zoom levels the deck thins out instead of switching off.
+export const FADE_FROM = 4;
 export const FADE_TO = 6.5;
+
+// Time constant of the fade easing, ms: a wheel tick or a fly-to changes the zoom at once, the clouds follow smoothly.
+export const FADE_TAU_MS = 260;
 
 // MapLibre switches custom layers from the globe matrix to the mercator one at this zoom (measured by the spike).
 export const MERCATOR_ZOOM = 12;

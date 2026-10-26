@@ -1,6 +1,7 @@
+import { computed } from "@preact/signals";
 import type maplibregl from "maplibre-gl";
 import { useEffect } from "preact/hooks";
-import { city } from "../simClient";
+import { city, state } from "../simClient";
 import { AboutDialog } from "./AboutDialog";
 import { AwayNotice } from "./AwayNotice";
 import { BuildBar } from "./BuildBar";
@@ -13,6 +14,7 @@ import { Hud } from "./Hud";
 import { NotebookHost } from "./NotebookHost";
 import { SettingsDialog } from "./SettingsDialog";
 import { installClickSound } from "./sound";
+import { attachWeatherSound } from "./weatherSound";
 import { TerrainInspector } from "./TerrainInspector";
 import { trackLayout } from "./layout";
 import "./layout.css";
@@ -22,6 +24,7 @@ export function App({ map }: { map: maplibregl.Map }) {
   const c = city.value;
   useEffect(() => (c ? trackLayout() : undefined), [!!c]);
   useEffect(installClickSound, []);
+  useEffect(() => attachWeatherSound(computed(() => state.value?.weather ?? null)), []);
   return (
     <>
       {c ? <Hud city={c} map={map} /> : <FoundCity map={map} />}

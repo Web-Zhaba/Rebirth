@@ -53,7 +53,7 @@ export function InspectorHead({ icon, title, chip, onClose }: { icon: IconName; 
 }
 
 // Label and value on one line.
-export function Line({ icon, label, children, tone }: { icon?: IconName; label: string; children: ComponentChildren; tone?: "bad" }) {
+export function Line({ icon, label, children, tone }: { icon?: IconName; label: string; children: ComponentChildren; tone?: "bad" | "warn" | "ok" }) {
   return (
     <div class={`insp-line${tone ? ` insp-${tone}` : ""}`}>
       {icon && <Icon name={icon} size={16} />}

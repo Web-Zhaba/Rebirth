@@ -44,6 +44,7 @@ export interface MarchKey {
   width: number; // target size
   height: number;
   clock: number; // game minutes
+  fade: number; // zoom fade at the time of the march (the density dissolve depends on it)
   version: number; // weather textures version (uploads)
   quality: CloudQuality;
   generation: number; // GL context generation
@@ -59,12 +60,13 @@ const sameMatrix = (a: ArrayLike<number>, b: ArrayLike<number>) => {
   return true;
 };
 
-// True when the last render target cannot be reused: the view, size, quality, uploads or context changed, the clock
-// moved more than MARCH_CLOCK_MIN game minutes, or a lightning flash is (or just stopped being) part of the picture.
+// True when the last render target cannot be reused: the view, size, quality, zoom fade, uploads or context changed,
+// the clock moved more than MARCH_CLOCK_MIN game minutes, or a lightning flash is (or just stopped being) part of the picture.
 export function needsMarch(prev: MadeMarch | null, next: MarchKey, flashActive: boolean, nowMs: number): boolean {
   if (!prev) return true;
   if (prev.width !== next.width || prev.height !== next.height || prev.quality !== next.quality) return true;
   if (prev.version !== next.version || prev.generation !== next.generation) return true;
+  if (prev.fade !== next.fade) return true;
   if (!sameMatrix(prev.matrix, next.matrix)) return true;
   if (Math.abs(next.clock - prev.clock) > MARCH_CLOCK_MIN) return true;
   if (flashActive) return nowMs - prev.at >= FLASH_FRAME_MS;

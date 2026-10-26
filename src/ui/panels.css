@@ -125,6 +125,10 @@
   color: var(--bad);
 }
 
+.insp-warn .insp-value {
+  color: var(--warn-text);
+}
+
 .insp-actions {
   display: flex;
   flex-wrap: wrap;

@@ -123,8 +123,23 @@ These multiply the existing season tables (`FOOD_RATE`), which stay as the basel
 ## 4. UI
 
 - Top bar chip: temperature and a condition word («ясно», «облачно», «дождь», «снег», «гроза/шторм» for storm
-  wind), tooltip with wind, rain, soil moisture, snow, the crop estimate and a one-line effect list for the day.
+  wind), tooltip with wind, rain, soil moisture, snow, the crop estimate and what the weather costs today: field
+  work, construction, firewood, the unheated, extra food need. The chip carries a warn/bad tone while the weather
+  really holds the town back.
+- Warnings strip: one line when field work or construction drops to 70 % or below, or when a household has no
+  firewood («Дождь: стройка 60 %»).
+- Town panel → «Работа»: a «Погода» block with the same factors and the current reason, visible without hovering.
+- Building panel: «Работа сегодня» for a slowed workplace and «Стройка сегодня» for a site, with the reason.
 - Layer bar toggle «Облака» (icon, `aria-pressed`, kept in localStorage `rebirth.clouds`, default on).
+- Settings: «Шум погоды» (rain, wind, snow hush; own localStorage key `rebirth.weatherSound`, off by default,
+  shares the volume slider with the UI sounds but not their on/off switch).
+
+**On the map** (`map/weatherLayer.ts`, `map/precipLayer.ts`, `map/weatherMath.ts`): a paper-white snow veil and a
+repaint of open water above it, ice on water, a faint overcast haze, a hillshade lit from the real sun, and
+rain/snow particles on a 2D canvas above the map at town zoom. All are signal-driven from `weather`; the snow veil,
+water, ice and haze sit under the night tint, so roads, buildings and lights keep their contrast. Layer bar toggle
+«Погода на карте» (`rebirth.weatherMap`, default on) switches snow, ice, haze and particles independently of
+«Облака»; the sun-lit hillshade stays.
 
 ## 5. Clouds (`src/map/cloudLayer.ts`)
 
@@ -153,8 +168,10 @@ shafts, lightning). The shell layer below is the current code until that plan la
 
 ## 7. Open
 
-- Close-up precipitation (rain/snow particles over the town) and a temperature/cloud forecast panel.
 - Real climate normals (Open-Meteo archive) as the base instead of the analytic latitude model.
+- Fire is a separate mechanic, not a weather event: the random `fire` event stays until that mechanic replaces it,
+  and lightning does not start fires.
+- There is no forecast by design: the player plans from the current state and the season, not from future weather.
 
 ## 8. Alternative food
 

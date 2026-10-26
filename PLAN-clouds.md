@@ -140,8 +140,9 @@ views.
 Otherwise the last render target is only composited. While the camera is still, the cost is just the composite.
 
 **Composite:** a full-screen triangle with a bilinear upsample and premultiplied alpha, which is MapLibre's custom
-layer blend. The zoom fade (fully on below 5, off at 6.5) multiplies the alpha. Below the minimum opacity nothing
-runs: no march, no cube requests.
+layer blend. The zoom fade (fully on below 4, off at 6.5) is eased in time and dissolves the density in the
+march, thin parts first; the alpha only lets the last cores go. Below the minimum opacity nothing runs: no march, no
+cube requests.
 
 **Presets:**
 
@@ -223,7 +224,7 @@ Render target format: RGBA16F when `EXT_color_buffer_float` is available, else R
 - the limb at pitch 60;
 - the terminator;
 - the antimeridian (lng 180) and both poles, with no seams;
-- the fade at 5–6.5;
+- the fade at 4–6.5, including a fast wheel zoom (no blink);
 - storms at night;
 - shadows at zoom 15 agreeing with the weather chip;
 - each preset;
@@ -257,6 +258,8 @@ Render target format: RGBA16F when `EXT_color_buffer_float` is available, else R
   - The lightning schedule runs on the CPU (`lightning.ts`) and sends up to 6 active flashes to the shader.
   - From orbit (zoom < 2.6, blended out by 3.4) the density uses the Nubis remap of cover.
   - The composite is a 5-tap bilinear.
+  - The zoom fade is eased over 260 ms and dissolves the density in the march (thin parts first), so a wheel tick or
+    a fly-to never blinks the deck; the fade is part of the march key.
   - Night clouds are a muted grey near the paper value, because the map itself has no per-region night shading.
 - **Weather model fixes found on the way:**
   - The trades-to-westerlies shear striped the cover at 24–36°. Fixed with `layerDays` 6, 3 layers and a broad `zonal` profile.
