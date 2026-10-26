@@ -52,17 +52,22 @@ export const TUNING = {
   swingBase: 3,
   swingDry: 5,
   anomaly: 3.6, // °C sigma of the front anomaly in mid-latitudes
-  windDeg: 12, // westerlies, degrees of longitude per game day
+  windDeg: 14, // westerlies, degrees of longitude per game day
   tradeDeg: -6,
-  layerDays: 24, // advected noise layers are cross-faded with this period (bounds the shear)
+  layerDays: 6, // advected noise layers are cross-faded with this period (bounds the shear)
+  layers: 3, // number of staggered layers
+  windFrom: 0, // |lat| where the trade easterlies start to give way to the westerlies ...
+  windTo: 65, // ... and where the westerlies are complete
   noiseStd: 0.16, // std of the raw fbm
-  cloudBias: 0.6, // wetness pushes the cloud noise
-  precipMax: 2.2, // mm/h scale
+  cloudBias: 3, // wetness pushes the cloud noise
+  polarCloud: 0.3, // extra wetness-equivalent of the cloud push at the poles
+  cloudRef: 0.52, // wetness at which the push is zero
+  precipMax: 1.3, // mm/h scale
   soilPerMm: 0.005,
   evap: 0.00016, // soil per °C-hour on a clear sky, scaled by (0.25 + 0.75 soil)
   drain: 0.01, // per hour of the excess above drainFrom
   drainFrom: 0.7,
-  snowPerMm: 0.0022, // m of settled snow per mm of water: fresh snow is 0.01, but a winter of 8 game days has no time to pile up like 90 real ones (compression of accumulation, melt stays real-time)
+  snowPerMm: 0.0060, // m of settled snow per mm of water: fresh snow is 0.01, but a winter of 8 game days has no time to pile up like 90 real ones (compression of accumulation, melt stays real-time)
   melt: 0.004, // m per °C-hour
   freezeRate: 0.0025,
   iceRate: 0.0015,
@@ -147,17 +152,17 @@ function fbm(lng: number, lat: number, seed: number): number {
 }
 
 // Zonal wind, degrees of longitude per game day (eastward positive).
-const zonal = (lat: number) => TUNING.tradeDeg + (TUNING.windDeg - TUNING.tradeDeg) * sstep(24, 36, Math.abs(lat));
+const zonal = (lat: number) => TUNING.tradeDeg + (TUNING.windDeg - TUNING.tradeDeg) * sstep(TUNING.windFrom, TUNING.windTo, Math.abs(lat));
 
-// Standardised (about unit sigma) noise advected by the wind. Two layers with different seeds are cross-faded so
-// that the shear between latitude bands never builds up beyond `layerDays`.
+// Standardised (about unit sigma) noise advected by the wind. Several staggered layers with different seeds are
+// cross-faded so that the shear between latitude bands never builds up beyond `layerDays`.
 function field(lng: number, lat: number, days: number, seed: number, ch: number): number {
   const P = TUNING.layerDays;
   const u = zonal(lat);
   let sum = 0;
   let norm = 0;
-  for (let k = 0; k < 2; k++) {
-    const shifted = days + (k * P) / 2;
+  for (let k = 0; k < TUNING.layers; k++) {
+    const shifted = days + (k * P) / TUNING.layers;
     const epoch = Math.floor(shifted / P);
     const tau = shifted - epoch * P;
     const w = Math.sin((Math.PI * tau) / P);
@@ -203,7 +208,9 @@ const DAY_H = 24;
 export function cloudField(lng: number, lat: number, t: number, seed: number, phase: number): { cloud: number; precip: number } {
   const days = t / DAY_MIN;
   const wet = wetness(lat, yearFrac(t, phase));
-  const cloud = sstep(-1.1, 1.1, field(lng, lat, days, seed, 1) + TUNING.cloudBias * (wet - 0.4));
+  // the polar caps are dry but not clear: a floor of cloud keeps them between the highs and the storm tracks
+  const polar = TUNING.polarCloud * sstep(55, 80, Math.abs(lat));
+  const cloud = sstep(-1.1, 1.1, field(lng, lat, days, seed, 1) + TUNING.cloudBias * (wet + polar - TUNING.cloudRef));
   if (cloud <= 0.6 || wet <= 0.3) return { cloud, precip: 0 };
   const core = (cloud - 0.6) / 0.4;
   const burst = sstep(-1.2, 1.4, field(lng, lat, days, seed, 2));

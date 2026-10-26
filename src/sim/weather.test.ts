@@ -262,3 +262,82 @@ describe("calibration at 50N, 200 m", () => {
     expect(lo / n).toBeLessThan(0.05);
   });
 });
+
+// East-west to north-south correlation-length ratio of the cloud cover around `lat`, over many times: the ratio of the
+// rms cover difference across a physical separation along a meridian to the one along a parallel. 1 is isotropic,
+// big means stripes running east-west.
+function anisotropy(lat: number, seed: number): number {
+  const sep = 3; // degrees of arc
+  const dLng = sep / Math.cos(lat * (Math.PI / 180));
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (let d = 0; d < 96; d += 2.5) {
+    const t = d * DAY_MIN;
+    for (let la = lat - 5; la <= lat + 5; la += 2.5) {
+      for (let lg = 0; lg < 360; lg += 6) {
+        const c = cloudField(lg, la, t, seed, 0).cloud;
+        sx += (cloudField(lg + dLng, la, t, seed, 0).cloud - c) ** 2;
+        sy += (cloudField(lg, la + sep, t, seed, 0).cloud - c) ** 2;
+        n++;
+      }
+    }
+  }
+  return Math.sqrt(sy / sx);
+}
+
+describe("cloud field shear", () => {
+  it("does not stripe the clouds east-west where the zonal wind turns over", () => {
+    const r = [1, 2, 3].map((seed) => anisotropy(30, seed) / anisotropy(50, seed));
+    for (const x of r) expect(x).toBeLessThan(1.4);
+  });
+
+  it("still moves the fronts east in mid-latitudes and west in the tropics", () => {
+    // lng shift that best explains the cover half a game day later, averaged over many times
+    const drift = (lat: number) => {
+      const dt = 0.5;
+      let best = 0;
+      let bestErr = Infinity;
+      for (let sh = -20; sh <= 20; sh += 1) {
+        let err = 0;
+        for (let d = 0; d < 60; d += 3) {
+          for (let lg = 0; lg < 360; lg += 10) {
+            err += (cloudField(lg, lat, d * DAY_MIN, 5, 0).cloud - cloudField(lg + sh, lat, (d + dt) * DAY_MIN, 5, 0).cloud) ** 2;
+          }
+        }
+        if (err < bestErr) {
+          bestErr = err;
+          best = sh;
+        }
+      }
+      return best / dt; // degrees of longitude per game day, eastward positive
+    };
+    expect(drift(50)).toBeGreaterThan(8);
+    expect(drift(50)).toBeLessThan(16);
+    expect(drift(0)).toBeLessThan(-3);
+  });
+});
+
+describe("cloud climatology", () => {
+  // mean cover over a deterministic sample of times and longitudes
+  const meanCover = (lats: number[], lng0 = 0, lng1 = 360) => {
+    let sum = 0;
+    let n = 0;
+    for (let d = 0; d < 128; d += 3.7) {
+      for (const lat of lats) {
+        for (let lg = lng0; lg < lng1; lg += 7) {
+          sum += cloudField(lg, lat, d * DAY_MIN, 11, 0).cloud;
+          n++;
+        }
+      }
+    }
+    return sum / n;
+  };
+  it("keeps the subtropical highs clear, the ITCZ and the storm tracks cloudy", () => {
+    expect(meanCover([20, 22, 25, 28, 30], 0, 30)).toBeLessThan(0.3);
+    expect(meanCover([0, 4, 8])).toBeGreaterThan(0.55);
+    const mid = meanCover([45, 50, 55]);
+    expect(mid).toBeGreaterThan(0.5);
+    expect(mid).toBeLessThan(0.75);
+  });
+});

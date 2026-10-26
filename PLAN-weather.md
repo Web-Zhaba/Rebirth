@@ -128,6 +128,9 @@ These multiply the existing season tables (`FOOD_RATE`), which stay as the basel
 
 ## 5. Clouds (`src/map/cloudLayer.ts`)
 
+**Superseded by `PLAN-clouds.md`** (volumetric ray-marched clouds on three.js, ground shadows, precipitation
+shafts, lightning). The shell layer below is the current code until that plan lands.
+
 - MapLibre custom layer, `renderingMode: "3d"`, raw WebGL2/1 as MapLibre provides it; no dependency added.
 - Drawn only when zoom is below about 6 and fully faded at 6.5 (smoothstep), skipped entirely otherwise; the globe
   projection is the only case that matters at those zooms.

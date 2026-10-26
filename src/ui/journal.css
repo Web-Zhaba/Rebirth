@@ -267,6 +267,10 @@
   flex: 1;
 }
 
+.settings-row .seg {
+  margin-left: auto;
+}
+
 .settings-val {
   min-width: 3ch;
   text-align: right;

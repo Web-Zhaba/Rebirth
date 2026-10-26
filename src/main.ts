@@ -14,7 +14,7 @@ import { attachRoadLayer } from "./map/roadLayer";
 import { attachRuinsLayer } from "./map/ruinsLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachLifeLayer } from "./map/lifeLayer";
-import { attachCloudLayer } from "./map/cloudLayer";
+import { attachClouds } from "./map/clouds/attach";
 import { attachNightTint } from "./map/nightLayer";
 import { attachTrafficLayer } from "./map/trafficLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
@@ -40,13 +40,17 @@ attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLig
 attachNightTint(map, gameClock); // dusk tint of the map itself; sits just under the lights
 attachReachLayer(map);
 attachCityMarker(map);
-attachCloudLayer(map, {
+const cloudSite = computed(() => {
+  const w = state.value?.weather?.site;
+  return w ? { seed: w.seed, phase: w.phase } : null;
+});
+// Clouds above everything on the map, visible only on the far globe views; their ground shadows at every zoom, just
+// under the night tint (so the lights stay bright).
+attachClouds(map, {
   clock: gameClock,
-  site: computed(() => {
-    const w = state.value?.weather?.site;
-    return w ? { seed: w.seed, phase: w.phase } : null;
-  }),
-}); // clouds above everything on the map, visible only on the far globe views
+  site: cloudSite,
+  extraLayers: [{ beforeId: "night-tint", load: async () => (await import("./map/clouds/cloudShadows")).createShadowLayer(map, { clock: gameClock, site: cloudSite }) }],
+});
 attachRoadTool(map);
 attachZoneTool(map);
 attachPlaceTool(map);
