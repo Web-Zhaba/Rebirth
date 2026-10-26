@@ -1,4 +1,4 @@
-// Coordinate-frame helpers for the cloud layers. Pure maths on plain arrays, no three.js and no MapLibre.
+// Coordinate-frame helpers for the three.js map layers (clouds, ground shadows, restored buildings). Pure maths on plain arrays, no three.js and no MapLibre.
 //
 // MapLibre unit-sphere frame (globe mode, what `defaultProjectionData.mainMatrix` projects): radius 1 is the planet
 // (6 371 008.8 m), a point sits at (sin lng cos lat, sin lat, cos lng cos lat), so +Y is north and +Z is (0E, 0N).
@@ -43,6 +43,20 @@ export function mercatorToLngLat(x: number, y: number): { lng: number; lat: numb
 
 // Metres per mercator unit at a latitude (the world is 2 pi R * cos(lat) wide there).
 export const metresPerMercator = (lat: number): number => 2 * Math.PI * EARTH_RADIUS_M * Math.cos(lat * RAD);
+
+// Local frame at a point of the unit sphere (MapLibre frame): up o, east e, north n.
+export interface LocalFrame {
+  o: Vec3;
+  e: Vec3;
+  n: Vec3;
+}
+
+export function localFrame(lng: number, lat: number): LocalFrame {
+  const l = lng * RAD;
+  const p = lat * RAD;
+  const sl = Math.sin(l), cl = Math.cos(l), sp = Math.sin(p), cp = Math.cos(p);
+  return { o: [sl * cp, sp, cl * cp], e: [cl, 0, -sl], n: [-sl * sp, cp, -cl * sp] };
+}
 
 // ---- 4x4 matrices, column-major like WebGL and gl-matrix ----
 

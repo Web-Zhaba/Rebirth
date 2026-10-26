@@ -1,5 +1,5 @@
 import { DRIFT_DEG, NOISE_TILE_M, OVERCAST_MAX, SHADOW_MAX, SUN_FULL_DEG, SUN_OFF_DEG } from "./shadowMath";
-import { EARTH_RADIUS_M } from "./frame";
+import { EARTH_RADIUS_M } from "../three/frame";
 
 // GLSL of the ground-shadow layer. The maths mirrors shadowMath.ts (offset, drift, darkening); keep them in step.
 // three prepends `#version 300 es`, the precision lines and the texture2D/textureCube -> texture and gl_FragColor aliases.

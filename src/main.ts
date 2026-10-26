@@ -37,8 +37,8 @@ attachExcavation();
 attachArticles();
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
-// Spike (PLAN-research T0): finished buildings again as three.js meshes. localStorage debug3dRestored = "1".
-if (import.meta.env.DEV && localStorage.getItem("debug3dRestored") === "1") void import("./map/restoredLayer").then((m) => m.attachRestoredDebug(map, { buildings: simClient.buildings, frame }));
+// Dev check of the restored-buildings layer (PLAN-research T1): finished buildings again as three.js models. localStorage debug3dRestored = "1".
+if (import.meta.env.DEV && localStorage.getItem("debug3dRestored") === "1") void import("./map/restoredLayer").then((m) => m.attachRestoredDebug(map, { buildings: simClient.buildings, frame, light: { clock: gameClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) } }));
 attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
 attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec });

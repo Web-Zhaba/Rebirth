@@ -3,7 +3,7 @@ import { ColorManagement, HalfFloatType, LinearFilter, LinearSRGBColorSpace, RGB
 import { invert4 } from "./frame";
 
 // The shared three.js host: one WebGLRenderer living on MapLibre's own canvas and GL context, for custom layers that
-// want three's scene graph and materials (clouds, ground shadows, later the buildings). Import this file only with a
+// want three's scene graph and materials (clouds, ground shadows, restored buildings). Import this file only with a
 // dynamic `import()`, so three.js stays out of the main chunk.
 //
 // Contract (proved by the step-0 spike of PLAN-clouds.md):

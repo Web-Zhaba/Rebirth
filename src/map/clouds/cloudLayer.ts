@@ -21,10 +21,10 @@ import { DAY_MIN } from "../../sim/time";
 import { CLOUD_BASE_M, CLOUD_TOP_M, CUBE_SIZE, FADE_TAU_MS, GLOBE_EXAGGERATION } from "./constants";
 import { cloudOpacity, smoothstep, effectiveQuality, MIN_OPACITY, needsMarch, PRESETS, targetSize, FLASH_FRAME_MS, type MadeMarch } from "./cloudQuality";
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, MARCH_FRAG } from "./cloudShaders";
-import { EARTH_RADIUS_M, lngLatToSphere, transformPoint, weatherToSphere } from "./frame";
+import { EARTH_RADIUS_M, lngLatToSphere, transformPoint, weatherToSphere } from "../three/frame";
 import { activeFlashes, FLASH_MAX } from "./lightning";
 import { cloudQuality, cloudsOn, type CloudSite } from "./settings";
-import { acquireHost, type ThreeHost } from "./three";
+import { acquireHost, type ThreeHost } from "../three/host";
 import { acquireWeatherTextures, type WeatherTextureSource } from "./weatherTextures";
 
 // The MapLibre custom layer for the volumetric clouds (PLAN-clouds.md section 5). `prerender` ray-marches the shell into

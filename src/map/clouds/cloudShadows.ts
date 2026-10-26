@@ -5,11 +5,11 @@ import { DAY_MIN } from "../../sim/time";
 import { sunDirection } from "../../sim/weather";
 import { PALETTE } from "../../ui/palette";
 import { CUBE_SIZE } from "./constants";
-import { invert4, lngLatToMercator, mercatorLocalMatrix, mercatorToLngLat, metresPerMercator, weatherToSphere, EARTH_RADIUS_M, type Vec3 } from "./frame";
+import { invert4, lngLatToMercator, mercatorLocalMatrix, mercatorToLngLat, metresPerMercator, weatherToSphere, EARTH_RADIUS_M, type Vec3 } from "../three/frame";
 import { cloudQuality, cloudsOn, type CloudSite } from "./settings";
 import { driftPhases, localFrame, mercatorScaleK, NOISE_TILE_M, rayBasis, rotatePolar, shadowHeight, sunLocal, sunOffsetLocal, sunStrength, DRIFT_DEG } from "./shadowMath";
 import { SHADOW_FRAG, SHADOW_VERT } from "./shadowShaders";
-import { acquireHost, type ThreeHost } from "./three";
+import { acquireHost, type ThreeHost } from "../three/host";
 import { acquireWeatherTextures, type WeatherTextureSource } from "./weatherTextures";
 
 // Cloud shadows on the ground and the overcast dimming (PLAN-clouds.md section 6). A custom layer added just under

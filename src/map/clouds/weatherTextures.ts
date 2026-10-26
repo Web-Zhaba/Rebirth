@@ -2,7 +2,7 @@ import { CubeTexture, Data3DTexture, DataTexture, LinearFilter, RepeatWrapping, 
 import { requestCube, requestNoise, type CubeResult } from "./cloudData";
 import { BASE_SIZE, DETAIL_SIZE } from "./noise3d";
 import type { CloudSite } from "./settings";
-import type { ThreeHost } from "./three";
+import type { ThreeHost } from "../three/host";
 import { STORM_MAX } from "./weatherCube";
 
 // GPU copies of the weather cube pair and the noise volumes (PLAN-clouds.md section 4), shared by the cloud layer and

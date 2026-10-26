@@ -1,6 +1,6 @@
 import { TUNING } from "../../sim/weather";
 import { CLOUD_BASE_M, CLOUD_TOP_M, FADE_FROM, FADE_TO, GLOBE_EXAGGERATION } from "./constants";
-import { EARTH_RADIUS_M, metresPerMercator, type Vec3 } from "./frame";
+import { EARTH_RADIUS_M, localFrame, metresPerMercator, type LocalFrame, type Vec3 } from "../three/frame";
 
 // Pure maths of the ground-shadow layer (PLAN-clouds.md section 6), mirrored line by line in shadowShaders.ts. No three.js.
 
@@ -41,19 +41,7 @@ export function sunOffsetM(sinElev: number, heightM: number): number {
   return heightM / tan;
 }
 
-// Local frame at a point of the unit sphere (MapLibre frame): up o, east e, north n.
-export interface LocalFrame {
-  o: Vec3;
-  e: Vec3;
-  n: Vec3;
-}
-
-export function localFrame(lng: number, lat: number): LocalFrame {
-  const l = lng * RAD;
-  const p = lat * RAD;
-  const sl = Math.sin(l), cl = Math.cos(l), sp = Math.sin(p), cp = Math.cos(p);
-  return { o: [sl * cp, sp, cl * cp], e: [cl, 0, -sl], n: [-sl * sp, cp, -cl * sp] };
-}
+export { localFrame, type LocalFrame };
 
 const dot = (a: ArrayLike<number>, b: ArrayLike<number>) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 

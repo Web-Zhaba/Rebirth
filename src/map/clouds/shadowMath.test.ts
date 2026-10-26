@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sunDirection, TUNING } from "../../sim/weather";
 import { CLOUD_BASE_M, CLOUD_TOP_M, GLOBE_EXAGGERATION } from "./constants";
-import { EARTH_RADIUS_M, invert4, lngLatToSphere, rayFromNdc, sphereToLngLat, weatherToSphere, type Vec3 } from "./frame";
+import { EARTH_RADIUS_M, invert4, lngLatToSphere, rayFromNdc, sphereToLngLat, weatherToSphere, type Vec3 } from "../three/frame";
 import {
   blendDrift,
   darkening,

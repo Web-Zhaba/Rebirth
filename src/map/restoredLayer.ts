@@ -1,135 +1,69 @@
 import type maplibregl from "maplibre-gl";
 import type { ReadonlySignal } from "@preact/signals";
-import { effect } from "@preact/signals";
-import { BufferAttribute, BufferGeometry, Color, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, Scene, ShaderMaterial, ShapeUtils, Camera, Vector2, Vector3 } from "three";
+import { effect, signal } from "@preact/signals";
+import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, OneFactor, OneMinusSrcAlphaFactor, Scene, ShaderMaterial, Vector3 } from "three";
+import { sunDirection } from "../sim/weather";
 import type { Building } from "../sim/types";
 import type { Frame as TownFrame } from "../world/frame";
 import { PALETTE } from "../ui/palette";
-import { EARTH_RADIUS_M, lngLatToMercator, mercatorLocalMatrix, metresPerMercator } from "./clouds/frame";
-import { localFrame } from "./clouds/shadowMath";
-import { acquireHost, type ThreeHost } from "./clouds/three";
+import { sunLocal, sunStrength } from "./clouds/shadowMath";
+import { buildHeritageModel, buildScaffold, type HeritageModel, type XY } from "./heritageModels";
+import { appendModel, emptyBuffers, type Buffers } from "./restoredBuffers";
+import { restoredIds } from "./restoredIds";
+import { EARTH_RADIUS_M, localFrame, lngLatToMercator, mercatorLocalMatrix, metresPerMercator, weatherToSphere } from "./three/frame";
+import { acquireHost, type ThreeHost } from "./three/host";
 
-// Restored buildings drawn by three.js inside the MapLibre map (PLAN-research.ru.md section 8, stage T0 spike). Import
-// this file only with a dynamic `import()` (it pulls in three.js).
+// Restored old buildings drawn by three.js inside the MapLibre map (PLAN-research.ru.md section 8). Import this file only
+// with a dynamic `import()` (it pulls in three.js); restoredIds.ts is the main-chunk side of it.
 //
-// A custom layer with `renderingMode: "3d"`: MapLibre sets its 3D depth mode (shared depth buffer with fill-extrusion,
-// LEQUAL, read-write, 3D depth range) before `render`, and our material keeps depth test and write on, so meshes and
-// fill-extrusions occlude each other per pixel.
+// One custom layer with `renderingMode: "3d"`: MapLibre sets its 3D depth mode (shared depth buffer with fill-extrusion,
+// LEQUAL, read-write, 3D depth range) before `render`, and the materials keep depth test on, so meshes and fill-extrusions
+// occlude each other per pixel.
 //
-// Projection: each vertex is stored twice, in a globe tangent frame and in a mercator frame, both in metres relative to
-// the layer origin and computed in float64 on the CPU from the vertex's lng/lat:
-// - globe: exact tangent coordinates (east, north, up) of the point (R + h) * unit(lng, lat) about the origin, so the
-//   map to the unit sphere is affine: sphere = o + (E e + N n + U o) / R. Matrix = main * that, in float64 per frame.
+// GL-state contract (host.draw resets three's state, so each material states everything it needs):
+// - finished buildings: one opaque mesh, NoBlending, depth test LEQUAL + write, DoubleSide;
+// - buildings under construction: one pale mesh drawn after it, premultiplied blending (ONE, ONE_MINUS_SRC_ALPHA, as
+//   MapLibre custom layers composite), depth test on, depth write off.
+// The layer is added before "night-tint" (like the cloud shadows), so the dusk tint and the cloud shadows darken it.
+//
+// Projection: each vertex is stored twice (restoredBuffers.ts), in a globe tangent frame and in a mercator frame, both in
+// metres relative to the layer origin and computed in float64 on the CPU from the vertex's lng/lat:
+// - globe: exact tangent coordinates of the point (R + h) * unit(lng, lat) about the origin, so the map to the unit sphere
+//   is affine: sphere = o + (E e + N n + U o) / R. Matrix = main * that, in float64 per frame.
 // - mercator: east = dLng * R cos(lat0), north = R cos(lat0) * (ymerc(lat) - ymerc(lat0)), up = h, through
 //   mercatorLocalMatrix(fallback, ...) (the same helper the shadow layer uses).
 // The vertex shader mixes the two clip positions with `projectionTransition`, exactly like MapLibre's
 // interpolateProjectionFor3D does for fill-extrusion, so depth values agree through the projection transition.
+//
+// Lighting: faces are shaded by the sun direction (sim/weather sunDirection, in the town's east/north/up frame) like the
+// fill-extrusions' default light: unlit faces at about half brightness. With the sun down (or no clock given) a fixed
+// fallback direction is used, slightly dimmer; the night tint layer above darkens everything else.
 
 export const RESTORED_LAYER_ID = "restored-buildings";
 const R = EARTH_RADIUS_M;
-const RAD = Math.PI / 180;
-const atanh = (x: number) => 0.5 * Math.log((1 + x) / (1 - x));
+const SCAFFOLD_ALPHA = 0.72;
+const PROGRESS_STEPS = 24; // progress < 1 is quantised, so a slowly growing site does not rebuild its model every tick
+const FALLBACK_LIGHT: [number, number, number] = [-0.45, -0.55, 0.7];
 
-// A building to draw: ring in town-local metres (counter-clockwise), heights in metres.
-export interface RestoredPiece {
-  ring: [number, number][];
+// A building to draw: ring in town-local metres, eaves height in metres, OSM kind (the `cls` of src/sim/heritage.ts),
+// progress 0..1 (below 1 the pale scaffold look: walls only, as high as the progress allows).
+export interface RestoredItem {
+  id: string | number;
+  ring: XY[];
   height: number;
-  wall: string;
-  roof: string;
-  gable: boolean; // gabled roof on a 4-corner ring (ridge along the long axis); anything else gets a flat roof
+  kind: string;
+  progress: number;
 }
 
-type P3 = [number, number, number];
-
-interface Buf {
-  g: number[]; // globe tangent frame
-  m: number[]; // mercator frame
-  n: number[];
-  c: number[];
-}
-
-// Pure geometry (no GL): walls plus a flat or gabled roof for every piece. `toLngLat` is the town frame's local -> lng/lat.
-export function buildGeometry(pieces: RestoredPiece[], toLngLat: (x: number, y: number) => [number, number], origin: { lng: number; lat: number }): Buf {
-  const f = localFrame(origin.lng, origin.lat);
-  const l0 = origin.lng * RAD;
-  const cp0 = Math.cos(origin.lat * RAD);
-  const ym0 = atanh(Math.sin(origin.lat * RAD));
-  const out: Buf = { g: [], m: [], n: [], c: [] };
-
-  const vertex = (p: P3, n: P3, col: Color) => {
-    const [lng, lat] = toLngLat(p[0], p[1]);
-    const l = lng * RAD;
-    const ph = lat * RAD;
-    const cp = Math.cos(ph);
-    const r = R + p[2];
-    const dx = Math.sin(l) * cp * r - f.o[0] * R;
-    const dy = Math.sin(ph) * r - f.o[1] * R;
-    const dz = Math.cos(l) * cp * r - f.o[2] * R;
-    out.g.push(dx * f.e[0] + dy * f.e[1] + dz * f.e[2], dx * f.n[0] + dy * f.n[1] + dz * f.n[2], dx * f.o[0] + dy * f.o[1] + dz * f.o[2]);
-    out.m.push((l - l0) * R * cp0, R * cp0 * (atanh(Math.sin(ph)) - ym0), p[2]);
-    out.n.push(n[0], n[1], n[2]);
-    out.c.push(col.r, col.g, col.b);
-  };
-  const faceNormal = (a: P3, b: P3, c: P3): P3 => {
-    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
-    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    const len = Math.hypot(nx, ny, nz) || 1;
-    nx /= len; ny /= len; nz /= len;
-    return nz < 0 ? [-nx, -ny, -nz] : [nx, ny, nz]; // roofs face up (walls pass their own normal)
-  };
-  const tri = (a: P3, b: P3, c: P3, col: Color, n?: P3) => {
-    const nn = n ?? faceNormal(a, b, c);
-    vertex(a, nn, col);
-    vertex(b, nn, col);
-    vertex(c, nn, col);
-  };
-  const quad = (a: P3, b: P3, c: P3, d: P3, col: Color, n?: P3) => {
-    tri(a, b, c, col, n);
-    tri(a, c, d, col, n);
-  };
-
-  for (const pc of pieces) {
-    let ring = pc.ring;
-    let area = 0;
-    for (let i = 0; i < ring.length; i++) {
-      const [x0, y0] = ring[i], [x1, y1] = ring[(i + 1) % ring.length];
-      area += x0 * y1 - x1 * y0;
-    }
-    if (area < 0) ring = [...ring].reverse(); // counter-clockwise: outward normal of edge d is (dy, -dx)
-    const wall = new Color(pc.wall);
-    const roof = new Color(pc.roof);
-    const h = pc.height;
-    const gabled = pc.gable && ring.length === 4;
-    if (gabled && Math.hypot(ring[1][0] - ring[0][0], ring[1][1] - ring[0][1]) < Math.hypot(ring[2][0] - ring[1][0], ring[2][1] - ring[1][1]))
-      ring = [ring[1], ring[2], ring[3], ring[0]]; // long side first
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i], b = ring[(i + 1) % ring.length];
-      const dx = b[0] - a[0], dy = b[1] - a[1];
-      const len = Math.hypot(dx, dy) || 1;
-      quad([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], h], [a[0], a[1], h], wall, [dy / len, -dx / len, 0]);
-    }
-    if (gabled) {
-      const [p0, p1, p2, p3] = ring;
-      const shortSide = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
-      const top = h + Math.min(6, Math.max(1.5, shortSide * 0.3));
-      const r0: P3 = [(p3[0] + p0[0]) / 2, (p3[1] + p0[1]) / 2, top];
-      const r1: P3 = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2, top];
-      const up = (p: [number, number]): P3 => [p[0], p[1], h];
-      const outward = (a: [number, number], b: [number, number]): P3 => {
-        const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
-        return [dy / len, -dx / len, 0];
-      };
-      tri(up(p3), up(p0), r0, wall, outward(p3, p0));
-      tri(up(p1), up(p2), r1, wall, outward(p1, p2));
-      quad(up(p0), up(p1), r1, r0, roof);
-      quad(up(p2), up(p3), r0, r1, roof);
-    } else {
-      const idx = ShapeUtils.triangulateShape(ring.map(([x, y]) => new Vector2(x, y)), []);
-      for (const [a, b, c] of idx) tri([ring[a][0], ring[a][1], h], [ring[b][0], ring[b][1], h], [ring[c][0], ring[c][1], h], roof, [0, 0, 1]);
-    }
-  }
-  return out;
+export interface RestoredOptions {
+  items: ReadonlySignal<RestoredItem[]>;
+  frame: ReadonlySignal<TownFrame | null>;
+  // Sun for the lighting: game minutes and the climate phase of the weather site. Omitted: fixed light.
+  light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null> };
+  // Publish the drawn ids to `restoredIds` for buildingLayer (default true).
+  publishIds?: boolean;
+  // Layer to insert before (default "night-tint").
+  beforeId?: string;
 }
 
 const VERT = /* glsl */ `
@@ -151,11 +85,14 @@ void main() {
 
 const FRAG = /* glsl */ `
 uniform vec3 uLight;
+uniform float uSun;
+uniform float uAlpha;
 varying vec3 vN;
 varying vec3 vC;
 void main() {
   float d = max(dot(normalize(vN), uLight), 0.0);
-  gl_FragColor = vec4(vC * (0.5 + 0.65 * d), 1.0);
+  float k = mix(0.55, 1.0, d) * mix(0.88, 1.0, uSun);
+  gl_FragColor = vec4(vC * k * uAlpha, uAlpha); // premultiplied (alpha 1 for opaque)
 }`;
 
 function mul4(a: ArrayLike<number>, b: ArrayLike<number>, out = new Float64Array(16)): Float64Array {
@@ -168,36 +105,87 @@ function mul4(a: ArrayLike<number>, b: ArrayLike<number>, out = new Float64Array
   return out;
 }
 
-export interface RestoredLayer extends maplibregl.CustomLayerInterface {
-  setPieces(pieces: RestoredPiece[]): void;
+const norm3 = (v: [number, number, number]): [number, number, number] => {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+
+// Model of an item. Unfinished: scaffold walls only.
+export function modelOf(it: RestoredItem): HeritageModel {
+  return it.progress >= 1 ? buildHeritageModel(it.ring, it.height, it.kind) : buildScaffold(it.ring, it.height, it.progress);
 }
 
-export function createRestoredLayer(map: maplibregl.Map, town: { frame: ReadonlySignal<TownFrame | null>; origin: ReadonlySignal<{ lng: number; lat: number } | null> }): RestoredLayer {
+const quantise = (p: number): number => (p >= 1 ? 1 : Math.min(PROGRESS_STEPS - 1, Math.max(0, Math.floor((Number.isFinite(p) ? p : 0) * PROGRESS_STEPS))) / PROGRESS_STEPS);
+const keyOf = (it: RestoredItem, p: number): string => `${p >= 1 ? it.kind : "scaffold"}|${it.height}|${p}|${it.ring.map((q) => `${q[0]},${q[1]}`).join(";")}`;
+
+export type RestoredLayer = maplibregl.CustomLayerInterface;
+
+export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions): RestoredLayer {
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
-  let mesh: Mesh | null = null;
-  let material: ShaderMaterial | null = null;
-  let pieces: RestoredPiece[] = [];
+  let done: Mesh | null = null; // finished buildings
+  let site: Mesh | null = null; // under construction
+  let doneMat: ShaderMaterial | null = null;
+  let siteMat: ShaderMaterial | null = null;
+  let stop: (() => void) | null = null;
   let dirty = true;
+  let origin: { lng: number; lat: number } | null = null; // the layer origin the buffers were built for
+  const cache = new Map<string, HeritageModel>();
   const camera = new Camera();
   const lg = new Float64Array(16);
   const g64 = new Float64Array(16);
+  const light = new Vector3(...norm3(FALLBACK_LIGHT));
 
-  const rebuild = () => {
-    const tf = town.frame.peek();
-    const o = town.origin.peek();
-    if (!mesh || !tf || !o) return;
-    const b = buildGeometry(pieces, tf.toLngLat, o);
+  const fill = (mesh: Mesh, b: Buffers) => {
     const geo = new BufferGeometry();
     geo.setAttribute("position", new BufferAttribute(new Float32Array(b.g), 3));
     geo.setAttribute("aMerc", new BufferAttribute(new Float32Array(b.m), 3));
     geo.setAttribute("normal", new BufferAttribute(new Float32Array(b.n), 3));
     geo.setAttribute("aColor", new BufferAttribute(new Float32Array(b.c), 3));
+    geo.setIndex(new BufferAttribute(new Uint32Array(b.i), 1));
     mesh.geometry.dispose();
     mesh.geometry = geo;
-    mesh.visible = b.g.length > 0;
+    mesh.visible = b.i.length > 0;
+  };
+
+  // Rebuilds the merged meshes; runs once per change of the item list (or the town frame), never per frame.
+  const rebuild = () => {
+    const tf = opts.frame.peek();
+    if (!done || !site || !tf) return;
+    const [lng, lat] = tf.toLngLat(0, 0);
+    origin = { lng, lat };
+    const a = emptyBuffers(), b = emptyBuffers();
+    const used = new Set<string>();
+    for (const it of opts.items.peek()) {
+      const p = quantise(it.progress);
+      const key = keyOf(it, p);
+      used.add(key);
+      let model = cache.get(key);
+      if (!model) cache.set(key, (model = modelOf({ ...it, progress: p })));
+      appendModel(p >= 1 ? a : b, model, tf.toLngLat, origin);
+    }
+    for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
+    fill(done, a);
+    fill(site, b);
     dirty = false;
   };
+
+  const material = (alpha: number, transparent: boolean) =>
+    new ShaderMaterial({
+      uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uAlpha: { value: alpha } },
+      vertexShader: VERT,
+      fragmentShader: FRAG,
+      side: DoubleSide,
+      transparent,
+      blending: transparent ? CustomBlending : NoBlending,
+      blendSrc: OneFactor,
+      blendDst: OneMinusSrcAlphaFactor,
+      blendSrcAlpha: OneFactor,
+      blendDstAlpha: OneMinusSrcAlphaFactor,
+      depthTest: true,
+      depthWrite: !transparent,
+      depthFunc: LessEqualDepth,
+    });
 
   const layer: RestoredLayer = {
     id: RESTORED_LAYER_ID,
@@ -205,38 +193,41 @@ export function createRestoredLayer(map: maplibregl.Map, town: { frame: Readonly
     renderingMode: "3d",
     onAdd(_m, gl) {
       host = acquireHost(map, gl as WebGL2RenderingContext);
-      material = new ShaderMaterial({
-        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: new Vector3(-0.45, -0.55, 0.7).normalize() } },
-        vertexShader: VERT,
-        fragmentShader: FRAG,
-        side: DoubleSide,
-        blending: NoBlending,
-        depthTest: true,
-        depthWrite: true,
-        depthFunc: LessEqualDepth,
-      });
-      mesh = Object.assign(new Mesh(new BufferGeometry(), material), { frustumCulled: false });
+      doneMat = material(1, false);
+      siteMat = material(SCAFFOLD_ALPHA, true);
+      done = Object.assign(new Mesh(new BufferGeometry(), doneMat), { frustumCulled: false, visible: false });
+      site = Object.assign(new Mesh(new BufferGeometry(), siteMat), { frustumCulled: false, visible: false, renderOrder: 1 });
       scene = new Scene();
-      scene.add(mesh);
+      scene.add(done, site);
       dirty = true;
+      stop = effect(() => {
+        void opts.items.value;
+        void opts.frame.value;
+        dirty = true;
+        map.triggerRepaint();
+      });
     },
     onRemove() {
-      mesh?.geometry.dispose();
-      material?.dispose();
+      stop?.();
+      stop = null;
+      done?.geometry.dispose();
+      site?.geometry.dispose();
+      doneMat?.dispose();
+      siteMat?.dispose();
       host?.release();
       host = null;
-      scene = mesh = material = null;
+      scene = done = site = doneMat = siteMat = null;
+      cache.clear();
     },
     render(_gl, args) {
-      const o = town.origin.peek();
-      if (!host || !scene || !material || !mesh || !o) return;
+      if (!host || !scene || !done || !site || !doneMat || !siteMat) return;
       if (dirty) rebuild();
-      if (!mesh.visible) return;
+      if (!origin || (!done.visible && !site.visible)) return;
+      const o = origin;
       const fr = host.frame(args.defaultProjectionData);
-      const u = material.uniforms;
       // mercator: local metres -> clip through the fallback (always the mercator matrix)
       const s = metresPerMercator(o.lat);
-      (u.uM.value as Matrix4).fromArray(Float32Array.from(mercatorLocalMatrix(fr.fallback, lngLatToMercator(o.lng, o.lat), s)));
+      const um = Float32Array.from(mercatorLocalMatrix(fr.fallback, lngLatToMercator(o.lng, o.lat), s));
       // globe: local metres -> unit sphere (affine) -> clip
       const f = localFrame(o.lng, o.lat);
       for (let i = 0; i < 3; i++) {
@@ -247,26 +238,68 @@ export function createRestoredLayer(map: maplibregl.Map, town: { frame: Readonly
       }
       lg[3] = lg[7] = lg[11] = 0;
       lg[15] = 1;
-      (u.uG.value as Matrix4).fromArray(Float32Array.from(mul4(fr.main, lg, g64)));
-      u.uT.value = fr.transition;
+      const ug = Float32Array.from(mul4(fr.main, lg, g64));
+      // sun in the origin's east/north/up frame
+      let sun = 1;
+      light.set(...norm3(FALLBACK_LIGHT));
+      const lt = opts.light;
+      const phase = lt?.phase.peek();
+      if (lt && phase !== null && phase !== undefined) {
+        const sl = sunLocal(weatherToSphere(sunDirection(lt.clock.peek(), phase)), f);
+        sun = sunStrength(sl.sinElev);
+        if (sun > 0) {
+          const d = norm3([sl.east, sl.north, Math.max(sl.sinElev, 0.05)]);
+          const fb = norm3(FALLBACK_LIGHT);
+          light.set(...norm3([fb[0] + (d[0] - fb[0]) * sun, fb[1] + (d[1] - fb[1]) * sun, fb[2] + (d[2] - fb[2]) * sun]));
+        }
+      }
+      for (const m of [doneMat, siteMat]) {
+        const u = m.uniforms;
+        (u.uM.value as Matrix4).fromArray(um);
+        (u.uG.value as Matrix4).fromArray(ug);
+        u.uT.value = fr.transition;
+        u.uSun.value = sun;
+      }
       host.draw((r) => r.render(scene!, camera));
-    },
-    setPieces(p) {
-      pieces = p;
-      dirty = true;
-      map.triggerRepaint();
     },
   };
   return layer;
 }
 
-// ---- Debug switch (spike): localStorage "debug3dRestored" = "1" (main.ts imports this file only then) ----
+// Adds the production layer to the map (before "night-tint" so the dusk tint and cloud shadows darken it) once the style
+// has that layer, and publishes the drawn ids for buildingLayer. Returns a function that detaches everything.
+export function attachRestoredLayer(map: maplibregl.Map, opts: RestoredOptions): () => void {
+  const layer = createRestoredLayer(map, opts);
+  const before = opts.beforeId ?? "night-tint";
+  let disposed = false;
+  const add = () => {
+    if (disposed || map.getLayer(RESTORED_LAYER_ID) || !map.getLayer(before)) return;
+    map.addLayer(layer, before);
+    map.off("styledata", add);
+  };
+  if (map.getLayer(before)) add();
+  else map.on("styledata", add);
+  const stopIds =
+    opts.publishIds === false
+      ? () => {}
+      : effect(() => {
+          restoredIds.value = new Set(opts.items.value.map((i) => i.id));
+        });
+  return () => {
+    disposed = true;
+    map.off("styledata", add);
+    stopIds();
+    if (opts.publishIds !== false) restoredIds.value = new Set();
+    if (map.getLayer(RESTORED_LAYER_ID)) map.removeLayer(RESTORED_LAYER_ID);
+  };
+}
 
-const rect = (cx: number, cy: number, w: number, d: number, rot = 0): [number, number][] => {
+// ---- Debug switch: localStorage "debug3dRestored" = "1" (main.ts imports this file only then, in dev) ----
+
+const rect = (cx: number, cy: number, w: number, d: number, rot = 0): XY[] => {
   const c = Math.cos(rot), s = Math.sin(rot);
-  return ([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]] as [number, number][]).map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
+  return ([[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]] as XY[]).map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
 };
-const mesh = (ring: [number, number][], height: number, gable = true): RestoredPiece => ({ ring, height, wall: PALETTE.warn, roof: PALETTE.bad, gable });
 // Demo scale (localStorage "debug3dRestoredScale"): at 40 the set is 2 km wide, readable at the globe/mercator zooms.
 const DEMO_K = (() => {
   try {
@@ -275,17 +308,20 @@ const DEMO_K = (() => {
     return 1;
   }
 })();
-const scaled = (ring: [number, number][]): [number, number][] => ring.map(([x, y]) => [x * DEMO_K, y * DEMO_K]);
-const DEMO_PIECES: RestoredPiece[] = [
-  mesh(rect(0, 0, 18, 10), 6),
-  mesh(rect(0, -28, 14, 8), 6),
-  mesh(rect(-30, 8, 8, 8), 24, false),
-  mesh(rect(36, 14, 16, 9, 0.5), 5),
-  mesh(rect(0, 30, 30, 12), 4, false),
-  mesh(rect(60, -10, 10, 10), 8, false), // seam test: shares its east wall with the fill-extrusion box below
-].map((p) => ({ ...p, ring: scaled(p.ring), height: p.height * DEMO_K }));
+const scaled = (ring: XY[]): XY[] => ring.map(([x, y]) => [x * DEMO_K, y * DEMO_K]);
+const demo = (id: number, ring: XY[], height: number, kind: string, progress = 1): RestoredItem => ({ id, ring: scaled(ring), height: height * DEMO_K, kind, progress });
+const DEMO_ITEMS: RestoredItem[] = [
+  demo(1, rect(0, 0, 18, 10), 6, "house"),
+  demo(2, rect(0, -28, 14, 8), 6, "house", 0.5),
+  demo(3, rect(-30, 8, 14, 11), 8, "place_of_worship"),
+  demo(4, rect(36, 14, 16, 9, 0.5), 5, "school"),
+  demo(5, rect(0, 30, 30, 12), 4, "station"),
+  demo(6, rect(60, -10, 10, 10), 8, "castle"), // seam test: shares its east wall with the fill-extrusion box below
+  demo(7, [[-60, -20], [-40, -20], [-40, -12], [-48, -12], [-48, 2], [-60, 2]], 6, "house"), // concave L
+  demo(8, rect(-60, 30, 36, 12, 0.3), 8, "place_of_worship"),
+];
 // Fill-extrusion neighbours (rings in local metres, height): intersect or stand in front of / behind the meshes.
-const DEMO_FE: { ring: [number, number][]; h: number }[] = [
+const DEMO_FE: { ring: XY[]; h: number }[] = [
   { ring: rect(14, 0, 8, 8), h: 22 },
   { ring: rect(0, -18, 40, 3), h: 12 },
   { ring: rect(-26, 8, 10, 4), h: 10 },
@@ -310,11 +346,21 @@ function demoFillExtrusions(map: maplibregl.Map, f: TownFrame | null): void {
   (map.getSource("restored-demo-fe") as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
 }
 
-// Draws the town's finished buildings again as three.js meshes, shifted so they overlap their fill-extrusion twins and
-// neighbours; occlusion between the two kinds can be judged by eye. Offset (metres) via localStorage "debug3dRestoredOffset"
-// = "dx,dy" (default 9,5).
-export function attachRestoredDebug(map: maplibregl.Map, deps: { buildings: ReadonlySignal<Record<number, Building> | null>; frame: ReadonlySignal<TownFrame | null> }): void {
-  const origin = { value: null as { lng: number; lat: number } | null, peek() { return this.value; } };
+const DEBUG_KINDS = ["house", "place_of_worship", "station", "school", "castle", "house", "town_hall"];
+
+// Draws the town's finished buildings again as restored models, shifted so they overlap their fill-extrusion twins and
+// neighbours (occlusion between the two kinds can be judged by eye), with the kind cycling through DEBUG_KINDS; with no
+// finished buildings a fixed demo set of every family is shown instead. Offset (metres) via localStorage
+// "debug3dRestoredOffset" = "dx,dy" (default 9,5). In dev `window.restoredItems` is the item signal for hand-made lists.
+export function attachRestoredDebug(
+  map: maplibregl.Map,
+  deps: {
+    buildings: ReadonlySignal<Record<number, Building> | null>;
+    frame: ReadonlySignal<TownFrame | null>;
+    light?: RestoredOptions["light"];
+  },
+): void {
+  const items = signal<RestoredItem[]>([]);
   const offsetRaw = (() => {
     try {
       return localStorage.getItem("debug3dRestoredOffset");
@@ -323,31 +369,20 @@ export function attachRestoredDebug(map: maplibregl.Map, deps: { buildings: Read
     }
   })();
   const [dx, dy] = (offsetRaw ?? "9,5").split(",").map(Number);
-  const layer = createRestoredLayer(map, { frame: deps.frame, origin: origin as unknown as ReadonlySignal<{ lng: number; lat: number } | null> });
-  const add = () => {
-    if (map.getLayer(RESTORED_LAYER_ID) || !map.getLayer("night-tint")) return;
-    map.addLayer(layer, "night-tint");
-    map.off("styledata", add);
-    const f = deps.frame.peek();
-    if (f && !Object.values(deps.buildings.peek() ?? {}).some((b) => b.state === "active")) demoFillExtrusions(map, f);
-  };
-  if (map.getLayer("night-tint")) add();
-  else map.on("styledata", add);
+  attachRestoredLayer(map, { items, frame: deps.frame, light: deps.light, publishIds: false });
   effect(() => {
     const list = deps.buildings.value;
     const f = deps.frame.value;
     if (!list || !f) return;
-    const [lng, lat] = f.toLngLat(0, 0);
-    origin.value = { lng, lat };
-    const pieces: RestoredPiece[] = [];
+    const out: RestoredItem[] = [];
+    let n = 0;
     for (const b of Object.values(list))
-      if (b.state === "active")
-        pieces.push({ ring: b.footprint.map(([x, y]) => [x + dx, y + dy] as [number, number]), height: b.height * 1.2, wall: PALETTE.warn, roof: PALETTE.bad, gable: true });
+      if (b.state === "active") out.push({ id: b.id, ring: b.footprint.map(([x, y]) => [x + dx, y + dy] as XY), height: b.height * 1.2, kind: DEBUG_KINDS[n++ % DEBUG_KINDS.length], progress: 1 });
     // No finished buildings yet: a fixed demo set, meshes interleaved with fill-extrusion boxes that intersect them.
-    const demo = pieces.length === 0;
-    if (demo) pieces.push(...DEMO_PIECES);
-    demoFillExtrusions(map, demo ? f : null);
-    layer.setPieces(pieces);
+    const isDemo = out.length === 0;
+    demoFillExtrusions(map, isDemo ? f : null);
+    items.value = isDemo ? DEMO_ITEMS : out;
   });
-  if (import.meta.env.DEV) Object.assign(window, { restoredLayer: layer });
+  map.on("styledata", () => demoFillExtrusions(map, items.peek() === DEMO_ITEMS ? deps.frame.peek() : null));
+  if (import.meta.env.DEV) Object.assign(window, { restoredItems: items });
 }
