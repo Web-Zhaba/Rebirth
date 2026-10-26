@@ -3,6 +3,7 @@ import { DIG } from "../sim/excavation";
 import type { DigInfo } from "../sim/types";
 import { digs, frame, sendCmd } from "../simClient";
 import { loadOldWorld, ringCentroid, type Disc, type OldWorld } from "../world/oldworld";
+import { hintSpots, selectHints, typeFoundations, typedFoundations, type TypedFoundation } from "./heritageSpots";
 
 // The revealed old world (null until the first dig is loaded); drawn by the ruins layer.
 export const oldWorld = signal<OldWorld | null>(null);
@@ -51,10 +52,11 @@ export function attachExcavation(): void {
   let retryAt = 0;
   let chain: Promise<void> = Promise.resolve();
 
-  async function report(world: OldWorld, list: DigInfo[]): Promise<void> {
+  async function report(world: OldWorld, list: DigInfo[], typed: TypedFoundation[]): Promise<void> {
     if (list.length === 0) return;
     const streetNames = new Set(world.streets.flatMap((s) => (s.name ? [s.name] : [])));
-    const groups = new Map<number, { f: { id: string; ring: [number, number][]; area: number }[]; p: { id: string; name: string; cls: string; x: number; y: number }[]; s: { id: string; name: string }[] }>();
+    const typeOf = new Map(typed.map((t) => [t.id, t]));
+    const groups = new Map<number, { f: { id: string; ring: [number, number][]; area: number; cls?: string; name?: string; height?: number }[]; p: { id: string; name: string; cls: string; x: number; y: number }[]; s: { id: string; name: string }[] }>();
     const group = (id: number) => {
       let g = groups.get(id);
       if (!g) groups.set(id, (g = { f: [], p: [], s: [] }));
@@ -63,7 +65,8 @@ export function attachExcavation(): void {
     for (const f of world.foundations) {
       if (reportedF.has(f.id)) continue;
       const [cx, cy] = ringCentroid(f.ring);
-      group(digFor(cx, cy, list)).f.push({ id: f.id, ring: f.ring, area: f.area });
+      const t = typeOf.get(f.id);
+      group(digFor(cx, cy, list)).f.push({ id: f.id, ring: f.ring, area: f.area, ...(t ? { cls: t.cls, ...(t.name ? { name: t.name } : {}), ...(t.height !== undefined ? { height: t.height } : {}) } : {}) });
     }
     const seen = new Set<string>();
     for (const s of world.streets) {
@@ -104,8 +107,11 @@ export function attachExcavation(): void {
     try {
       const world = await loadOldWorld(f, discs);
       applied = discs;
+      const typed = list.length ? typeFoundations(world.foundations, world.spots, (x, y) => digFor(x, y, list)) : [];
       oldWorld.value = world;
-      chain = chain.then(() => report(world, list)).catch(() => undefined);
+      typedFoundations.value = typed;
+      hintSpots.value = selectHints(world, discs);
+      chain = chain.then(() => report(world, list, typed)).catch(() => undefined);
     } catch {
       retryAt = Date.now() + RETRY_MS; // network failure: the game goes on, try again later
     } finally {

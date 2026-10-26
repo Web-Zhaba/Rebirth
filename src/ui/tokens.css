@@ -40,6 +40,13 @@
   --bad-fill: #ebc9bc;
   --info: #3a5a78;
   --info-fill: #d3dfe8;
+  /* Knowledge domains: notable old buildings on the map */
+  --domain-build: #a4562f;
+  --domain-farm: #6b8e3d;
+  --domain-craft: #7b5f8c;
+  --domain-trade: #c08a1e;
+  --domain-learn: #3a6f9c;
+  --domain-care: #9c3a52;
 
   /* Dusk surface (day summary, later milestones) */
   --dusk: #26303a;

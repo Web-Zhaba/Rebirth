@@ -1,15 +1,30 @@
 import type maplibregl from "maplibre-gl";
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
 import { isBridge, oldStreetKind, ROAD_KINDS } from "../sim/roads";
-import { PALETTE } from "../ui/palette";
+import { DOMAIN_COLORS, PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
-import type { OldWorld, XY } from "../world/oldworld";
+import { ringCentroid, type OldWorld, type XY } from "../world/oldworld";
+import { hintSpots, typedFoundations } from "./heritageSpots";
 
 const SRC_WALLS = "ruins-walls";
 const SRC_FLOORS = "ruins-floors";
 const SRC_STREETS = "ruins-streets";
 const SRC_POIS = "ruins-pois";
-const RUIN_LAYERS = ["ruins-floor", "ruins-streets", "ruins-outline", "ruins-walls", "ruins-street-names", "ruins-poi-names"];
+const SRC_TYPED = "ruins-typed";
+const SRC_TYPED_NAMES = "ruins-typed-labels";
+const SRC_HINTS = "ruins-hints";
+const RUIN_LAYERS = [
+  "ruins-floor",
+  "ruins-typed-fill",
+  "ruins-streets",
+  "ruins-outline",
+  "ruins-typed-outline",
+  "ruins-walls",
+  "ruins-hints",
+  "ruins-street-names",
+  "ruins-typed-names",
+  "ruins-poi-names",
+];
 const EQUATOR_M = 40075016.686;
 
 // Whether the old city is drawn: a choice of the player's, kept in localStorage. The finds stay either way.
@@ -144,10 +159,15 @@ export function attachRuinsLayer(
 
   const setup = (lat: number) => {
     const k = 512 / (EQUATOR_M * Math.cos((lat * Math.PI) / 180));
-    for (const id of [SRC_WALLS, SRC_FLOORS, SRC_STREETS, SRC_POIS]) map.addSource(id, { type: "geojson", data: empty() });
+    for (const id of [SRC_WALLS, SRC_FLOORS, SRC_STREETS, SRC_POIS, SRC_TYPED, SRC_TYPED_NAMES, SRC_HINTS]) map.addSource(id, { type: "geojson", data: empty() });
     const beneath = map.getLayer("roads-casing") ? "roads-casing" : undefined;
     map.addLayer(
       { id: "ruins-floor", type: "fill", source: SRC_FLOORS, minzoom: 13, paint: { "fill-color": PALETTE.pencilFaint, "fill-opacity": 0.28 } },
+      beneath,
+    );
+    // Notable buildings: floor in the colour of their domain.
+    map.addLayer(
+      { id: "ruins-typed-fill", type: "fill", source: SRC_TYPED, minzoom: 13, paint: { "fill-color": ["get", "c"], "fill-opacity": 0.5 } },
       beneath,
     );
     map.addLayer(
@@ -181,6 +201,17 @@ export function attachRuinsLayer(
     );
     map.addLayer(
       {
+        id: "ruins-typed-outline",
+        type: "line",
+        source: SRC_TYPED,
+        minzoom: 13,
+        layout: { "line-join": "round" },
+        paint: { "line-color": ["get", "c"], "line-width": 2, "line-opacity": 0.95 },
+      },
+      beneath,
+    );
+    map.addLayer(
+      {
         id: "ruins-walls",
         type: "fill-extrusion",
         source: SRC_WALLS,
@@ -191,6 +222,24 @@ export function attachRuinsLayer(
           "fill-extrusion-height": WALL_HEIGHT,
           "fill-extrusion-base": 0,
           "fill-extrusion-opacity": 0.9,
+        },
+      },
+      beneath,
+    );
+    // Hints: faint unnamed spots just beyond a dig, no type and no domain colour.
+    map.addLayer(
+      {
+        id: "ruins-hints",
+        type: "circle",
+        source: SRC_HINTS,
+        minzoom: 14,
+        paint: {
+          "circle-radius": 4,
+          "circle-color": PALETTE.pencilFaint,
+          "circle-opacity": 0.35,
+          "circle-stroke-color": PALETTE.pencilFaint,
+          "circle-stroke-width": 1,
+          "circle-stroke-opacity": 0.5,
         },
       },
       beneath,
@@ -210,6 +259,23 @@ export function attachRuinsLayer(
           "text-letter-spacing": 0.05,
         },
         paint: { "text-color": PALETTE.ink2, "text-halo-color": PALETTE.paperRaised, "text-halo-width": 1.5 },
+      },
+      beneath,
+    );
+    map.addLayer(
+      {
+        id: "ruins-typed-names",
+        type: "symbol",
+        source: SRC_TYPED_NAMES,
+        minzoom: 15,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": FONT,
+          "text-size": 12,
+          "text-max-width": 8,
+          "text-anchor": "center",
+        },
+        paint: { "text-color": PALETTE.ink, "text-halo-color": PALETTE.paperRaised, "text-halo-width": 1.5 },
       },
       beneath,
     );
@@ -258,17 +324,33 @@ export function attachRuinsLayer(
         properties: { w: streetWidth(s.cls), bridge: isBridge(oldStreetKind(s.cls, s.bridge === true)), ...(s.name ? { name: s.name } : {}) },
         geometry: { type: "LineString", coordinates: s.pts.map(([x, y]) => f.toLngLat(x, y)) },
       }));
-    const pois: GeoJSON.Feature[] = w.pois.map((p) => ({
-      type: "Feature",
-      properties: { name: p.name },
-      geometry: { type: "Point", coordinates: f.toLngLat(p.x, p.y) },
-    }));
+    const typedList = typedFoundations.value;
+    const typedNameSet = new Set(typedList.flatMap((t) => (t.name ? [t.name] : []))); // labelled by the typed layer instead
+    const pois: GeoJSON.Feature[] = w.pois
+      .filter((p) => !typedNameSet.has(p.name))
+      .map((p) => ({
+        type: "Feature",
+        properties: { name: p.name },
+        geometry: { type: "Point", coordinates: f.toLngLat(p.x, p.y) },
+      }));
+    const typed: GeoJSON.Feature[] = [];
+    const typedNames: GeoJSON.Feature[] = [];
+    for (const t of typedList) {
+      if (t.ring.length < 3) continue;
+      const outer = t.ring.map(([x, y]) => f.toLngLat(x, y));
+      typed.push({ type: "Feature", properties: { c: DOMAIN_COLORS[t.domain] }, geometry: { type: "Polygon", coordinates: [close(outer)] } });
+      if (t.name) typedNames.push({ type: "Feature", properties: { name: t.name }, geometry: { type: "Point", coordinates: f.toLngLat(...ringCentroid(t.ring)) } });
+    }
+    const hints: GeoJSON.Feature[] = hintSpots.value.map((h) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: f.toLngLat(h.x, h.y) } }));
     const set = (id: string, features: GeoJSON.Feature[]) =>
       (map.getSource(id) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
     set(SRC_WALLS, walls);
     set(SRC_FLOORS, floors);
     set(SRC_STREETS, streets);
     set(SRC_POIS, pois);
+    set(SRC_TYPED, typed);
+    set(SRC_TYPED_NAMES, typedNames);
+    set(SRC_HINTS, hints);
   };
 
   const run = () => {

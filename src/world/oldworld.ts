@@ -1,4 +1,5 @@
 import type { VectorTile } from "@mapbox/vector-tile";
+import { heritageKind } from "../sim/heritage";
 import type { Frame } from "./frame";
 import { lngLatToTile } from "./mercator";
 import { loadVector } from "./tiles";
@@ -7,6 +8,7 @@ import { loadVector } from "./tiles";
 // (x east, y north). Pure geometry is exported separately so it can be tested offline.
 
 export const OLDWORLD_ZOOM = 14;
+export const HINT_BAND = 60; // m beyond a disc where notable POIs are still read (for typing and hints)
 
 export type XY = [number, number];
 export interface Disc {
@@ -35,10 +37,20 @@ export interface Poi {
   x: number;
   y: number;
 }
+// A notable POI (curated class, named or not) inside a disc or in the band around it.
+export interface Spot {
+  id: string;
+  name?: string;
+  cls: string;
+  subclass: string;
+  x: number;
+  y: number;
+}
 export interface OldWorld {
   foundations: Foundation[];
   streets: Street[];
   pois: Poi[];
+  spots: Spot[];
 }
 
 export const STREET_CLASSES = [
@@ -95,6 +107,8 @@ export function inDiscs(x: number, y: number, discs: Disc[]): boolean {
   for (const d of discs) if ((x - d.x) ** 2 + (y - d.y) ** 2 <= d.r * d.r) return true;
   return false;
 }
+
+export const growDiscs = (discs: Disc[], m: number): Disc[] => discs.map((d) => ({ x: d.x, y: d.y, r: d.r + m }));
 
 // Parameter interval [t0, t1] (within 0..1) of segment a->b inside the disc, or null.
 export function segmentDiscInterval(a: XY, b: XY, d: Disc): [number, number] | null {
@@ -246,14 +260,16 @@ export function parseOldWorldTile(
   ty: number,
   frame: Frame,
   discs: Disc[],
+  band = HINT_BAND,
 ): OldWorld {
-  const out: OldWorld = { foundations: [], streets: [], pois: [] };
+  const out: OldWorld = { foundations: [], streets: [], pois: [], spots: [] };
   if (!vt) return out;
   const conv = (extent: number) => (p: { x: number; y: number }): XY => {
     const [lng, lat] = tilePointToLngLat(z, tx, ty, extent, p.x, p.y);
     return frame.toLocal(lng, lat);
   };
   const tag = `${z}/${tx}/${ty}`;
+  const wide = growDiscs(discs, band);
 
   const bl = vt.layers.building;
   const found: (Foundation & { osm?: string })[] = [];
@@ -325,21 +341,19 @@ export function parseOldWorldTile(
     const c = conv(pl.extent);
     for (let i = 0; i < pl.length; i++) {
       const f = pl.feature(i);
-      const name = f.type === 1 ? nameOf(f.properties) : undefined;
-      if (!name) continue;
+      if (f.type !== 1) continue;
+      const name = nameOf(f.properties);
+      const cls = String(f.properties.class ?? "");
+      const subclass = String(f.properties.subclass ?? "");
+      const notable = heritageKind(cls, subclass) !== null;
+      if (!name && !notable) continue;
       const g = f.loadGeometry()[0]?.[0];
       if (!g) continue;
       const [x, y] = c(g);
-      if (!inDiscs(x, y, discs)) continue;
-      const osm = idOf(f);
-      out.pois.push({
-        id: osm ? `osm:${osm}` : `${tag}#${i}`,
-        name,
-        cls: String(f.properties.class ?? ""),
-        subclass: String(f.properties.subclass ?? ""),
-        x,
-        y,
-      });
+      const id = idOf(f);
+      const key = id ? `osm:${id}` : `${tag}#${i}`;
+      if (notable && inDiscs(x, y, wide)) out.spots.push({ id: key, ...(name ? { name } : {}), cls, subclass, x, y });
+      if (name && inDiscs(x, y, discs)) out.pois.push({ id: key, name, cls, subclass, x, y });
     }
   }
   return out;
@@ -356,15 +370,25 @@ export function mergeOldWorld(parts: OldWorld[]): OldWorld {
     poiKeys.add(key);
     pois.push(p);
   }
+  const spotKeys = new Set<string>();
+  const spots: Spot[] = [];
+  for (const p of parts.flatMap((o) => o.spots)) {
+    const key = `${p.name ?? ""}@${Math.round(p.x * 2)},${Math.round(p.y * 2)}`;
+    if (spotKeys.has(p.id) || spotKeys.has(key)) continue;
+    spotKeys.add(p.id);
+    spotKeys.add(key);
+    spots.push(p);
+  }
   return {
     foundations: dedupeFoundations(parts.flatMap((o) => o.foundations)),
     streets: parts.flatMap((o) => o.streets),
     pois,
+    spots,
   };
 }
 
 export async function loadOldWorld(frame: Frame, discs: Disc[]): Promise<OldWorld> {
-  const tiles = tilesForDiscs(frame, discs);
+  const tiles = tilesForDiscs(frame, growDiscs(discs, HINT_BAND)); // the band around a disc too: hints and typing
   const parts = await Promise.all(
     tiles.map(async (t) =>
       parseOldWorldTile(await loadVector(OLDWORLD_ZOOM, t.x, t.y), OLDWORLD_ZOOM, t.x, t.y, frame, discs),

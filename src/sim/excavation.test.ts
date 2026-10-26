@@ -258,3 +258,59 @@ describe("recordFinds through the worker", () => {
     expect(out.filter((m) => m.t === "cmdResult").pop()).toMatchObject({ id: 3, ok: false });
   });
 });
+
+describe("typed foundations", () => {
+  const rec = (s: SimState, c: FindsCmd) => {
+    const r = recordFinds(s, c);
+    if (!r.ok) throw new Error(r.reason);
+    return r.sim;
+  };
+  const typed = (id: string, extra: Record<string, unknown> = {}) => ({ ...found(id, 100), cls: "school", name: "Школа", height: 12, ...extra });
+  const save = (sim: SimState): unknown => JSON.parse(JSON.stringify({ version: 4, city, sim } satisfies SaveV4));
+
+  it("stores the kind, name and height of a typed foundation", () => {
+    const s = rec(town([dig()]), cmd({ foundations: [typed("a"), found("b")] }));
+    expect(s.finds.foundations[0]).toMatchObject({ id: "a", cls: "school", name: "Школа", height: 12 });
+    expect("cls" in s.finds.foundations[1]).toBe(false);
+  });
+  it("rejects a bad kind, name or height", () => {
+    const s = town([dig()]);
+    for (const bad of [{ cls: "" }, { cls: "x".repeat(61) }, { name: "" }, { name: "x".repeat(201) }, { height: -1 }, { height: 301 }, { height: NaN }, { height: "9" }]) {
+      expect(recordFinds(s, cmd({ foundations: [typed("a", bad)] })).ok, JSON.stringify(bad)).toBe(false);
+    }
+    expect(recordFinds(s, cmd({ foundations: [typed("a", { height: 0 }), typed("b", { height: 300 })] })).ok).toBe(true);
+  });
+  it("enriches an already recorded foundation that has no type, without stone or chronicle", () => {
+    const s1 = rec(town([dig()]), cmd({ foundations: [found("a", 100)] }));
+    const s2 = rec(s1, cmd({ foundations: [typed("a")] }));
+    expect(s2.finds.foundations).toHaveLength(1);
+    expect(s2.finds.foundations[0]).toMatchObject({ id: "a", cls: "school", name: "Школа", height: 12, area: 100 });
+    expect(s2.stock.stone).toBe(s1.stock.stone);
+    expect(s2.chronicle).toBe(s1.chronicle);
+    expect(s1.finds.foundations[0].cls).toBeUndefined(); // the old state is not mutated
+    // a type already there is kept
+    const s3 = rec(s2, cmd({ foundations: [typed("a", { cls: "library", name: "Другая" })] }));
+    expect(s3).toBe(s2);
+  });
+  it("round-trips through a save; an old save without the fields loads untyped", () => {
+    const s = rec(town([dig()]), cmd({ foundations: [typed("a"), found("b")] }));
+    expect(parseSave(save(s), NOW)!.sim.finds).toEqual(s.finds);
+    const raw = save(s) as { sim: { finds: { foundations: Record<string, unknown>[] } } };
+    for (const f of raw.sim.finds.foundations) {
+      delete f.cls;
+      delete f.name;
+      delete f.height;
+    }
+    const old = parseSave(raw, NOW)!.sim.finds.foundations;
+    expect(old).toHaveLength(2);
+    expect(old[0].cls).toBeUndefined();
+  });
+  it("drops a broken type from a save but keeps the foundation", () => {
+    const s = rec(town([dig()]), cmd({ foundations: [typed("a")] }));
+    const raw = save(s) as { sim: { finds: { foundations: Record<string, unknown>[] } } };
+    Object.assign(raw.sim.finds.foundations[0], { cls: 5, name: "", height: 9999 });
+    const f = parseSave(raw, NOW)!.sim.finds.foundations[0];
+    expect(f.id).toBe("a");
+    expect([f.cls, f.name, f.height]).toEqual([undefined, undefined, undefined]);
+  });
+});

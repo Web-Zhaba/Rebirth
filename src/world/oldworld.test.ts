@@ -183,7 +183,26 @@ describe("parseOldWorldTile", () => {
     expect(out.pois.map((p) => p.name)).toEqual(["Shop"]);
   });
 
+  it("reads notable POIs, named or not, in a band beyond the disc; plain POIs only inside", () => {
+    const at = (dx: number, dy: number) => [[{ x: px + dx, y: py + dy }]];
+    const vt2 = {
+      layers: {
+        poi: layer([
+          feat(1, { class: "school", subclass: "school" }, at(5, 5), 1), // unnamed, inside
+          feat(1, { name: "Храм", class: "place_of_worship", subclass: "christian" }, at(150, 0), 2), // ~47 m out: in the band
+          feat(1, { class: "castle", subclass: "castle" }, at(400, 0), 3), // ~125 m out: beyond the band
+          feat(1, { name: "Кафе", class: "cafe", subclass: "cafe" }, at(150, 0), 4), // not notable, outside the disc
+          feat(1, { class: "cafe", subclass: "cafe" }, at(5, 5), 5), // not notable, unnamed
+        ]),
+      },
+    } as unknown as VectorTile;
+    const out = parseOldWorldTile(vt2, 14, tx, ty, frame, [{ x: 0, y: 0, r: 20 }]);
+    expect(out.spots.map((p) => p.id).sort()).toEqual(["osm:1", "osm:2"]);
+    expect(out.spots.find((p) => p.id === "osm:1")!.name).toBeUndefined();
+    expect(out.pois).toEqual([]);
+  });
+
   it("returns nothing for a missing tile", () => {
-    expect(parseOldWorldTile(null, 14, 0, 0, frame, [])).toEqual({ foundations: [], streets: [], pois: [] });
+    expect(parseOldWorldTile(null, 14, 0, 0, frame, [])).toEqual({ foundations: [], streets: [], pois: [], spots: [] });
   });
 });

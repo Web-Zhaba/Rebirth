@@ -1,6 +1,8 @@
 // Colors of the "Field atlas" (PLAN-ui.md section 2) for code that cannot read CSS variables: MapLibre paint
 // properties, canvas patterns, legends. Every entry here has a custom property of the same name (camelCase ->
 // kebab-case) in tokens.css with the same value; palette.test.ts fails when the two drift apart.
+import type { DomainId } from "../sim/domains";
+
 export const PALETTE = {
   paper: "#f4eddc",
   paperRaised: "#fbf7ec",
@@ -23,6 +25,13 @@ export const PALETTE = {
   badFill: "#ebc9bc",
   info: "#3a5a78",
   infoFill: "#d3dfe8",
+  // Knowledge domains: notable old buildings on the map.
+  domainBuild: "#a4562f",
+  domainFarm: "#6b8e3d",
+  domainCraft: "#7b5f8c",
+  domainTrade: "#c08a1e",
+  domainLearn: "#3a6f9c",
+  domainCare: "#9c3a52",
   dusk: "#26303a",
   duskInk: "#ede6d3",
   // Base map, muted so zones, roads and buildings read on top of it.
@@ -53,6 +62,16 @@ export const PALETTE = {
   roadDirtEdge: "#5e4a2c",
 } as const;
 export type PaletteKey = keyof typeof PALETTE;
+
+// Map colour of each knowledge domain.
+export const DOMAIN_COLORS: Record<DomainId, string> = {
+  build: PALETTE.domainBuild,
+  farm: PALETTE.domainFarm,
+  craft: PALETTE.domainCraft,
+  trade: PALETTE.domainTrade,
+  learn: PALETTE.domainLearn,
+  care: PALETTE.domainCare,
+};
 
 // Map colors that have no CSS counterpart (lights, hillshading, moving dots).
 export const MAP_ONLY = {

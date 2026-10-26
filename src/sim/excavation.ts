@@ -135,7 +135,7 @@ export function digInfos(s: Pick<SimState, "buildings" | "finds">): DigInfo[] {
 
 export interface FindsCmd {
   digId: number;
-  foundations: { id: string; ring: [number, number][]; area: number }[];
+  foundations: { id: string; ring: [number, number][]; area: number; cls?: string; name?: string; height?: number }[];
   pois: { id: string; name: string; cls: string; x: number; y: number }[];
   streets: { id: string; name: string }[];
 }
@@ -145,6 +145,18 @@ const isStr = (v: unknown, max: number): v is string => typeof v === "string" &&
 const isRec = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isPt = (p: unknown): p is Pt => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6;
 const r2 = (v: number): number => Math.round(v * 100) / 100;
+const MAX_HEIGHT = 300; // m
+
+// The optional type of a foundation: a kind, a name and a height, each valid when present.
+const typeOk = (f: { cls?: unknown; name?: unknown; height?: unknown }): boolean =>
+  (f.cls === undefined || isStr(f.cls, 60)) && (f.name === undefined || isStr(f.name, 200)) && (f.height === undefined || (finite(f.height) && f.height >= 0 && f.height <= MAX_HEIGHT));
+const typeOf = (f: { cls?: string; name?: string; height?: number }): Pick<FoundFoundation, "cls" | "name" | "height"> => {
+  const t: Pick<FoundFoundation, "cls" | "name" | "height"> = {};
+  if (f.cls !== undefined) t.cls = f.cls;
+  if (f.name !== undefined) t.name = f.name;
+  if (f.height !== undefined) t.height = f.height;
+  return t;
+};
 
 const plural = (n: number, one: string, few: string, many: string): string => {
   const m = n % 100;
@@ -171,6 +183,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   for (const f of foundations) {
     if (!isRec(f) || !isStr(f.id, 200) || !finite(f.area) || f.area <= 0 || f.area > 1e7) return bad("Некорректный фундамент");
     if (!Array.isArray(f.ring) || f.ring.length < 3 || f.ring.length > MAX_RING || !f.ring.every(isPt)) return bad("Некорректный фундамент");
+    if (!typeOk(f)) return bad("Некорректный фундамент");
   }
   for (const p of pois) {
     if (!isRec(p) || !isStr(p.id, 200) || !isStr(p.name, 200) || typeof p.cls !== "string" || p.cls.length > 60 || !isPt([p.x, p.y])) return bad("Некорректное место");
@@ -201,10 +214,22 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   }
   const newF: FoundFoundation[] = [];
   let stone = 0;
+  // Old saves hold foundations without a type: an id that arrives again with one is enriched in place.
+  let known = s.finds.foundations;
+  let enriched = 0;
   for (const f of foundations) {
+    if (seenF.has(f.id) && f.cls !== undefined) {
+      const i = known.findIndex((x) => x.id === f.id);
+      if (i >= 0 && known[i].cls === undefined) {
+        if (known === s.finds.foundations) known = known.slice();
+        known[i] = { ...known[i], ...typeOf(f) };
+        enriched++;
+      }
+      continue;
+    }
     if (seenF.has(f.id) || s.finds.foundations.length + newF.length >= MAX_FOUNDATIONS) continue;
     seenF.add(f.id);
-    newF.push({ id: f.id, ring: f.ring.map((p): Pt => [r2(p[0]), r2(p[1])]), area: f.area, digId: cmd.digId, at });
+    newF.push({ id: f.id, ring: f.ring.map((p): Pt => [r2(p[0]), r2(p[1])]), area: f.area, digId: cmd.digId, at, ...typeOf(f) });
     stone += salvagedStone(f.area);
   }
   if (newF.length > 0) {
@@ -212,7 +237,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     const word = n % 10 === 1 && n % 100 !== 11 ? `открыт ${n} фундамент` : `открыто ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`;
     chronicle = addChronicle(chronicle, at, "dig:found", `Раскоп: ${word}, +${tonnes(stone)} т камня`);
   }
-  if (newF.length + newPois.length + newStreets.length === 0) return { ok: true, sim: s };
+  if (newF.length + newPois.length + newStreets.length + enriched === 0) return { ok: true, sim: s };
   return {
     ok: true,
     sim: {
@@ -221,7 +246,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
       chronicle,
       finds: {
         ...s.finds,
-        foundations: newF.length ? [...s.finds.foundations, ...newF] : s.finds.foundations,
+        foundations: newF.length ? [...known, ...newF] : known,
         pois: newPois.length ? [...s.finds.pois, ...newPois] : s.finds.pois,
         streets: newStreets.length ? [...s.finds.streets, ...newStreets] : s.finds.streets,
       },
@@ -242,7 +267,11 @@ export function parseFinds(v: unknown): Finds {
     for (const r of v.foundations) {
       if (!isRec(r) || !base(r) || !isNum(r.area) || r.area <= 0) continue;
       if (!Array.isArray(r.ring) || r.ring.length < 3 || r.ring.length > MAX_RING || !r.ring.every(isPt)) continue;
-      out.foundations.push({ id: r.id as string, ring: (r.ring as Pt[]).map((p): Pt => [p[0], p[1]]), area: r.area, digId: r.digId as number, at: r.at as number });
+      const fd: FoundFoundation = { id: r.id as string, ring: (r.ring as Pt[]).map((p): Pt => [p[0], p[1]]), area: r.area, digId: r.digId as number, at: r.at as number };
+      if (isStr(r.cls, 60)) fd.cls = r.cls;
+      if (isStr(r.name, 200)) fd.name = r.name;
+      if (isNum(r.height) && r.height >= 0 && r.height <= MAX_HEIGHT) fd.height = r.height;
+      out.foundations.push(fd);
     }
   }
   for (const key of ["pois", "streets"] as const) {
