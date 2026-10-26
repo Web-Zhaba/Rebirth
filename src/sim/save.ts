@@ -87,6 +87,8 @@ function parseRoads(v: unknown): RoadGraph | null {
     if (!isNum(raw.length) || raw.length <= 0) return null;
     if (!isNum(raw.labor) || raw.labor < 0) return null;
     if (!isNum(raw.done) || raw.done < 0 || raw.done > raw.labor) return null;
+    // `stone`: absent in saves from before stone roads and once the stone is taken
+    if (raw.stone !== undefined && (!isNum(raw.stone) || raw.stone < 0)) return null;
     edges[id] = {
       id,
       a: raw.a as number,
@@ -95,6 +97,7 @@ function parseRoads(v: unknown): RoadGraph | null {
       length: raw.length,
       labor: raw.labor,
       done: raw.done,
+      ...(raw.stone !== undefined ? { stone: raw.stone } : {}),
     };
   }
   return { nodes, edges, nextId };

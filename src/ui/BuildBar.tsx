@@ -67,7 +67,7 @@ const lockOf = (t: Tool): string | null => {
 
 const isTyping = (el: HTMLElement | null) => !!el && (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable || !!el.closest("dialog"));
 
-// F1-F5 pick a category, Q W E R T Y an item of it, B demolish. Layout independent (key codes).
+// F1-F5 pick a category, Q W E R T Y U I an item of it, B demolish. Layout independent (key codes).
 function onKey(e: KeyboardEvent): void {
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
   const el = e.target as HTMLElement | null;

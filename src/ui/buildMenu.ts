@@ -14,11 +14,11 @@ export type CategoryId = "roads" | "zones" | "food" | "farm" | "services" | "pas
 export interface Category {
   id: CategoryId;
   label: string;
-  tools: Tool[]; // up to 6, picked by Q W E R T Y
+  tools: Tool[]; // up to 8, picked by Q W E R T Y U I
 }
 
 export const CATEGORIES: Category[] = [
-  { id: "roads", label: "Дороги", tools: ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore"] },
+  { id: "roads", label: "Дороги", tools: ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore", "stone", "stonebridge"] },
   { id: "zones", label: "Зоны", tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
   { id: "food", label: "Еда", tools: ["gumno", "garden", "hunter", "fisher", "forager", "orchard"] },
   { id: "farm", label: "Ресурсы", tools: ["woodcutter", "sawpit", "quarry", "barn", "cellar", "apiary"] },
@@ -27,8 +27,8 @@ export const CATEGORIES: Category[] = [
 ];
 
 // Physical key codes (layout independent: Q is the key left of W also on a Russian layout).
-export const ITEM_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY"] as const;
-export const ITEM_KEY_LABEL = ["Q", "W", "E", "R", "T", "Y"] as const;
+export const ITEM_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI"] as const;
+export const ITEM_KEY_LABEL = ["Q", "W", "E", "R", "T", "Y", "U", "I"] as const;
 export const CATEGORY_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6"] as const;
 export const DEMOLISH_KEY = "KeyB";
 
@@ -39,6 +39,8 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   dirt: "dirt",
   footbridge: "footbridge",
   bridge: "bridge",
+  stone: "stone",
+  stonebridge: "bridge",
   bulldoze: "bulldoze",
   restore: "street",
   res: "res",
@@ -72,6 +74,8 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   dirt: "Дорога",
   footbridge: "Канатный мостик",
   bridge: "Свайный мост",
+  stone: "Каменная дорога",
+  stonebridge: "Каменный мост",
   bulldoze: "Снос",
   restore: "Старые улицы",
   res: "Жильё",
@@ -89,6 +93,8 @@ const PURPOSE: Record<Tool, string> = {
   dirt: "Грунтовая дорога: шире и ровнее тропы, по ней возят грузы",
   footbridge: "Подвесной мостик над водой: только для пешеходов, узкий и лёгкий",
   bridge: "Широкий мост на сваях над водой: по нему проедут грузы",
+  stone: "Каменная дорога: прочная, берёт крутой уклон; камень берут со склада, когда начинают работу",
+  stonebridge: "Каменный мост на опорах: самый длинный пролёт, камень берут со склада, когда начинают работу",
   bulldoze: "Снести участок дороги вместе с планами вдоль него",
   restore: "Проложить заново раскопанную улицу целиком: старая тропа станет тропой, улица — дорогой",
   res: "Размечает участки под жильё: сюда придут новые семьи",
@@ -120,8 +126,10 @@ const PURPOSE: Record<Tool, string> = {
 const SITE: Partial<Record<Tool, string>> = {
   path: "Между двумя точками на суше, уклон не круче 25 %",
   dirt: "Между двумя точками на суше, уклон не круче 12 %",
-  footbridge: "Через воду или по суше, уклон не круче 30 %",
-  bridge: "Через воду или по суше, уклон не круче 10 %",
+  footbridge: "Через воду (пролёт до 25 м) или по суше, уклон не круче 30 %",
+  bridge: "Через воду (пролёт до 30 м) или по суше, уклон не круче 10 %",
+  stone: "Между двумя точками на суше, уклон не круче 20 %",
+  stonebridge: "Через воду (пролёт до 60 м) или по суше, уклон не круче 12 %",
   woodcutter: `В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`,
   fisher: `У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`,
   forager: `В лесу: от ${Math.round(PLACE_MIN.foragerForest * 100)} % леса в ${SITE_RADIUS.forager} м вокруг`,
@@ -174,7 +182,7 @@ export function toolInfo(t: Tool): ToolInfo {
     label: toolLabel(t),
     purpose: PURPOSE[t],
     labor: road ? `${num(road.labor)} чел.-ч на метр` : b ? `${num(b.labor)} чел.-ч` : null,
-    materials: b ? materialList(b.materials) : [],
+    materials: b ? materialList(b.materials) : road?.stone ? [{ icon: "stone", text: `${num(road.stone)} т на метр` }] : [],
     jobs: b && b.jobs > 0 ? b.jobs : null,
     site: SITE[t] ?? (b ? "У построенной дороги, на свободных участках" : "На карте"),
     reach,

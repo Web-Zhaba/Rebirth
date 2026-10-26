@@ -3,7 +3,7 @@ import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
 import { lockReason } from "../sim/tech";
-import { addRoad, cutOffEdges, distToEdge, isRoadKind, MIN_SEGMENT, oldStreetKind, ROAD_KINDS, segmentCost, segmentKind, snapPoint, type Snap } from "../sim/roads";
+import { addRoad, cutOffEdges, distToEdge, effectiveSpans, isRoadKind, MIN_SEGMENT, oldStreetKind, ROAD_KINDS, segmentCost, segmentKind, snapPoint, type Snap } from "../sim/roads";
 import type { RoadKind } from "../sim/types";
 import { frame, gameClock, roads, sendCmd, state } from "../simClient";
 import { oldWorld } from "./excavation";
@@ -48,6 +48,7 @@ interface RestoreLine {
   cls: string;
   kind: RoadKind;
   labor: number;
+  span: number; // m, longest run of water
   ok: boolean;
 }
 interface Restore {
@@ -228,7 +229,9 @@ export function attachRoadTool(map: maplibregl.Map): void {
     source("road-snap")?.setData({ type: "FeatureCollection", features: pt });
   };
 
-  const costText = (len: number, labor: number) => `${Math.round(len)} м · ${Math.round(labor)} чел.-ч · ${etaText(labor)}`;
+  const costText = (len: number, labor: number, stone = 0) =>
+    `${Math.round(len)} м · ${Math.round(labor)} чел.-ч${stone > 0 ? ` · камня ${Math.round(stone * 10) / 10} т`.replace(".", ",") : ""} · ${etaText(labor)}`;
+  const spans = () => effectiveSpans(state.peek()?.progress);
 
   // Terrain sampling is throttled; results of superseded requests are dropped.
   const requestCost = (pts: Pt[], along: OldRef | null) => {
@@ -244,9 +247,9 @@ export function attachRoadTool(map: maplibregl.Map): void {
       samplePathProfile(f, req.pts, state.value?.clearings)
         .then((p) => {
           if (mine !== seq) return;
-          const c = segmentCost(p, segmentKind(t, req.along));
+          const c = segmentCost(p, segmentKind(t, req.along), spans());
           const queued = queuedLabel(gameClock.peek(), state.peek()?.levers);
-          verdict = c.ok ? { ok: true, text: costText(p.length, c.labor) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? "Нельзя" };
+          verdict = c.ok ? { ok: true, text: costText(p.length, c.labor, c.stone) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? "Нельзя" };
           drawPreview(req.pts);
           setLabel(verdict.text);
         })
@@ -297,6 +300,15 @@ export function attachRoadTool(map: maplibregl.Map): void {
     const g = roads.value;
     const t = drawT();
     if (!g || !t) return;
+    const locked = lockOf(t);
+    if (locked) {
+      seq++;
+      pendingCost = null;
+      verdict = { ok: false, text: locked };
+      drawPreview(pts);
+      setLabel(locked);
+      return;
+    }
     if (pts.length < 2) {
       seq++;
       pendingCost = null;
@@ -325,6 +337,11 @@ export function attachRoadTool(map: maplibregl.Map): void {
     const g = roads.value;
     const t = drawT();
     if (!f || !g || !t) return;
+    const locked = lockOf(t);
+    if (locked) {
+      flash(locked);
+      return;
+    }
     if (pts.length < 2) {
       flash("Слишком коротко");
       return;
@@ -339,7 +356,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
     samplePathProfile(f, pts, state.value?.clearings)
       .then((p) => {
         const kind = segmentKind(t, along);
-        const c = segmentCost(p, kind);
+        const c = segmentCost(p, kind, spans());
         if (!c.ok) {
           flash(c.reason ?? "Нельзя");
           return false;
@@ -350,6 +367,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
           pts,
           snapTol: CURVE_SNAP_M,
           labor: laborByLength(pts, c.labor),
+          span: c.span,
         }).then((res) => {
           if (!res.ok) flash(res.reason ?? "Не удалось проложить");
           else if (cutOffEdges(local.graph).size > cutOffEdges(g).size) {
@@ -424,7 +442,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       if (lockOf(kind)) kind = kind === "bridge" ? "footbridge" : kind === "dirt" ? "path" : kind;
       const local = addRoad(g, pts, kind, CURVE_SNAP_M, laborByLength(pts, 1));
       if (!local.ok && !r.reason) r.reason = local.reason;
-      r.lines.push({ pts, cls: w.cls, kind, labor: 0, ok: local.ok });
+      r.lines.push({ pts, cls: w.cls, kind, labor: 0, span: 0, ok: local.ok });
     }
     if (r.lines.length === 0) r.reason = "Слишком коротко";
     restore = r;
@@ -435,9 +453,10 @@ export function attachRoadTool(map: maplibregl.Map): void {
         .map(async (l) => {
           try {
             const p = await samplePathProfile(f, l.pts, state.value?.clearings);
-            const c = segmentCost(p, l.kind);
+            const c = segmentCost(p, l.kind, spans());
             const lock = lockOf(l.kind);
             l.labor = c.labor;
+            l.span = c.span;
             if (!c.ok || lock) {
               l.ok = false;
               if (!r.reason) r.reason = lock ?? c.reason ?? "Нельзя";
@@ -485,7 +504,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
     let built = 0;
     let reason = "";
     for (const l of todo) {
-      const res = await sendCmd({ type: "addRoad", kind: l.kind, pts: l.pts, snapTol: CURVE_SNAP_M, labor: laborByLength(l.pts, l.labor) });
+      const res = await sendCmd({ type: "addRoad", kind: l.kind, pts: l.pts, snapTol: CURVE_SNAP_M, labor: laborByLength(l.pts, l.labor), span: l.span });
       if (res.ok) {
         built++;
         const local = after && addRoad(after, l.pts, l.kind, CURVE_SNAP_M, laborByLength(l.pts, l.labor));
@@ -534,7 +553,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
         features: [line(f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y))],
       });
       const pct = edge.labor > 0 ? Math.floor((100 * edge.done) / edge.labor) : 100;
-      setLabel(`${ROAD_KINDS[edge.kind].name} · ${Math.round(edge.length)} м · ${pct >= 100 ? "построено" : `${pct} %`}`);
+      setLabel(`${ROAD_KINDS[edge.kind].name} · ${Math.round(edge.length)} м · ${pct >= 100 ? "построено" : `${pct} %`}${(edge.stone ?? 0) > (state.peek()?.stock.stone ?? Infinity) ? " · Нет камня" : ""}`);
       return;
     }
     if (spaceDown) {

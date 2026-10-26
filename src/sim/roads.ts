@@ -1,12 +1,44 @@
 import type { Land } from "../world/landcover";
-import type { RoadEdge, RoadGraph, RoadKind } from "./types";
+import { bridgeSpanBonus } from "./tech";
+import type { ProgressState, RoadEdge, RoadGraph, RoadKind, Stock } from "./types";
 
-export const ROAD_KINDS: Record<RoadKind, { name: string; width: number; labor: number; maxGrade: number; crossesWater: boolean }> = {
+export interface RoadSpec {
+  name: string;
+  width: number;
+  labor: number; // person-hours per metre on level meadow
+  maxGrade: number;
+  crossesWater: boolean;
+  stone?: number; // t of stone per metre, taken from the stock when work on the edge starts
+  unlock?: string; // tech unlock key; the kind is closed until researched
+}
+
+export const ROAD_KINDS: Record<RoadKind, RoadSpec> = {
   path: { name: "Тропа", width: 2, labor: 0.1, maxGrade: 0.25, crossesWater: false },
   dirt: { name: "Грунтовая дорога", width: 5, labor: 1.0, maxGrade: 0.12, crossesWater: false },
   footbridge: { name: "Канатный мостик", width: 1.5, labor: 0.5, maxGrade: 0.3, crossesWater: true },
   bridge: { name: "Свайный мост", width: 4, labor: 2.0, maxGrade: 0.1, crossesWater: true },
+  stone: { name: "Каменная дорога", width: 5, labor: 2.0, maxGrade: 0.2, crossesWater: false, stone: 0.01, unlock: "road:stone" },
+  stonebridge: { name: "Каменный мост", width: 5, labor: 4.0, maxGrade: 0.12, crossesWater: true, stone: 0.04, unlock: "road:stonebridge" },
 };
+
+// Longest span in metres a bridge kind covers before any technology.
+export const BASE_SPAN: Partial<Record<RoadKind, number>> = { footbridge: 25, bridge: 30, stonebridge: 60 };
+export type Spans = Partial<Record<RoadKind, number>>;
+
+// Span limits of every bridge kind with the researched techs added (a missing `progress` means no techs).
+export function effectiveSpans(progress?: Pick<ProgressState, "techs">): Spans {
+  const out: Spans = {};
+  for (const k of Object.keys(BASE_SPAN) as RoadKind[]) out[k] = (BASE_SPAN[k] ?? 0) + bridgeSpanBonus(progress, k);
+  return out;
+}
+
+// Russian refusal when `span` metres of open water is more than `kind` holds, else null. The client preview and the
+// worker both ask this; only the placing of a road is checked, built bridges are never touched.
+export function spanReason(kind: RoadKind, span: number, spans: Spans = BASE_SPAN): string | null {
+  const limit = spans[kind] ?? BASE_SPAN[kind];
+  if (!ROAD_KINDS[kind].crossesWater || limit === undefined || span <= limit + 1e-6) return null;
+  return `Пролёт ${Math.round(span)} м: ${ROAD_KINDS[kind].name.toLowerCase()} держит до ${Math.round(limit)} м`;
+}
 
 export const isRoadKind = (t: string): t is RoadKind => Object.hasOwn(ROAD_KINDS, t);
 export const isBridge = (k: RoadKind): boolean => ROAD_KINDS[k].crossesWater;
@@ -105,6 +137,12 @@ function splitEdge(g: RoadGraph, id: number, x: number, y: number): number {
   const labor2 = e.labor - labor1;
   g.edges[id] = { ...e, b: node, length: l1, labor: labor1, done: done1 };
   g.edges[edge] = { id: edge, a: node, b: e.b, kind: e.kind, length: l2, labor: labor2, done: Math.min(labor2, e.done - done1) };
+  if (e.stone !== undefined) {
+    // the stone still owed is shared by length
+    const owed1 = e.stone * f;
+    g.edges[id].stone = owed1;
+    g.edges[edge].stone = e.stone - owed1;
+  }
   return node;
 }
 
@@ -223,6 +261,8 @@ export function addRoad(
       }
       const id = g.nextId++;
       g.edges[id] = { id, a: p, b: q, kind, length: lens[k], labor: (laborPerSegment[i] * lens[k]) / total, done: 0 };
+      const perM = ROAD_KINDS[kind].stone;
+      if (perM) g.edges[id].stone = perM * lens[k];
     }
   }
   return { ok: true, graph: g };
@@ -284,13 +324,29 @@ export interface SegmentCost {
   reason?: string;
   labor: number;
   maxGrade: number;
+  stone: number; // t the road needs from the stock
+  span: number; // m, longest run of water
 }
 
-export function segmentCost(p: TerrainProfile, kind: RoadKind): SegmentCost {
+// Longest continuous run of water pieces along the profile, in metres.
+export function longestSpan(p: TerrainProfile): number {
+  const pieces = p.land.length;
+  if (pieces < 1) return 0;
+  let run = 0;
+  let best = 0;
+  for (const l of p.land) {
+    run = l === "water" ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  return (best * p.length) / pieces;
+}
+
+// `spans`: effective span limits (effectiveSpans); without them the base limits apply.
+export function segmentCost(p: TerrainProfile, kind: RoadKind, spans?: Spans): SegmentCost {
   const spec = ROAD_KINDS[kind];
   const pieces = p.land.length;
-  if (p.length < MIN_SEGMENT) return { ok: false, reason: "Слишком коротко", labor: 0, maxGrade: 0 };
-  if (pieces < 1 || p.elev.length !== pieces + 1) return { ok: false, reason: "Нет данных о местности", labor: 0, maxGrade: 0 };
+  if (p.length < MIN_SEGMENT) return { ok: false, reason: "Слишком коротко", labor: 0, maxGrade: 0, stone: 0, span: 0 };
+  if (pieces < 1 || p.elev.length !== pieces + 1) return { ok: false, reason: "Нет данных о местности", labor: 0, maxGrade: 0, stone: 0, span: 0 };
   const pl = p.length / pieces;
   let labor = 0;
   let maxGrade = 0;
@@ -306,11 +362,15 @@ export function segmentCost(p: TerrainProfile, kind: RoadKind): SegmentCost {
     maxGrade = Math.max(maxGrade, grade);
     labor += spec.labor * pl * LAND_MULT[land] * (1 + grade / 0.08);
   }
-  if (water && !spec.crossesWater) return { ok: false, reason: "Через воду нужен мост", labor, maxGrade };
+  const stone = (spec.stone ?? 0) * p.length;
+  const span = longestSpan(p);
+  if (water && !spec.crossesWater) return { ok: false, reason: "Через воду нужен мост", labor, maxGrade, stone, span };
+  const tooLong = spanReason(kind, span, spans);
+  if (tooLong) return { ok: false, reason: tooLong, labor, maxGrade, stone, span };
   if (maxGrade > spec.maxGrade) {
-    return { ok: false, reason: `Слишком круто: ${Math.round(maxGrade * 100)} %`, labor, maxGrade };
+    return { ok: false, reason: `Слишком круто: ${Math.round(maxGrade * 100)} %`, labor, maxGrade, stone, span };
   }
-  return { ok: true, labor, maxGrade };
+  return { ok: true, labor, maxGrade, stone, span };
 }
 
 // ---------- construction ----------
@@ -329,13 +389,22 @@ function reachedNodes(g: RoadGraph): Set<number> {
   return r;
 }
 
-// Unfinished edges a work party can reach, lowest id first.
-export function workableEdges(g: RoadGraph): number[] {
+// An edge that still owes stone the stock cannot cover waits for it.
+const lacksStone = (e: RoadEdge, stock: Pick<Stock, "stone"> | undefined): boolean => !!stock && (e.stone ?? 0) > stock.stone + EPS;
+
+// Unfinished edges a work party can reach, lowest id first. With a `stock`, edges short of stone are left out.
+export function workableEdges(g: RoadGraph, stock?: Pick<Stock, "stone">): number[] {
   const reached = reachedNodes(g);
   return Object.values(g.edges)
-    .filter((e) => unfinished(e) && (reached.has(e.a) || reached.has(e.b)))
+    .filter((e) => unfinished(e) && (reached.has(e.a) || reached.has(e.b)) && !lacksStone(e, stock))
     .map((e) => e.id)
     .sort((p, q) => p - q);
+}
+
+// Reachable unfinished edges that wait only for stone.
+export function stoneWaiting(g: RoadGraph, stock: Pick<Stock, "stone">): Set<number> {
+  const open = new Set(workableEdges(g, stock));
+  return new Set(workableEdges(g).filter((id) => !open.has(id)));
 }
 
 // Unfinished edges no work party can ever reach: their part of the network touches neither the
@@ -367,19 +436,27 @@ export function cutOffEdges(g: RoadGraph): Set<number> {
 }
 
 // Spends person-hours FIFO on workable edges; leftovers carry to the next one.
-// Returns the graph and the person-hours nobody could use (no reachable work).
-export function spendOnRoads(g: RoadGraph, personHours: number): { roads: RoadGraph; left: number } {
+// An edge takes the stone it owes from `stock` when work on it starts; edges short of stone wait and the hands go on to the next.
+// Returns the graph, the stock and the person-hours nobody could use (no reachable work).
+export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock): { roads: RoadGraph; left: number; stock?: Stock } {
   let edges = g.edges;
   let copied = false;
   let left = personHours;
+  let st = stock;
   while (left > EPS) {
-    const ids = workableEdges(copied ? { ...g, edges } : g);
+    const ids = workableEdges(copied ? { ...g, edges } : g, st);
     if (ids.length === 0) break;
     if (!copied) {
       edges = { ...edges };
       copied = true;
     }
-    const e = edges[ids[0]];
+    let e = edges[ids[0]];
+    if (e.stone !== undefined) {
+      if (st) st = { ...st, stone: Math.max(0, st.stone - e.stone) };
+      const { stone: _taken, ...rest } = e;
+      e = rest;
+      edges[e.id] = e;
+    }
     const remain = e.labor - e.done;
     if (left >= remain) {
       edges[e.id] = { ...e, done: e.labor };
@@ -389,7 +466,7 @@ export function spendOnRoads(g: RoadGraph, personHours: number): { roads: RoadGr
       left = 0;
     }
   }
-  return { roads: copied ? { ...g, edges } : g, left };
+  return { roads: copied ? { ...g, edges } : g, left, stock: st };
 }
 
 export const advanceConstruction = (g: RoadGraph, personHours: number): RoadGraph => spendOnRoads(g, personHours).roads;

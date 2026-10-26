@@ -20,7 +20,7 @@ export interface ArticleInput {
 
 export type Cmd =
   // pts and labor are local meters / person-hours; labor has one entry per segment.
-  | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[] }
+  | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[]; span?: number } // span: longest water run (m) of the line, for the bridge span limit
   | { type: "removeRoad"; edgeId: number }
   | { type: "paintZones"; keys: string[]; zone: "none" | ZoneType }
   | { type: "addField"; pts: [number, number][] }

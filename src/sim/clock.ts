@@ -93,16 +93,17 @@ export function step(s: SimState): SimState {
     const toloka = tolokaActive(s.levers, s.gameMinutes);
     const bf = buildFactor(s.weather) * buildSpeedMul(s.progress); // rain, cold and storms cut the hours and the crew
     const hours = (builderCount(s) * BASE_TICK * bf) / 60;
-    const r = toloka ? { roads: s.roads, left: hours } : spendOnRoads(s.roads, hours);
+    const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock);
+    const roadStock = r.stock ?? s.stock; // stone the roads took when work on them started
     roads = r.roads;
     const lever = { priority: s.levers.priority, focus: toloka ? s.levers.toloka!.site : null };
     const crew = (CREW * BASE_TICK * bf) / 60; // person-hours of one crew in a tick
     const first = clearingsFirst(s.stock);
-    const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations, crew, s.clearings, first, lever);
+    const paid = payMaterials(s.buildings, roadStock, r.left, s.finds.foundations, crew, s.clearings, first, lever);
     clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first, lever);
     buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings, first, lever);
     stock = paid.stock;
-    events = reportShortages(s.buildings, paid.buildings, s.stock, events, s.gameMinutes);
+    events = reportShortages(s.buildings, paid.buildings, roadStock, events, s.gameMinutes);
     events = reportBuilt(s.buildings, buildings, events, s.gameMinutes);
   }
   let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, events }, clearUse);

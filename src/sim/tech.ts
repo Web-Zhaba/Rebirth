@@ -4,15 +4,12 @@ import type { ProgressState, RoadKind, SimState } from "./types";
 // The technology tree and the eras (PLAN-research.ru.md sections 4-6, 9). Static: none of it is saved, only
 // `SimState.progress` (the ids of what is researched). sim/research.ts holds the rules that move it.
 
-// Bridge kinds that carry a span limit; the stone bridge joins RoadKind with the stone roads (stage R4).
-export type SpanKind = RoadKind | "stonebridge";
-
 // What a technology changes besides its unlock keys. Fractions are added up over the researched techs: 0.1 = +10 %.
 export interface TechModifiers {
   fieldYield?: number; // yield of the fields
   workshopOutput?: number; // output of the workshops (craft zone)
   buildSpeed?: number; // construction progress
-  bridgeSpan?: Partial<Record<SpanKind, number>>; // metres added to the span limit of a bridge kind (data only until R4)
+  bridgeSpan?: Partial<Record<RoadKind, number>>; // metres added to the span limit of a bridge kind (roads.ts effectiveSpans)
 }
 
 export interface TechDef {
@@ -222,7 +219,7 @@ export const fieldYieldMul = (p: Techs): number => 1 + sumMod(p, (m) => m.fieldY
 export const workshopMul = (p: Techs): number => 1 + sumMod(p, (m) => m.workshopOutput);
 export const buildSpeedMul = (p: Techs): number => 1 + sumMod(p, (m) => m.buildSpeed);
 // Metres the researched techs add to the span limit of a bridge kind.
-export const bridgeSpanBonus = (p: Techs, kind: SpanKind): number => sumMod(p, (m) => m.bridgeSpan?.[kind]);
+export const bridgeSpanBonus = (p: Techs, kind: RoadKind): number => sumMod(p, (m) => m.bridgeSpan?.[kind]);
 
 // Yield potential of the fields: the weather's crop times the techs' yield.
 export const cropOf = (s: { weather?: { crop: number }; progress?: Techs }): number => (s.weather?.crop ?? 1) * fieldYieldMul(s.progress);

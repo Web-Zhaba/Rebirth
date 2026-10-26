@@ -12,7 +12,7 @@ export interface City {
   foundedAt: number; // epoch ms
 }
 
-export type RoadKind = "path" | "dirt" | "footbridge" | "bridge";
+export type RoadKind = "path" | "dirt" | "footbridge" | "bridge" | "stone" | "stonebridge";
 
 // Coordinates are local meters (src/world/frame.ts), x east, y north.
 export interface RoadNode {
@@ -29,6 +29,7 @@ export interface RoadEdge {
   length: number; // m
   labor: number; // person-hours to build
   done: number; // person-hours spent; built when done >= labor
+  stone?: number; // t of stone still owed to the stock; taken when work starts, then gone
 }
 
 export interface RoadGraph {

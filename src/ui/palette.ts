@@ -60,6 +60,8 @@ export const PALETTE = {
   roadBridge: "#8c7b5a",
   roadBridgeEdge: "#3e3424",
   roadDirtEdge: "#5e4a2c",
+  roadStone: "#a3a39b",
+  roadStoneEdge: "#4a4a45",
 } as const;
 export type PaletteKey = keyof typeof PALETTE;
 
@@ -104,6 +106,18 @@ export const PLACED_BUILDING_COLORS = {
   school: "#3f8a6b",
   healer: "#b24d46",
 } as const;
+
+// Restored old buildings drawn as 3D models (heritageModels.ts): wall, roof and accent (dome, spire, parapet) per model family.
+// Map only, like the colours above; the scaffold is the pale look of a building under construction.
+export const MODEL_COLORS = {
+  house: { wall: "#c9b48a", roof: "#94503a", accent: "#6d4f2a" },
+  worship: { wall: "#e2dac4", roof: "#5f7a52", accent: "#c49a2c" },
+  tower: { wall: "#bdb4a0", roof: "#7a5a3c", accent: "#94503a" },
+  hip: { wall: "#d3c3a0", roof: "#a4562f", accent: "#7a5a3c" },
+  flat: { wall: "#b9ad96", roof: "#857b6c", accent: "#6b604f" },
+  scaffold: { wall: "#fbf7ec", roof: "#e9dfc8", accent: "#cdbf9f" },
+} as const;
+export type ModelFamily = keyof typeof MODEL_COLORS;
 
 export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();
 

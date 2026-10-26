@@ -5,7 +5,7 @@ import { compactScreen, flyOrJump } from "../map/motion";
 import { etaRealMs, formatReal } from "../sim/buildEta";
 import { BUILDINGS } from "../sim/buildings";
 import { isCleared } from "../sim/clearing";
-import { ROAD_KINDS, workableEdges } from "../sim/roads";
+import { ROAD_KINDS, stoneWaiting, workableEdges } from "../sim/roads";
 import { frame, gameClock, speed, state } from "../simClient";
 import { plural } from "./InspectorParts";
 import { Panel, ProgressBar } from "./kit";
@@ -30,6 +30,7 @@ interface Task {
   at?: [number, number]; // local meters: the title flies the map there, hover rings it
   building?: number; // building id: the title also opens its card
   prio: boolean; // the player put this site first
+  wait?: string; // why nobody works on it now (shown instead of the finish time)
 }
 
 // Construction work the builders are on now: houses and workshops going up (or being rebuilt), roads they can reach,
@@ -63,12 +64,13 @@ export function BuilderTasks({ map }: { map: maplibregl.Map }) {
     if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: перестройка`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), at, building: b.id, prio: priority === b.id });
   }
   const reachable = new Set(workableEdges(s.roads));
+  const noStone = stoneWaiting(s.roads, s.stock);
   for (const e of Object.values(s.roads.edges)) {
     if (!reachable.has(e.id)) continue;
     const a = s.roads.nodes[e.a];
     const b = s.roads.nodes[e.b];
     const at: [number, number] = [(a.x + b.x) / 2, (a.y + b.y) / 2];
-    tasks.push({ key: `r${e.id}`, title: `${ROAD_KINDS[e.kind].name}, ${Math.round(e.length)} м`, value: e.labor > 0 ? e.done / e.labor : 0, left: Math.max(0, e.labor - e.done), at, prio: false });
+    tasks.push({ key: `r${e.id}`, title: `${ROAD_KINDS[e.kind].name}, ${Math.round(e.length)} м`, value: e.labor > 0 ? e.done / e.labor : 0, left: Math.max(0, e.labor - e.done), at, prio: false, ...(noStone.has(e.id) ? { wait: "Нет камня" } : {}) });
   }
   for (const c of s.clearings) {
     if (isCleared(c)) continue;
@@ -88,6 +90,7 @@ export function BuilderTasks({ map }: { map: maplibregl.Map }) {
     return speed.value === 0 ? "пауза" : "нет срока";
   };
   const rows = tasks.slice(0, MAX_SHOWN).map((t) => {
+    if (t.wait) return { ...t, eta: t.wait };
     ahead += t.left;
     return { ...t, eta: etaText(ahead) };
   });

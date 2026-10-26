@@ -4,8 +4,8 @@ import { CATEGORIES, categoryOf, ITEM_KEYS, toolForKey, toolInfo } from "./build
 
 describe("build menu", () => {
   const all = CATEGORIES.flatMap((c) => c.tools);
-  it("lists every tool exactly once, at most six per category", () => {
-    const want: Tool[] = ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore", "res", "craft", "trade", "field", "clearing", "clear", ...PLACE_TOOLS];
+  it("lists every tool exactly once, at most eight per category", () => {
+    const want: Tool[] = ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore", "stone", "stonebridge", "res", "craft", "trade", "field", "clearing", "clear", ...PLACE_TOOLS];
     expect([...all].sort()).toEqual([...want].sort());
     for (const c of CATEGORIES) expect(c.tools.length).toBeLessThanOrEqual(ITEM_KEYS.length);
     expect(CATEGORIES.length).toBe(6);
@@ -15,6 +15,8 @@ describe("build menu", () => {
     expect(toolForKey("KeyQ", "farm")).toBe("woodcutter");
     expect(toolForKey("KeyR", "farm")).toBe("barn");
     expect(toolForKey("KeyY", "roads")).toBe("restore");
+    expect(toolForKey("KeyU", "roads")).toBe("stone");
+    expect(toolForKey("KeyI", "roads")).toBe("stonebridge");
     expect(toolForKey("KeyY", "past")).toBeNull();
     expect(toolForKey("KeyB", "services")).toBe("bulldoze");
     expect(toolForKey("Digit1", "farm")).toBeNull();

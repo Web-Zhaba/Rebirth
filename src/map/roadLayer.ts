@@ -3,14 +3,14 @@ import { effect } from "@preact/signals";
 import { cutOffEdges, ROAD_KINDS, workableEdges } from "../sim/roads";
 import { roadChains, type RoadState } from "./roadChains";
 import { PALETTE } from "../ui/palette";
-import { city, frame, roads } from "../simClient";
+import { city, frame, roads, stock } from "../simClient";
 
 const SRC = "roads";
 const EQUATOR_M = 40075016.686;
 
-const BUILT_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirt, "footbridge", PALETTE.roadBridge, "bridge", PALETTE.roadBridge, PALETTE.roadPath];
+const BUILT_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirt, "footbridge", PALETTE.roadBridge, "bridge", PALETTE.roadBridge, "stone", PALETTE.roadStone, "stonebridge", PALETTE.roadStone, PALETTE.roadPath];
 const CUT_COLOR = PALETTE.bad; // roads no work party can reach
-const CASING_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirtEdge, "footbridge", PALETTE.roadBridgeEdge, "bridge", PALETTE.roadBridgeEdge, PALETTE.roadPathEdge];
+const CASING_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirtEdge, "footbridge", PALETTE.roadBridgeEdge, "bridge", PALETTE.roadBridgeEdge, "stone", PALETTE.roadStoneEdge, "stonebridge", PALETTE.roadStoneEdge, PALETTE.roadPathEdge];
 
 // Width in px of `meters` of ground at zoom z (MapLibre uses 512 px tiles), at least 1 px,
 // plus `extra` px. Integer-zoom stops keep the exponential interpolation exact.
@@ -77,7 +77,9 @@ export function attachRoadLayer(map: maplibregl.Map): void {
     const g = roads.value;
     if (!c || !f || !g) return;
     if (!styled) addLayers(c.lat); // one city per page load
-    const active = new Set(workableEdges(g));
+    // Edges short of stone are not workable: they show as waiting. The stock is only watched while some edge owes stone.
+    const st = Object.values(g.edges).some((e) => e.stone) ? stock.value : null;
+    const active = new Set(workableEdges(g, st ?? undefined));
     const cut = cutOffEdges(g);
     const stateOf = (e: { id: number; done: number; labor: number }): RoadState =>
       e.done >= e.labor ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting";

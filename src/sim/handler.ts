@@ -17,7 +17,7 @@ import { peopleStats, queryBuilding, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
-import { addRoad, emptyRoads, removeEdge, ROAD_KINDS } from "./roads";
+import { addRoad, effectiveSpans, emptyRoads, removeEdge, ROAD_KINDS, spanReason } from "./roads";
 import { migrateLegacy, parseSave } from "./save";
 import { dayOf } from "./time";
 import { startWeather, type WeatherState } from "./weather";
@@ -392,6 +392,10 @@ export class Handler {
       if (cmd.type === "addRoad") {
         const bad = validateAddRoad(cmd);
         if (bad) return reject(bad);
+        const locked = lockReason(sim, cmd.kind);
+        if (locked) return reject(locked);
+        const tooLong = cmd.span === undefined ? null : spanReason(cmd.kind, cmd.span, effectiveSpans(sim.progress));
+        if (tooLong) return reject(tooLong);
         const r = addRoad(roads, cmd.pts, cmd.kind, cmd.snapTol, cmd.labor);
         if (!r.ok) return reject(r.reason);
         next = r.graph;
@@ -565,7 +569,8 @@ const validSite = (v: unknown): v is Site =>
 
 // The message crossed a thread boundary, so check the shape at runtime.
 function validateAddRoad(cmd: Extract<Cmd, { type: "addRoad" }>): string | null {
-  const { pts, labor, kind, snapTol } = cmd;
+  const { pts, labor, kind, snapTol, span } = cmd;
+  if (span !== undefined && (!finite(span) || span < 0)) return "Некорректный пролёт";
   if (typeof kind !== "string" || !Object.hasOwn(ROAD_KINDS, kind)) return "Неизвестный вид дороги";
   if (!finite(snapTol) || snapTol <= 0 || snapTol > 1000) return "Некорректный допуск";
   if (!Array.isArray(pts) || pts.length < 2 || pts.length > 512) return "Некорректная линия";
