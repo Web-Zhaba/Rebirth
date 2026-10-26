@@ -26,8 +26,9 @@ export const SERVICE = {
   healerDeathFactor: 0.6,
   schoolFrom: 7, // age of the children who attend
   schoolTo: 15,
-  literateDays: 2 * YEAR_DAYS, // days of school (2 years) for a child to become literate at 15
-  literateBoost: 0.2, // a literate worker is this much more productive
+  childLiteracyDays: 2 * YEAR_DAYS, // school days for a child to learn to read in full (2 years, before 15)
+  adultLiteracyDays: YEAR_DAYS, // the same for a grown-up: half the time
+  literateBoost: 0.2, // a fully literate worker is this much more productive; partly learned ones part of it
   landBase: 20,
   landPerService: 8,
   landMoodWeight: 0.3,
@@ -36,6 +37,9 @@ export const SERVICE = {
   upgradeMood: 75,
   upgradeDays: 20,
 };
+
+// Literacy progress of a resident (`school`, 0..100) per school day: the child's and the grown-up's pace.
+export const learnPerDay = (adult: boolean): number => 100 / (adult ? SERVICE.adultLiteracyDays : SERVICE.childLiteracyDays);
 
 const bit = (id: ServiceId): number => 1 << SERVICE_IDS.indexOf(id);
 export const covers = (mask: number | undefined, id: ServiceId): boolean => ((mask ?? 0) & bit(id)) !== 0;

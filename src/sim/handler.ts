@@ -1,3 +1,4 @@
+import { finishAll, grantStock, reveal, unlockAll } from "./admin";
 import { newTally, observe, summarize, type Tally } from "./away";
 import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
@@ -5,7 +6,7 @@ import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { resolveChoice } from "./events";
 import { goalViews, lockReason } from "./goals";
-import { callBlock, callSettlers, callToloka, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
+import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
@@ -60,7 +61,7 @@ function inspect(sim: SimState, id: number): BuildingQuery | null {
     if (isService(b.template)) {
       const stats = serviceStats(sim);
       const staffed = BUILDINGS[b.template].jobs === 0 || q.workers.length > 0;
-      q.service = { id: b.template, reach: SERVICES[b.template].reach, covered: stats.covered[b.template], houses: stats.houses, working: b.state === "active" && staffed };
+      q.service = { id: b.template, reach: SERVICES[b.template].reach, covered: stats.covered[b.template], houses: stats.houses, pupils: stats.pupils, seats: stats.seats, working: b.state === "active" && staffed };
     }
   }
   return q;
@@ -88,6 +89,7 @@ export class Handler {
   private lifeDay = Number.NaN; // game day the main thread has visual life for
   private lifeIncoming: SimState["incoming"] | null = null; // families on their way it was drawn for
   private speed: Speed = 1; // session setting
+  private free = false; // admin: whatever is started finishes at once; session setting
   private hiddenAt: number | null = null; // wall time the tab was hidden
   private persistedAt = 0; // wall time of the last save by tick()
 
@@ -249,6 +251,7 @@ export class Handler {
     this.lifeDay = Number.NaN;
     this.lifeIncoming = null;
     this.speed = 1;
+    this.free = false;
     this.hiddenAt = null;
     this.persistedAt = save?.sim.realTime ?? 0;
     this.failed.clear();
@@ -435,12 +438,13 @@ export class Handler {
         }
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
-      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff") {
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff") {
         const r =
           cmd.type === "setPriority" ? setPriority(sim, cmd.key)
           : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
           : cmd.type === "setSchedule" ? setSchedule(sim, cmd.strada)
           : cmd.type === "setRations" ? setRations(sim, cmd.rations)
+          : cmd.type === "setAdultSchool" ? setAdultSchool(sim, cmd.on)
           : cmd.type === "setJobPriority" ? setJobPriority(sim, cmd.group, cmd.priority)
           : cmd.type === "setStaff" ? setStaff(sim, cmd.id, cmd.staff)
           : callSettlers(sim);
@@ -451,6 +455,21 @@ export class Handler {
         if (!sim.pending || sim.pending.id !== cmd.id) return reject("Это событие уже решено");
         if (cmd.option !== 0 && cmd.option !== 1) return reject("Некорректный ответ");
         this.save = { ...this.save, sim: resolveChoice(sim, cmd.option, false) };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "admin") {
+        const op = cmd.op;
+        if (typeof op !== "object" || op === null) return reject("Некорректная команда");
+        if (op.k === "free") {
+          if (typeof op.on !== "boolean") return reject("Некорректная команда");
+          this.free = op.on;
+        } else if (op.k === "finish") this.save = { ...this.save, sim: finishAll(sim) };
+        else if (op.k === "stock") this.save = { ...this.save, sim: grantStock(sim) };
+        else if (op.k === "unlock") this.save = { ...this.save, sim: unlockAll(sim) };
+        else if (op.k === "reveal") {
+          const r = reveal(sim, op.x, op.y, op.r);
+          if (!r.ok) return reject(r.reason);
+          this.save = { ...this.save, sim: r.sim };
+        } else return reject("Неизвестная команда");
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");
@@ -472,6 +491,7 @@ export class Handler {
 
   // Posts, persists and acknowledges a command that already changed this.save.
   private async finishCommand(id: number): Promise<void> {
+    if (this.free) this.save = { ...this.save!, sim: finishAll(this.save!.sim) };
     this.postSnapshot();
     try {
       await this.storage.put(this.save!);
@@ -495,7 +515,8 @@ export class Handler {
       return;
     }
     const prev = this.save.sim.gameMinutes;
-    const sim = advanceTo(this.save.sim, now, pace);
+    const advanced = advanceTo(this.save.sim, now, pace);
+    const sim = this.free ? finishAll(advanced) : advanced;
     if (sim.gameMinutes === prev) {
       if (sim.realTime !== this.save.sim.realTime) this.save = { ...this.save, sim }; // paused: the wall time just follows
       return;

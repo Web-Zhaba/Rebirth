@@ -1,5 +1,5 @@
 import { locate, metersPerPixel } from "./mercator";
-import { NATURE_MAXZOOM, WATERWAY_ZOOM } from "./nature";
+import { NATURE_MAXZOOM, WATERWAY_HALF_M, WATERWAY_ZOOM } from "./nature";
 import { getLandTile, getWaterwayTile } from "./tiles";
 
 export const LANDS = ["water", "forest", "meadow", "wetland", "sand", "rock", "ice"] as const;
@@ -40,6 +40,7 @@ export async function landAt(lng: number, lat: number): Promise<Land> {
   const hit = (p: { bbox: number[]; rings: number[][] }) =>
     x >= p.bbox[0] && x <= p.bbox[2] && y >= p.bbox[1] && y <= p.bbox[3] && pointInRings(x, y, p.rings);
   if (tile.water.some(hit)) return "water";
+  if (await nearRiver(lng, lat, WATERWAY_HALF_M)) return "water";
   const lc = tile.land.find(hit);
   return (lc && CLASS_TO_LAND[lc.cls]) || "meadow";
 }

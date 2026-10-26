@@ -19,6 +19,9 @@ export const WILD_GRASS = ["grassland", "meadow", "scrub", "heath", "fell", "tun
 
 export const WATER_EXCLUDED_CLASSES = ["swimming_pool", "dock"];
 export const WATERWAY_CLASSES = ["river", "stream"];
+// Small rivers and streams exist only as lines: this far to each side of a line is water (a road
+// piece across one always has a midpoint inside this band).
+export const WATERWAY_HALF_M = 6;
 
 type Props = Record<string, unknown>;
 

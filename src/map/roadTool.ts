@@ -2,7 +2,7 @@ import { play } from "../ui/sound";
 import type maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
-import { addRoad, cutOffEdges, distToEdge, ROAD_KINDS, segmentCost, snapPoint, type Snap } from "../sim/roads";
+import { addRoad, cutOffEdges, distToEdge, ROAD_KINDS, segmentCost, segmentKind, snapPoint, type Snap } from "../sim/roads";
 import { frame, gameClock, roads, sendCmd, state } from "../simClient";
 import { oldWorld } from "./excavation";
 import { snapToOldStreets } from "../world/oldStreets";
@@ -21,6 +21,14 @@ const roadT = (): RoadTool | null => {
   return t && isRoadTool(t) ? t : null;
 };
 
+// The revealed old street a road end sits on, if any.
+interface OldRef {
+  id: string;
+  cls: string;
+}
+// The street class when both ends are on the same old street, else null.
+const sameOldStreet = (a: OldRef | null, b: OldRef | null): string | null => (a && b && a.id === b.id ? a.cls : null);
+
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 const line = (a: [number, number], b: [number, number], props: GeoJSON.GeoJsonProperties = {}): GeoJSON.Feature => ({
   type: "Feature",
@@ -37,12 +45,13 @@ export function attachRoadTool(map: maplibregl.Map): void {
 
   let ready = false;
   let start: Snap | null = null; // last placed point of the current chain
+  let startOld: OldRef | null = null; // the old street start sits on
   let busy = false; // a click is being validated/sent
   let cursor: { x: number; y: number } | null = null; // last mouse position, px
   let hoverEdge: number | null = null;
   let seq = 0; // bumped to drop stale async preview results
   let timer = 0;
-  let pendingCost: { a: Snap; b: Snap } | null = null;
+  let pendingCost: { a: Snap; b: Snap; oldCls: string | null } | null = null;
   let verdict: { ok: boolean; text: string } | null = null;
   let lastEvent: maplibregl.MapMouseEvent | null = null;
   let streetHint = ""; // " · по старой улице X" while the snap is on a named old street
@@ -124,12 +133,13 @@ export function attachRoadTool(map: maplibregl.Map): void {
   };
 
   // Existing road nodes and edges first; when none is near, the revealed old streets (vertices, then segments).
-  const resolve = (g: NonNullable<typeof roads.value>, p: { x: number; y: number }, tol: number): { snap: Snap; guide: boolean; name?: string } => {
+  const resolve = (g: NonNullable<typeof roads.value>, p: { x: number; y: number }, tol: number): { snap: Snap; guide: boolean; name?: string; old: OldRef | null } => {
     const snap = snapPoint(g, p, tol);
-    if (snap.kind !== "free") return { snap, guide: true };
+    if (snap.kind !== "free") return { snap, guide: true, old: null };
     const old = snapToOldStreets(p, oldWorld.value?.streets ?? [], tol);
-    if (!old) return { snap, guide: false };
-    return { snap: { x: old.x, y: old.y, kind: "free" }, guide: true, name: old.name };
+    if (!old) return { snap, guide: false, old: null };
+    const ref = old.id !== undefined && old.cls !== undefined ? { id: old.id, cls: old.cls } : null;
+    return { snap: { x: old.x, y: old.y, kind: "free" }, guide: true, name: old.name, old: ref };
   };
 
   const setSnap = (s: Snap | null, guide = true) => {
@@ -144,8 +154,8 @@ export function attachRoadTool(map: maplibregl.Map): void {
   const costText = (len: number, labor: number) => `${Math.round(len)} м · ${Math.round(labor)} чел.-ч · ${etaText(labor)}`;
 
   // Terrain sampling is throttled; results of superseded requests are dropped.
-  const requestCost = (a: Snap, b: Snap) => {
-    pendingCost = { a, b };
+  const requestCost = (a: Snap, b: Snap, oldCls: string | null) => {
+    pendingCost = { a, b, oldCls };
     if (timer) return;
     timer = window.setTimeout(() => {
       timer = 0;
@@ -157,7 +167,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       sampleProfile(f, [req.a.x, req.a.y], [req.b.x, req.b.y], state.value?.clearings)
         .then((p) => {
           if (mine !== seq) return;
-          const c = segmentCost(p, t);
+          const c = segmentCost(p, segmentKind(t, p.land.includes("water"), req.oldCls));
           const queued = queuedLabel(gameClock.peek(), state.peek()?.levers);
           verdict = c.ok ? { ok: true, text: costText(p.length, c.labor) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? "Нельзя" };
           drawPreview(req.a, req.b);
@@ -246,7 +256,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       return;
     }
     setLabel(verdict ? verdict.text : "…");
-    requestCost(start, snap);
+    requestCost(start, snap, sameOldStreet(startOld, r.old));
   };
 
   const onClick = (e: maplibregl.MapMouseEvent) => {
@@ -267,17 +277,21 @@ export function attachRoadTool(map: maplibregl.Map): void {
       });
       return;
     }
-    const snap = resolve(g, { x, y }, tol).snap;
+    const r = resolve(g, { x, y }, tol);
+    const snap = r.snap;
     if (!start) {
       start = snap;
+      startOld = r.old;
       return;
     }
     const a = start;
+    const oldCls = sameOldStreet(startOld, r.old);
     busy = true;
     const finish = (ok: boolean) => {
       busy = false;
       if (ok) {
         start = snap;
+        startOld = r.old;
         verdict = null;
         if (lastEvent) onMove(lastEvent);
       }
@@ -291,14 +305,15 @@ export function attachRoadTool(map: maplibregl.Map): void {
     }
     sampleProfile(f, [a.x, a.y], [snap.x, snap.y], state.value?.clearings)
       .then((p) => {
-        const c = segmentCost(p, t);
+        const kind = segmentKind(t, p.land.includes("water"), oldCls);
+        const c = segmentCost(p, kind);
         if (!c.ok) {
           flash(c.reason ?? "Нельзя");
           return false;
         }
         return sendCmd({
           type: "addRoad",
-          kind: t,
+          kind,
           pts: [[a.x, a.y], [snap.x, snap.y]],
           snapTol: tol,
           labor: [c.labor],
@@ -319,6 +334,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
 
   const endChain = () => {
     start = null;
+    startOld = null;
     clearOverlay();
   };
 
@@ -351,6 +367,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
   effect(() => {
     const t = tool.value;
     start = null;
+    startOld = null;
     busy = false;
     if (ready) clearOverlay();
     map.getCanvas().style.cursor = t ? "crosshair" : "";

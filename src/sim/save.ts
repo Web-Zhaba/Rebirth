@@ -11,6 +11,7 @@ import { migrateText } from "./legacyText";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
+import { SERVICE } from "./services";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
 import type {
   Building,
@@ -244,7 +245,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
       commute: r.commute as number | null,
       idleDays: r.idleDays,
       literate: r.literate === true,
-      school: isNum(r.school) && r.school >= 0 ? r.school : 0,
+      school: isNum(r.school) ? Math.min(100, Math.max(0, r.school)) : 0,
+      ...(r.inClass === true ? { inClass: true } : {}),
     };
   }
   const households: Record<number, Household> = {};
@@ -349,6 +351,7 @@ function parseLevers(v: unknown): Levers {
   if (isRecord(t) && isNum(t.site) && Number.isInteger(t.site) && t.site !== 0 && isNum(t.until)) out.toloka = { site: t.site, until: t.until };
   if (isNum(v.tolokaReady)) out.tolokaReady = v.tolokaReady;
   out.strada = v.strada === true;
+  out.adultSchool = v.adultSchool === true;
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
   const j = v.jobs;
   if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
@@ -471,7 +474,8 @@ function fromV3(v: Record<string, unknown>): Record<string, unknown> {
       residents[k] = r;
       continue;
     }
-    const school = isNum(r.school) ? Math.round(r.school * YEAR_SCALE) : r.school;
+    // v3 kept school days (of a 360-day year); the literacy progress is a share of the child's school time now.
+    const school = isNum(r.school) ? Math.min(100, (r.school * YEAR_SCALE * 100) / SERVICE.childLiteracyDays) : r.school;
     residents[k] = { ...r, born: now - (now - r.born) * (YEAR_MIN / YEAR_MIN_V3), school };
   }
   return { ...v, version: 4, sim: { ...sim, residents } };

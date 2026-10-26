@@ -4,7 +4,7 @@ import { DIG } from "../sim/excavation";
 import { CLEARING } from "../sim/clearing";
 import { PLACE_MIN } from "../sim/growth";
 import { BUILDINGS, type Materials } from "../sim/buildings";
-import { ROAD_KINDS } from "../sim/roads";
+import { isRoadKind, ROAD_KINDS } from "../sim/roads";
 import { SERVICES, isService } from "../sim/services";
 import { SITE_RADIUS, type Tool } from "../map/tools";
 import type { IconName } from "./icons";
@@ -18,7 +18,7 @@ export interface Category {
 }
 
 export const CATEGORIES: Category[] = [
-  { id: "roads", label: "Дороги", tools: ["path", "dirt", "bulldoze"] },
+  { id: "roads", label: "Дороги", tools: ["path", "dirt", "footbridge", "bridge", "bulldoze"] },
   { id: "zones", label: "Зоны", tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
   { id: "food", label: "Еда", tools: ["gumno", "garden", "hunter", "fisher"] },
   { id: "farm", label: "Ресурсы", tools: ["woodcutter", "sawpit", "quarry", "barn"] },
@@ -37,6 +37,8 @@ export const categoryOf = (t: Tool): Category => CATEGORIES.find((c) => c.tools.
 export const TOOL_ICON: Record<Tool, IconName> = {
   path: "path",
   dirt: "dirt",
+  footbridge: "footbridge",
+  bridge: "bridge",
   bulldoze: "bulldoze",
   res: "res",
   craft: "craft",
@@ -63,6 +65,8 @@ export const TOOL_ICON: Record<Tool, IconName> = {
 const TOOL_LABEL: Partial<Record<Tool, string>> = {
   path: "Тропа",
   dirt: "Дорога",
+  footbridge: "Канатный мостик",
+  bridge: "Свайный мост",
   bulldoze: "Снос",
   res: "Жильё",
   craft: "Ремесло",
@@ -77,6 +81,8 @@ export const toolLabel = (t: Tool): string => TOOL_LABEL[t] ?? BUILDINGS[t].name
 const PURPOSE: Record<Tool, string> = {
   path: "Дешёвая тропа: по ней ходят пешком, ставить дома можно рядом",
   dirt: "Грунтовая дорога: шире и ровнее тропы, по ней возят грузы",
+  footbridge: "Подвесной мостик над водой: только для пешеходов, узкий и лёгкий",
+  bridge: "Широкий мост на сваях над водой: по нему проедут грузы",
   bulldoze: "Снести участок дороги вместе с планами вдоль него",
   res: "Размечает участки под жильё: сюда придут новые семьи",
   craft: "Размечает участки под мастерские: кузница, столярня, гончарня",
@@ -103,6 +109,8 @@ const PURPOSE: Record<Tool, string> = {
 const SITE: Partial<Record<Tool, string>> = {
   path: "Между двумя точками на суше, уклон не круче 25 %",
   dirt: "Между двумя точками на суше, уклон не круче 12 %",
+  footbridge: "Через воду или по суше, уклон не круче 30 %",
+  bridge: "Через воду или по суше, уклон не круче 10 %",
   woodcutter: `В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`,
   fisher: `У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`,
   quarry: "Не на воде и не на болоте; камень добывается на любой суше",
@@ -136,7 +144,7 @@ export function materialList(m: Materials): { icon: IconName; text: string }[] {
 // Everything the hover card shows, taken from the sim tables.
 export function toolInfo(t: Tool): ToolInfo {
   const b = BUILDINGS[t];
-  const road = t === "path" || t === "dirt" ? ROAD_KINDS[t] : null;
+  const road = isRoadKind(t) ? ROAD_KINDS[t] : null;
   let reach: string | null = null;
   if (isService(t)) reach = `Охват ${SERVICES[t].reach} м по дорогам`;
   else if (t === "gumno") reach = `Поля до ${FIELD.radius} м от фермы`;

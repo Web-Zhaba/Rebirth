@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect } from "preact/hooks";
 import { city } from "../simClient";
+import { AdminPanel } from "./AdminPanel";
 import { AboutDialog } from "./AboutDialog";
 import { AwayNotice } from "./AwayNotice";
 import { BuildBar } from "./BuildBar";
@@ -32,6 +33,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <TownPanel city={c} map={map} />}
       {c && <NotebookHost />}
       {c && <BuildBar />}
+      {c && <AdminPanel />}
       <AwayNotice />
       <AboutDialog />
       <HotkeysDialog />

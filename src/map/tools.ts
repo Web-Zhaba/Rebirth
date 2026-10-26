@@ -1,6 +1,7 @@
 import { play } from "../ui/sound";
 import { signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
+import { isRoadKind } from "../sim/roads";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
 export type RoadTool = RoadKind | "bulldoze";
@@ -9,7 +10,7 @@ export type ZoneTool = BrushTool | "field" | "clearing";
 export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "barn" | "dig" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
-export const isRoadTool = (t: Tool): t is RoadTool => t === "path" || t === "dirt" || t === "bulldoze";
+export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || isRoadKind(t);
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
 export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "barn", "dig", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);

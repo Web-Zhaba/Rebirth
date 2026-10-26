@@ -80,7 +80,7 @@ const flagsFor = (f: ProdFlags, year: number): ProdFlags => (f.year === year ? f
 
 interface Workers {
   n: Map<number, number>; // workers per workplace id
-  lit: Map<number, number>; // of them literate
+  lit: Map<number, number>; // their literacy, summed as shares (school / 100)
 }
 const workerCache = new WeakMap<object, Workers>();
 
@@ -92,7 +92,7 @@ function workersByJob(residents: Record<number, Resident>): Workers {
   for (const r of Object.values(residents)) {
     if (r.job === null) continue;
     w.n.set(r.job, (w.n.get(r.job) ?? 0) + 1);
-    if (r.literate) w.lit.set(r.job, (w.lit.get(r.job) ?? 0) + 1);
+    w.lit.set(r.job, (w.lit.get(r.job) ?? 0) + r.school / 100);
   }
   workerCache.set(residents, w);
   return w;
@@ -325,7 +325,7 @@ export function dailyEconomy(s: SimState): SimState {
     flags = { ...flags, rot: 0 };
   }
 
-  // wares: each employed trade worker serves 12 households a day (a literate one 20 % more), starting
+  // wares: each employed trade worker serves 12 households a day (a literate one 20 % more, a learning one part of it), starting
   // from a different one each day; each market worker then hands out to 20 households the market covers
   let shopSlots = 0;
   let marketSlots = 0;
@@ -333,7 +333,7 @@ export function dailyEconomy(s: SimState): SimState {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
     if (!b || b.state !== "active") continue;
-    if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (r.literate ? SERVICE.literateBoost : 0));
+    if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (SERVICE.literateBoost * r.school) / 100);
     else if (b.template === "market") marketSlots += SERVICE.marketHouseholds;
   }
   const ids = Object.keys(s.households).map(Number).sort((p, q) => p - q);

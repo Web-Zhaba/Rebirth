@@ -346,8 +346,9 @@ interface Counts {
   children: number;
   employed: number;
   jobless: number; // adults with no regular job
+  inClass: number; // adults in class today: no work at all
   commuteSum: number;
-  literate: number; // literate adults
+  literate: number; // literacy of the adults, summed as shares (school / 100)
 }
 
 // Counted at the start of the game day, so the result is the same whenever it is asked within a day.
@@ -358,15 +359,16 @@ export function countResidents(residents: Record<number, Resident>, now: number)
   const hit = countCache.get(residents);
   if (hit && hit.day === day) return hit.c;
   const at = dayStart(now);
-  const c: Counts = { pop: 0, adults: 0, children: 0, employed: 0, jobless: 0, commuteSum: 0, literate: 0 };
+  const c: Counts = { pop: 0, adults: 0, children: 0, employed: 0, jobless: 0, inClass: 0, commuteSum: 0, literate: 0 };
   for (const r of Object.values(residents)) {
     c.pop++;
     const age = ageOf(r.born, at);
     if (age < ADULT_MIN) c.children++;
     else if (age < ADULT_MAX) {
       c.adults++;
-      if (r.literate) c.literate++;
-      if (r.job !== null) {
+      c.literate += r.school / 100;
+      if (r.inClass) c.inClass++;
+      else if (r.job !== null) {
         c.employed++;
         c.commuteSum += r.commute ?? 0;
       } else c.jobless++;
@@ -387,7 +389,7 @@ export function idleResidents(s: ArtelState): Set<number> {
   if (constructionWork(s.buildings, s.roads, s.clearings)) return out;
   const farmless = idleGumnos(s);
   for (const r of Object.values(s.residents)) {
-    if (!isAdultAge(ageOf(r.born, s.gameMinutes))) continue;
+    if (!isAdultAge(ageOf(r.born, s.gameMinutes)) || r.inClass) continue;
     if (r.job === null || farmless.has(r.job)) out.add(r.id);
   }
   return out;
@@ -415,7 +417,10 @@ export function artel(s: ArtelState): { hands: number; drafted: number; employed
 }
 
 export const builderCount = (s: ArtelState): number => {
-  if (tolokaActive(s.levers, s.gameMinutes)) return countResidents(s.residents, s.gameMinutes).adults; // толока: every adult
+  if (tolokaActive(s.levers, s.gameMinutes)) {
+    const c = countResidents(s.residents, s.gameMinutes);
+    return c.adults - c.inClass; // толока: every adult who is not in class
+  }
   const a = artel(s);
   return a.hands + a.drafted;
 };
@@ -502,6 +507,7 @@ export function peopleStats(s: ArtelState & Pick<SimState, "households">): Peopl
     employed: c.employed,
     builders: work ? c.jobless + farmers + blocked + artel(s).drafted : 0,
     unemployed: work ? 0 : c.jobless + farmers,
+    inClass: c.inClass,
     tents,
     avgCommute: c.employed > 0 ? c.commuteSum / c.employed : 0,
     households,
@@ -589,7 +595,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     r.commute = null;
   };
   for (const r of Object.values(w.residents)) {
-    if (!isAdultAge(ageOf(r.born, w.now))) {
+    if (!isAdultAge(ageOf(r.born, w.now)) || r.inClass) {
       r.job = null;
       r.commute = null;
     } else if (r.job !== null) {
@@ -702,7 +708,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     for (let i = 0; i < JOB_ROUNDS && round(); i++);
   }
   for (const r of Object.values(w.residents)) {
-    if (!isAdultAge(ageOf(r.born, w.now))) continue;
+    if (!isAdultAge(ageOf(r.born, w.now)) || r.inClass) continue;
     if (r.job !== null) r.idleDays = 0;
     else if (work === false) r.idleDays++;
   }
@@ -844,7 +850,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     for (const r of Object.values(w.residents)) {
       if (!isAdultAge(ageOf(r.born, now))) continue;
       adults++;
-      if (r.job === null) jobless++;
+      if (r.job === null && !r.inClass) jobless++;
     }
     const unemployment = adults > 0 && !work ? jobless / adults : 0;
     const outlook = foodOutlook({ ...s, residents: w.residents, households: w.households, stock });
@@ -969,8 +975,9 @@ const WORK_TEXT: Record<string, string> = {
 };
 
 function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: Set<number>): string {
-  if (age < ADULT_MIN) return age >= SERVICE.schoolFrom && r.school > 0 ? "школьник" : "ребёнок";
+  if (age < ADULT_MIN) return r.inClass ? "школьник" : "ребёнок";
   if (age >= ADULT_MAX) return r.sex === "m" ? "старик" : "старуха";
+  if (r.inClass) return "учится в школе";
   if (r.job !== null && idle.has(r.job)) return work ? "на стройке" : "без работы";
   if (r.job !== null) {
     const b = s.buildings[r.job];
@@ -1000,7 +1007,7 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
           .filter((r): r is Resident => !!r)
           .map((r) => {
             const age = ageOf(r.born, now);
-            return { id: r.id, name: fullName(r), age: Math.floor(age), sex: r.sex, role: roleOf(s, r, age, work, idle), literate: r.literate };
+            return { id: r.id, name: fullName(r), age: Math.floor(age), sex: r.sex, role: roleOf(s, r, age, work, idle), literate: r.literate, learn: Math.round(r.school) };
           }),
       }));
     return {

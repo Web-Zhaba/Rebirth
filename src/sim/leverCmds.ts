@@ -4,6 +4,7 @@ import { withChronicle } from "./chronicle";
 import { CALL, RATIONS, TOLOKA_COOLDOWN, tolokaActive, workEndAt, workHours, isWorkHour, type Levers, type Rations } from "./levers";
 import { countResidents, isWorkplace, rebalanceJobs, vacantHouses } from "./people";
 import { say } from "./production";
+import { classPupils } from "./school";
 import { nextRandom } from "./rng";
 import { calendar } from "./time";
 import type { SimState } from "./types";
@@ -59,6 +60,18 @@ export function setSchedule(s: SimState, strada: boolean): LeverResult {
   const next = set(s, { strada });
   const w = workHours(next);
   return done(next, strada ? `Долгий день: работают с ${w.start} до ${w.end} часов, люди устают` : `Обычный распорядок: работа с ${w.start} до ${w.end} часов`);
+}
+
+// Grown-ups without reading go to school instead of work (see classPupils); the jobs are reassigned at once.
+export function setAdultSchool(s: SimState, on: boolean): LeverResult {
+  if (typeof on !== "boolean") return fail("Некорректный приказ");
+  if (s.levers.adultSchool === on) return { ok: true, sim: s };
+  const withLever = set(s, { adultSchool: on });
+  const inClass = classPupils(withLever);
+  const residents = { ...s.residents };
+  for (const r of Object.values(residents)) if (!!r.inClass !== inClass.has(r.id)) residents[r.id] = { ...r, inClass: inClass.has(r.id) };
+  const next = rebalanceJobs({ ...withLever, residents });
+  return done(next, on ? "Неграмотные взрослые идут в школу вместо работы" : "Взрослые возвращаются к работе");
 }
 
 export function setRations(s: SimState, rations: Rations): LeverResult {

@@ -578,7 +578,7 @@ describe("save", () => {
     expect(s.sim.gameMinutes).toBe(gm);
     expect(ageOf(s.sim.residents[Number(a)].born, gm)).toBeCloseTo(30);
     expect(ageOf(s.sim.residents[Number(b)].born, gm)).toBeCloseTo(10);
-    expect(s.sim.residents[Number(b)].school).toBe(Math.round(360 * YEAR_SCALE));
+    expect(s.sim.residents[Number(b)].school).toBeCloseTo(50); // 360 old school days scale to 32: half of the 64 a child needs
     const run = advanceTo(s.sim, NOW + 5 * 1440 * 1000);
     expect(run.gameMinutes).toBe(gm + 5 * 1440);
     expect(JSON.stringify(run)).not.toMatch(/NaN|null.*Infinity/);

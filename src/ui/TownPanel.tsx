@@ -159,6 +159,7 @@ function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
       <Line label="Работают">{p.employed}</Line>
       <Line label="На стройке">{p.builders}</Line>
       <Line label="Без работы">{p.unemployed}</Line>
+      {p.inClass > 0 && <Line label="В школе">{p.inClass}</Line>}
       <Line label="Дорога на работу">{p.employed > 0 ? `~${Math.round(p.avgCommute)} мин` : "—"}</Line>
       <Line label="Рабочий день">
         {pad(hours.start)}–{pad(hours.end)}
@@ -260,6 +261,15 @@ function OrdersTab() {
           onClick={() => act({ type: "setSchedule", strada: !lv.strada })}
         >
           {lv.strada ? "Долгий день: до 21:00" : "Обычный день: 07–19"}
+        </Button>
+        <Button
+          aria-label="Взрослые в школу"
+          aria-pressed={lv.adultSchool}
+          variant={lv.adultSchool ? "primary" : "default"}
+          title="Неграмотные взрослые ходят в школу вместо работы, пока не выучатся. Места в школах ограничены: 30 на школу, сначала дети"
+          onClick={() => act({ type: "setAdultSchool", on: !lv.adultSchool })}
+        >
+          {lv.adultSchool ? "Взрослые учатся" : "Взрослые работают"}
         </Button>
       </div>
       <div class="orders-row" role="radiogroup" aria-label="Нормы еды">

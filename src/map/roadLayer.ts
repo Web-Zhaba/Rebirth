@@ -7,9 +7,9 @@ import { city, frame, roads } from "../simClient";
 const SRC = "roads";
 const EQUATOR_M = 40075016.686;
 
-const BUILT_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirt, PALETTE.roadPath];
+const BUILT_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirt, "footbridge", PALETTE.roadBridge, "bridge", PALETTE.roadBridge, PALETTE.roadPath];
 const CUT_COLOR = PALETTE.bad; // roads no work party can reach
-const CASING_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirtEdge, PALETTE.roadPathEdge];
+const CASING_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirtEdge, "footbridge", PALETTE.roadBridgeEdge, "bridge", PALETTE.roadBridgeEdge, PALETTE.roadPathEdge];
 
 // Width in px of `meters` of ground at zoom z (MapLibre uses 512 px tiles), at least 1 px,
 // plus `extra` px. Integer-zoom stops keep the exponential interpolation exact.

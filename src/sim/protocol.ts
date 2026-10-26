@@ -1,5 +1,6 @@
 import type { Speed } from "./clock";
 import type { Light, Trip } from "../map/lifeLayer";
+import type { AdminOp } from "./admin";
 import type { Away } from "./away";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
@@ -35,12 +36,15 @@ export type Cmd =
   | { type: "callToloka"; key: number }
   | { type: "setSchedule"; strada: boolean }
   | { type: "setRations"; rations: Rations }
+  | { type: "setAdultSchool"; on: boolean }
   | { type: "callSettlers" }
   // Jobs: hiring priority of a job group (or of construction), and the staff limit of a workplace.
   | { type: "setJobPriority"; group: JobKey; priority: Priority }
   | { type: "setStaff"; id: number; staff: number }
   // The answer to the pending event: its id and the option (0 or 1).
   | { type: "choose"; id: string; option: 0 | 1 }
+  // Admin panel cheats.
+  | { type: "admin"; op: AdminOp }
   // Wikipedia articles found near the dig discs (validated, deduplicated by id and capped by the sim).
   | { type: "addArticles"; articles: ArticleInput[] }
   // New finds of a dig site: foundations in local meters, named places and one entry per street name.

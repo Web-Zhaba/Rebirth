@@ -21,6 +21,8 @@ const service = (id: keyof typeof SERVICES, tail: string) => `${PLACE_HINT}. П�
 const HINT: Record<Tool, string> = {
   path: ROAD_HINT,
   dirt: ROAD_HINT,
+  footbridge: ROAD_HINT,
+  bridge: ROAD_HINT,
   bulldoze: "Клик по участку — снести, Esc — выйти",
   res: BRUSH_HINT,
   craft: BRUSH_HINT,

@@ -10,7 +10,7 @@ export interface City {
   foundedAt: number; // epoch ms
 }
 
-export type RoadKind = "path" | "dirt";
+export type RoadKind = "path" | "dirt" | "footbridge" | "bridge";
 
 // Coordinates are local meters (src/world/frame.ts), x east, y north.
 export interface RoadNode {
@@ -131,8 +131,9 @@ export interface Resident {
   job: number | null; // building id of the workplace
   commute: number | null; // minutes one way
   idleDays: number; // days in a row without any work
-  literate: boolean;
-  school: number; // days of school attended (children 7-14 in the reach of a staffed school)
+  literate: boolean; // learned in full (school reached 100)
+  school: number; // literacy progress 0..100: grows on school days, see learnPerDay
+  inClass?: boolean; // in class today: children 7-14 and, when ordered, illiterate grown-ups; they do no work
 }
 
 export interface Household {
@@ -354,6 +355,8 @@ export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";
 export interface ServiceStats {
   houses: number; // finished houses
   covered: Record<ServiceId, number>; // houses covered per service
+  pupils: number; // residents in class today (children 7-14, and grown-ups if ordered), within the seats
+  seats: number; // seats of the active schools, all of them together
   literate: number; // share 0..1 of adults
   avgLandValue: number;
   level2: number; // houses of level 2
@@ -366,6 +369,7 @@ export interface PeopleStats {
   employed: number; // adults with a regular job
   builders: number; // adults without a job while construction work exists
   unemployed: number; // adults without a job and without construction work
+  inClass: number; // adults sent to school: no work at all
   tents: number; // households living in tents
   avgCommute: number; // minutes, over the employed
   households: number;
@@ -429,6 +433,7 @@ export interface PersonInfo {
   sex: "m" | "f";
   role: string; // occupation text
   literate: boolean;
+  learn: number; // literacy progress 0..100
 }
 
 export interface WorkerInfo {
@@ -462,7 +467,7 @@ export type BuildingQuery =
       capacity: number;
       workers: WorkerInfo[];
       production?: ProductionInfo;
-      service?: { id: ServiceId; reach: number; covered: number; houses: number; working: boolean };
+      service?: { id: ServiceId; reach: number; covered: number; houses: number; pupils: number; seats: number; working: boolean };
     };
 
 export interface SaveV4 {

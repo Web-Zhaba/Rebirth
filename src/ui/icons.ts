@@ -18,6 +18,8 @@ import HerbsBundle from "~icons/game-icons/herbs-bundle";
 import House from "~icons/game-icons/house";
 import MagnifyingGlass from "~icons/game-icons/magnifying-glass";
 import PathTile from "~icons/game-icons/path-tile";
+import RopeBridge from "~icons/game-icons/rope-bridge";
+import StoneBridge from "~icons/game-icons/stone-bridge";
 import Road from "~icons/game-icons/road";
 import Shop from "~icons/game-icons/shop";
 import StonePile from "~icons/game-icons/stone-pile";
@@ -124,6 +126,8 @@ export const ICONS = {
   // Tools (game-icons)
   path: PathTile,
   dirt: Road,
+  footbridge: RopeBridge,
+  bridge: StoneBridge,
   bulldoze: Bulldozer,
   res: House,
   craft: HammerNails,

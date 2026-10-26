@@ -1,7 +1,8 @@
 import { BUILDINGS, UPGRADE } from "./buildings";
 import { isUnlocked } from "./goals";
 import { ageOf, buildNet, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
-import { countServices, covers, isService, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
+import { countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
+import { classPupils, schoolSeats } from "./school";
 import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
 
 // ---------- coverage ----------
@@ -108,15 +109,14 @@ export function upgradeBlockers(s: Pick<SimState, "goals" | "coverage" | "landVa
 export function dailyServices(s: SimState): SimState {
   const { coverage, landValue } = refreshServices(s);
   const now = s.gameMinutes;
+  const attending = classPupils({ ...s, coverage });
 
   let residents = s.residents;
   for (const r of Object.values(s.residents)) {
     const age = ageOf(r.born, now);
-    let next = r;
-    if (age >= SERVICE.schoolFrom && age < SERVICE.schoolTo) {
-      const home = s.households[r.household]?.home;
-      if (home != null && covers(coverage[home], "school")) next = { ...r, school: r.school + 1 };
-    } else if (age >= SERVICE.schoolTo && !r.literate && r.school >= SERVICE.literateDays) next = { ...r, literate: true };
+    const inClass = attending.has(r.id);
+    const school = inClass ? Math.min(100, r.school + learnPerDay(age >= SERVICE.schoolTo)) : r.school;
+    const next = school === r.school && inClass === !!r.inClass ? r : { ...r, school, literate: r.literate || school >= 100, inClass };
     if (next !== r) {
       if (residents === s.residents) residents = { ...residents };
       residents[r.id] = next;
@@ -143,7 +143,7 @@ export function dailyServices(s: SimState): SimState {
 
 // ---------- aggregates ----------
 
-export function serviceStats(s: Pick<SimState, "buildings" | "residents" | "gameMinutes" | "coverage" | "landValue">): ServiceStats {
+export function serviceStats(s: Pick<SimState, "buildings" | "residents" | "households" | "gameMinutes" | "coverage" | "landValue" | "levers">): ServiceStats {
   const covered = Object.fromEntries(SERVICE_IDS.map((id) => [id, 0])) as Record<ServiceId, number>;
   let houses = 0;
   let level2 = 0;
@@ -156,7 +156,7 @@ export function serviceStats(s: Pick<SimState, "buildings" | "residents" | "game
     for (const id of SERVICE_IDS) if (covers(s.coverage[b.id], id)) covered[id]++;
   }
   const c = countResidents(s.residents, s.gameMinutes);
-  return { houses, covered, literate: c.adults > 0 ? c.literate / c.adults : 0, avgLandValue: houses > 0 ? value / houses : 0, level2 };
+  return { houses, covered, pupils: classPupils(s).size, seats: schoolSeats(s), literate: c.adults > 0 ? c.literate / c.adults : 0, avgLandValue: houses > 0 ? value / houses : 0, level2 };
 }
 
 // ---------- reach drawing (also used on the main thread for the placement preview) ----------

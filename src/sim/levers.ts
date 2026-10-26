@@ -11,12 +11,13 @@ export interface Levers {
   tolokaReady: number; // gameMinutes from which a new толока may be called
   strada: boolean; // «Долгий день»: the long workday
   rations: Rations;
+  adultSchool: boolean; // «Взрослые в школу»: illiterate grown-ups learn in class instead of working
   jobs: Record<JobKey, Priority>; // hiring priority per job group, and the builders' floor ("build"); 2 = normal
 }
 
 export const emptyJobs = (): Record<JobKey, Priority> => Object.fromEntries(JOB_KEYS.map((k) => [k, 2])) as Record<JobKey, Priority>;
 
-export const emptyLevers = (): Levers => ({ priority: null, toloka: null, tolokaReady: 0, strada: false, rations: "normal", jobs: emptyJobs() });
+export const emptyLevers = (): Levers => ({ priority: null, toloka: null, tolokaReady: 0, strada: false, rations: "normal", adultSchool: false, jobs: emptyJobs() });
 
 export const WORKDAY = { start: 7, end: 19 };
 export const STRADA = { start: 5, end: 21 };

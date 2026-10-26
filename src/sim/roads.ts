@@ -1,10 +1,15 @@
 import type { Land } from "../world/landcover";
 import type { RoadEdge, RoadGraph, RoadKind } from "./types";
 
-export const ROAD_KINDS: Record<RoadKind, { name: string; width: number; labor: number; maxGrade: number }> = {
-  path: { name: "Тропа", width: 2, labor: 0.1, maxGrade: 0.25 },
-  dirt: { name: "Грунтовая дорога", width: 5, labor: 1.0, maxGrade: 0.12 },
+export const ROAD_KINDS: Record<RoadKind, { name: string; width: number; labor: number; maxGrade: number; crossesWater: boolean }> = {
+  path: { name: "Тропа", width: 2, labor: 0.1, maxGrade: 0.25, crossesWater: false },
+  dirt: { name: "Грунтовая дорога", width: 5, labor: 1.0, maxGrade: 0.12, crossesWater: false },
+  footbridge: { name: "Канатный мостик", width: 1.5, labor: 0.5, maxGrade: 0.3, crossesWater: true },
+  bridge: { name: "Свайный мост", width: 4, labor: 2.0, maxGrade: 0.1, crossesWater: true },
 };
+
+export const isRoadKind = (t: string): t is RoadKind => Object.hasOwn(ROAD_KINDS, t);
+export const isBridge = (k: RoadKind): boolean => ROAD_KINDS[k].crossesWater;
 
 export const MIN_SEGMENT = 8; // m
 export const WORKERS = 10;
@@ -247,6 +252,16 @@ export interface TerrainProfile {
   elev: number[];
 }
 
+// Piers and pillars standing in the water, per metre of bridge.
+const WATER_MULT = 1.5;
+
+// A road over water along a revealed old street is a bridge of the street's kind: a footpath gets a footbridge,
+// any other street a pile bridge. Elsewhere the road kind stands as chosen.
+export function segmentKind(kind: RoadKind, water: boolean, oldStreetCls: string | null): RoadKind {
+  if (!water || oldStreetCls === null || isBridge(kind)) return kind;
+  return oldStreetCls === "path" ? "footbridge" : "bridge";
+}
+
 const LAND_MULT: Record<Exclude<Land, "water">, number> = {
   meadow: 1,
   sand: 1.2,
@@ -276,13 +291,14 @@ export function segmentCost(p: TerrainProfile, kind: RoadKind): SegmentCost {
     const land = p.land[i];
     if (land === "water") {
       water = true;
+      labor += spec.labor * pl * WATER_MULT;
       continue;
     }
     const grade = Math.abs(p.elev[i + 1] - p.elev[i]) / pl;
     maxGrade = Math.max(maxGrade, grade);
     labor += spec.labor * pl * LAND_MULT[land] * (1 + grade / 0.08);
   }
-  if (water) return { ok: false, reason: "Нельзя через воду — мосты позже", labor, maxGrade };
+  if (water && !spec.crossesWater) return { ok: false, reason: "Через воду нужен мост", labor, maxGrade };
   if (maxGrade > spec.maxGrade) {
     return { ok: false, reason: `Слишком круто: ${Math.round(maxGrade * 100)} %`, labor, maxGrade };
   }

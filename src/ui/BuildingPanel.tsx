@@ -238,6 +238,11 @@ export function BuildingPanel() {
           <div>
             Охват {info.service.reach} м: {info.service.covered} из {info.service.houses} домов
           </div>
+          {info.service.id === "school" && (
+            <div class="people-note">
+              Учеников: {info.service.pupils} из {info.service.seats} мест
+            </div>
+          )}
           {!info.service.working && <div class="prod-warn">Не работает: нет работников</div>}
         </>
       )}
@@ -263,7 +268,7 @@ export function BuildingPanel() {
                   <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет")}
                   <div class="person-role">
                     {p.role}
-                    {p.literate && " · грамотный"}
+                    {p.literate ? " · грамотный" : p.learn > 0 && ` · грамотность ${p.learn} %`}
                   </div>
                 </div>
               ))}

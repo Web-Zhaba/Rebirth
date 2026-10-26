@@ -9,6 +9,7 @@ import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
 import { attachPlaceLabels } from "./map/placeLabels";
 import { attachPlaceTool } from "./map/placeTool";
+import { attachRevealTool } from "./map/revealTool";
 import { attachReachLayer } from "./map/reachLayer";
 import { attachRoadLayer } from "./map/roadLayer";
 import { attachRuinsLayer } from "./map/ruinsLayer";
@@ -42,6 +43,7 @@ attachCityMarker(map);
 attachRoadTool(map);
 attachZoneTool(map);
 attachPlaceTool(map);
+attachRevealTool(map);
 let centred = false;
 effect(() => {
   const c = city.value;

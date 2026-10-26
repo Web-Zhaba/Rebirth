@@ -1,6 +1,7 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
-import { Dialog } from "./kit";
+import { adminOpen } from "./AdminPanel";
+import { Button, Dialog } from "./kit";
 import { play, setSoundEnabled, setSoundVolume, soundEnabled, soundVolume } from "./sound";
 
 export const settingsOpen = signal(false);
@@ -31,6 +32,7 @@ export function SettingsDialog() {
           />
           <span class="settings-val">{pct}%</span>
         </label>
+        <Button onClick={() => { adminOpen.value = true; settingsOpen.value = false; }}>Админ-панель</Button>
       </div>
     </Dialog>
   );

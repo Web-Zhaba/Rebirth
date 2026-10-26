@@ -67,6 +67,8 @@
   --road-path-edge: #8a7d63;
   --road-dirt: #a98a58;
   --road-dirt-edge: #5e4a2c;
+  --road-bridge: #8c7b5a;
+  --road-bridge-edge: #3e3424;
 
   /* Type */
   --font-body: "PT Sans", system-ui, "Segoe UI", sans-serif;

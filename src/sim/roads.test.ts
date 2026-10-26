@@ -8,6 +8,7 @@ import {
   removeEdge,
   ROAD_KINDS,
   segmentCost,
+  segmentKind,
   snapPoint,
   workableEdges,
   type TerrainProfile,
@@ -165,11 +166,21 @@ describe("segmentCost", () => {
     expect(c.maxGrade).toBeCloseTo(0.1);
     expect(c.labor).toBeCloseTo(10 * (1 + 0.1 / 0.08) + 10);
   });
-  it("rejects water", () => {
-    expect(segmentCost(flat(["meadow", "water"]), "path")).toMatchObject({
-      ok: false,
-      reason: "Нельзя через воду — мосты позже",
-    });
+  it("rejects water for roads, bridges cross it", () => {
+    expect(segmentCost(flat(["meadow", "water"]), "path")).toMatchObject({ ok: false, reason: "Через воду нужен мост" });
+    expect(segmentCost(flat(["meadow", "water"]), "dirt")).toMatchObject({ ok: false, reason: "Через воду нужен мост" });
+    expect(segmentCost(flat(["meadow", "water"]), "footbridge").ok).toBe(true);
+    expect(segmentCost(flat(["meadow", "water"]), "bridge").ok).toBe(true);
+  });
+  it("charges bridges for the water part", () => {
+    expect(segmentCost(flat(["water", "meadow"]), "bridge").labor).toBeCloseTo(ROAD_KINDS.bridge.labor * 10 * (1.5 + 1));
+    expect(segmentCost(flat(["water", "meadow"]), "footbridge").labor).toBeCloseTo(ROAD_KINDS.footbridge.labor * 10 * (1.5 + 1));
+  });
+  it("bridges keep their grade limits", () => {
+    const p = flat(["meadow", "meadow"]);
+    p.elev = [100, 101.5, 101.5]; // 15 %
+    expect(segmentCost(p, "bridge")).toMatchObject({ ok: false, reason: "Слишком круто: 15 %" });
+    expect(segmentCost(p, "footbridge").ok).toBe(true);
   });
   it("rejects steep grades per kind", () => {
     const p = flat(["meadow", "meadow"]);
@@ -230,5 +241,17 @@ describe("construction", () => {
     expect(at(70).roads.edges[3].done).toBeCloseTo(per); // first work tick
     expect(at(13 * 60).roads.edges[3].done).toBeCloseTo(12 * 6 * per); // 07:00-19:00 only
     expect(at(13 * 60 + 600).roads.edges[3].done).toBeCloseTo(12 * 6 * per); // night idle
+  });
+});
+
+describe("segmentKind", () => {
+  it("a road over water on an old footpath is a footbridge, on another old street a pile bridge", () => {
+    expect(segmentKind("path", true, "path")).toBe("footbridge");
+    expect(segmentKind("dirt", true, "primary")).toBe("bridge");
+  });
+  it("keeps the chosen kind on land, off old streets, or when it is already a bridge", () => {
+    expect(segmentKind("dirt", false, "primary")).toBe("dirt");
+    expect(segmentKind("path", true, null)).toBe("path");
+    expect(segmentKind("bridge", true, "path")).toBe("bridge");
   });
 });

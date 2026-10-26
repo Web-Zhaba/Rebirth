@@ -48,6 +48,8 @@ export const PALETTE = {
   roadPath: "#dccfa6",
   roadPathEdge: "#8a7d63",
   roadDirt: "#a98a58",
+  roadBridge: "#8c7b5a",
+  roadBridgeEdge: "#3e3424",
   roadDirtEdge: "#5e4a2c",
 } as const;
 export type PaletteKey = keyof typeof PALETTE;

@@ -5,12 +5,13 @@ import { BUILDINGS, houseCapacity, UPGRADE } from "./buildings";
 import { computeCoverage, computeLandValue, dailyServices, refreshServices, reachSegments, serviceStats, upgradeBlockers, upgradeShortfall } from "./coverage";
 import { advanceBuildings, canPlace, emptyGrowth, placeBuilding } from "./growth";
 import { toSnapshot } from "./handler";
-import { builderCount, constructionWork, dailyStep, foodOutlook, FORAGE, forageKg, idleResidents, peopleStats, productionScale, queryBuilding } from "./people";
+import { builderCount, constructionWork, countResidents, dailyStep, foodOutlook, FORAGE, forageKg, idleResidents, peopleStats, productionScale, queryBuilding } from "./people";
 import { dailyEconomy, economyStats, HAND_HOURS, payMaterials, produceStep } from "./production";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { FIELD } from "./fields";
-import { covers, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
+import { covers, learnPerDay, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
+import { SCHOOL_SEATS } from "./school";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, Household, Resident, RoadGraph, SimState } from "./types";
 import { emptyZones, qkey, regenerateCells } from "./zones";
@@ -78,7 +79,7 @@ function folk(s: SimState, specs: HSpec[]): SimState {
     const members: number[] = [];
     const add = (age: number, job: number | null, literate: boolean, school: number) => {
       const id = pid++;
-      residents[id] = { id, first: "Иван", last: "Тестов", sex: "m", born: s.gameMinutes - age * YEAR_MIN, household: hid, spouse: null, job, commute: job === null ? null : 5, idleDays: 0, literate, school };
+      residents[id] = { id, first: "Иван", last: "Тестов", sex: "m", born: s.gameMinutes - age * YEAR_MIN, household: hid, spouse: null, job, commute: job === null ? null : 5, idleDays: 0, literate, school: literate ? 100 : school };
       members.push(id);
     };
     for (let k = 0; k < (sp.adults ?? 1); k++) add(30, k === 0 ? (sp.job ?? null) : null, k === 0 && !!sp.literate, 0);
@@ -304,29 +305,63 @@ describe("school and literacy", () => {
   };
   it("children 7-14 covered by a staffed school attend, others do not", () => {
     const s = dailyServices(classroom(9));
-    expect(s.residents[3].school).toBe(1); // covered household
+    expect(s.residents[3].school).toBeCloseTo(learnPerDay(false)); // covered household: one day of learning
+    expect(s.residents[3].inClass).toBe(true);
     expect(s.residents[6].school).toBe(0); // far from the school
     expect(dailyServices(classroom(5)).residents[3].school).toBe(0); // too young
     const closed = classroom(9);
     const noTeacher = dailyServices({ ...closed, residents: { ...closed.residents, 1: { ...closed.residents[1], job: null } } });
     expect(noTeacher.residents[3].school).toBe(0);
   });
-  it("a child becomes literate at 15 after SERVICE.literateDays of school", () => {
-    const at15 = (school: number) => {
-      const s = classroom(15, school);
-      return dailyServices(s).residents[3];
-    };
-    expect(at15(SERVICE.literateDays).literate).toBe(true);
-    expect(at15(SERVICE.literateDays - 1).literate).toBe(false);
-    expect(at15(0).literate).toBe(false);
+  it("serviceStats counts the pupils: children 7-14 in houses a school covers", () => {
+    expect(serviceStats(classroom(9)).pupils).toBe(1); // the far household's child is not covered
+    expect(serviceStats(classroom(5)).pupils).toBe(0); // too young
   });
-  it("two years of attendance in play: literate on the first day at 15", () => {
+  it("the seats of the schools cap the pupils, children first", () => {
+    const s = withCoverage(folk(town([bld(1, "school", 0), bld(2, "izba", 100)]), [{ home: 2, adults: 1, kids: SCHOOL_SEATS + 1, kidAge: 9 }]));
+    s.residents[1].job = 1; // the teacher
+    const d = dailyServices(s);
+    expect(serviceStats(d)).toMatchObject({ pupils: SCHOOL_SEATS, seats: SCHOOL_SEATS });
+    expect(Object.values(d.residents).filter((r) => r.school > 0)).toHaveLength(SCHOOL_SEATS);
+  });
+  const day = (s: SimState) => dailyServices({ ...s, gameMinutes: s.gameMinutes + 1440 });
+  it("the town sends illiterate grown-ups to school only when ordered; the teacher stays at school", () => {
+    const s = classroom(9);
+    const ordered = dailyServices({ ...s, levers: { ...s.levers, adultSchool: true } });
+    expect(ordered.residents[2].school).toBeCloseTo(learnPerDay(true)); // illiterate adult in a covered house
+    expect(ordered.residents[2].inClass).toBe(true);
+    expect(ordered.residents[1].school).toBe(0); // the teacher
+    expect(dailyServices(s).residents[2].school).toBe(0); // not ordered
+  });
+  it("a grown-up in class is neither jobless nor a builder: no work at all", () => {
+    const s = dailyServices({ ...classroom(9), levers: { ...classroom(9).levers, adultSchool: true } });
+    const c = countResidents(s.residents, s.gameMinutes);
+    expect(c.inClass).toBe(1); // resident 2; the teacher (1) works, the far adults (4, 5) are jobless
+    expect(c.jobless).toBe(2);
+    expect(idleResidents(s).has(2)).toBe(false);
+  });
+  it("a grown-up learns in one year of school days, a child in two", () => {
+    let s: SimState = { ...classroom(9), levers: { ...classroom(9).levers, adultSchool: true } };
+    for (let d = 1; d < SERVICE.adultLiteracyDays; d++) s = day(s);
+    expect(s.residents[2].literate).toBe(false);
+    s = day(s);
+    expect(s.residents[2].school).toBeCloseTo(100);
+    expect(s.residents[2].literate).toBe(true);
+    expect(SERVICE.childLiteracyDays).toBe(2 * SERVICE.adultLiteracyDays);
+  });
+  it("a child learns a little on each school day and is literate after two years", () => {
     let s = classroom(12.9);
-    for (let d = 0; d < 100; d++) s = dailyServices({ ...s, gameMinutes: s.gameMinutes + 1440 });
+    for (let d = 1; d < SERVICE.childLiteracyDays; d++) s = day(s);
+    expect(s.residents[3].school).toBeLessThan(100);
+    expect(s.residents[3].literate).toBe(false);
+    s = day(s);
     expect(s.residents[3].literate).toBe(true);
-    expect(s.residents[3].school).toBeGreaterThanOrEqual(SERVICE.literateDays); // attendance stopped at 15
-    expect(s.residents[6].literate).toBe(false);
-    expect(serviceStats(s).literate).toBeCloseTo(1 / 6); // all six are adults by now
+    expect(s.residents[6].literate).toBe(false); // far from the school
+  });
+  it("a child who leaves school at 15 keeps the progress he has", () => {
+    const s = dailyServices(classroom(15, 50));
+    expect(s.residents[3].school).toBe(50);
+    expect(s.residents[3].literate).toBe(false);
   });
   it("adults without school stay illiterate", () => {
     const s = dailyServices(folk(town([bld(1, "school", 0), bld(2, "izba", 100)]), [{ home: 2, adults: 2 }]));
@@ -599,12 +634,12 @@ describe("save", () => {
     expect([1, 2, 3].map((id) => parse()[id].founder)).toEqual([true, false, false]);
     expect(parse(true)[3].founder).toBe(true); // an explicit flag wins
   });
-  it("round-trips residents' literacy and school days", () => {
-    const s = folk(town([bld(1, "izba", 0)]), [{ home: 1, adults: 1, kids: 1, kidAge: 9, school: 400, literate: true }]);
+  it("round-trips residents' literacy and learning progress", () => {
+    const s = folk(town([bld(1, "izba", 0)]), [{ home: 1, adults: 1, kids: 1, kidAge: 9, school: 40, literate: true }]);
     const json = JSON.parse(JSON.stringify({ version: 4, city: { name: "Тест", lat: 55, lng: 37, foundedAt: 1_700_000_000_000 }, sim: { ...s, realTime: NOW - 1000 } }));
     const back = parseSave(json, NOW)!.sim;
     expect(back.residents[1].literate).toBe(true);
-    expect(back.residents[2].school).toBe(400);
+    expect(back.residents[2].school).toBe(40);
   });
 });
 
