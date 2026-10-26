@@ -11,8 +11,13 @@ const eco = (o: Partial<EconomyStats> = {}): EconomyStats => ({
   fields: { count: 0, ha: 0, assignedHa: 0, sown: 0, reaped: 0, expected: 0, window: "none" as never },
   avgMood: 0,
   forage: 0,
+  brushwood: 0,
   outlook: 1,
   eveningWares: 0,
+  fieldWork: 1,
+  buildFactor: 1,
+  firewood: 0,
+  unheated: { households: 0, people: 0 },
   ...o,
 });
 

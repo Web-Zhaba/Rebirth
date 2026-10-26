@@ -1,6 +1,6 @@
 import "./style.css";
 import { render, h } from "preact";
-import { effect } from "@preact/signals";
+import { computed, effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
 import { attachArticles } from "./map/articles";
 import { attachBadgeLayer } from "./map/badgeLayer";
@@ -15,12 +15,15 @@ import { attachRoadLayer } from "./map/roadLayer";
 import { attachRuinsLayer } from "./map/ruinsLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachLifeLayer } from "./map/lifeLayer";
+import { attachClouds } from "./map/clouds/attach";
 import { attachNightTint } from "./map/nightLayer";
+import { attachPrecipitation } from "./map/precipLayer";
 import { attachTrafficLayer } from "./map/trafficLayer";
+import { attachWeatherLayer } from "./map/weatherLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
 import { attachZoneTool } from "./map/zoneTool";
 import * as simClient from "./simClient";
-import { city, frame, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
+import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
 import { App } from "./ui/App";
 
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
@@ -40,6 +43,20 @@ attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLig
 attachNightTint(map, gameClock); // dusk tint of the map itself; sits just under the lights
 attachReachLayer(map);
 attachCityMarker(map);
+const cloudSite = computed(() => {
+  const w = state.value?.weather?.site;
+  return w ? { seed: w.seed, phase: w.phase } : null;
+});
+const weatherNow = computed(() => state.value?.weather ?? null);
+// Clouds above everything on the map, visible only on the far globe views; their ground shadows at every zoom, just
+// under the night tint (so the lights stay bright).
+attachClouds(map, {
+  clock: gameClock,
+  site: cloudSite,
+  extraLayers: [{ beforeId: "night-tint", load: async () => (await import("./map/clouds/cloudShadows")).createShadowLayer(map, { clock: gameClock, site: cloudSite }) }],
+});
+attachWeatherLayer(map, { weather: weatherNow, clock: gameClock });
+attachPrecipitation(map, { weather: weatherNow });
 attachRoadTool(map);
 attachZoneTool(map);
 attachPlaceTool(map);

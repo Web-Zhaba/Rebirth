@@ -15,6 +15,7 @@ import { settingsOpen } from "./SettingsDialog";
 import { rightPanel, togglePanel } from "./panels";
 import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
+import { weatherChip, weatherWarning } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -44,8 +45,8 @@ function onSpeedKey(e: KeyboardEvent): void {
   e.preventDefault();
 }
 
-const Row = ({ label, value }: { label: string; value: ComponentChildren }) => (
-  <span class="tip-row">
+const Row = ({ label, value, tone }: { label: string; value: ComponentChildren; tone?: "ok" | "warn" | "bad" }) => (
+  <span class={`tip-row${tone ? ` tip-${tone}` : ""}`}>
     <span>{label}</span>
     <span>{value}</span>
   </span>
@@ -112,6 +113,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
   const clearAll = clearing.reduce((a, c) => a + clearingLogs(c.area, c.forest), 0);
   const mood = eco ? Math.round(eco.avgMood) : 0;
   const net = eco ? foodNet(eco) : 0;
+  const wx = weatherChip(state.value?.weather, cal.season, eco);
   const text = (id: Good) => (st ? (id === "wares" ? String(Math.floor(st[id])) : amount(st[id])) : "");
 
   return (
@@ -147,6 +149,31 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
       </div>
       {p && st && eco && (
         <div class="stats">
+          {wx && (
+            <BarStat
+              icon={wx.icon}
+              value={wx.temp}
+              caption={wx.word}
+              tone={wx.impact ?? undefined}
+              title={`Погода: ${wx.word}`}
+              tip={
+                <>
+                  {wx.rows.map((r) => (
+                    <Row key={r.label} label={r.label} value={r.value} />
+                  ))}
+                  {wx.notes.map((n) => (
+                    <span key={n} class="tip-note">
+                      {n}
+                    </span>
+                  ))}
+                  {wx.effects.length > 0 && <b class="tip-title tip-section">Что это значит сегодня</b>}
+                  {wx.effects.map((e) => (
+                    <Row key={e.key} label={e.label} value={e.value} tone={e.tone} />
+                  ))}
+                </>
+              }
+            />
+          )}
           <BarStat
             icon="person"
             value={String(p.pop)}
@@ -198,6 +225,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
                     <Row label="На складе" value={`${text(g.id)} ${GOOD_UNIT[g.id]}`} />
                     <Row label="Сделано вчера" value={`${made > 0 ? "+" : ""}${amount(made)} ${GOOD_UNIT[g.id]}`} />
                     {g.id === "logs" && clearing.length > 0 && <Row label="Вырубка уже дала" value={`+${amount(clearGot)} из ${amount(clearAll)} м³`} />}
+                    {g.id === "logs" && eco.brushwood > 0 && <Row label="Хворост, без дров в запасе" value={`+${amount(eco.brushwood)} м³ в день`} />}
                     {g.id === "wares" && eco.eveningWares > 0 && <Row label="Вечерние ремёсла, 19–22 ч" value={`+${eco.eveningWares.toFixed(2).replace(".", ",")} шт/ч`} />}
                   </>
                 }
@@ -233,7 +261,8 @@ export function currentWarnings() {
   const { queue } = roadQueue(roads.value);
   const b = buildings.value;
   const building = b ? Object.values(b).filter((x) => x.state === "building").length : 0;
-  return warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building });
+  const weather = weatherWarning(state.value?.weather, eco);
+  return warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building, weather });
 }
 
 export function Warnings() {

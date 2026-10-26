@@ -47,7 +47,7 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 // Chain order = the order of the plan table.
 export const GOALS: GoalDef[] = [
-  { id: "izbas2", title: "Построить 2 дома", reward: "лесопилка, склад, охотничий пост", target: 2, unit: "", unlocks: ["sawpit", "barn", "hunter"], value: (s) => countWhere(s, (b) => b.zone === "res") },
+  { id: "izbas2", title: "Построить 2 дома", reward: "лесопилка, склад, погреб, охотничий пост, сбор в лесу", target: 2, unit: "", unlocks: ["sawpit", "barn", "cellar", "hunter", "forager"], value: (s) => countWhere(s, (b) => b.zone === "res") },
   {
     id: "logs20",
     title: "Накопить 20 м³ брёвен",
@@ -60,14 +60,14 @@ export const GOALS: GoalDef[] = [
   },
   { id: "sow2", title: "Засеять 2 га", reward: "рыболовный причал, огород, +1 семья", target: 2, unit: "га", unlocks: ["fisher", "garden"], families: 1, value: (s) => round1(sownHa(s)) },
   { id: "dig", title: "Открыть раскоп", reward: "первая статья в тетради", target: 1, unit: "", unlocks: [], value: (s) => countWhere(s, (b) => b.template === "dig") },
-  { id: "pop25", title: "25 жителей", reward: "торговая зона, рынок", target: 25, unit: "", unlocks: ["zone:trade", "market"], value: (s) => Object.keys(s.residents).length },
+  { id: "pop25", title: "25 жителей", reward: "торговая зона, рынок, пасека", target: 25, unit: "", unlocks: ["zone:trade", "market", "apiary"], value: (s) => Object.keys(s.residents).length },
   {
     id: "harvest",
     title: "Первый урожай",
-    reward: "храм, праздник урожая",
+    reward: "храм, сад, праздник урожая",
     target: 1,
     unit: "",
-    unlocks: ["chapel"],
+    unlocks: ["chapel", "orchard"],
     value: (s) => (s.chronicle.some((e) => e.kind === "harvest") || s.prod.flags.done ? 1 : 0),
   },
   { id: "pop50", title: "50 жителей", reward: "школа, лечебница", target: 50, unit: "", unlocks: ["school", "healer"], value: (s) => Object.keys(s.residents).length },
@@ -84,6 +84,10 @@ export const UNLOCK_NAME: Record<string, string> = {
   fisher: "рыболовный причал",
   garden: "огород",
   hunter: "охотничий пост",
+  cellar: "погреб",
+  forager: "сбор в лесу",
+  orchard: "сад",
+  apiary: "пасека",
   market: "рынок",
   chapel: "храм",
   school: "школа",

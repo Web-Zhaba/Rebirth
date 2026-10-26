@@ -91,6 +91,11 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   // Food without fields (fields.ts FOOD_RATE): a kitchen garden by the houses, a hunter's hut.
   garden: T("garden", "Огород", "placed", 1, 1, 3, 3, 1, 20, 3, [2, 0.5, 0], "food"),
   hunter: T("hunter", "Охотничий пост", "placed", 1, 1, 4, 4, 3, 30, 2, [4, 1, 0], "food"),
+  // Alternative food (fields.ts FOOD_RATE): picking in the forest, fruit trees, bees; and a cellar that keeps the stock.
+  forager: T("forager", "Сбор в лесу", "placed", 1, 1, 4, 4, 2, 24, 3, [2, 0.5, 0], "food"),
+  orchard: T("orchard", "Сад", "placed", 1, 2, 8, 10, 3, 60, 2, [4, 0.5, 0], "food"),
+  apiary: T("apiary", "Пасека", "placed", 1, 1, 4, 4, 2, 30, 1, [3, 1, 0], "food"),
+  cellar: T("cellar", "Погреб", "placed", 1, 1, 5, 5, 2, 70, 0, [10, 3, 4], "services"),
   // Excavation (PLAN.md section 12).
   dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0], "services"),
 };
@@ -111,13 +116,17 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp
 export const BARN_CAP = 30_000; // kg per finished barn
+export const CELLAR_CAP = 10_000; // kg per finished cellar; it keeps food better than a barn (weatherEffects spoilage)
 export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, wares: 20 };
 
 export function foodCapacity(buildings: Record<number, Building>): number {
   let cap = FOOD_CAMP_CAP;
-  for (const b of Object.values(buildings)) if (b.template === "barn" && b.state === "active") cap += BARN_CAP;
+  for (const b of Object.values(buildings)) if (b.state === "active") cap += storageOf(b.template);
   return cap;
 }
+
+// Kg of food a finished building of the template holds on top of the camp.
+export const storageOf = (template: string): number => (template === "barn" ? BARN_CAP : template === "cellar" ? CELLAR_CAP : 0);
 
 // ---------- construction labor ----------
 

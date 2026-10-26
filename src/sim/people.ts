@@ -1,13 +1,15 @@
 import { BUILDINGS, foodCapacity, houseCapacity } from "./buildings";
 import { buildFloor, buildingPriority, capacityOf } from "./jobs";
 import { isCleared } from "./clearing";
-import { assignFields, expectedKg, FIELD, foodKgHour, idleGumnos, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
+import { assignFields, bears, expectedKg, FIELD, FOOD_RATE, foodKgHour, idleGumnos, idleOrchards, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
 import { covers, SERVICE, servicesIn } from "./services";
 import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
-import { calendar, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
+import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
+import { foodNeedFactor, mortalityFactor, orchardQuality } from "./weatherEffects";
+import type { WeatherState } from "./weather";
 import { CELL_SIZE } from "./zones";
 
 export const FOUNDERS = 14; // founding party: 4 households in tents
@@ -388,9 +390,10 @@ export function idleResidents(s: ArtelState): Set<number> {
   const out = new Set<number>();
   if (constructionWork(s.buildings, s.roads, s.clearings)) return out;
   const farmless = idleGumnos(s);
+  const orchards = idleOrchards(s); // the gardeners out of season
   for (const r of Object.values(s.residents)) {
     if (!isAdultAge(ageOf(r.born, s.gameMinutes)) || r.inClass) continue;
-    if (r.job === null || farmless.has(r.job)) out.add(r.id);
+    if (r.job === null || farmless.has(r.job) || orchards.has(r.job)) out.add(r.id);
   }
   return out;
 }
@@ -458,35 +461,41 @@ export function productionScale(s: ArtelState): number {
 // the harvest is this year's unreaped expected amount while the window has not closed (a field not sown yet
 // counts in full: the whole yield), otherwise next year's (the full yield of every field a gumno works).
 // need = today's consumption x YEAR_DAYS. 0 below 90 % of the need, 1 from 120 %.
-export function foodOutlook(s: ArtelState & { households: SimState["households"] }): number {
-  const need = foodPerDay(s.residents, s.gameMinutes, s.levers);
+export function foodOutlook(s: ArtelState & { households: SimState["households"] } & Partial<Pick<SimState, "weather">>): number {
+  const need = foodPerDay(s.residents, s.gameMinutes, s.levers); // the yearly average: today's cold does not count
   if (need <= 0) return 1;
   const cal = calendar(s.gameMinutes);
   const days = YEAR_DAYS;
   let projected = s.stock.food;
   const open = cal.dayOfYear <= HARVEST_END_DAY;
   const assign = assignFields(s.zones.fields, s.buildings);
+  const crop = s.weather?.crop ?? 1;
   for (const f of s.zones.fields) {
     if (!assign.has(f.id)) continue;
     const w = workOf(s.prod.fields, f.id, cal.year);
-    if (!open || w.sowH <= 0) projected += FIELD.yieldKgHa * haOf(f);
-    else projected += Math.max(0, expectedKg(f, w) - w.reaped);
+    if (!open) projected += FIELD.yieldKgHa * haOf(f);
+    else if (w.sowH <= 0) projected += FIELD.yieldKgHa * haOf(f) * crop;
+    else projected += Math.max(0, expectedKg(f, w, crop) - w.reaped);
   }
   const workers = new Map<number, number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
   let daily = 0;
   for (const [id, n] of workers) {
     const b = s.buildings[id];
-    if (b && b.state === "active") daily += n * foodKgHour(b.template, cal.season) * workLength(s.levers);
+    if (!b || b.state !== "active") continue;
+    if (b.template === "orchard") {
+      // a bearing orchard gives its autumn once a year, so the whole year at the quality so far
+      if (bears(b, s.gameMinutes)) projected += n * FOOD_RATE.orchard.kgHour * workLength(s.levers) * DAYS_PER_SEASON * orchardQuality(s.prod.orchard);
+    } else daily += n * foodKgHour(b.template, cal.season) * workLength(s.levers);
   }
   projected += (daily + forageKg(s)) * days;
   return Math.min(1, Math.max(0, (projected / (need * days) - 0.9) / 0.3));
 }
 
-// Kg of food the town eats in a day.
-export function foodPerDay(residents: Record<number, Resident>, now: number, levers?: Levers): number {
+// Kg of food the town eats in a day (more in the cold).
+export function foodPerDay(residents: Record<number, Resident>, now: number, levers?: Levers, weather?: WeatherState): number {
   const c = countResidents(residents, now);
-  return (c.adults * FOOD.adult + c.children * FOOD.child) * rationFood(levers);
+  return (c.adults * FOOD.adult + c.children * FOOD.child) * rationFood(levers) * foodNeedFactor(weather);
 }
 
 export function peopleStats(s: ArtelState & Pick<SimState, "households">): PeopleStats {
@@ -745,7 +754,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     for (const id of ids()) {
       const r = w.residents[id];
       const home = w.households[r.household]?.home;
-      const care = home != null && covers(s.coverage[home], "healer") ? SERVICE.healerDeathFactor : 1;
+      const care = (home != null && covers(s.coverage[home], "healer") ? SERVICE.healerDeathFactor : 1) * mortalityFactor(s.weather, w.households[r.household]?.cold);
       if (rand() < (deathRate(ageOf(r.born, now)) * care) / YEAR_DAYS) {
         say(w, "death", `${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`);
         removePerson(w, r);
@@ -963,6 +972,9 @@ const WORK_TEXT: Record<string, string> = {
   woodcutter: "лесоруб",
   garden: "работает в Огороде",
   hunter: "охотник — Охотничий пост",
+  forager: "собирает в лесу",
+  orchard: "садовник — Сад",
+  apiary: "пасечник",
   sawpit: "рабочий лесопилки",
   quarry: "рабочий карьера",
   fisher: "рыбак",

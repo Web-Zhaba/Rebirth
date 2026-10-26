@@ -1,5 +1,6 @@
 import { BUILDINGS } from "./buildings";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
+import { fieldWork } from "./weatherEffects";
 import type { Building, Field, FieldWork, Resident, SimState, Stock, Window } from "./types";
 
 // Food from work that needs no field: kg per worker-hour and the factor of each season (0 spring .. 3 winter).
@@ -8,7 +9,16 @@ export const FOOD_RATE: Record<string, { kgHour: number; season: [number, number
   fisher: { kgHour: 0.6, season: [1, 1, 1, 0.5] },
   garden: { kgHour: 0.2, season: [1, 1, 1, 0] }, // the beds lie fallow in winter
   hunter: { kgHour: 0.15, season: [0.5, 0.5, 1, 2] }, // game comes down to the izba in the cold
+  // Alternative food: berries, mushrooms and nuts (a staffed forager feeds about 4 adults a year; an orchard 5-7 once it bears; an apiary 1-2); fruit trees (production.ts: a
+  // bearing orchard, scaled by the year's quality); honey (kg of food equivalent, weather decides most of it).
+  forager: { kgHour: 0.13, season: [0.3, 1, 1.4, 0] },
+  orchard: { kgHour: 0.8, season: [0, 0, 1, 0] },
+  apiary: { kgHour: 0.3, season: [0.3, 1, 0.7, 0] },
 };
+// Gathering in the forest asks for this share of forest around the site (growth.ts checks it).
+export const FORAGER_FOREST = 0.2;
+// Years before planted trees bear.
+export const ORCHARD_YEARS = 1;
 export const foodKgHour = (template: string, season: number): number => {
   const r = FOOD_RATE[template];
   return r ? r.kgHour * r.season[season] : 0;
@@ -91,17 +101,17 @@ export function windowAt(gameMinutes: number): Window {
   return null;
 }
 
-// Person-hours of work a field still has in the open window.
-export function remainingHours(f: Field, w: FieldWork, win: Window): number {
+// Person-hours of work a field still has in the open window; `crop` (yield potential) shortens or lengthens the harvest.
+export function remainingHours(f: Field, w: FieldWork, win: Window, crop = 1): number {
   if (win === "sowing") return Math.max(0, FIELD.sowHoursHa * haOf(f) - w.sowH);
-  if (win === "harvest") return Math.max(0, FIELD.harvestHoursHa * haOf(f) * sownShare(f, w) - w.harvH);
+  if (win === "harvest") return Math.max(0, FIELD.harvestHoursHa * haOf(f) * sownShare(f, w) * crop - w.harvH);
   return 0;
 }
 
 // Sowing progress per hour of work now: 1 in spring, less in the late days.
 export const sowCredit = (gameMinutes: number): number => (calendar(gameMinutes).season === 0 ? 1 : LATE_SOWING.credit);
 
-type Idle = Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod" | "stock">;
+type Idle = Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod" | "stock"> & Partial<Pick<SimState, "weather">>;
 
 // Active gumnos with no work for their farmers right now.
 export function idleGumnos(s: Idle): Set<number> {
@@ -109,7 +119,7 @@ export function idleGumnos(s: Idle): Set<number> {
   const win = windowAt(s.gameMinutes);
   const gumnos = Object.values(s.buildings).filter((b) => b.template === "gumno" && b.state === "active");
   if (gumnos.length === 0) return out;
-  if (win === null) {
+  if (win === null || (s.weather && fieldWork(s.weather) <= 0)) { // frozen, snowed in: the farmers join the artel
     for (const b of gumnos) out.add(b.id);
     return out;
   }
@@ -118,7 +128,7 @@ export function idleGumnos(s: Idle): Set<number> {
   const left = new Map<number, number>();
   for (const f of s.zones.fields) {
     const g = assign.get(f.id);
-    if (g !== undefined) left.set(g, (left.get(g) ?? 0) + remainingHours(f, workOf(s.prod.fields, f.id, year), win));
+    if (g !== undefined) left.set(g, (left.get(g) ?? 0) + remainingHours(f, workOf(s.prod.fields, f.id, year), win, s.weather?.crop));
   }
   for (const b of gumnos) if ((left.get(b.id) ?? 0) <= 1e-9) out.add(b.id);
   return out;
@@ -137,13 +147,25 @@ function blockedWorkshops(s: Pick<Idle, "buildings" | "stock" | "prod">): Set<nu
   return out;
 }
 
+// Orchards with nothing to pick: the trees do not bear yet, or it is not autumn.
+export function idleOrchards(s: Idle): Set<number> {
+  const out = new Set<number>();
+  const autumn = calendar(s.gameMinutes).season === 2;
+  for (const b of Object.values(s.buildings)) if (b.template === "orchard" && b.state === "active" && !(autumn && bears(b, s.gameMinutes))) out.add(b.id);
+  return out;
+}
+
 // Workplaces whose workers join the construction artel: farmers while the land has no work for them,
-// and the workers of workshops blocked by missing inputs.
+// the workers of workshops blocked by missing inputs, and the gardeners of an orchard out of season.
 export function idleWorkplaces(s: Idle): Set<number> {
   const out = idleGumnos(s);
   for (const id of blockedWorkshops(s)) out.add(id);
+  for (const id of idleOrchards(s)) out.add(id);
   return out;
 }
+
+// Fruit trees bear a year after the orchard was finished (Building.ripe, stamped by the daily step).
+export const bears = (b: Pick<Building, "ripe">, now: number): boolean => b.ripe !== undefined && now >= b.ripe;
 
 // Farmers (workers of a gumno) join the artel outside the two windows, and inside one
 // when their gumno has no work left in it.
@@ -173,5 +195,5 @@ export const workOf = (fields: Record<number, FieldWork>, id: number, year: numb
 };
 
 export const sownShare = (f: Field, w: FieldWork): number => Math.min(1, w.sowH / (FIELD.sowHoursHa * haOf(f)));
-// Kg the field can still give this year (what sowing made possible).
-export const expectedKg = (f: Field, w: FieldWork): number => FIELD.yieldKgHa * haOf(f) * sownShare(f, w);
+// Kg the field can still give this year (what sowing made possible, times the yield potential `crop` of the weather).
+export const expectedKg = (f: Field, w: FieldWork, crop = 1): number => FIELD.yieldKgHa * haOf(f) * sownShare(f, w) * crop;

@@ -14,6 +14,8 @@ import { isWorkHour, tolokaActive, workHours, type Levers } from "./levers";
 import { spendOnRoads } from "./roads";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
 import type { SimState } from "./types";
+import { weatherStep } from "./weather";
+import { buildFactor } from "./weatherEffects";
 
 export { START_MINUTE_OF_DAY };
 
@@ -88,11 +90,12 @@ export function step(s: SimState): SimState {
     // materials from the stock when work on them starts, and to forest clearings, ahead of the buildings when logs run short.
     // On a толока every hand goes to its site, none to the roads.
     const toloka = tolokaActive(s.levers, s.gameMinutes);
-    const hours = (builderCount(s) * BASE_TICK) / 60;
+    const bf = buildFactor(s.weather); // rain, cold and storms cut the hours and the crew
+    const hours = (builderCount(s) * BASE_TICK * bf) / 60;
     const r = toloka ? { roads: s.roads, left: hours } : spendOnRoads(s.roads, hours);
     roads = r.roads;
     const lever = { priority: s.levers.priority, focus: toloka ? s.levers.toloka!.site : null };
-    const crew = (CREW * BASE_TICK) / 60; // person-hours of one crew in a tick
+    const crew = (CREW * BASE_TICK * bf) / 60; // person-hours of one crew in a tick
     const first = clearingsFirst(s.stock);
     const paid = payMaterials(s.buildings, s.stock, r.left, s.finds.foundations, crew, s.clearings, first, lever);
     clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first, lever);
@@ -105,7 +108,7 @@ export function step(s: SimState): SimState {
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScales(s));
   else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
   cur = retireDigs(cur);
-  let next: SimState = { ...cur, gameMinutes: s.gameMinutes + BASE_TICK };
+  let next: SimState = weatherStep({ ...cur, gameMinutes: s.gameMinutes + BASE_TICK });
   // A workplace finished in this tick hires at once, not at the next midnight.
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00

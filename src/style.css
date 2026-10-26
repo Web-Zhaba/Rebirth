@@ -21,6 +21,14 @@ body {
   height: 100vh;
 }
 
+/* Weather particles above the map canvas but below the interface, and never in the way of map gestures. */
+.precip-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 /* Links: one style for <a> and text-like buttons (button.link), ink on hover, visible focus ring. */
 a,
 button.link {

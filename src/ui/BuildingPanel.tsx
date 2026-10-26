@@ -17,6 +17,7 @@ import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspe
 import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
 import { Button, Confirm, IconButton, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
+import { buildFactorText, workFactorText } from "./weatherModel";
 
 const REFRESH_MS = 4000;
 
@@ -84,6 +85,8 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
     <div class="prod">
       {site && template === "woodcutter" && <div>Лес вокруг: {pct(site.forest)}</div>}
       {site && template === "fisher" && <div>Вода рядом: {pct(site.water)}</div>}
+      {site && template === "forager" && <div>Лес вокруг: {pct(site.forest)}</div>}
+      {p.orchard && <div>{p.orchard.ripeDays > 0 ? `Деревья растут: ещё ${p.orchard.ripeDays} дн.` : `Урожай этого года: ${pct(p.orchard.quality)}`}</div>}
       {p.storage !== undefined && <div>Склад: +{tons(p.storage)} т еды</div>}
       {p.fields && (
         <div>
@@ -151,6 +154,9 @@ export function BuildingPanel() {
   const upgradeNote = b && snap && b.state === "active" && b.template === UPGRADE.template && b.level < 2 && !b.upgrade ? upgradeBlockers(snap, b, snap.houseMood[b.id]) : null;
   const group = t?.group ?? null;
   const info = useResidents(id, shown && b?.state === "active", `${b?.staff ?? "-"}|${group ? (state.value?.levers.jobs?.[group] ?? 2) : "-"}`);
+  const ws = snap?.weather;
+  const weatherWork = b && b.state === "active" && info?.kind === "workplace" ? workFactorText(b.template, ws) : null;
+  const weatherBuild = b && b.state !== "active" ? buildFactorText(ws) : null;
   useEffect(() => setConfirming(false), [id]);
   if (!b || !t || !shown) return null;
   const upgrading = b.state === "active" && !!b.upgrade;
@@ -194,6 +200,11 @@ export function BuildingPanel() {
           {queued && <div class="people-note">{queued}</div>}
           <SiteLevers siteKey={b.id} />
         </div>
+      )}
+      {weatherBuild && (
+        <Line label="Стройка сегодня" tone={weatherBuild.pct <= 50 ? "bad" : "warn"}>
+          {weatherBuild.pct} %{weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
+        </Line>
       )}
       {b.state !== "active" && <SiteMaterials template={b.template} paid={b.paid} hand={b.hand} st={stock.value} />}
       {upgradeNote && (
@@ -247,6 +258,11 @@ export function BuildingPanel() {
         </>
       )}
       {capacity && <div>{capacity}</div>}
+      {weatherWork && (
+        <Line label="Работа сегодня" tone={weatherWork.pct <= 50 ? "bad" : "warn"}>
+          {weatherWork.pct} %{weatherWork.reason ? ` — ${weatherWork.reason}` : ""}
+        </Line>
+      )}
       {output && (
         <Line icon={output.icon} label={`Делает: ${output.name}`}>
           {b.template === "gumno" ? "вчера собрано" : "вчера"} {num(output.made)} {output.unit}

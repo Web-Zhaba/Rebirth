@@ -17,6 +17,7 @@ import { jobNotes, JOB_ICON, PRIORITY_LONG, PRIORITY_SHORT } from "./jobsModel";
 import { Button, Confirm, IconButton, ProgressBar, Segmented, Tabs, type TabItem } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { amount, pad, roadQueue } from "./topbarModel";
+import { effectLines, weatherReason } from "./weatherModel";
 
 type Tab = "people" | "work" | "services" | "events" | "orders";
 
@@ -126,6 +127,27 @@ function PeopleTab() {
   );
 }
 
+// What the weather takes from the town today: the two big factors, fuel and food. Visible without hovering the chip.
+function WeatherBlock() {
+  const ws = state.value?.weather;
+  const lines = effectLines(ws, economy.value);
+  if (lines.length === 0) return null;
+  const reason = weatherReason(ws);
+  return (
+    <>
+      <h3 class="rs-sub">Погода</h3>
+      <div class="rs-list">
+        {lines.map((l) => (
+          <Line key={l.key} label={l.label} tone={l.tone}>
+            {l.value}
+          </Line>
+        ))}
+        {reason && <div class="people-note">Сейчас: {reason}</div>}
+      </div>
+    </>
+  );
+}
+
 function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
   const p = people.value;
   const dem = p?.demand ?? { res: 0, craft: 0, trade: 0 };
@@ -155,6 +177,7 @@ function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
   return (
     <div class="rs-list">
       <JobsBlock />
+      <WeatherBlock />
       <h3 class="rs-sub">Занятость</h3>
       <Line label="Работают">{p.employed}</Line>
       <Line label="На стройке">{p.builders}</Line>

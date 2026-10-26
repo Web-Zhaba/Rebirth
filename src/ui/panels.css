@@ -125,6 +125,10 @@
   color: var(--bad);
 }
 
+.insp-warn .insp-value {
+  color: var(--warn-text);
+}
+
 .insp-actions {
   display: flex;
   flex-wrap: wrap;
@@ -260,7 +264,12 @@
   border-left: 0;
 }
 
-.seg-btn:hover:not(.on) {
+.seg-btn:disabled {
+  color: var(--pencil-faint);
+  cursor: not-allowed;
+}
+
+.seg-btn:hover:not(.on):not(:disabled) {
   background: var(--paper-shade);
 }
 
