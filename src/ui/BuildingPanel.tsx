@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { BUILDINGS, houseCapacity, JOB_NAMES, materialsOf, type JobGroup, type Materials, UPGRADE } from "../sim/buildings";
 import { domainName } from "../sim/domains";
-import { heritageDomain, kindName, siteTitle } from "../sim/heritage";
+import { kindName, siteDomain, siteTitle } from "../sim/heritage";
 import { SPEED } from "../sim/research";
 import { upgradeBlockers } from "../sim/coverage";
 import { queuedLabel } from "../sim/clock";
@@ -60,7 +60,7 @@ function SiteMaterials({ m, paid, hand, st }: { m: Materials | undefined; paid: 
 
 // A restored old building: its real name, the way it was restored and what it adds to the research.
 function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined }) {
-  const domain = heritageDomain(site?.cls);
+  const domain = siteDomain(site?.cls);
   const w = b.restoreWeight ?? 0;
   return (
     <div class="prod">

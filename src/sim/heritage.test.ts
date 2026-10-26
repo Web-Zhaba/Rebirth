@@ -20,14 +20,17 @@ describe("heritage table", () => {
       ["place_of_worship", "christian", "care"],
       ["place_of_worship", undefined, "care"],
       ["hospital", "clinic", "care"],
-      ["doctors", "doctors", "care"],
-      ["pharmacy", "pharmacy", "care"],
+      ["doctors", "doctors", null],
+      ["pharmacy", "pharmacy", null],
+      ["bank", "bank", null],
+      ["shop", "mall", null],
+      ["railway", "halt", null],
       ["grocery", "marketplace", "trade"],
       ["grocery", "supermarket", null],
       ["railway", "station", "trade"],
       ["railway", "subway", null],
       ["harbor", "marina", "trade"],
-      ["car", "car_repair", "craft"],
+      ["car", "car_repair", null],
       ["restaurant", "restaurant", null],
       ["shop", "bakery", null],
       ["parking", "parking", null],
@@ -35,7 +38,7 @@ describe("heritage table", () => {
     for (const [cls, sub, want] of cases) expect(heritageDomain(cls, sub), `${cls}/${sub}`).toBe(want);
   });
   it("every domain value is a real domain", () => {
-    for (const [c, s] of [["castle"], ["school"], ["place_of_worship"], ["harbor"], ["car", "car_repair"]] as [string, string?][]) expect(DOMAIN_IDS).toContain(heritageDomain(c, s));
+    for (const [c, s] of [["castle"], ["school"], ["place_of_worship"], ["harbor"], ["railway", "station"]] as [string, string?][]) expect(DOMAIN_IDS).toContain(heritageDomain(c, s));
   });
   it("a stored kind reads back to its domain", () => {
     expect(heritageKind("grocery", "marketplace")).toBe("marketplace");

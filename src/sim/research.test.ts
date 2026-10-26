@@ -72,7 +72,7 @@ describe("running", () => {
   it("finishes in its days at base speed, then starts the next in the queue", () => {
     let s = ok(queueResearch(town(), "carpentry"));
     s = ok(queueResearch(s, "storage"));
-    s = run(s, 1.02);
+    s = run(s, 3.06);
     expect(have(s, "carpentry")).toBe(true);
     expect(s.progress.research.active?.techId).toBe("storage");
     expect(s.chronicle.at(-1)).toMatchObject({ kind: "tech:carpentry" });
@@ -82,13 +82,13 @@ describe("running", () => {
   it("a long stretch passes several techs", () => {
     let s = town();
     for (const id of ["carpentry", "storage", "foraging"]) s = ok(queueResearch(s, id));
-    s = run(s, 3.1);
+    s = run(s, 9.3);
     expect(s.progress.techs).toEqual(["carpentry", "storage", "foraging"]);
     expect(s.progress.research.active).toBeNull();
   });
   it("runs through the real tick", () => {
     let s = ok(queueResearch(people(town(), 2), "carpentry"));
-    for (let i = 0; i < 160; i++) s = step(s);
+    for (let i = 0; i < 480; i++) s = step(s);
     expect(have(s, "carpentry")).toBe(true);
   });
   it("idle with an empty queue changes nothing", () => {
@@ -99,7 +99,7 @@ describe("running", () => {
     let s = ok(queueResearch(town(), "carpentry"));
     s = ok(queueResearch(s, "trade")); // needs crafts
     s = ok(queueResearch(s, "storage"));
-    s = run(s, 1.02);
+    s = run(s, 3.06);
     expect(s.progress.research.active?.techId).toBe("storage");
     expect(s.progress.research.queue).toEqual(["trade"]);
   });
@@ -116,16 +116,16 @@ describe("speed", () => {
     expect(researchSpeed(s, "build")).toBeCloseTo(1.5);
   });
   it("a faster town finishes sooner", () => {
-    const fast = run(ok(queueResearch(people(town(), 10, 100), "carpentry")), 0.7);
+    const fast = run(ok(queueResearch(people(town(), 10, 100), "carpentry")), 2.1);
     expect(have(fast, "carpentry")).toBe(true);
-    expect(have(run(ok(queueResearch(town(), "carpentry")), 0.7), "carpentry")).toBe(false);
+    expect(have(run(ok(queueResearch(town(), "carpentry")), 2.1), "carpentry")).toBe(false);
   });
   it("the view reports the share, the eta and the speeds", () => {
     expect(researchView(town()).active).toBeNull();
-    const t = run(ok(queueResearch(town(), "carpentry")), 0.5);
+    const t = run(ok(queueResearch(town(), "carpentry")), 1.5);
     const v = researchView(t);
     expect(v.active!.share).toBeCloseTo(0.5, 1);
-    expect(v.active!.etaMinutes).toBeCloseTo(0.5 * DAY_MIN, -2);
+    expect(v.active!.etaMinutes).toBeCloseTo(1.5 * DAY_MIN, -2);
     expect(v.speeds.learn).toBe(1);
     expect(v.era).toBe(1);
   });
@@ -134,19 +134,19 @@ describe("speed", () => {
 describe("insights", () => {
   it("cut the time of their tech and are used up with it", () => {
     let s = grantInsight(town(), "carpenter-corner");
-    expect(workDays(s.progress, TECH_BY_ID.get("carpentry")!)).toBeCloseTo(0.6);
+    expect(workDays(s.progress, TECH_BY_ID.get("carpentry")!)).toBeCloseTo(1.8);
     s = ok(queueResearch(s, "carpentry"));
-    s = run(s, 0.65);
+    s = run(s, 1.85);
     expect(have(s, "carpentry")).toBe(true);
     expect(s.progress.insights).toEqual([]);
   });
   it("do not stack: the best one counts", () => {
     const s = grantInsight(grantInsight(town(), "firing"), "ledger");
-    expect(workDays(s.progress, TECH_BY_ID.get("guildwork")!)).toBeCloseTo(7 * 0.7);
+    expect(workDays(s.progress, TECH_BY_ID.get("guildwork")!)).toBeCloseTo(21 * 0.7);
   });
   it("apply to work already done", () => {
     let s = ok(queueResearch(town(), "carpentry"));
-    s = run(s, 0.7);
+    s = run(s, 2.1);
     expect(have(s, "carpentry")).toBe(false);
     s = grantInsight(s, "carpenter-corner");
     s = run(s, 0.01);

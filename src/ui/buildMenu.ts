@@ -4,9 +4,10 @@ import { DIG } from "../sim/excavation";
 import { CLEARING } from "../sim/clearing";
 import { PLACE_MIN } from "../sim/growth";
 import { BUILDINGS, type Materials } from "../sim/buildings";
-import { isRoadKind, ROAD_KINDS } from "../sim/roads";
+import { ROAD_KINDS } from "../sim/roads";
 import { SERVICES, isService } from "../sim/services";
-import { SITE_RADIUS, type Tool } from "../map/tools";
+import { roadKindOf, roadMaterial, SITE_RADIUS, type MaterialTool, type Tool } from "../map/tools";
+import type { RoadKind } from "../sim/types";
 import type { IconName } from "./icons";
 
 export type CategoryId = "roads" | "zones" | "food" | "farm" | "services" | "past";
@@ -18,7 +19,7 @@ export interface Category {
 }
 
 export const CATEGORIES: Category[] = [
-  { id: "roads", label: "Дороги", tools: ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore", "stone", "stonebridge"] },
+  { id: "roads", label: "Дороги", tools: ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore"] },
   { id: "zones", label: "Зоны", tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
   { id: "food", label: "Еда", tools: ["gumno", "garden", "hunter", "fisher", "forager", "orchard"] },
   { id: "farm", label: "Ресурсы", tools: ["woodcutter", "sawpit", "quarry", "barn", "cellar", "apiary"] },
@@ -39,8 +40,6 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   dirt: "dirt",
   footbridge: "footbridge",
   bridge: "bridge",
-  stone: "stone",
-  stonebridge: "bridge",
   bulldoze: "bulldoze",
   restore: "street",
   res: "res",
@@ -73,9 +72,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   path: "Тропа",
   dirt: "Дорога",
   footbridge: "Канатный мостик",
-  bridge: "Свайный мост",
-  stone: "Каменная дорога",
-  stonebridge: "Каменный мост",
+  bridge: "Мост",
   bulldoze: "Снос",
   restore: "Старые улицы",
   res: "Жильё",
@@ -93,8 +90,6 @@ const PURPOSE: Record<Tool, string> = {
   dirt: "Грунтовая дорога: шире и ровнее тропы, по ней возят грузы",
   footbridge: "Подвесной мостик над водой: только для пешеходов, узкий и лёгкий",
   bridge: "Широкий мост на сваях над водой: по нему проедут грузы",
-  stone: "Каменная дорога: прочная, берёт крутой уклон; камень берут со склада, когда начинают работу",
-  stonebridge: "Каменный мост на опорах: самый длинный пролёт, камень берут со склада, когда начинают работу",
   bulldoze: "Снести участок дороги вместе с планами вдоль него",
   restore: "Проложить заново раскопанную улицу целиком: старая тропа станет тропой, улица — дорогой",
   res: "Размечает участки под жильё: сюда придут новые семьи",
@@ -128,8 +123,6 @@ const SITE: Partial<Record<Tool, string>> = {
   dirt: "Между двумя точками на суше, уклон не круче 12 %",
   footbridge: "Через воду (пролёт до 25 м) или по суше, уклон не круче 30 %",
   bridge: "Через воду (пролёт до 30 м) или по суше, уклон не круче 10 %",
-  stone: "Между двумя точками на суше, уклон не круче 20 %",
-  stonebridge: "Через воду (пролёт до 60 м) или по суше, уклон не круче 12 %",
   woodcutter: `В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`,
   fisher: `У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`,
   forager: `В лесу: от ${Math.round(PLACE_MIN.foragerForest * 100)} % леса в ${SITE_RADIUS.forager} м вокруг`,
@@ -138,6 +131,16 @@ const SITE: Partial<Record<Tool, string>> = {
   apiary: "Не на воде и не на болоте",
   clearing: `Контур до ${CLEARING.maxArea / 10000} га, не дальше ${CLEARING.reach} м от построенной дороги`,
   field: "Замкнутый контур на суше, не через дорогу и не поверх другого поля",
+};
+
+// Hover text of the stone materials, which replace the tool text while chosen.
+const KIND_PURPOSE: Partial<Record<RoadKind, string>> = {
+  stone: "Каменная дорога: прочная, берёт крутой уклон; камень берут со склада, когда начинают работу",
+  stonebridge: "Каменный мост на опорах: самый длинный пролёт, камень берут со склада, когда начинают работу",
+};
+const KIND_SITE: Partial<Record<RoadKind, string>> = {
+  stone: "Между двумя точками на суше, уклон не круче 20 %",
+  stonebridge: "Через воду (пролёт до 60 м) или по суше, уклон не круче 12 %",
 };
 
 export interface ToolInfo {
@@ -164,9 +167,11 @@ export function materialList(m: Materials): { icon: IconName; text: string }[] {
 }
 
 // Everything the hover card shows, taken from the sim tables.
-export function toolInfo(t: Tool): ToolInfo {
+// A road or bridge tool shows the material chosen for it.
+export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roadMaterial.value): ToolInfo {
   const b = BUILDINGS[t];
-  const road = isRoadKind(t) ? ROAD_KINDS[t] : null;
+  const kind = roadKindOf(t, material);
+  const road = kind ? ROAD_KINDS[kind] : null;
   let reach: string | null = null;
   if (isService(t)) reach = `Охват ${SERVICES[t].reach} м по дорогам`;
   else if (t === "gumno") reach = `Поля до ${FIELD.radius} м от фермы`;
@@ -180,11 +185,11 @@ export function toolInfo(t: Tool): ToolInfo {
   return {
     tool: t,
     label: toolLabel(t),
-    purpose: PURPOSE[t],
+    purpose: (kind && KIND_PURPOSE[kind]) || PURPOSE[t],
     labor: road ? `${num(road.labor)} чел.-ч на метр` : b ? `${num(b.labor)} чел.-ч` : null,
     materials: b ? materialList(b.materials) : road?.stone ? [{ icon: "stone", text: `${num(road.stone)} т на метр` }] : [],
     jobs: b && b.jobs > 0 ? b.jobs : null,
-    site: SITE[t] ?? (b ? "У построенной дороги, на свободных участках" : "На карте"),
+    site: (kind && KIND_SITE[kind]) || (SITE[t] ?? (b ? "У построенной дороги, на свободных участках" : "На карте")),
     reach,
   };
 }

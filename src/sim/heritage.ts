@@ -1,5 +1,5 @@
 import { INSIGHTS, type InsightDef } from "./tech";
-import type { ProgressState } from "./types";
+import type { FoundFoundation, ProgressState, SimState } from "./types";
 import type { DomainId } from "./domains";
 
 // Which OpenMapTiles POI classes mark a notable old building and which knowledge domain it feeds
@@ -18,24 +18,15 @@ const BY_CLASS: Record<string, DomainId> = {
   theatre: "learn",
   place_of_worship: "care",
   hospital: "care", // hospital/hospital, hospital/clinic
-  doctors: "care",
-  pharmacy: "care",
   harbor: "trade",
   ferry_terminal: "trade",
-  bank: "trade",
 };
 
 // "class/subclass" where the subclass decides: [kind, domain] picks it, null drops a subclass of an accepted class.
 // The kind is what is stored as a foundation's `cls`, so the domain can be read back from it alone.
 const BY_SUB: Record<string, [string, DomainId] | null> = {
   "grocery/marketplace": ["marketplace", "trade"],
-  "grocery/department_store": ["department_store", "trade"],
-  "shop/mall": ["mall", "trade"],
-  "shop/wholesale": ["wholesale", "trade"],
   "railway/station": ["station", "trade"],
-  "railway/halt": ["halt", "trade"],
-  "bus/bus_station": ["bus_station", "trade"],
-  "car/car_repair": ["car_repair", "craft"],
   "school/kindergarten": null,
   "town_hall/community_centre": null,
 };
@@ -59,8 +50,17 @@ export function heritageDomain(cls: string | undefined, subclass?: string): Doma
   return BY_CLASS[kind] ?? BY_KIND[kind] ?? null;
 }
 
-// A typed (notable) foundation: its stored kind is in the table.
-export const isHeritage = (f: { cls?: string }): boolean => !!f.cls && (f.cls in BY_CLASS || f.cls in BY_KIND);
+// Kinds trimmed from the table (landmarks only now). A save may still hold such a site that is being restored or is restored.
+const LEGACY_DOMAIN: Record<string, DomainId> = { doctors: "care", pharmacy: "care", bank: "trade", department_store: "trade", mall: "trade", wholesale: "trade", halt: "trade", bus_station: "trade", car_repair: "craft" };
+
+// A curated stored kind.
+export const isCurated = (cls: string | undefined): boolean => !!cls && (cls in BY_CLASS || cls in BY_KIND);
+
+// A typed (notable) foundation: its kind is curated; a trimmed kind stays typed only once restoring or restored.
+export const isHeritage = (f: { cls?: string; state?: string }): boolean => isCurated(f.cls) || (!!f.cls && f.cls in LEGACY_DOMAIN && (f.state === "restoring" || f.state === "restored"));
+
+// Domain of a stored foundation's kind, trimmed kinds included.
+export const siteDomain = (cls: string | undefined): DomainId | null => heritageDomain(cls) ?? (cls ? (LEGACY_DOMAIN[cls] ?? null) : null);
 
 // ---------- restoration (PLAN-research.ru.md section 7) ----------
 // Pure data and rules shared by the worker and the panel.
@@ -99,13 +99,7 @@ const WORK_TEMPLATE: Record<string, string> = {
   school: "school",
   college: "school",
   hospital: "healer",
-  doctors: "healer",
-  pharmacy: "healer",
   marketplace: "market",
-  department_store: "market",
-  mall: "market",
-  wholesale: "market",
-  car_repair: "carpentry",
 };
 export const workTemplate = (cls: string | undefined): string | null => (cls && WORK_TEMPLATE[cls]) || null;
 
@@ -123,7 +117,7 @@ export function restoreCost(area: number): { labor: number; logs: number; planks
 }
 
 // Scarcity (section 5): the fewer notable buildings a revealed area holds, the more each restoration is worth.
-export const SCARCITY = { target: 20, min: 1, max: 3, cell: 10 }; // target: typed foundations per km2 that count as plain 1
+export const SCARCITY = { target: 20, min: 1, max: 3, cell: 10, kindGap: 300 }; // target: typed foundations per km2 that count as plain 1; kindGap: same-kind sites closer than this (m) count once
 export const WORKING_SHARE = 0.5; // a working building counts half
 
 const mulCache = new WeakMap<object, number>();
@@ -142,21 +136,66 @@ export function discArea(discs: readonly { x: number; y: number; r: number }[]):
   return cells.size * g * g;
 }
 
-// m = clamp(20 / density, 1, 3), density = typed foundations per km2 of the revealed area; 1 while nothing is revealed.
-export function scarcity(finds: { foundations: readonly { cls?: string }[]; revealed: readonly { x: number; y: number; r: number }[] }): number {
+// Curated foundations counted by the scarcity density: several of one kind within kindGap m of each other count once.
+export function distinctTyped(foundations: readonly Pick<FoundFoundation, "id" | "cls" | "ring">[]): number {
+  const reps = new Map<string, [number, number][]>();
+  let n = 0;
+  for (const f of [...foundations].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    if (!f.cls || !isCurated(f.cls) || f.ring.length === 0) continue;
+    let cx = 0;
+    let cy = 0;
+    for (const [x, y] of f.ring) {
+      cx += x;
+      cy += y;
+    }
+    cx /= f.ring.length;
+    cy /= f.ring.length;
+    let list = reps.get(f.cls);
+    if (!list) reps.set(f.cls, (list = []));
+    if (list.some(([x, y]) => Math.hypot(x - cx, y - cy) <= SCARCITY.kindGap)) continue;
+    list.push([cx, cy]);
+    n++;
+  }
+  return n;
+}
+
+// m = clamp(20 / density, 1, 3), density = distinct curated foundations per km2 of the revealed area; 1 while nothing is revealed.
+export function scarcity(finds: { foundations: readonly Pick<FoundFoundation, "id" | "cls" | "ring">[]; revealed: readonly { x: number; y: number; r: number }[] }): number {
   const hit = mulCache.get(finds);
   if (hit !== undefined) return hit;
   let m = 1;
   if (finds.revealed.length > 0) {
     const km2 = discArea(finds.revealed) / 1e6;
-    const typed = finds.foundations.filter(isHeritage).length;
+    const typed = distinctTyped(finds.foundations);
     const density = km2 > 0 ? typed / km2 : Infinity;
     m = density <= 0 ? SCARCITY.max : Math.round(clamp(SCARCITY.target / density, SCARCITY.min, SCARCITY.max) * 100) / 100;
   }
   mulCache.set(finds, m);
   return m;
 }
-export const restoreWeightOf = (mode: "monument" | "working", mul: number): number => Math.round((mode === "monument" ? mul : mul * WORKING_SHARE) * 100) / 100;
+// Each further restoration of a kind counts half of the one before: weight x REPEAT^n for n earlier ones.
+export const REPEAT = 0.5;
+export const repeatFactor = (n: number): number => REPEAT ** Math.max(0, n);
+export const restoreWeightOf = (mode: "monument" | "working", mul: number, earlier = 0): number =>
+  Math.round((mode === "monument" ? mul : mul * WORKING_SHARE) * repeatFactor(earlier) * 100) / 100;
+
+// Sites of `cls` ordered before building `beforeId` (all when absent) that are restoring or restored; lost ones do not count.
+// A site without a building counts as earlier.
+export function earlierOfKind(s: Pick<SimState, "finds" | "buildings">, cls: string | undefined, selfId: string, beforeId?: number): number {
+  if (!cls) return 0;
+  const orderOf = new Map<string, number>();
+  if (beforeId !== undefined) for (const b of Object.values(s.buildings)) if (b.siteId) orderOf.set(b.siteId, b.id);
+  let n = 0;
+  for (const f of s.finds.foundations) {
+    if (f.id === selfId || f.cls !== cls || (f.state !== "restoring" && f.state !== "restored")) continue;
+    if (beforeId === undefined || (orderOf.get(f.id) ?? -1) < beforeId) n++;
+  }
+  return n;
+}
+
+// Kinds that have a restoring or restored site: their other sites are drawn faintly on the ruins layer.
+export const doneKinds = (foundations: readonly Pick<FoundFoundation, "cls" | "state">[]): Set<string> =>
+  new Set(foundations.flatMap((f) => (f.cls && (f.state === "restoring" || f.state === "restored") ? [f.cls] : [])));
 
 // The insight a restoration in `domain` grants: the first of the domain not held and not used up; with none left, the
 // first such one of a domain that has no real sites (farm, then craft), so those domains stay reachable.

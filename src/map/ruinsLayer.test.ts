@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { doneKinds } from "../sim/heritage";
 import { insetRing, streetWidth } from "./ruinsLayer";
 import type { XY } from "../world/oldworld";
 
@@ -62,5 +63,12 @@ describe("streetWidth", () => {
     expect(streetWidth("residential")).toBe(6);
     expect(streetWidth("minor")).toBe(6);
     expect(streetWidth("primary")).toBe(10);
+  });
+});
+
+describe("doneKinds", () => {
+  it("lists kinds with a restoring or restored site, not lost or untouched ones", () => {
+    const k = doneKinds([{ cls: "castle", state: "restored" }, { cls: "school", state: "restoring" }, { cls: "library", state: "lost" }, { cls: "museum" }, { state: "restored" }]);
+    expect([...k].sort()).toEqual(["castle", "school"]);
   });
 });

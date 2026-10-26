@@ -13,7 +13,7 @@ import { samplePathProfile } from "../world/profile";
 import { PALETTE } from "../ui/palette";
 import { etaText } from "./buildCost";
 import { arcPath, snapAngle, type Pt } from "./curve";
-import { flash, isRoadTool, mapMpp, MIN_ROAD_ZOOM, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
+import { flash, isRoadTool, mapMpp, roadKindOf, MIN_ROAD_ZOOM, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
 
 const SNAP_PX = 12;
 const PREVIEW_MS = 120;
@@ -38,8 +38,7 @@ const sameOldStreet = (a: OldRef | null, b: OldRef | null): OldRef | null => (a 
 
 // The road kind being drawn, or null for the bulldozer, the restore tool or no road tool.
 const drawT = (): RoadKind | null => {
-  const t = tool.value;
-  return t && isRoadKind(t) ? t : null;
+  return roadKindOf(tool.value);
 };
 
 // The revealed old street under the restore tool: each of its ways is a line, priced once `priced`; the `ok` ones get built.
@@ -644,7 +643,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
   const onDown = (e: maplibregl.MapMouseEvent) => {
     suppressClick = false;
     const t = roadT();
-    if (!t || !isRoadKind(t) || busy || spaceDown || arcEnd || !ensure()) return;
+    if (!t || !roadKindOf(t) || busy || spaceDown || arcEnd || !ensure()) return;
     if (e.originalEvent.button !== 0) return;
     const ctx = context(e);
     if (!ctx || map.getZoom() < MIN_ROAD_ZOOM) return;

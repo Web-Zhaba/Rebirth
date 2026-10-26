@@ -52,6 +52,11 @@ function Body({ v }: { v: HeritageView }) {
             {num(v.cost.labor)} чел.-ч · брёвна {num(v.cost.logs)} м³ · доски {num(v.cost.planks)} м³ · камень {num(v.cost.stone)} т
           </Line>
           {v.mul > 1 && <div class="people-note">Таких построек в округе мало: вклад в науку ×{String(v.mul).replace(".", ",")}</div>}
+          {v.repeat && (
+            <div class="people-note">
+              Ещё один {v.repeat.kind.toLowerCase()}: вклад ×{String(v.repeat.factor).replace(".", ",")}, идеи не будет
+            </div>
+          )}
           <fieldset class="her-opts">
             <legend>Как восстановить</legend>
             {v.options.map((o) => (

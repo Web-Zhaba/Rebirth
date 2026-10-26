@@ -1,6 +1,6 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, isRoadTool, ROAD_MODES, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
+import { flash, isMaterialTool, isRoadTool, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
@@ -162,6 +162,19 @@ export function BuildBar() {
       window.removeEventListener("keydown", onEsc);
     };
   }, []);
+  // A stone material that is not open (another town loaded) falls back to the plain one.
+  useEffect(
+    () =>
+      effect(() => {
+        const progress = state.value?.progress;
+        if (!progress) return;
+        const cur = roadMaterial.peek();
+        const next = { ...cur };
+        for (const k of ["dirt", "bridge"] as const) if (lockReason({ progress }, cur[k])) next[k] = k;
+        if (next.dirt !== cur.dirt || next.bridge !== cur.bridge) roadMaterial.value = next;
+      }),
+    [],
+  );
   // A tool picked elsewhere (hotkey, map) brings its category to the front.
   useEffect(
     () =>
@@ -178,6 +191,7 @@ export function BuildBar() {
   const growth = active === "res" || active === "craft" || active === "trade" ? ADVICE[people.value?.growth?.[active] ?? "ok"] : null;
   const mode = roadMode.value;
   const drawsRoad = !!active && isRoadTool(active) && active !== "bulldoze" && active !== "restore";
+  const materials = active && isMaterialTool(active) ? ROAD_MATERIALS[active] : null;
   const hint = active ? (drawsRoad ? ROAD_HINT[mode] : HINT[active]) : null;
   return (
     <div class="build-bar">
@@ -191,6 +205,17 @@ export function BuildBar() {
           </div>
         )}
         {drawsRoad && <Segmented label="Режим дороги" value={mode} onChange={(m) => (roadMode.value = m)} options={ROAD_MODES.map((o) => ({ id: o.id, label: o.label, title: o.title }))} />}
+        {materials && active && isMaterialTool(active) && (
+          <Segmented
+            label={active === "dirt" ? "Материал дороги" : "Материал моста"}
+            value={roadKindOf(active)!}
+            onChange={(k) => (roadMaterial.value = { ...roadMaterial.value, [active]: k })}
+            options={materials.map((o) => {
+              const lock = progress ? lockReason({ progress }, o.id) : null;
+              return { id: o.id, label: o.label, title: lock ? `${o.title}: ${lock}` : o.title, disabled: !!lock };
+            })}
+          />
+        )}
         {active && !msg && <CostLine t={active} />}
       </div>
       <div class="bb-panel panel">

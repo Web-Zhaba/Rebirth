@@ -1,5 +1,5 @@
 import { addChronicle } from "./chronicle";
-import { heritageDomain, nextInsight, restoreWeightOf, scarcity, siteTitle } from "./heritage";
+import { earlierOfKind, nextInsight, restoreWeightOf, scarcity, siteDomain, siteTitle } from "./heritage";
 import { restoreBlocker, restoredBuilding } from "./heritageGeo";
 import { say } from "./production";
 import { grantInsight } from "./research";
@@ -36,11 +36,12 @@ export function completeRestorations(s: SimState): SimState {
     if (!b.siteId || b.state !== "active" || b.upgrade || (b.restoreMode !== "monument" && b.restoreMode !== "working")) continue;
     const f = cur.finds.foundations.find((x) => x.id === b.siteId);
     if (!f || f.state !== "restoring") continue;
-    const domain = heritageDomain(f.cls);
-    const weight = restoreWeightOf(b.restoreMode, scarcity(cur.finds));
+    const domain = siteDomain(f.cls);
+    const earlier = earlierOfKind(cur, f.cls, f.id, b.id);
+    const weight = restoreWeightOf(b.restoreMode, scarcity(cur.finds), earlier);
     let progress = cur.progress;
     if (domain) progress = { ...progress, restored: { ...progress.restored, [domain]: (progress.restored[domain] ?? 0) + weight } };
-    const ins = domain ? nextInsight(progress, domain) : null;
+    const ins = domain && earlier === 0 ? nextInsight(progress, domain) : null; // only the first of a kind brings an idea
     cur = withFoundation({ ...cur, progress, buildings: { ...cur.buildings, [b.id]: { ...b, restoreWeight: weight } } }, f.id, { state: "restored" });
     if (ins) cur = grantInsight(cur, ins.id);
     const name = siteTitle(f);
@@ -56,7 +57,7 @@ export function loseSite(s: SimState, gone: Building): SimState {
   const f = s.finds.foundations.find((x) => x.id === gone.siteId);
   if (!f || f.state === "lost") return s;
   let out = withFoundation(s, f.id, { state: "lost" });
-  const domain = heritageDomain(f.cls);
+  const domain = siteDomain(f.cls);
   const w = gone.restoreWeight ?? 0;
   if (domain && w > 0) {
     const left = Math.max(0, (out.progress.restored[domain] ?? 0) - w);

@@ -2,10 +2,10 @@ import { play } from "../ui/sound";
 import type maplibregl from "maplibre-gl";
 import { signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
-import { isRoadKind } from "../sim/roads";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
-export type RoadTool = RoadKind | "bulldoze" | "restore"; // restore: rebuild a revealed old street as a whole
+// Road tools; a tool plus its material (see roadMaterial) picks the sim RoadKind. restore: rebuild a revealed old street as a whole.
+export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
 // How a road segment is drawn: dragged straight between two points, or an arc through a bend point.
 export type RoadMode = "straight" | "arc";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
@@ -13,7 +13,7 @@ export type ZoneTool = BrushTool | "field" | "clearing";
 export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
-export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || isRoadKind(t);
+export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
 export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
@@ -26,6 +26,25 @@ export const ROAD_MODES: { id: RoadMode; label: string; title: string }[] = [
   { id: "straight", label: "Прямая", title: "Прямая: протяните от начала до конца" },
   { id: "arc", label: "Дуга", title: "Дуга: протяните начало и конец, затем движение мышью задаёт изгиб" },
 ];
+// Material of the road and bridge tools (tech upgrades change a tool, they do not add one): the sim kind each draws.
+export type MaterialTool = "dirt" | "bridge";
+export const ROAD_MATERIALS: Record<MaterialTool, { id: RoadKind; label: string; title: string }[]> = {
+  dirt: [
+    { id: "dirt", label: "Грунт", title: "Грунтовая дорога" },
+    { id: "stone", label: "Камень", title: "Каменная дорога" },
+  ],
+  bridge: [
+    { id: "bridge", label: "Свайный", title: "Свайный мост" },
+    { id: "stonebridge", label: "Каменный", title: "Каменный мост" },
+  ],
+};
+export const roadMaterial = signal<Record<MaterialTool, RoadKind>>({ dirt: "dirt", bridge: "bridge" });
+export const isMaterialTool = (t: Tool): t is MaterialTool => t === "dirt" || t === "bridge";
+// The sim road kind a tool draws, or null for the bulldozer, the restore tool and non-road tools.
+export function roadKindOf(t: Tool | null, material: Record<MaterialTool, RoadKind> = roadMaterial.value): RoadKind | null {
+  if (t === "path" || t === "footbridge") return t;
+  return t && isMaterialTool(t) ? material[t] : null;
+}
 // Brief message about a rejected action, shown by the toolbar.
 export const toolMsg = signal<string | null>(null);
 

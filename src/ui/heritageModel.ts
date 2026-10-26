@@ -1,6 +1,6 @@
 import { BUILDINGS } from "../sim/buildings";
 import { domainName, type DomainId } from "../sim/domains";
-import { heritageDomain, kindName, MONUMENT, nextInsight, restoreCost, restoredHeight, restoreWeightOf, siteTitle, workTemplate } from "../sim/heritage";
+import { earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreCost, restoredHeight, restoreWeightOf, siteDomain, siteTitle, workTemplate } from "../sim/heritage";
 import { restoreBlocker } from "../sim/heritageGeo";
 import { SPEED } from "../sim/research";
 import { SERVICES, isService } from "../sim/services";
@@ -38,6 +38,7 @@ export interface HeritageView {
   stateText: string | null;
   cost: { labor: number; logs: number; planks: number; stone: number };
   mul: number; // scarcity multiplier
+  repeat: { kind: string; factor: number } | null; // a further site of a kind already restored or ordered: its research factor
   options: ModeOption[];
   canOrder: boolean;
   note: string | null; // why nothing can be ordered at all
@@ -79,11 +80,12 @@ function workEffects(cls: string | undefined): string[] {
 }
 
 export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): HeritageView {
-  const domain = heritageDomain(site.cls);
+  const domain = siteDomain(site.cls);
+  const earlier = earlierOfKind(sim, site.cls, site.id);
   const recorded = sim.finds.foundations.some((f) => f.id === site.id);
   const open = (mode: RestoreMode): string | null => (recorded ? restoreBlocker(sim, site.id, mode) : "Находка ещё не занесена в записи");
   const base = domain ? (sim.progress.restored[domain] ?? 0) : 0;
-  const ins = domain ? nextInsight(sim.progress, domain) : null;
+  const ins = domain && earlier === 0 ? nextInsight(sim.progress, domain) : null; // only the first of a kind brings an idea
   const insightText = ins
     ? ins.tech
       ? `«${ins.text}»: «${TECH_BY_ID.get(ins.tech)?.name ?? ins.tech}» изучается быстрее на ${Math.round(ins.cut * 100)} %`
@@ -91,7 +93,7 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     : null;
   const mk = (mode: RestoreMode): ModeOption => {
     const why = open(mode);
-    const w = restoreWeightOf(mode, mul);
+    const w = restoreWeightOf(mode, mul, earlier);
     const effects =
       mode === "monument"
         ? ["Без рабочих мест", `Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.mood}, стоимость земли +${MONUMENT.land} (до +${MONUMENT.landCap} от всех памятников)`]
@@ -121,6 +123,7 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     stateText: state ? STATE_TEXT[state] : null,
     cost: restoreCost(site.area),
     mul,
+    repeat: earlier > 0 ? { kind: kindName(site.cls), factor: repeatFactor(earlier) } : null,
     options,
     canOrder,
     note: canOrder ? null : (options[0].why ?? options[1].why),

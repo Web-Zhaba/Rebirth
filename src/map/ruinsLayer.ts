@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
+import { doneKinds } from "../sim/heritage";
 import { isBridge, oldStreetKind, ROAD_KINDS } from "../sim/roads";
 import { DOMAIN_COLORS, PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
@@ -170,7 +171,7 @@ export function attachRuinsLayer(
     );
     // Notable buildings: floor in the colour of their domain.
     map.addLayer(
-      { id: "ruins-typed-fill", type: "fill", source: SRC_TYPED, minzoom: 13, paint: { "fill-color": ["get", "c"], "fill-opacity": ["match", ["get", "s"], "restored", 0.12, "restoring", 0.3, "lost", 0.2, 0.5] } },
+      { id: "ruins-typed-fill", type: "fill", source: SRC_TYPED, minzoom: 13, paint: { "fill-color": ["get", "c"], "fill-opacity": ["match", ["get", "s"], "restored", 0.12, "restoring", 0.3, "lost", 0.2, ["case", ["==", ["get", "dim"], 1], 0.2, 0.5]] } },
       beneath,
     );
     map.addLayer(
@@ -209,7 +210,7 @@ export function attachRuinsLayer(
         source: SRC_TYPED,
         minzoom: 13,
         layout: { "line-join": "round" },
-        paint: { "line-color": ["get", "c"], "line-width": ["match", ["get", "s"], "restoring", 3.5, "restored", 1, 2], "line-opacity": ["match", ["get", "s"], "lost", 0.45, 0.95] },
+        paint: { "line-color": ["get", "c"], "line-width": ["match", ["get", "s"], "restoring", 3.5, "restored", 1, 2], "line-opacity": ["match", ["get", "s"], "lost", 0.45, ["case", ["==", ["get", "dim"], 1], 0.5, 0.95]] },
       },
       beneath,
     );
@@ -329,6 +330,7 @@ export function attachRuinsLayer(
       }));
     const typedList = typedFoundations.value;
     const stateOf = new Map((sc?.finds.value?.foundations ?? []).flatMap((x) => (x.state ? [[x.id, x.state] as const] : [])));
+    const done = doneKinds(sc?.finds.value?.foundations ?? []); // a kind already restored: its other sites are fainter
     const typedNameSet = new Set(typedList.flatMap((t) => (t.name ? [t.name] : []))); // labelled by the typed layer instead
     const pois: GeoJSON.Feature[] = w.pois
       .filter((p) => !typedNameSet.has(p.name))
@@ -343,7 +345,7 @@ export function attachRuinsLayer(
       if (t.ring.length < 3) continue;
       const outer = t.ring.map(([x, y]) => f.toLngLat(x, y));
       const st = stateOf.get(t.id) ?? "";
-      typed.push({ type: "Feature", properties: { c: st === "lost" ? PALETTE.pencilFaint : DOMAIN_COLORS[t.domain], s: st }, geometry: { type: "Polygon", coordinates: [close(outer)] } });
+      typed.push({ type: "Feature", properties: { c: st === "lost" ? PALETTE.pencilFaint : DOMAIN_COLORS[t.domain], s: st, dim: st === "" && done.has(t.cls) ? 1 : 0 }, geometry: { type: "Polygon", coordinates: [close(outer)] } });
       if (t.name) typedNames.push({ type: "Feature", properties: { name: t.name }, geometry: { type: "Point", coordinates: f.toLngLat(...ringCentroid(t.ring)) } });
     }
     const hints: GeoJSON.Feature[] = hintSpots.value.map((h) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: f.toLngLat(h.x, h.y) } }));

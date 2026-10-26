@@ -3,7 +3,7 @@ import { finishAll } from "./admin";
 import { advanceBuildings, canPlace, emptyGrowth, placeBuilding, reconcile, spawnBuildings } from "./growth";
 import { BUILDINGS } from "./buildings";
 import { computeCoverage, computeLandValue } from "./coverage";
-import { heritageDomain, nextInsight, restoreCost, scarcity, workTemplate } from "./heritage";
+import { distinctTyped, earlierOfKind, heritageDomain, isHeritage, nextInsight, restoreCost, restoreWeightOf, scarcity, siteDomain, workTemplate } from "./heritage";
 import { orientedBox, restoreBlocker, ringDoor, simplifyRing } from "./heritageGeo";
 import { Handler, toSnapshot, type Storage } from "./handler";
 import { parseSave } from "./save";
@@ -55,12 +55,23 @@ describe("kind table", () => {
   it("maps working templates", () => {
     expect(workTemplate("place_of_worship")).toBe("chapel");
     expect(workTemplate("college")).toBe("school");
-    expect(workTemplate("pharmacy")).toBe("healer");
-    expect(workTemplate("mall")).toBe("market");
-    expect(workTemplate("car_repair")).toBe("carpentry");
+    expect(workTemplate("hospital")).toBe("healer");
+    expect(workTemplate("marketplace")).toBe("market");
     expect(workTemplate("castle")).toBeNull();
-    expect(workTemplate("bank")).toBeNull();
     expect(heritageDomain("hospital")).toBe("care");
+  });
+  it("drops the trimmed kinds: no template, no longer typed unless already restoring or restored", () => {
+    for (const k of ["pharmacy", "doctors", "mall", "car_repair", "bank", "department_store", "wholesale", "halt", "bus_station"]) {
+      expect(workTemplate(k), k).toBeNull();
+      expect(heritageDomain(k), k).toBeNull();
+      expect(isHeritage({ cls: k }), k).toBe(false);
+      expect(isHeritage({ cls: k, state: "lost" }), k).toBe(false);
+      expect(isHeritage({ cls: k, state: "restoring" }), k).toBe(true);
+      expect(isHeritage({ cls: k, state: "restored" }), k).toBe(true);
+      expect(siteDomain(k), k).not.toBeNull();
+    }
+    expect(isHeritage({ cls: "castle" })).toBe(true);
+    expect(restoreSite(mk([found("p", "pharmacy", rect(0, 0, 20, 30))]), "p", "monument")).toMatchObject({ ok: false });
   });
 });
 
@@ -148,7 +159,7 @@ describe("the building", () => {
     expect(s.nextBuildingId).toBe(2);
   });
   it("takes the template of the working mode and a clamped height", () => {
-    const s = order(mk([found("a", "place_of_worship", rect(0, 0, 20, 30), { height: 60 }), found("h", "doctors", rect(50, 0, 10, 10), { height: 1 })]), "a", "working");
+    const s = order(mk([found("a", "place_of_worship", rect(0, 0, 20, 30), { height: 60 }), found("h", "hospital", rect(50, 0, 10, 10), { height: 1 })]), "a", "working");
     expect(s.buildings[1]).toMatchObject({ template: "chapel", restoreMode: "working", height: 25 });
     expect(order(s, "h", "working").buildings[2]).toMatchObject({ template: "healer", height: 4 });
   });
@@ -199,7 +210,7 @@ describe("completion", () => {
 });
 
 describe("scarcity", () => {
-  const typed = (n: number) => Array.from({ length: n }, (_, i) => found(`t${i}`, "castle", rect(i * 30, 0, 10, 10)));
+  const typed = (n: number) => Array.from({ length: n }, (_, i) => found(`t${i}`, "castle", rect(i * 400, 0, 10, 10)));
   it("is 1 with nothing revealed", () => {
     expect(scarcity({ foundations: typed(3), revealed: [] })).toBe(1);
   });
@@ -222,6 +233,51 @@ describe("scarcity", () => {
     const s = finishAll(order({ ...sparse, finds: { ...sparse.finds, revealed: [{ digId: 1, x: 0, y: 0, r: 500 }] } }, "a", "monument"));
     expect(s.progress.restored.build).toBe(3);
     expect(toSnapshot(s).heritageMul).toBe(3);
+  });
+});
+
+describe("diminishing returns", () => {
+  const two = (clsB = "castle") => mk([found("a", "castle", rect(0, 0, 20, 30)), found("b", clsB, rect(60, 0, 20, 30))], initialProgress());
+  it("halves each further restoration of a kind and grants an insight only for the first", () => {
+    const s = finishAll(order(order(two(), "a", "monument"), "b", "monument"));
+    expect(s.buildings[1].restoreWeight).toBe(1);
+    expect(s.buildings[2].restoreWeight).toBe(0.5);
+    expect(s.progress.restored.build).toBe(1.5);
+    expect(s.progress.insights).toEqual(["carpenter-corner"]);
+  });
+  it("keeps the working share on top of the repeat factor", () => {
+    expect(restoreWeightOf("working", 2, 2)).toBe(0.25);
+    expect(restoreWeightOf("monument", 1, 3)).toBe(0.13);
+    expect(restoreWeightOf("monument", 3)).toBe(3);
+  });
+  it("does not reduce a different kind of the same domain, which brings its own insight", () => {
+    const s = finishAll(order(order(two("monument"), "a", "monument"), "b", "monument"));
+    expect(s.buildings[2].restoreWeight).toBe(1);
+    expect(s.progress.insights.length).toBe(2);
+  });
+  it("counts ordered ones as earlier but not lost ones", () => {
+    const s = order(order(two(), "a", "monument"), "b", "monument");
+    expect(earlierOfKind(s, "castle", "b", s.buildings[2].id)).toBe(1);
+    expect(earlierOfKind(s, "castle", "a", s.buildings[1].id)).toBe(0);
+    const lost = loseSite({ ...s, buildings: { 2: s.buildings[2] } }, s.buildings[1]);
+    expect(earlierOfKind(lost, "castle", "b", s.buildings[2].id)).toBe(0);
+    expect(finishAll(lost).buildings[2].restoreWeight).toBe(1);
+  });
+});
+
+describe("scarcity of kinds", () => {
+  it("counts several of one kind within 300 m once, far ones and other kinds apart", () => {
+    const f = (id: string, cls: string, x: number) => found(id, cls, rect(x, 0, 10, 10));
+    expect(distinctTyped([f("a", "castle", 0), f("b", "castle", 100), f("c", "castle", 250)])).toBe(1);
+    expect(distinctTyped([f("a", "castle", 0), f("b", "castle", 500)])).toBe(2);
+    expect(distinctTyped([f("a", "castle", 0), f("b", "school", 10)])).toBe(2);
+    expect(distinctTyped([f("a", "castle", 0), f("b", "pharmacy", 10), f("c", "bank", 20)])).toBe(1); // trimmed kinds do not count
+  });
+  it("is the same for a cluster as for one site", () => {
+    const disc = [{ x: 0, y: 0, r: 190 }];
+    const one = [found("a", "castle", rect(0, 0, 10, 10))];
+    const cluster = [...one, found("b", "castle", rect(50, 0, 10, 10)), found("c", "castle", rect(90, 0, 10, 10))];
+    expect(scarcity({ foundations: cluster, revealed: disc })).toBe(scarcity({ foundations: one, revealed: disc }));
   });
 });
 

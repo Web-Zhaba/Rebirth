@@ -64,10 +64,10 @@ describe("tech model", () => {
   it("scales the time by the domain speed and the insight", () => {
     const fast = { ...speeds, build: 2 };
     const v = buildTechView(input({ insights: ["carpenter-corner"] }, { speeds: fast }));
-    // carpentry: 1 day, insight -40 %, speed 2
-    expect(v.nodes.get("carpentry")!.days).toBeCloseTo(0.3);
+    // carpentry: 3 days, insight -40 %, speed 2
+    expect(v.nodes.get("carpentry")!.days).toBeCloseTo(0.9);
     expect(v.nodes.get("carpentry")!.insight).toEqual({ text: "Плотницкий угол", cut: 0.4 });
-    expect(v.nodes.get("storage")!.days).toBeCloseTo(1);
+    expect(v.nodes.get("storage")!.days).toBeCloseTo(3);
   });
 
   it("limits the queue", () => {
