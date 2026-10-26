@@ -5,7 +5,8 @@ import { frame } from "../simClient";
 import { Icon } from "./Icon";
 import { IconButton } from "./kit";
 import { dismissToast, toasts } from "./toastStore";
-import { KIND_ICON, KIND_TONE, showMs, type Toast } from "./toastModel";
+import { openPanel } from "./panels";
+import { KIND_ICON, KIND_TONE, opensScience, showMs, type Toast } from "./toastModel";
 
 // One toast: dismisses itself after its time, which stops while the pointer or the focus is on it.
 function ToastItem({ t, map }: { t: Toast; map: maplibregl.Map }) {
@@ -39,6 +40,10 @@ function ToastItem({ t, map }: { t: Toast; map: maplibregl.Map }) {
     >
       {fly ? (
         <button class="toast-main" title="Показать на карте" onClick={fly}>
+          {body}
+        </button>
+      ) : opensScience(t.kind) ? (
+        <button class="toast-main" title="Открыть «Науку»" onClick={() => openPanel("tech")}>
           {body}
         </button>
       ) : (

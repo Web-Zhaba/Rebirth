@@ -5,7 +5,7 @@
      < 1300 px    compact top bar: resources show icon + number only (caption and daily delta stay for screen readers
                   and in the tooltip); the full bar needs about 1260 px.
      900-1099 px  medium: left column 250 px, centre column starts right of it and narrows when the right slot
-                  is open, layers and goals start collapsed.
+                  is open, layers start collapsed.
      < 900 px     narrow: the top bar wraps onto a second row; the right slot is a drawer from the bar down to the
                   build bar; an event card or the day summary takes the whole width and hides the left column and the
                   drawer while it is shown (they come back after it is answered).
@@ -61,7 +61,6 @@ button.link {
 
 /* Targets at least 24 px high (WCAG 2.2). */
 .layer-head,
-.goals-head,
 button.event-card-pause-btn {
   min-height: 24px;
 }
@@ -276,7 +275,7 @@ button.event-card-pause-btn {
   }
 
   /* A card that needs an answer has the screen to itself. */
-  #ui:has(.centre-col > *) :is(.side-col, .rs-panel, .notebook, .notebook-panel) {
+  #ui:has(.centre-col > :not(.research-line)) :is(.side-col, .rs-panel, .notebook, .notebook-panel) {
     visibility: hidden;
   }
 }

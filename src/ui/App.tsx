@@ -19,6 +19,7 @@ import { attachWeatherSound } from "./weatherSound";
 import { TerrainInspector } from "./TerrainInspector";
 import { trackLayout } from "./layout";
 import "./layout.css";
+import { TechPanel } from "./TechPanel";
 import { TownPanel } from "./TownPanel";
 
 export function App({ map }: { map: maplibregl.Map }) {
@@ -34,6 +35,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <BuildingPanel />}
       {c && <ClearingPanel />}
       {c && <TownPanel city={c} map={map} />}
+      {c && <TechPanel />}
       {c && <NotebookHost />}
       {c && <BuildBar />}
       {c && <AdminPanel />}

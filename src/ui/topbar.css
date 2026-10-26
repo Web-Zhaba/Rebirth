@@ -383,50 +383,30 @@ button.city-name-btn:hover .city-name {
   background: var(--paper-shade);
 }
 
-/* Goals tracker, under the town panel. */
-.goals {
-  flex: none;
-  padding: var(--sp-2) var(--sp-3);
-}
 
-.goals-title {
-  margin-bottom: var(--sp-1);
-  font-family: var(--font-display);
-  font-size: var(--fs-md);
-  font-weight: 700;
+/* «Наука» button with the badge: a finished tech or an idle science. */
+.tb-tech {
+  position: relative;
+  display: inline-flex;
 }
-
-.goals-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.goal-head {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  font-size: var(--fs-sm);
-}
-
-.goal-name {
-  font-weight: 700;
-}
-
-.goal-fig {
-  color: var(--ink-2);
+.tb-badge {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  padding: 0 4px;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 14px;
   white-space: nowrap;
+  pointer-events: none;
 }
-
-.goal-reward {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  margin-top: 2px;
-  font-size: var(--fs-xs);
+.tb-badge-done {
+  background: var(--ok-fill);
   color: var(--ok-text);
+  font-weight: 700;
 }
-
+.tb-badge-idle {
+  background: var(--warn-fill);
+  color: var(--warn-text);
+}

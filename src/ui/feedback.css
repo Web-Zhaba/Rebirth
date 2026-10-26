@@ -1,4 +1,4 @@
-/* Feedback layer (U5): centre column, event card, toasts, goals tracker, map badges. */
+/* Feedback layer (U5): centre column, event card, toasts, map badges. */
 
 /* Centre of the screen under the top bar: event card above the day summary. */
 .centre-col {
@@ -141,7 +141,7 @@ button.event-card-pause-btn:hover {
   color: var(--pencil);
 }
 
-/* Toasts under the goals tracker. */
+/* Toasts under the side column. */
 .toasts {
   flex: none;
   display: flex;
@@ -209,78 +209,9 @@ button.toast-main:hover .toast-text {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .toast,
-  .goals-flash {
+  .toast {
     animation: none;
   }
-}
-
-/* Goals tracker: collapsible head, reward chips, flash on completion. */
-.goals-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: var(--ink);
-  cursor: pointer;
-  text-align: left;
-}
-.goals-head .goals-title {
-  flex: 1;
-  margin: 0;
-}
-.goals-count {
-  min-width: 18px;
-  padding: 0 5px;
-  border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--paper-shade);
-  font-size: var(--fs-xs);
-  text-align: center;
-}
-.goals-list {
-  margin-top: var(--sp-1);
-}
-.goals-list[hidden] {
-  display: none;
-}
-.goals-done {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  margin-top: var(--sp-1);
-  padding: 2px var(--sp-2);
-  background: var(--ok-fill);
-  border: var(--bw-hair) solid var(--ok);
-  border-radius: var(--radius-sm);
-  color: var(--ok-text);
-  font-size: var(--fs-sm);
-  font-weight: 700;
-}
-.goals-flash {
-  border-color: var(--ok);
-  animation: goals-flash 1.2s ease-out 2;
-}
-@keyframes goals-flash {
-  50% {
-    background: var(--ok-fill);
-  }
-}
-.goal-reward {
-  flex-wrap: wrap;
-  column-gap: var(--sp-2);
-}
-.goal-reward-label {
-  color: var(--pencil);
-}
-.goal-reward-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
 }
 
 /* Map badges (badgeLayer.ts): small paper tags over buildings that need attention. */
@@ -443,4 +374,8 @@ button.toast-main:hover .toast-text {
   font-size: 12px;
   color: var(--ink-soft, inherit);
   pointer-events: none;
+}
+.research-line button {
+  pointer-events: auto;
+  color: inherit;
 }

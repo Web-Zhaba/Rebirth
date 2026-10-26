@@ -4,8 +4,8 @@ import { tool } from "../map/tools";
 import { selectedClearing } from "../map/zoneLayer";
 
 // The right-hand slot (PLAN-ui.md section 5) holds one panel at a time: the inspector of the selected
-// building or clearing, the town panel or the notebook.
-export type RightPanel = "inspector" | "town" | "notebook";
+// building or clearing, the town panel, the notebook or the science panel.
+export type RightPanel = "inspector" | "town" | "notebook" | "tech";
 
 export const rightPanel = signal<RightPanel | null>(null);
 

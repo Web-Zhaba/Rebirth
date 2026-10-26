@@ -13,6 +13,8 @@ import { aboutOpen } from "./AboutDialog";
 import { hotkeysOpen } from "./HotkeysDialog";
 import { settingsOpen } from "./SettingsDialog";
 import { rightPanel, togglePanel } from "./panels";
+import { BADGE_TEXT } from "./techModel";
+import { badge } from "./techState";
 import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
 import { weatherChip, weatherWarning } from "./weatherModel";
@@ -93,6 +95,11 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
       if (e.key === "?") {
         e.preventDefault();
         hotkeysOpen.value = true;
+        return;
+      }
+      if (e.code === "KeyN") {
+        e.preventDefault();
+        togglePanel("tech");
         return;
       }
       if (e.key === "h" || e.key === "H" || e.key === "Home") {
@@ -243,12 +250,25 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
         </div>
       )}
       <span class="tb-end">
+        <TechButton />
         <IconButton icon="town" size={20} label="Город" aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")} />
         <IconButton icon="help" size={16} label="Горячие клавиши (?)" onClick={() => (hotkeysOpen.value = true)} />
         <IconButton icon="settings" size={16} label="Настройки" onClick={() => (settingsOpen.value = true)} />
         <IconButton icon="info" size={16} label="Об игре" onClick={() => (aboutOpen.value = true)} />
       </span>
     </header>
+  );
+}
+
+// «Наука» with a badge: a tech finished since the panel was last open, or nothing under research.
+function TechButton() {
+  const b = badge.value;
+  const text = b ? BADGE_TEXT[b] : "";
+  return (
+    <span class="tb-tech">
+      <IconButton icon="scroll" size={20} label={`Наука (N)${text ? `: ${text}` : ""}`} aria-pressed={rightPanel.value === "tech"} onClick={() => togglePanel("tech")} />
+      {b && <span class={`tb-badge tb-badge-${b}`}>{text}</span>}
+    </span>
   );
 }
 

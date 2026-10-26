@@ -59,6 +59,9 @@ export const isImportant = (k: EventKind): boolean => IMPORTANT.has(k);
 // The sound a fresh event gets: a finished building or a goal chimes; event cards have their own «notify».
 export const soundFor = (k: EventKind): "finished" | null => (k === "built" || k === "goal" || k === "tech" || k === "era" ? "finished" : null);
 
+// News of a finished tech or a new era open the science panel when clicked.
+export const opensScience = (k: EventKind): boolean => k === "tech" || k === "era";
+
 export const MAX_TOASTS = 4;
 export const MAX_NEW = 5; // news taken per snapshot; a burst beyond this is history, not news
 export const SHOW_MS = 6000;

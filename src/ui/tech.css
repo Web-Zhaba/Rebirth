@@ -1,0 +1,250 @@
+/* Science panel (PLAN-research.ru.md section 10): research speed, queue, tech card, the tree by eras and domains.
+   Nodes are buttons whose state is written out as text; colour only backs it up. */
+.dom-build { --dom: var(--domain-build); }
+.dom-farm { --dom: var(--domain-farm); }
+.dom-craft { --dom: var(--domain-craft); }
+.dom-trade { --dom: var(--domain-trade); }
+.dom-learn { --dom: var(--domain-learn); }
+.dom-care { --dom: var(--domain-care); }
+
+.rs-panel.tech-panel {
+  width: min(660px, calc(100vw - 20px));
+}
+
+.tech-speeds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+}
+.tech-speed {
+  padding: 1px var(--sp-2);
+  border: var(--bw-hair) solid var(--rule-soft);
+  border-left: 3px solid var(--dom);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.tech-note {
+  font-size: var(--fs-xs);
+  color: var(--pencil);
+}
+
+.tech-queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: var(--bw-hair) solid var(--rule-soft);
+  background: var(--paper);
+}
+.tech-now {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.tech-now-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.tech-now-name {
+  font-weight: 700;
+  color: var(--ink);
+  text-align: left;
+}
+.tech-idle {
+  margin: 0;
+  color: var(--warn-text);
+  font-weight: 700;
+}
+.tech-q-list {
+  margin: 0;
+  padding-left: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tech-q-list li {
+  display: list-item;
+}
+.tech-q-list .icon-btn {
+  vertical-align: middle;
+  margin-left: var(--sp-1);
+}
+
+.tech-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--bw) solid var(--rule);
+  border-left: 6px solid var(--dom);
+  background: var(--paper-shade);
+}
+.tech-card p {
+  margin: 0;
+}
+.tech-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.tech-card-head h3 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+}
+.tech-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px var(--sp-3);
+  margin: 0;
+}
+.tech-facts dt {
+  color: var(--pencil);
+}
+.tech-facts dd {
+  margin: 0;
+}
+.tech-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.tech-actions:empty {
+  display: none;
+}
+
+.tech-lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: var(--bw) solid var(--rule);
+}
+.tech-lane-head {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+}
+.tech-cond {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw-hair) dashed var(--warn);
+  background: var(--warn-fill);
+  color: var(--warn-text);
+}
+.tech-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-2);
+  align-items: start;
+}
+.tech-col h4 {
+  margin: 0 0 var(--sp-1);
+  padding-bottom: 2px;
+  border-bottom: 3px solid var(--dom);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.tech-col ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tech-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw-hair) solid var(--rule);
+  border-left: 4px solid var(--dom);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.tech-node:hover {
+  background: var(--paper-shade);
+}
+.tech-node[aria-pressed="true"] {
+  box-shadow: var(--shadow-hard-sm);
+  border-color: var(--rule);
+  outline: 2px solid var(--rule);
+  outline-offset: -3px;
+}
+.tn-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 700;
+}
+.tn-state {
+  font-size: var(--fs-xs);
+  color: var(--pencil);
+}
+.tn-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--info);
+}
+.tn-done {
+  background: var(--ok-fill);
+}
+.tn-done .tn-state {
+  color: var(--ok-text);
+}
+.tn-active {
+  background: var(--info-fill);
+}
+.tn-queued {
+  background: var(--paper);
+  border-style: dashed;
+}
+.tn-available .tn-state {
+  color: var(--ink-2);
+}
+.tn-locked {
+  background: var(--paper);
+  color: var(--pencil);
+  border-style: dotted;
+}
+
+/* Narrow: the tree is a plain list, one domain after another. */
+@media (max-width: 720px) {
+  .rs-panel.tech-panel {
+    width: 100vw;
+  }
+  .tech-cols {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* The drawer covers the centre column on narrow screens: its research line would sit on the drawer's head. */
+@media (max-width: 899px) {
+  #ui:has(.rs-panel) .research-line {
+    visibility: hidden;
+  }
+}
