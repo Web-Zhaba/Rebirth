@@ -7,7 +7,7 @@ import { covers, SERVICE, servicesIn } from "./services";
 import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
-import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, EventKind } from "./types";
+import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, Stock, EventKind } from "./types";
 import { cropOf } from "./tech";
 import { foodNeedFactor, mortalityFactor, orchardQuality } from "./weatherEffects";
 import type { WeatherState } from "./weather";
@@ -336,10 +336,11 @@ export function vacantHouses(buildings: Record<number, Building>, households: Re
 }
 
 // Is there construction work (unfinished buildings, house upgrades, forest clearings or roads a work party can reach)?
-export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph, clearings: readonly Clearing[] = []): boolean {
+// With a `stock`, road edges that wait for stone do not count: nobody can work on them.
+export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph, clearings: readonly Clearing[] = [], stock?: Pick<Stock, "stone">): boolean {
   for (const b of Object.values(buildings)) if (b.state !== "active" || b.upgrade) return true;
   if (clearings.some((c) => !isCleared(c))) return true;
-  return workableEdges(roads).length > 0;
+  return workableEdges(roads, stock).length > 0;
 }
 
 // ---------- aggregates ----------
@@ -390,7 +391,7 @@ export const forageRate = (gameMinutes: number): number => (calendar(gameMinutes
 // for them to join. Their number is the unemployed of peopleStats.
 export function idleResidents(s: ArtelState): Set<number> {
   const out = new Set<number>();
-  if (constructionWork(s.buildings, s.roads, s.clearings)) return out;
+  if (constructionWork(s.buildings, s.roads, s.clearings, s.stock)) return out;
   const farmless = idleGumnos(s);
   const orchards = idleOrchards(s); // the gardeners out of season
   for (const r of Object.values(s.residents)) {
@@ -414,7 +415,7 @@ export function artel(s: ArtelState): { hands: number; drafted: number; employed
   const idle = idleWorkers(s);
   const hands = c.jobless + idle;
   let drafted = 0;
-  if (constructionWork(s.buildings, s.roads, s.clearings)) {
+  if (constructionWork(s.buildings, s.roads, s.clearings, s.stock)) {
     const min = buildFloor(c.adults, s.levers);
     drafted = Math.max(0, Math.min(min - hands, c.employed - idle));
   }
@@ -502,7 +503,7 @@ export function foodPerDay(residents: Record<number, Resident>, now: number, lev
 
 export function peopleStats(s: ArtelState & Pick<SimState, "households">): PeopleStats {
   const c = countResidents(s.residents, s.gameMinutes);
-  const work = constructionWork(s.buildings, s.roads, s.clearings);
+  const work = constructionWork(s.buildings, s.roads, s.clearings, s.stock);
   const farmers = idleFarmers(s);
   const blocked = idleWorkers(s) - farmers; // workers of workshops without inputs: busy by job, free for the artel
   let tents = 0;
@@ -748,7 +749,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     });
   const on = (r: Rule) => !opts.only || opts.only.includes(r);
   const now = w.now;
-  const work = constructionWork(buildings, s.roads, s.clearings);
+  const work = constructionWork(buildings, s.roads, s.clearings, s.stock);
   const ids = () => Object.keys(w.residents).map(Number);
 
   // 1. deaths
@@ -1008,7 +1009,7 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
   if (!b || !t) return null;
   const now = s.gameMinutes;
   if (b.zone === "res") {
-    const work = constructionWork(s.buildings, s.roads, s.clearings);
+    const work = constructionWork(s.buildings, s.roads, s.clearings, s.stock);
     const idle = idleWorkplaces(s);
     const households = Object.values(s.households)
       .filter((h) => h.home === id)

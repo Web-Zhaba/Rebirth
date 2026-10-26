@@ -33,7 +33,7 @@ export interface HeritageView {
   domain: DomainId | null;
   domainName: string;
   area: number;
-  height: number | null;
+  height: number;
   state: FoundState | null;
   stateText: string | null;
   cost: { labor: number; logs: number; planks: number; stone: number };
@@ -109,7 +109,6 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   const options = [mk("monument"), mk("working")];
   const canOrder = options.some((o) => o.available);
   const state = site.state ?? null;
-  const height = site.height === undefined ? null : site.height;
   return {
     id: site.id,
     title: siteTitle(site),
@@ -117,7 +116,7 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     domain,
     domainName: domain ? domainName(domain) : "—",
     area: site.area,
-    height: height === null ? null : Math.round(restoredHeight(height, 8)),
+    height: Math.round(restoredHeight(site.height, BUILDINGS[workTemplate(site.cls) ?? "restored"].height)), // as the sim sizes it
     state,
     stateText: state ? STATE_TEXT[state] : null,
     cost: restoreCost(site.area),

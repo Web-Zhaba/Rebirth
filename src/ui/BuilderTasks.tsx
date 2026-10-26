@@ -4,6 +4,7 @@ import { selectedBuilding } from "../map/buildingLayer";
 import { compactScreen, flyOrJump } from "../map/motion";
 import { etaRealMs, formatReal } from "../sim/buildEta";
 import { BUILDINGS } from "../sim/buildings";
+import { siteTitle } from "../sim/heritage";
 import { isCleared } from "../sim/clearing";
 import { ROAD_KINDS, stoneWaiting, workableEdges } from "../sim/roads";
 import { frame, gameClock, speed, state } from "../simClient";
@@ -58,7 +59,8 @@ export function BuilderTasks({ map }: { map: maplibregl.Map }) {
   const priority = s.levers?.priority ?? null;
   const tasks: Task[] = [];
   for (const b of Object.values(s.buildings)) {
-    const name = BUILDINGS[b.template]?.name ?? b.template;
+    const site = b.siteId ? s.finds.foundations.find((f) => f.id === b.siteId) : undefined;
+    const name = site ? siteTitle(site) : (BUILDINGS[b.template]?.name ?? b.template);
     const at: [number, number] = [b.lot.cx, b.lot.cy];
     if (b.state === "building") tasks.push({ key: `b${b.id}`, title: name, value: b.labor > 0 ? b.done / b.labor : 0, left: Math.max(0, b.labor - b.done), at, building: b.id, prio: priority === b.id });
     if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: перестройка`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), at, building: b.id, prio: priority === b.id });

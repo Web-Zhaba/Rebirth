@@ -29,7 +29,7 @@ export function jobReport(s: SimState): JobReport {
     if (h.home !== null) continue;
     for (const m of h.members) if (s.residents[m] && isAdultAge(ageOf(s.residents[m].born, s.gameMinutes))) tentAdults++;
   }
-  const construction = constructionWork(s.buildings, s.roads, s.clearings);
+  const construction = constructionWork(s.buildings, s.roads, s.clearings, s.stock);
   return {
     groups: JOB_GROUPS.map((k) => rows.get(k)!),
     adults: c.adults,

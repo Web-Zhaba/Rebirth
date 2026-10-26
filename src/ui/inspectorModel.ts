@@ -23,6 +23,7 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
   }
   if (info?.kind === "house" && info.households.length === 0) return { label: "пустует", tone: "warn" };
   if (info?.kind === "house") return { label: "заселён", tone: "ok" };
+  if (b.restoreMode === "monument") return { label: "памятник", tone: "ok" };
   return { label: b.template === "dig" ? "раскоп готов" : "работает", tone: "ok" };
 }
 

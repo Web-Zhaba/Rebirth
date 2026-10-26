@@ -1,4 +1,5 @@
 import type maplibregl from "maplibre-gl";
+import type { ExpressionSpecification } from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import { covers } from "../sim/services";
 import type { Building, ClientState } from "../sim/types";
@@ -6,6 +7,7 @@ import { pointInPolygon } from "../sim/zones";
 import { buildings, frame, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
+import { restoredFilter, restoredIds } from "./restoredIds";
 import { BUILDING_COLORS, overlay, OVERLAY_COLORS, PLACED_COLORS, tool, type Overlay } from "./tools";
 
 const SRC = "buildings";
@@ -106,6 +108,17 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
     map.on("pitch", outlineByTilt);
     outlineByTilt();
     ready = true;
+
+    // What three.js draws as a restored model is dropped from the extrusions (hit-testing uses the footprints).
+    const baseFilters: Record<string, ExpressionSpecification> = {
+      "buildings-active": ["==", ["get", "state"], "active"],
+      "buildings-building": ["==", ["get", "state"], "building"],
+      "buildings-outline": ["in", ["get", "state"], ["literal", ["active", "building"]]],
+    };
+    effect(() => {
+      const ex = restoredFilter(restoredIds.value);
+      for (const [id, base] of Object.entries(baseFilters)) map.setFilter(id, ex ? ["all", base, ex] : base);
+    });
 
     effect(() => {
       const list = buildings.value;

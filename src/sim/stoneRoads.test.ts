@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { constructionWork } from "./people";
 import { advanceTo, TICK_MS } from "./clock";
 import { Handler, type Storage } from "./handler";
 import type { Cmd, FromWorker } from "./protocol";
@@ -96,6 +97,12 @@ describe("stone roads", () => {
     const b = spendOnRoads(a.roads, 10, a.stock);
     expect(b.stock!.stone).toBeCloseTo(4);
     expect(b.roads.edges[3].done).toBe(20);
+  });
+  it("an edge waiting for stone is not construction work", () => {
+    const g = road("stone", [[0, 0], [100, 0]], [100]);
+    expect(constructionWork({}, g, [], stockOf(0.5))).toBe(false);
+    expect(constructionWork({}, g, [], stockOf(50))).toBe(true);
+    expect(constructionWork({}, g)).toBe(true);
   });
   it("wait without stone and let the hands go to the next edge", () => {
     let g = road("stone", [[0, 0], [100, 0]], [100]);

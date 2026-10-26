@@ -1,6 +1,7 @@
 import "./style.css";
 import { render, h } from "preact";
 import { computed, effect } from "@preact/signals";
+import type { RestoredItem } from "./map/restoredLayer";
 import { createMap } from "./map/mapView";
 import { attachArticles } from "./map/articles";
 import { attachBadgeLayer } from "./map/badgeLayer";
@@ -38,7 +39,34 @@ attachArticles();
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
 // Dev check of the restored-buildings layer (PLAN-research T1): finished buildings again as three.js models. localStorage debug3dRestored = "1".
-if (import.meta.env.DEV && localStorage.getItem("debug3dRestored") === "1") void import("./map/restoredLayer").then((m) => m.attachRestoredDebug(map, { buildings: simClient.buildings, frame, light: { clock: gameClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) } }));
+const sunLight = { clock: gameClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) };
+const debug3d = import.meta.env.DEV && localStorage.getItem("debug3dRestored") === "1";
+if (debug3d) void import("./map/restoredLayer").then((m) => m.attachRestoredDebug(map, { buildings: simClient.buildings, frame, light: sunLight }));
+// Restored old buildings (typed foundations) as three.js models; the layer (and three.js) loads with the first one.
+let lastRestored: RestoredItem[] = [];
+const restoredSig = (l: RestoredItem[]): string => l.map((i) => `${i.id}|${i.kind}|${i.height}|${Math.floor(i.progress * 24)}|${i.progress >= 1}`).join(";");
+const restoredItems = computed<RestoredItem[]>(() => {
+  const st = state.value;
+  const out: RestoredItem[] = [];
+  if (!st) return lastRestored;
+  for (const b of Object.values(st.buildings)) {
+    if (!b.siteId) continue;
+    const site = st.finds.foundations.find((f) => f.id === b.siteId);
+    out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress: b.state === "active" ? 1 : b.labor > 0 ? Math.min(1, b.done / b.labor) : 0 });
+  }
+  // The same list while nothing visible changed, so the layer does not rebuild its meshes every tick.
+  if (restoredSig(out) !== restoredSig(lastRestored)) lastRestored = out;
+  return lastRestored;
+});
+if (!debug3d) {
+  let loading = false;
+  const stopWatch = effect(() => {
+    if (loading || !restoredItems.value.length) return;
+    loading = true;
+    void import("./map/restoredLayer").then((m) => m.attachRestoredLayer(map, { items: restoredItems, frame, light: sunLight }));
+    queueMicrotask(() => stopWatch());
+  });
+}
 attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
 attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec });
