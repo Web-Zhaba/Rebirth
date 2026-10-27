@@ -4,18 +4,21 @@ import { effect, signal } from "@preact/signals";
 import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, Scene, ShaderMaterial, Vector3 } from "three";
 import { sunDirection } from "../sim/weather";
 import { BUILDINGS } from "../sim/buildings";
+import { isRoadKind } from "../sim/roads";
 import type { Frame as TownFrame } from "../world/frame";
 import { sunLocal, sunStrength } from "./clouds/shadowMath";
 import { buildHeritageModel } from "./heritageModels";
 import { mergePacked, projectModel, type Packed } from "./modelBuffers";
 import { buildScaffold, type Model, type XY } from "./modelGeometry";
+import { buildRoadModel } from "./roadModels";
 import { buildTownModel } from "./townModels";
 import { EARTH_RADIUS_M, localFrame, lngLatToMercator, mercatorLocalMatrix, metresPerMercator, weatherToSphere } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
-// Every building of the town drawn by three.js inside the MapLibre map: the town's own (townModels.ts) and restored old
-// ones (heritageModels.ts), finished or under construction. Import this file only with a dynamic `import()` (it pulls in
-// three.js); main.ts builds the item list, buildingLayer.ts keeps the 2D parts (planned lots, outlines) and the clicks.
+// Every building and built road of the town drawn by three.js inside the MapLibre map: the town's own buildings
+// (townModels.ts), restored old ones (heritageModels.ts), finished or under construction, and built roads and bridges
+// (roadModels.ts). Import this file only with a dynamic `import()` (it pulls in three.js); models.ts attaches it with the
+// item lists of buildingLayer.ts and roadLayer.ts, which keep the 2D parts (planned lots and roads, outlines) and the clicks.
 //
 // One custom layer with `renderingMode: "3d"`: MapLibre sets its 3D depth mode (shared depth buffer with fill-extrusion,
 // LEQUAL, read-write, 3D depth range) before `render`, and the material keeps depth test on, so meshes and the remaining
@@ -52,13 +55,14 @@ const FALLBACK_LIGHT: [number, number, number] = [-0.45, -0.55, 0.7];
 // walls as high as the progress allows, corner posts at full height).
 // - heritage: a restored old building; kind is its OSM class (the `cls` of src/sim/heritage.ts), height its eaves.
 // - town: one of the town's own; kind is the template (src/sim/buildings.ts), height the template's (after an upgrade).
+// - road: a built road chain; ring is its centre line (not closed), kind its RoadKind, height unused.
 export interface ModelItem {
   id: string | number;
   ring: XY[];
   height: number;
   kind: string;
   progress: number;
-  style: "heritage" | "town";
+  style: "heritage" | "town" | "road";
   level?: number; // town: 2 for a rebuilt house
   front?: XY | null; // town: unit vector towards the street (the door side)
   tint?: string; // town: overlay colour, "" or absent for none
@@ -85,6 +89,7 @@ varying vec3 vN;
 varying vec3 vC;
 varying vec4 vF;
 varying float vZ;
+varying vec2 vXY;
 void main() {
   vec4 m = uM * vec4(aMerc, 1.0);
   vec4 g = uG * vec4(position, 1.0);
@@ -94,10 +99,12 @@ void main() {
   vC = aColor;
   vF = aFacade;
   vZ = aMerc.z; // height above the ground in metres
+  vXY = aMerc.xy; // metres east and north of the origin, for patterns laid out in world space
 }`;
 
 // Facade codes (modelGeometry.ts PATTERN): 1 house, 2 hall, 3 worship, 4 log courses, 5 wide, 6 tower, 7 roof rows,
-// 8 boards, 9 log cabin; + 10 a door, + 20 a gate at the middle of the wall.
+// 8 boards, 9 log cabin; + 10 a door, + 20 a gate at the middle of the wall. Roads (roadModels.ts) from 30: 30 track, 31
+// ruts, 32 cobbles, 33 plank deck, 34 ashlar; there the facade is (s along, offset across, width, code).
 const FRAG = /* glsl */ `
 uniform vec3 uLight;
 uniform float uSun;
@@ -105,6 +112,7 @@ varying vec3 vN;
 varying vec3 vC;
 varying vec4 vF;
 varying float vZ;
+varying vec2 vXY;
 
 // Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
 // metres along s and z; once windows get that small the grid turns into its average coverage.
@@ -134,13 +142,39 @@ float doorway(float dx, float z, float aw, float az, float w, float h) {
   return (1.0 - smoothstep(w * 0.5 - aw, w * 0.5 + aw, dx)) * (1.0 - smoothstep(h - az, h + az, z));
 }
 
+// Road surface: darker edges, then the pattern of its code.
+vec3 road(vec3 col, int code, float z, float aw, float ay, float az, float axy) {
+  float w = abs(vF.z);
+  float e = abs(vF.y) / max(w * 0.5, 1e-3); // 0 on the centre line, 1 at the edge
+  if (code == 30) return col * mix(1.0, 0.8, smoothstep(0.5, 1.0, e));
+  col *= mix(1.0, 0.78, smoothstep(0.82, 1.0, e));
+  if (code == 31 && vF.z > 0.0) {
+    // two wheel ruts
+    float r = abs(abs(vF.y) - w * 0.27);
+    col *= 1.0 - 0.14 * (1.0 - smoothstep(0.18, 0.38 + ay, r));
+  } else if (code == 32) {
+    vec2 q = vXY / 0.42;
+    q.x += 0.5 * mod(floor(q.y), 2.0);
+    vec2 f = abs(fract(q) - 0.5);
+    col *= 1.0 - 0.22 * smoothstep(0.36, 0.47, max(f.x, f.y)) * (1.0 - smoothstep(0.15, 0.5, axy / 0.42));
+  } else if (code == 33) {
+    col *= 1.0 - 0.24 * seams(vF.x, aw, 0.3);
+  } else if (code == 34) {
+    float course = floor(z / 0.5);
+    col *= 1.0 - 0.2 * max(seams(z, az, 0.5), seams(vF.x + 0.6 * mod(course, 2.0), aw, 1.2));
+  }
+  return col;
+}
+
 void main() {
   float z = vZ;
-  float aw = max(fwidth(vF.x), 1e-4), az = max(fwidth(z), 1e-4); // outside any branch: derivatives need uniform flow
+  // outside any branch: derivatives need uniform flow
+  float aw = max(fwidth(vF.x), 1e-4), az = max(fwidth(z), 1e-4), ay = max(fwidth(vF.y), 1e-4);
+  float axy = max(max(fwidth(vXY.x), fwidth(vXY.y)), 1e-4);
   int code = int(vF.w + 0.5);
-  int dk = code / 10; // 1 door, 2 gate
+  int dk = code < 30 ? code / 10 : 0; // 1 door, 2 gate
   int p = code - dk * 10;
-  vec3 col = vC;
+  vec3 col = code >= 30 ? road(vC, code, z, aw, ay, az, axy) : vC;
   // window grid per facade: floor height, sill, window height, width, spacing (metres)
   vec4 g = vec4(0.0);
   float sp = 0.0;
@@ -196,6 +230,7 @@ const norm3 = (v: [number, number, number]): [number, number, number] => {
 
 // Model of an item. Unfinished: the building site.
 export function modelOf(it: ModelItem): Model {
+  if (it.style === "road") return buildRoadModel(it.ring, isRoadKind(it.kind) ? it.kind : "path");
   if (it.progress < 1) return buildScaffold(it.ring, it.height, it.progress);
   if (it.style === "heritage") return buildHeritageModel(it.ring, it.height, it.kind);
   return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading });
@@ -205,6 +240,7 @@ const quantise = (p: number): number => (p >= 1 ? 1 : Math.min(PROGRESS_STEPS - 
 // Everything that shapes an item's model (its id is not: two identical buildings share a model).
 const keyOf = (it: ModelItem, p: number): string => {
   const ring = it.ring.map((q) => `${q[0]},${q[1]}`).join(";");
+  if (it.style === "road") return `road|${it.kind}|${ring}`;
   if (p < 1) return `site|${it.height}|${p}|${ring}`;
   const f = it.front ? `${it.front[0].toFixed(3)},${it.front[1].toFixed(3)}` : "";
   return `${it.style}|${it.kind}|${it.height}|${it.level ?? 1}|${f}|${it.tint ?? ""}|${it.upgrading ? 1 : 0}|${ring}`;
@@ -250,7 +286,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     const used = new Set<string>();
     const packs: Packed[] = [];
     for (const it of opts.items.peek()) {
-      const p = quantise(it.progress);
+      const p = it.style === "road" ? 1 : quantise(it.progress);
       const key = keyOf(it, p);
       used.add(key);
       let pack = cache.get(key);
@@ -412,6 +448,15 @@ function demoItems(): ModelItem[] {
     [rect(70, -40, 36, 12, 0.3), 8, "place_of_worship"],
   ];
   for (const [ring, h, kind] of heritage) out.push({ id: id++, ring: scaled(ring), height: h * DEMO_K, kind, progress: 1, style: "heritage" });
+  // roads: the street between the template rows, a curve, and each bridge kind
+  const road = (kind: string, pts: XY[]) => out.push({ id: `r${id++}`, ring: scaled(pts), height: 0, kind, progress: 1, style: "road" });
+  road("dirt", [[-110, 0], [110, 0]]);
+  road("path", [[-110, 30 - 6], [0, 30 - 6]]);
+  road("stone", [[0, 30 - 6], [60, 24], [90, 10], [110, 0]]);
+  road("path", Array.from({ length: 13 }, (_, k): XY => [-110 + 14 * Math.cos((k / 12) * Math.PI), -15 - 14 * Math.sin((k / 12) * Math.PI)]));
+  road("footbridge", [[-100, -60], [-70, -60]]);
+  road("bridge", [[-60, -60], [-25, -64], [5, -60]]);
+  road("stonebridge", [[15, -60], [75, -60]]);
   return out;
 }
 

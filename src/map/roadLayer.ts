@@ -1,12 +1,16 @@
 import type maplibregl from "maplibre-gl";
-import { effect } from "@preact/signals";
+import { computed, effect, type ReadonlySignal } from "@preact/signals";
 import { cutOffEdges, ROAD_KINDS, workableEdges } from "../sim/roads";
-import { roadChains, type RoadState } from "./roadChains";
+import type { ModelItem } from "./modelLayer";
+import { roadChains, type RoadChain, type RoadState } from "./roadChains";
 import { PALETTE } from "../ui/palette";
 import { city, frame, roads, stock } from "../simClient";
 
 const SRC = "roads";
 const EQUATOR_M = 40075016.686;
+// Built roads are three.js models (roadModels.ts); their lines stay only while zoomed out, where a real-width ribbon
+// would be thinner than a pixel.
+const LINES_MAX_ZOOM = 16;
 
 const BUILT_COLOR = ["match", ["get", "kind"], "dirt", PALETTE.roadDirt, "footbridge", PALETTE.roadBridge, "bridge", PALETTE.roadBridge, "stone", PALETTE.roadStone, "stonebridge", PALETTE.roadStone, PALETTE.roadPath];
 const CUT_COLOR = PALETTE.bad; // roads no work party can reach
@@ -20,7 +24,35 @@ function realWidth(k: number, extra = 0): maplibregl.ExpressionSpecification {
   return ["interpolate", ["exponential", 2], ["zoom"], ...stops] as maplibregl.ExpressionSpecification;
 }
 
-// Roads as lines at real width; planned and waiting edges are dashed and faded, cut-off ones red.
+// Chains of the road graph by kind and state. Edges short of stone are not workable: they show as waiting. The stock is
+// only watched while some edge owes stone.
+const chains = computed<RoadChain[] | null>(() => {
+  const g = roads.value;
+  if (!g) return null;
+  const st = Object.values(g.edges).some((e) => e.stone) ? stock.value : null;
+  const active = new Set(workableEdges(g, st ?? undefined));
+  const cut = cutOffEdges(g);
+  const stateOf = (e: { id: number; done: number; labor: number }): RoadState =>
+    e.done >= e.labor ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting";
+  return roadChains(g, stateOf);
+});
+
+// What the model layer draws of the roads: every built chain. The same list comes back while no built chain changed.
+let lastItems: ModelItem[] = [];
+const itemSig = (l: readonly ModelItem[]) => l.map((i) => `${i.kind}:${i.ring.map((p) => p.join(",")).join(";")}`).join("|");
+export const roadItems: ReadonlySignal<ModelItem[]> = computed(() => {
+  const list = chains.value;
+  const g = roads.value;
+  if (!list || !g) return lastItems;
+  const out: ModelItem[] = list
+    .filter((ch) => ch.state === "built")
+    .map((ch) => ({ id: `road${ch.id}`, ring: ch.nodes.map((id): [number, number] => [g.nodes[id].x, g.nodes[id].y]), height: 0, kind: ch.kind, progress: 1, style: "road" }));
+  if (itemSig(out) !== itemSig(lastItems)) lastItems = out;
+  return lastItems;
+});
+
+// Roads as lines at real width: built ones while zoomed out (closer, the three.js models draw them), planned and waiting
+// edges dashed and faded, cut-off ones red.
 export function attachRoadLayer(map: maplibregl.Map): void {
   let styled = false;
 
@@ -33,6 +65,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
       ...common,
       id: "roads-casing",
       type: "line",
+      maxzoom: LINES_MAX_ZOOM,
       filter: ["==", ["get", "state"], "built"],
       paint: { "line-color": CASING_COLOR as never, "line-width": realWidth(k, 1.5) },
     });
@@ -40,6 +73,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
       ...common,
       id: "roads-built",
       type: "line",
+      maxzoom: LINES_MAX_ZOOM,
       filter: ["==", ["get", "state"], "built"],
       paint: { "line-color": BUILT_COLOR as never, "line-width": realWidth(k) },
     });
@@ -75,15 +109,10 @@ export function attachRoadLayer(map: maplibregl.Map): void {
     const c = city.value;
     const f = frame.value;
     const g = roads.value;
-    if (!c || !f || !g) return;
+    const list = chains.value;
+    if (!c || !f || !g || !list) return;
     if (!styled) addLayers(c.lat); // one city per page load
-    // Edges short of stone are not workable: they show as waiting. The stock is only watched while some edge owes stone.
-    const st = Object.values(g.edges).some((e) => e.stone) ? stock.value : null;
-    const active = new Set(workableEdges(g, st ?? undefined));
-    const cut = cutOffEdges(g);
-    const stateOf = (e: { id: number; done: number; labor: number }): RoadState =>
-      e.done >= e.labor ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting";
-    const features: GeoJSON.Feature[] = roadChains(g, stateOf).map((ch) => ({
+    const features: GeoJSON.Feature[] = list.map((ch) => ({
       type: "Feature",
       properties: { id: ch.id, kind: ch.kind, w: ROAD_KINDS[ch.kind].width, state: ch.state },
       geometry: {

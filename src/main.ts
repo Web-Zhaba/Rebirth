@@ -5,6 +5,7 @@ import { createMap } from "./map/mapView";
 import { attachArticles } from "./map/articles";
 import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
+import { attachModels } from "./map/models";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
 import { attachPlaceLabels } from "./map/placeLabels";
@@ -36,9 +37,10 @@ attachRuinsLayer(map, oldWorld, frame); // old foundations and streets, beneath 
 attachExcavation();
 attachArticles();
 attachRoadLayer(map); // before the city marker so roads draw beneath it
-// Buildings as three.js models (loaded with the first building); localStorage debug3dModels = "1" shows every model kind instead.
+attachBuildingLayer(map);
+// Buildings and built roads as three.js models (loaded with the first one); localStorage debug3dModels = "1" shows every model kind instead.
 const sunLight = { clock: gameClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) };
-attachBuildingLayer(map, { light: sunLight, debug: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1" });
+attachModels(map, { light: sunLight, debug: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1" });
 attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
 attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec });

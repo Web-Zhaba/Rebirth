@@ -6,7 +6,7 @@ import { pointInPolygon } from "../sim/zones";
 import { buildings, frame, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
-import type { ModelItem, ModelLayerOptions } from "./modelLayer";
+import type { ModelItem } from "./modelLayer";
 import { overlay, OVERLAY_COLORS, tool, type Overlay } from "./tools";
 
 const SRC = "buildings";
@@ -44,11 +44,11 @@ function tintOf(b: Building, ov: Overlay, st: ClientState): string {
 // Unit vector from a lot towards its road (the door side): the opposite of growth.ts `away`.
 const towardsRoad = (b: Building): [number, number] => [Math.sin(b.lot.angle) * b.side, -Math.cos(b.lot.angle) * b.side];
 
-// What the model layer draws: every building that is not just planned. A restored old building is drawn by its OSM class.
+// What the model layer draws of the buildings: every one that is not just planned. A restored old building is drawn by its OSM class.
 // The same list comes back while nothing visible changed, so the layer does not rebuild every tick.
 let lastItems: ModelItem[] = [];
 const itemSig = (i: ModelItem): string => `${i.id}|${i.kind}|${i.height}|${i.progress >= 1 ? 1 : Math.floor(i.progress * 24)}|${i.level ?? 1}|${i.tint ?? ""}|${i.upgrading ? 1 : 0}`;
-export const modelItems: ReadonlySignal<ModelItem[]> = computed(() => {
+export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   const st = state.value;
   const ov = overlay.value;
   if (!st) return lastItems;
@@ -66,29 +66,10 @@ export const modelItems: ReadonlySignal<ModelItem[]> = computed(() => {
   return lastItems;
 });
 
-export interface BuildingLayerOptions {
-  light?: ModelLayerOptions["light"];
-  debug?: boolean; // show every model kind (modelLayer.ts attachModelDebug) instead of the town
-}
-
-// Buildings: finished ones and building sites as three.js models (modelLayer.ts, loaded with the first building), planned
-// ones as a dashed outline; footprint outlines near a top-down view.
-export function attachBuildingLayer(map: maplibregl.Map, opts: BuildingLayerOptions = {}): void {
+// Buildings: finished ones and building sites are three.js models (modelLayer.ts via models.ts, fed by `buildingItems`),
+// planned ones a dashed outline; footprint outlines near a top-down view.
+export function attachBuildingLayer(map: maplibregl.Map): void {
   let ready = false;
-
-  const attachModels = () => {
-    if (opts.debug) {
-      void import("./modelLayer").then((m) => m.attachModelDebug(map, { frame, light: opts.light }));
-      return;
-    }
-    let loading = false;
-    const stopWatch = effect(() => {
-      if (loading || !modelItems.value.length) return;
-      loading = true;
-      void import("./modelLayer").then((m) => m.attachModelLayer(map, { items: modelItems, frame, light: opts.light }));
-      queueMicrotask(() => stopWatch());
-    });
-  };
 
   const setup = () => {
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -122,7 +103,6 @@ export function attachBuildingLayer(map: maplibregl.Map, opts: BuildingLayerOpti
     map.on("pitch", outlineByTilt);
     outlineByTilt();
     ready = true;
-    attachModels();
 
     effect(() => {
       const list = buildings.value;
