@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DAYS_PER_SEASON, START_MINUTE_OF_DAY } from "../sim/clock";
 import { TREE_COLORS } from "../ui/palette";
 import { buildTree, crownAt } from "./treeModels";
+import { impostorRadius } from "./treeImpostor";
 import { coniferShare, keepAt, MIN_KEEP, scatterTrees, thinReach, TREE_KINDS, TREE_STRIDE, type ForestPoly } from "./treeScatter";
 
 const square = (x0: number, y0: number, x1: number, y1: number): ForestPoly => ({ bbox: [x0, y0, x1, y1], rings: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1]]] });
@@ -56,7 +57,7 @@ describe("scatterTrees", () => {
 describe("trees", () => {
   it("builds each kind at each level of detail, cheaper with every level", () => {
     for (const kind of TREE_KINDS) {
-      const tris = [0, 1, 2].map((lod) => {
+      const tris = ([0, 2] as const).map((lod) => {
         const t = buildTree(kind, lod);
         const z = t.positions.filter((_, i) => i % 3 === 2);
         expect(t.crown.length).toBe(z.length);
@@ -66,8 +67,11 @@ describe("trees", () => {
         return t.indices.length / 3;
       });
       expect(buildTree(kind, 0).crown).toContain(0); // the full tree has a trunk
-      expect(tris[1]).toBeLessThan(tris[0] / 2);
-      expect(tris[2]).toBeLessThanOrEqual(6);
+      expect(tris[1]).toBeLessThanOrEqual(6);
+      // the impostor's view holds the whole tree, turned any way about its middle, and not much more
+      const r = impostorRadius(buildTree(kind, 0));
+      expect(r).toBeGreaterThan(0.5);
+      expect(r).toBeLessThan(0.65);
     }
   });
 

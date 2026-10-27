@@ -40,19 +40,14 @@ const SHAPES: Record<TreeKind, { trunk: XY[]; bark: string; crowns: { at: XY; z:
   },
 };
 
-// Levels of detail: 0 full, 1 a few faces for the distance, 2 a flat crown seen from straight above.
+// Levels of detail: 0 full, 1 an impostor of the full tree for the distance (treeImpostor.ts, built from level 0), 2 a
+// flat crown seen from straight above.
 export const TREE_LODS = 3;
 
-// The simple crown of each kind for the distance: one surface, no trunk.
-const FAR: Record<TreeKind, { z: number; prof: XY[] }> = {
-  conifer: { z: 0.12, prof: [[0.26, 0], [0, 0.88]] },
-  broadleaf: { z: 0.3, prof: [[0.12, 0], [0.37, 0.2], [0.3, 0.5], [0, 0.7]] },
-  birch: { z: 0.35, prof: [[0.08, 0], [0.2, 0.25], [0, 0.65]] },
-};
 // The flat crown: its radius and height in tree heights.
 const FLAT: Record<TreeKind, { r: number; z: number }> = { conifer: { r: 0.24, z: 0.45 }, broadleaf: { r: 0.37, z: 0.6 }, birch: { r: 0.2, z: 0.65 } };
 
-export function buildTree(kind: TreeKind, lod = 0): TreeModel {
+export function buildTree(kind: TreeKind, lod: 0 | 2 = 0): TreeModel {
   const mesh = new Mesh({ cx: 0, cy: 0, ux: 1, uy: 0, len: 0, wid: 0 });
   const sh = SHAPES[kind];
   const leaf = rgb(kind === "conifer" ? TREE_COLORS.conifer : TREE_COLORS.summer);
@@ -61,8 +56,6 @@ export function buildTree(kind: TreeKind, lod = 0): TreeModel {
     revolve(mesh, 0, 0, 0, sh.trunk, rgb(sh.bark), 5);
     trunkVerts = mesh.m.positions.length / 3;
     for (const c of sh.crowns) revolve(mesh, c.at[0], c.at[1], c.z, c.prof, leaf, 7);
-  } else if (lod === 1) {
-    revolve(mesh, 0, 0, FAR[kind].z, FAR[kind].prof, leaf, 5);
   } else {
     // a hexagon, lighter in the middle (the top of the crown) than at the rim
     const { r, z } = FLAT[kind];

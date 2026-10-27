@@ -1,7 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import {
-  BufferAttribute,
   Camera,
   DoubleSide,
   DynamicDrawUsage,
@@ -25,6 +24,7 @@ import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { bakeImpostor, IMPOSTOR_STEP, IMPOSTOR_VIEWS, impostorQuad, treeGeometry, type Impostor } from "./treeImpostor";
 import { buildTree, crownAt, TREE_LODS } from "./treeModels";
 import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
 import { eyeOf, frustumPlanes, sphereInside } from "./three/frame";
@@ -40,7 +40,8 @@ import { acquireHost, type ThreeHost } from "./three/host";
 // their trees drawn a little bigger, and the last stretch before the far edge fades the trees out.
 // A chunk's trees are scattered and projected once and cached; new chunks are built within FRAME_BUDGET ms per frame,
 // so moving the camera never stalls on them. Levels of detail per chunk by its distance from the camera: full trees
-// near, a few faces farther, and flat crowns for a view from straight above. One instanced mesh per kind and level, its
+// near, impostors of them farther (treeImpostor.ts: quads facing the camera with the baked tree on them), and flat
+// crowns for a view from straight above. One instanced mesh per kind and level, its
 // instances in one interleaved buffer refilled (not reallocated) as the view changes.
 //
 // Close up only: below TREES_FROM_ZOOM the forest is the 2D fill alone, and up to GROW_TO the trees grow in. Deciduous
@@ -67,9 +68,22 @@ const WIND_DIR: [number, number] = [0.98, 0.2]; // toward the east
 const WIND_FULL = 14; // m/s: full sway
 const PER = 10; // floats per instance: globe base (3), mercator base (3), size, turn, hash, shade
 
+// Level 1 is built with IMPOSTOR defined: a quad (treeImpostor.ts) instead of the tree's mesh.
 const VERT = /* glsl */ `
+#ifndef IMPOSTOR
 attribute vec3 aColor;
 attribute float aCrown;
+varying vec3 vC;
+varying float vCrown;
+varying float vH;
+varying vec3 vP;
+#else
+uniform float uRadius; // half the side of a baked view, in tree heights
+varying vec2 vUV;
+varying vec3 vR;
+varying vec3 vU;
+varying float vFlip;
+#endif
 attribute vec3 iG;
 attribute vec3 iM;
 attribute vec4 iP; // size, turn, hash, shade
@@ -84,34 +98,49 @@ uniform vec3 uEye; // camera in the mercator frame
 uniform float uReach; // the far thinning (treeScatter.ts keepAt)
 uniform float uFar;
 varying vec3 vN;
-varying vec3 vC;
-varying float vCrown;
-varying float vH;
 varying float vHash;
 varying float vShade;
-varying vec3 vP;
 void main() {
   // thinned far trees are drawn bigger, so the forest keeps its cover; past FADE_FROM they shrink away
   float dist = length(iM - uEye);
   float keep = clamp(uReach / dist, ${MIN_KEEP}, 1.0);
   float s = iP.x * uGrow * min(2.0, pow(keep, -0.3)) * (1.0 - smoothstep(uFar * ${FADE_FROM}, uFar, dist));
+  // sway: grows with the square of the height, gusts out of phase from tree to tree
+  float gust = 0.35 + 0.65 * sin(uTime * (1.1 + 0.5 * iP.z) + iP.z * 40.0);
+#ifdef IMPOSTOR
+  // a quad facing the camera about the tree's middle, showing the baked view nearest the camera's elevation (with an
+  // offset per tree, so the forest passes from one view to the next gradually), mirrored for half the trees
+  vec3 F = normalize(uEye - iM - vec3(0.0, 0.0, 0.5 * s));
+  vec3 R = cross(vec3(0.0, 0.0, 1.0), F);
+  R = length(R) > 1e-4 ? normalize(R) : vec3(1.0, 0.0, 0.0);
+  vec3 U = cross(F, R);
+  float view = clamp(floor(degrees(asin(clamp(F.z, 0.0, 1.0))) / ${IMPOSTOR_STEP}.0 + fract(iP.z * 5.37)), 0.0, ${IMPOSTOR_VIEWS - 1}.0);
+  vFlip = fract(iP.z * 3.1) < 0.5 ? -1.0 : 1.0;
+  vec2 q = position.xy;
+  vUV = vec2((view + 0.5 + 0.5 * q.x * vFlip) / ${IMPOSTOR_VIEWS}.0, 0.5 + 0.5 * q.y);
+  vec3 p = ((R * q.x + U * q.y) * uRadius + vec3(0.0, 0.0, 0.5)) * s;
+  float h = clamp(0.5 + q.y * uRadius, 0.0, 1.0);
+  p.xy += uWind.xy * uWind.z * gust * h * h * s * 0.03;
+  vN = F;
+  vR = R;
+  vU = U;
+#else
   vec3 p = position;
   if (aCrown > 0.5) p.xy *= 1.0 - 0.45 * uBare; // leafless: only the thinner frame of branches
   float c = cos(iP.y), sn = sin(iP.y);
   p = vec3(c * p.x - sn * p.y, sn * p.x + c * p.y, p.z) * s;
-  // sway: grows with the square of the height, gusts out of phase from tree to tree
-  float gust = 0.35 + 0.65 * sin(uTime * (1.1 + 0.5 * iP.z) + iP.z * 40.0);
   p.xy += uWind.xy * uWind.z * gust * position.z * position.z * s * 0.03;
-  vec4 m = uM * vec4(iM + p, 1.0);
-  vec4 g = uG * vec4(iG + p, 1.0);
-  gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
   vN = vec3(c * normal.x - sn * normal.y, sn * normal.x + c * normal.y, normal.z);
   vC = aColor;
   vCrown = aCrown;
   vH = position.z;
+  vP = position * iP.x + iP.z * 17.0; // metres in the tree, shifted per tree: holes and snow patches differ
+#endif
+  vec4 m = uM * vec4(iM + p, 1.0);
+  vec4 g = uG * vec4(iG + p, 1.0);
+  gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
   vHash = iP.z;
   vShade = iP.w;
-  vP = position * iP.x + iP.z * 17.0; // metres in the tree, shifted per tree: holes and snow patches differ
 }`;
 
 const FRAG = /* glsl */ `
@@ -127,30 +156,53 @@ uniform vec3 uBareCol;
 uniform vec3 uSnowCol;
 uniform vec3 uLeafBase; // the leaf colour the meshes are built with: seasonal crowns keep its light and shade
 varying vec3 vN;
+varying float vHash;
+varying float vShade;
+#ifndef IMPOSTOR
 varying vec3 vC;
 varying float vCrown;
 varying float vH;
-varying float vHash;
-varying float vShade;
 varying vec3 vP;
+#else
+uniform sampler2D uColor; // treeImpostor.ts
+uniform sampler2D uData;
+varying vec2 vUV;
+varying vec3 vR;
+varying vec3 vU;
+varying float vFlip;
+#endif
 float cell(vec3 p) {
   return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
 }
-void main() {
-  vec3 col = vC;
-  vec3 n = normalize(vN);
-  if (vCrown > 0.5) {
-    // a leafless crown is a see-through tangle of twigs: most of it is cut away in small cells
-    if (uBare > 0.01 && cell(vP * 2.2) < uBare * 0.7) discard;
-    if (uSeasonal > 0.5) col = mix(mix(uCrownA, uCrownB, fract(vHash * 7.31)), uBareCol, uBare) * (dot(vC, vec3(1.0)) / dot(uLeafBase, vec3(1.0)));
-    col *= vShade * mix(0.7, 1.05, smoothstep(0.1, 1.0, vH)); // darker deep in the crown
-    // snow lies in patches on the branches that face up
-    float spot = smoothstep(0.35, 0.65, cell(vP * 1.6 + 3.1));
+// A point of a tree: col its colour as built, crown 1 on the foliage, h its height in the tree (0..1), spot how thick
+// the snow lies there.
+vec3 shade(vec3 col, vec3 n, float crown, float h, float spot) {
+  if (crown > 0.5) {
+    if (uSeasonal > 0.5) col = mix(mix(uCrownA, uCrownB, fract(vHash * 7.31)), uBareCol, uBare) * (dot(col, vec3(1.0)) / dot(uLeafBase, vec3(1.0)));
+    col *= vShade * mix(0.7, 1.05, smoothstep(0.1, 1.0, h)); // darker deep in the crown
+    // snow lies on the branches that face up
     col = mix(col, uSnowCol, uSnow * smoothstep(0.12, 0.45, n.z) * mix(0.35, 0.95, spot));
   }
   float d = max(dot(n, uLight), 0.0);
   float k = mix(0.55, 1.0, d) * mix(0.88, 1.0, uSun);
-  gl_FragColor = vec4(mix(col * k, uTint.rgb, uTint.a), 1.0);
+  return mix(col * k, uTint.rgb, uTint.a);
+}
+void main() {
+#ifdef IMPOSTOR
+  vec4 a = texture2D(uColor, vUV);
+  vec4 t = texture2D(uData, vUV);
+  float crown = step(0.5, t.a);
+  // the coverage kept sharp at any size (alphaToCoverage turns it into MSAA samples); a leafless crown is see-through
+  float cover = clamp((a.a - 0.5) / max(fwidth(a.a), 1e-4) + 0.5, 0.0, 1.0) * (1.0 - crown * uBare * 0.7);
+  if (cover < 0.01) discard;
+  vec2 nv = (t.xy * 2.0 - 1.0) * vec2(vFlip, 1.0);
+  vec3 n = normalize(vR * nv.x + vU * nv.y + vN * sqrt(max(0.0, 1.0 - dot(nv, nv))));
+  gl_FragColor = vec4(shade(a.rgb, n, crown, t.z, 0.5), cover);
+#else
+  // a leafless crown is a see-through tangle of twigs: most of it is cut away in small cells; snow lies in patches
+  if (vCrown > 0.5 && uBare > 0.01 && cell(vP * 2.2) < uBare * 0.7) discard;
+  gl_FragColor = vec4(shade(vC, normalize(vN), vCrown, vH, smoothstep(0.35, 0.65, cell(vP * 1.6 + 3.1))), 1.0);
+#endif
 }`;
 
 export interface TreeLayerOptions {
@@ -197,6 +249,8 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   let rebuilt = 0; // chunks built again in place: part of what the buffers hold
   const camera = new Camera();
   const framer = frameSetter(opts.light);
+  let impostors: Impostor[] | null = null; // by kind; baked in the first render (and again after a lost context)
+  let unRestore: (() => void) | null = null;
 
   const reset = () => {
     chunks.clear();
@@ -249,7 +303,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         // a new geometry, not new attributes on the old one: three keeps the instance limit of the first binding
         const old = s.mesh.geometry as InstancedBufferGeometry;
         const geo = new InstancedBufferGeometry();
-        for (const name of ["position", "normal", "aColor", "aCrown"]) geo.setAttribute(name, old.getAttribute(name));
+        for (const [name, attr] of Object.entries(old.attributes)) if (!(attr instanceof InterleavedBufferAttribute)) geo.setAttribute(name, attr);
         geo.setIndex(old.getIndex());
         s.buf = new InstancedInterleavedBuffer(new Float32Array(Math.max(256, Math.ceil(counts[k] * 1.5)) * PER), PER).setUsage(DynamicDrawUsage);
         geo.setAttribute("iG", new InterleavedBufferAttribute(s.buf, 3, 0));
@@ -286,16 +340,13 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       scene = new Scene();
       TREE_KINDS.forEach((kind) => {
         for (let lod = 0; lod < TREE_LODS; lod++) {
-          const t = buildTree(kind, lod);
-          const geo = new InstancedBufferGeometry();
-          geo.setAttribute("position", new BufferAttribute(Float32Array.from(t.positions), 3));
-          geo.setAttribute("normal", new BufferAttribute(Float32Array.from(t.normals), 3));
-          geo.setAttribute("aColor", new BufferAttribute(Float32Array.from(t.colors), 3));
-          geo.setAttribute("aCrown", new BufferAttribute(Float32Array.from(t.crown), 1));
-          geo.setIndex(new BufferAttribute(Uint32Array.from(t.indices), 1));
+          const imp = lod === 1;
+          const geo = imp ? impostorQuad() : treeGeometry(buildTree(kind, lod as 0 | 2), new InstancedBufferGeometry());
           geo.instanceCount = 0;
           const mat = new ShaderMaterial({
+            defines: imp ? { IMPOSTOR: "" } : {},
             uniforms: {
+              ...(imp && { uColor: { value: null }, uData: { value: null }, uRadius: { value: 0 } }),
               uG: { value: new Matrix4() },
               uM: { value: new Matrix4() },
               uT: { value: 0 },
@@ -321,6 +372,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
             fragmentShader: FRAG,
             side: DoubleSide,
             blending: NoBlending,
+            alphaToCoverage: imp,
             depthTest: true,
             depthWrite: true,
             depthFunc: LessEqualDepth,
@@ -332,6 +384,10 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         }
       });
       opts.source.onTile = () => map.triggerRepaint();
+      unRestore = host.onRestore(() => {
+        impostors = null; // their textures went with the context
+        map.triggerRepaint();
+      });
       stops.push(
         effect(() => {
           void opts.frame.value;
@@ -359,6 +415,10 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       for (const s of slots) s.mesh.geometry.dispose();
       for (const m of mats) m.dispose();
       slots.length = mats.length = 0;
+      impostors?.forEach((q) => q.dispose());
+      impostors = null;
+      unRestore?.();
+      unRestore = null;
       host?.release();
       host = null;
       scene = null;
@@ -456,6 +516,17 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       if (missing) map.triggerRepaint();
       if (!slots.some((s) => s.count > 0)) return;
+      if (!impostors) {
+        const baked = host.draw((r) => TREE_KINDS.map((kind) => bakeImpostor(r, buildTree(kind, 0))));
+        if (!baked) return;
+        impostors = baked;
+        baked.forEach((q, kind) => {
+          const u = mats[kind * TREE_LODS + 1].uniforms;
+          u.uColor.value = q.color;
+          u.uData.value = q.data;
+          u.uRadius.value = q.radius;
+        });
+      }
       // uniforms of this frame
       const clock = opts.light?.clock.peek() ?? 0;
       const crown = crownAt(clock);
@@ -479,7 +550,14 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         (u.uCrownB.value as Vector3).set(...b);
         u.uSnow.value = seasonal ? snow * crown.bare * 0.6 : snow;
       }
-      host.draw((r) => r.render(scene!, camera));
+      host.draw((r) => {
+        // the impostors write their coverage to the alpha (alphaToCoverage): keep it off the canvas, which stays opaque
+        const color = r.state.buffers.color;
+        r.getContext().colorMask(true, true, true, false);
+        color.setLocked(true);
+        r.render(scene!, camera);
+        color.setLocked(false);
+      });
       if (wind > 0.02 && !flat) map.triggerRepaint(); // the sway moves every frame
     },
   };
