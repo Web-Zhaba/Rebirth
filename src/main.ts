@@ -8,6 +8,7 @@ import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachForest } from "./map/forest";
 import { attachWater } from "./map/water";
 import { attachFields3d } from "./map/fields3d";
+import { attachSmoke } from "./map/smoke";
 import { attachModels } from "./map/models";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
@@ -64,6 +65,7 @@ attachModels(map, { light: sunLight, weather: weatherNow, debug: import.meta.env
 attachForest(map, { light: sunLight, weather: weatherNow, ruins: computed(() => (ruinsShown.value ? (oldWorld.value?.foundations ?? null) : null)) });
 attachWater(map, { light: sunLight, weather: weatherNow }); // 3D water, close up
 attachFields3d(map, { light: sunLight, weather: weatherNow }); // ploughland and crops on the farm fields, close up
+attachSmoke(map, { light: sunLight, weather: weatherNow }); // smoke from the chimneys of lived-in houses and working shops, close up
 // Clouds above everything on the map, visible only on the far globe views; their ground shadows at every zoom, just
 // under the night tint (so the lights stay bright).
 attachClouds(map, {

@@ -1,6 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
-import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, Scene, ShaderMaterial, Vector2, Vector3, Vector4 } from "three";
+import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, NormalBlending, Scene, ShaderMaterial, Vector2, Vector3, Vector4 } from "three";
 import { calendar } from "../sim/clock";
 import { roads as roadGraph } from "../simClient";
 import type { WeatherState } from "../sim/weather";
@@ -18,7 +18,7 @@ import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale, skyColours } from "./relief";
 import { eyeOf, frustumPlanes, mercatorToLngLat } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
-import { bridgePiers, buildWaterChunk, FLOW_REACH, nearestPiers, realShores, runsOutside, SHORE_CAP, tileWater, type Box, type Pier, type TileWater, type Waterway } from "./waterMesh";
+import { bridgePiers, buildWaterChunk, FLOW_REACH, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Pier, type TileWater, type Waterway } from "./waterMesh";
 import { iceOpacity, snowOpacity, weatherCoverVisibility, WIND_DIR } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
 import { motionOn, motionTime, showWhile, water3dOn } from "./graphicsSettings";
@@ -92,6 +92,96 @@ void main() {
   vShore = aShore;
   vFlow = aFlow;
   vTone = aTone;
+}`;
+
+const STEAM_LIFT = 0.8; // m above the water: the sheet of steam
+
+// Steam: the same chunk geometry as a sheet lifted above the water and toward the camera the same way.
+const STEAM_VERT = /* glsl */ `
+attribute vec3 aG;
+attribute vec3 aM;
+attribute float aShore;
+attribute vec2 aFlow;
+uniform mat4 uG;
+uniform mat4 uM;
+uniform float uT;
+uniform vec3 uEye;
+varying vec3 vM;
+varying float vShore;
+varying vec2 vFlow;
+void main() {
+  vec3 up = vec3(0.0, 0.0, ${STEAM_LIFT.toFixed(2)});
+  vec3 toEye = uEye - aM;
+  float d = max(length(toEye), 1.0);
+  vec3 lift = toEye * (min(d * 0.002, 25.0) / d);
+  vec4 m = uM * vec4(aM + up + lift, 1.0);
+  vec4 g = uG * vec4(aG + lift, 1.0);
+  gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
+  vM = aM + up;
+  vShore = aShore;
+  vFlow = aFlow;
+}`;
+
+// Wisps: domain-warped fbm in world metres, stretched along the wind and carried by it (and by a river's flow),
+// thicker at the shore, thin looking straight down (it is a 2D sheet), fewer octaves with distance.
+const STEAM_FRAG = /* glsl */ `
+uniform float uTime;
+uniform vec3 uEye;
+uniform vec3 uSunDir;
+uniform float uSun;
+uniform vec4 uTint;
+uniform vec2 uWindDir;
+uniform float uWind;
+uniform float uFar;
+uniform float uIn;
+uniform vec3 uHorizon;
+uniform float uSteam;
+varying vec3 vM;
+varying float vShore;
+varying vec2 vFlow;
+float hash(vec2 p) {
+  return fract(sin(dot(mod(p, 1024.0), vec2(127.1, 311.7))) * 43758.5453);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p, int oct) {
+  float s = 0.0, a = 0.5, tot = 0.0;
+  for (int k = 0; k < 3; k++) {
+    if (k >= oct) break;
+    s += a * noise(p);
+    tot += a;
+    p = p * 2.03 + vec2(17.1, 9.3);
+    a *= 0.5;
+  }
+  return s / tot;
+}
+void main() {
+  float dist = length(uEye - vM);
+  float reach = min(uFar * 0.6, 9000.0);
+  float fadeFar = 1.0 - smoothstep(reach * 0.5, reach, dist);
+  float fadeNear = smoothstep(2.0, 25.0, dist);
+  float vz = abs(uEye.z - vM.z) / max(dist, 1.0);
+  float looking = mix(0.3, 1.0, pow(1.0 - vz, 1.5)); // thicker along the surface than straight down
+  bool river = dot(vFlow, vFlow) > 1e-4;
+  vec2 vel = uWindDir * (0.3 + uWind * 1.5) + vFlow * 0.5; // m/s
+  vec2 p = vM.xy - vel * uTime;
+  vec2 q = vec2(dot(p, uWindDir) * 0.5, dot(p, vec2(-uWindDir.y, uWindDir.x))) / 14.0; // stretched along the wind
+  int oct = dist < 350.0 ? 3 : (dist < 2500.0 ? 2 : 1);
+  vec2 w = vec2(fbm(q * 0.8 + vec2(0.0, uTime * 0.02), oct), fbm(q * 0.8 + vec2(5.2, 1.3) - uTime * 0.015, oct));
+  float n = fbm(q + (w - 0.5) * 2.2, oct); // curling
+  float wisp = smoothstep(0.34, 0.68, n);
+  float clumps = mix(0.4, 1.0, smoothstep(0.25, 0.7, noise(vM.xy * 0.004 + 3.0))); // bare stretches between banks of steam
+  float shoreK = river ? 1.0 : mix(0.55, 1.0, 1.0 - smoothstep(0.0, 50.0, vShore));
+  float lip = 0.5 + 0.5 * smoothstep(0.0, 3.0, vShore);
+  float a = (0.2 + 0.8 * wisp) * wisp * clumps * shoreK * lip * looking * uSteam * fadeFar * fadeNear * uIn * 0.85;
+  a *= mix(0.35, 1.0, uSun); // by night it is barely there
+  vec3 col = mix(vec3(0.86, 0.9, 0.95), uHorizon * 1.15, 0.45);
+  float warm = (1.0 - smoothstep(0.02, 0.4, uSunDir.z)) * uSun; // lit from the side at sunrise
+  col = mix(col, vec3(1.0, 0.8, 0.62), warm * 0.55) * mix(0.4, 1.0, uSun) * (0.9 + 0.2 * wisp);
+  col = mix(col, uTint.rgb, uTint.a);
+  gl_FragColor = vec4(col * a, a); // premultiplied
 }`;
 
 const FRAG = /* glsl */ `
@@ -249,6 +339,7 @@ export interface WaterLayerOptions {
 
 interface Chunk {
   mesh: Mesh | null; // null: no water in it
+  steam?: Mesh; // the sheet of steam over it: shares its geometry
   seen: number;
   stale: boolean;
 }
@@ -259,6 +350,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
   let mat: ShaderMaterial | null = null;
+  let steamMat: ShaderMaterial | null = null;
+  let steamNow = 0; // strength of the steam this frame
+  let steamForce: number | null = null; // devtools override
   let origin: { lng: number; lat: number } | null = null;
   let tilesFor: TownFrame | null = null;
   let frameNo = 0;
@@ -276,6 +370,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
   const reset = () => {
     for (const c of chunks.values()) c.mesh?.geometry.dispose();
     for (const c of chunks.values()) if (c.mesh) scene?.remove(c.mesh);
+    for (const c of chunks.values()) if (c.steam) scene?.remove(c.steam);
     chunks.clear();
     shown.clear();
   };
@@ -485,11 +580,16 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     geo.setIndex(new BufferAttribute(n > 65535 ? Uint32Array.from(c.index) : Uint16Array.from(c.index), 1));
     const mesh = Object.assign(new Mesh(geo, mat!), { frustumCulled: false, visible: false });
     scene!.add(mesh);
-    return { mesh, seen: 0, stale: false };
+    const steam = Object.assign(new Mesh(geo, steamMat!), { frustumCulled: false, visible: false, renderOrder: 1 });
+    scene!.add(steam);
+    return { mesh, steam, seen: 0, stale: false };
   };
 
   // devtools: what is drawn now
   if (import.meta.env.DEV) Object.assign(window, { waterMat: () => mat, waterStats: () => ({ shown: shown.size, chunks: chunks.size, tiles: land.size + ways.size, tris: [...shown].reduce((a, q) => a + (q.geometry.index?.count ?? 0) / 3, 0) }) });
+
+  // devtools: the steam strength now; waterSteamForce(v) sets it for a look, null gives it back to the weather
+  if (import.meta.env.DEV) Object.assign(window, { waterSteam: () => steamNow, waterSteamForce: (v: number | null) => ((steamForce = v), map.triggerRepaint()) });
 
   // Is there water at a town point, as far as the loaded tiles know (an unloaded tile counts as water)?
   const waterAt = (tf: TownFrame, x: number, y: number): boolean => {
@@ -560,6 +660,19 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         depthWrite: true,
         depthFunc: LessEqualDepth,
       });
+      const share = ["uG", "uM", "uT", "uSunDir", "uSun", "uTint", "uTime", "uEye", "uWindDir", "uWind", "uFar", "uIn", "uHorizon"];
+      steamMat = new ShaderMaterial({
+        uniforms: { ...Object.fromEntries(share.map((k) => [k, mat!.uniforms[k]])), uSteam: { value: 0 } }, // the water's own uniform objects: set once a frame
+        vertexShader: STEAM_VERT,
+        fragmentShader: STEAM_FRAG,
+        side: DoubleSide,
+        transparent: true,
+        blending: NormalBlending,
+        premultipliedAlpha: true, // (ONE, ONE_MINUS_SRC_ALPHA)
+        depthTest: true,
+        depthWrite: false,
+        depthFunc: LessEqualDepth,
+      });
       stops.push(
         effect(() => {
           void opts.frame.value;
@@ -587,7 +700,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       stops.length = 0;
       reset();
       mat?.dispose();
+      steamMat?.dispose();
       mat = null;
+      steamMat = null;
       host?.release();
       host = null;
       scene = null;
@@ -595,7 +710,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     render(_gl, args) {
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
-      if (!host || !scene || !mat || !tf || zoom < WATER_FROM_ZOOM) return;
+      if (!host || !scene || !mat || !steamMat || !tf || zoom < WATER_FROM_ZOOM) return;
       const [lng, lat] = tf.toLngLat(0, 0);
       if (!origin || origin.lng !== lng || origin.lat !== lat) {
         origin = { lng, lat };
@@ -604,6 +719,13 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       const M = framer.mercator(args, host, origin);
       const eye = eyeOf(M);
       if (!eye) return;
+      const clock = opts.light?.clock.peek() ?? 0;
+      const cal = calendar(clock);
+      const w = opts.weather.peek();
+      const cover = weatherMapOn.peek() && w ? 1 : 0;
+      const ice = cover ? Math.min(1, iceOpacity(w!.ice) / 0.55) : 0;
+      steamNow = steamForce ?? (w ? steamStrength(w.now.temp, cal.hour + cal.minute / 60, w.now.wind, w.now.cloud, w.now.snow ? 0 : w.now.precip, ice) : 0);
+      const steamOn = steamNow > 0.003;
       const merc = mercatorLocal(origin);
       const [elng, elat] = merc.from(eye[0], eye[1]);
       const k = reliefScale.peek();
@@ -643,9 +765,11 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         if (c) {
           c.seen = frameNo;
           if (c.mesh) want.add(c.mesh);
+          if (c.steam) c.steam.visible = steamOn;
         }
       }
       for (const m of shown) if (!want.has(m)) m.visible = false;
+      for (const c of chunks.values()) if (c.steam && (!c.mesh || !want.has(c.mesh))) c.steam.visible = false;
       for (const m of want) m.visible = true;
       shown.clear();
       for (const m of want) shown.add(m);
@@ -662,14 +786,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       framer.set(u, args, host, origin);
       (u.uEye.value as Vector3).set(...eye);
       u.uTime.value = motionTime();
-      const clock = opts.light?.clock.peek() ?? 0;
-      const cal = calendar(clock);
       const sky = skyColours(cal.hour + cal.minute / 60);
       (u.uSky.value as Vector3).set(...rgb(sky.sky));
       (u.uHorizon.value as Vector3).set(...rgb(sky.horizon));
-      const w = opts.weather.peek();
-      const cover = weatherMapOn.peek() && w ? 1 : 0;
-      const ice = cover ? Math.min(1, iceOpacity(w!.ice) / 0.55) : 0;
       u.uWind.value = Math.max(0.12, Math.min(1.2, (w?.now.wind ?? 3) / WIND_FULL));
       u.uRain.value = w && !w.now.snow ? Math.min(1, w.now.precip / RAIN_FULL) : 0;
       u.uIce.value = ice;
@@ -678,6 +797,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       (u.uFlat.value as Vector3).set(flat[0] + (pale[0] - flat[0]) * fi, flat[1] + (pale[1] - flat[1]) * fi, flat[2] + (pale[2] - flat[2]) * fi);
       const t = Math.min(1, (zoom - WATER_FROM_ZOOM) / (WATER_FULL_ZOOM - WATER_FROM_ZOOM));
       u.uIn.value = t * t * (3 - 2 * t);
+      steamMat.uniforms.uSteam.value = steamNow;
       // the nearest piers that stand in water
       const here = tf.toLocal(elng, elat);
       const list = nearestPiers(piers, here[0], here[1], PIERS * 2, PIER_REACH).filter((q) => waterAt(tf, q.x, q.y)).slice(0, PIERS);

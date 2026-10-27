@@ -66,3 +66,19 @@ describe("groundSeat", () => {
     expect(Math.min(...zs(s))).toBeLessThan(11);
   });
 });
+
+describe("groundSeat smoke emitters", () => {
+  it("rise with the building onto the relief, with and without a plinth", () => {
+    const m = buildHeritageModel(ring, 6, "house", 3);
+    expect(m.smoke?.length).toBeGreaterThan(0);
+    for (const ground of [(x: number) => 100 + x * 0.3, (_x: number) => 100]) {
+      const s = seatBuilding(m, ring, ground, "#888888");
+      expect(s.smoke).toHaveLength(m.smoke!.length);
+      s.smoke!.forEach(([x, y, z], i) => {
+        expect(x).toBe(m.smoke![i][0]);
+        expect(y).toBe(m.smoke![i][1]);
+        expect(z).toBeCloseTo(m.smoke![i][2] + (ground(10) > 100 ? 103 : 100), 9);
+      });
+    }
+  });
+});

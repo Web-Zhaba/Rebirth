@@ -331,3 +331,21 @@ export function nearestPiers(piers: readonly Pier[], x: number, y: number, max: 
     .slice(0, max)
     .map((q) => q.p);
 }
+
+const smooth = (a: number, b: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+// How much the morning steam rises off open water, 0..1: cold air over warmer water on a clear, calm morning
+// (about 04-10 h local game time, strongest just after dawn), none in rain, under heavy cloud or under ice.
+// temp °C, hour 0..24 (fractional), wind m/s, cloud 0..1, precip mm/h, ice 0..1.
+export function steamStrength(temp: number, hour: number, wind: number, cloud: number, precip: number, ice: number): number {
+  const when = smooth(3.5, 5.5, hour) * (1 - smooth(6.5, 10, hour));
+  const cold = 1 - smooth(4, 12, temp);
+  const calm = 1 - smooth(2, 5, wind);
+  const clear = 1 - smooth(0.5, 0.9, cloud);
+  const dry = 1 - smooth(0.02, 0.2, precip);
+  const open = 1 - smooth(0.1, 0.5, ice);
+  return when * cold * calm * clear * dry * open;
+}

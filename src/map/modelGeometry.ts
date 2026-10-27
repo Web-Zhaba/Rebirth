@@ -20,6 +20,7 @@ export interface Model {
   facade: number[]; // s, len, top, pattern per vertex (see PATTERN)
   indices: number[];
   lift?: number[]; // per vertex: how far groundSeat.ts raised it onto the relief (the facade keeps the height above that)
+  smoke?: [number, number, number][]; // chimney tops (x, y, z in the model's metres, like positions): where smokeLayer.ts lets smoke out
 }
 
 export const MAX_VERTS = 48; // rings with more vertices are simplified
@@ -300,6 +301,11 @@ export class Mesh {
   }
   idx(a: number, b: number, c: number): void {
     this.m.indices.push(a, b, c);
+  }
+  // A smoke emitter at the top (u, v, z) of a chimney.
+  emit(u: number, v: number, z: number): void {
+    const [x, y] = this.world(u, v);
+    (this.m.smoke ??= []).push([x, y, z]);
   }
   // Flat triangle; the normal comes from the winding, flipped to face up (or along `hint` when given).
   flat(a: P3, b: P3, c: P3, col: RGB, fac: Fac = NOFAC, hint?: P3): void {

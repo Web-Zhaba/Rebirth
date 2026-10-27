@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILDINGS } from "../sim/buildings";
-import { DOOR, GATE, PATTERN, type Model, type XY } from "./modelGeometry";
+import { DOOR, GATE, PATTERN, pointInRing, type Model, type XY } from "./modelGeometry";
 import { buildTownModel, townForm } from "./townModels";
 
 // Footprint the way growth.ts makes it: along the road (x) by deep (y), the road below (front = -y).
@@ -106,5 +106,51 @@ describe("buildTownModel", () => {
     expect(zMax(buildTownModel(lot(3, 3), 1, "garden", { seed: 1 }))).toBeLessThan(0.6);
     expect(zMax(buildTownModel(lot(6, 6), 1, "dig", { seed: 1 }))).toBeLessThan(2);
     expect(zMax(buildTownModel(lot(6, 7), 5, "izba", { seed: 1, front: FRONT }))).toBeGreaterThan(4);
+  });
+});
+
+describe("smoke emitters", () => {
+  // the highest vertex within 0.9 m of a point: for a chimney top, the chimney itself
+  const highestAt = (m: Model, x: number, y: number) => {
+    let z = -Infinity;
+    for (let i = 0; i < m.positions.length; i += 3) if (Math.hypot(m.positions[i] - x, m.positions[i + 1] - y) < 0.9) z = Math.max(z, m.positions[i + 2]);
+    return z;
+  };
+  it("report every chimney top: above the roof, inside the footprint", () => {
+    let found = 0;
+    for (const id of ["izba", "izba5", "shop", "tavern", "healer", "smithy", "pottery"])
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const t = BUILDINGS[id];
+        const ring = lot(t.along, t.deep, 30, -12);
+        const m = buildTownModel(ring, t.height, id, { seed, front: FRONT });
+        for (const [x, y, z] of m.smoke ?? []) {
+          found++;
+          expect(pointInRing(x, y, ring)).toBe(true);
+          expect(z).toBeGreaterThan(1.5); // higher than a man (a kiln stub is the lowest)
+          expect(z).toBeLessThanOrEqual(zMax(m) + 1e-9);
+          expect(highestAt(m, x, y)).toBeCloseTo(z, 6); // nothing of the roof rises over it
+        }
+      }
+    expect(found).toBeGreaterThan(20);
+  });
+  it("the smithy has its big chimney, the pottery its kiln, a tavern two", () => {
+    for (const seed of [1, 2, 3]) {
+      expect(buildTownModel(lot(6, 5), 4, "smithy", { seed, front: FRONT }).smoke?.length).toBeGreaterThanOrEqual(1);
+      expect(buildTownModel(lot(6, 5), 4, "pottery", { seed, front: FRONT }).smoke?.length).toBeGreaterThanOrEqual(1);
+      expect(buildTownModel(lot(12, 10), 7, "tavern", { seed, front: FRONT }).smoke?.length).toBe(2);
+    }
+  });
+  it("yards and sheds have none", () => {
+    for (const id of ["garden", "well", "dig", "woodcutter", "market"]) expect(buildTownModel(lot(6, 6), 3, id, { seed: 1, front: FRONT }).smoke ?? []).toHaveLength(0);
+  });
+  it("move with the footprint", () => {
+    const a = buildTownModel(lot(6, 7), 5, "izba5", { seed: 3, front: FRONT }).smoke ?? [];
+    const b = buildTownModel(lot(6, 7, 100, 50), 5, "izba5", { seed: 3, front: FRONT }).smoke ?? [];
+    expect(b).toHaveLength(a.length);
+    a.forEach(([x, y, z], i) => {
+      expect(b[i][0]).toBeCloseTo(x + 100, 6);
+      expect(b[i][1]).toBeCloseTo(y + 50, 6);
+      expect(b[i][2]).toBeCloseTo(z, 6);
+    });
   });
 });

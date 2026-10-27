@@ -355,6 +355,20 @@ export function modelOf(it: ModelItem): Model {
   return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading });
 }
 
+// A chimney top of a finished building (Model.smoke), town-local metres with the ground under it: what smokeLayer.ts
+// draws smoke over. lamp: the building is lived in or worked in (the item's lamp).
+export interface Emitter {
+  id: string | number;
+  kind: string;
+  style: ModelItem["style"];
+  lamp?: Light["kind"];
+  x: number;
+  y: number;
+  z: number;
+}
+export const modelEmitters = signal<Emitter[]>([]);
+if (import.meta.env.DEV) Object.assign(window, { modelEmitters }); // devtools: modelEmitters.value = [...] to try the smoke
+
 const LAMP_CODE: Record<Light["kind"], number> = { house: 1, work: 2, tavern: 3 };
 // Lamp attribute of an item: its kind plus a seed from its id in 0..1 (which of its windows are lit).
 function lampOf(it: ModelItem): number {
@@ -500,6 +514,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     }
     const used = new Set<string>();
     const packs: Packed[] = [], roadPacks: Packed[] = [];
+    const smoke: Emitter[] = [];
     for (const it of items) {
       const p = it.style === "road" ? 1 : quantise(it.progress);
       const key = keyOf(it, p, k);
@@ -507,10 +522,12 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       let pack = cache.get(key);
       if (!pack) cache.set(key, (pack = projectModel(seatedModelOf({ ...it, progress: p }, ground), tf.toLngLat, origin, p >= 1 ? lampOf(it) : 0)));
       (it.style === "road" ? roadPacks : packs).push(pack);
+      for (const [x, y, z] of pack.smoke ?? []) smoke.push({ id: it.id, kind: it.kind, style: it.style, lamp: it.lamp, x, y, z });
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
     fill(mesh, mergePacked(packs));
     fill(roadMesh!, mergePacked(roadPacks));
+    modelEmitters.value = smoke;
     dirty = false;
   };
 

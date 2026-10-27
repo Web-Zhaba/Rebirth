@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { XY } from "./modelGeometry";
-import { bridgePiers, buildWaterChunk, clipBox, nearestPiers, realShores, runsOutside, SHORE_CAP, tileWater, type Box, type Waterway } from "./waterMesh";
+import { bridgePiers, buildWaterChunk, clipBox, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Waterway } from "./waterMesh";
 
 const area = (p: XY[]) => Math.abs(p.reduce((a, [x, y], i) => a + x * p[(i + 1) % p.length][1] - p[(i + 1) % p.length][0] * y, 0)) / 2;
 const ring = (pts: XY[]) => pts.flat();
@@ -119,5 +119,27 @@ describe("shore tones", () => {
     expect(c.tone.length).toBe(c.xy.length / 2);
     expect(c.tone.slice(0, c.ribbons).every((t) => t >= 0)).toBe(true);
     expect(c.tone.slice(c.ribbons).every((t) => t === -1)).toBe(true);
+  });
+});
+
+describe("steamStrength", () => {
+  it("is strong on a cold clear calm morning after dawn", () => {
+    expect(steamStrength(2, 6, 0.5, 0.1, 0, 0)).toBeGreaterThan(0.9);
+  });
+  it("fades out by ten and is absent at night and noon", () => {
+    expect(steamStrength(2, 10, 0.5, 0, 0, 0)).toBe(0);
+    expect(steamStrength(2, 2, 0.5, 0, 0, 0)).toBe(0);
+    expect(steamStrength(2, 13, 0.5, 0, 0, 0)).toBe(0);
+    expect(steamStrength(2, 8.5, 0.5, 0, 0, 0)).toBeLessThan(steamStrength(2, 6, 0.5, 0, 0, 0));
+  });
+  it("needs cold, calm, clear, dry, open water", () => {
+    expect(steamStrength(14, 6, 0.5, 0, 0, 0)).toBe(0);
+    expect(steamStrength(2, 6, 6, 0, 0, 0)).toBe(0);
+    expect(steamStrength(2, 6, 0.5, 1, 0, 0)).toBe(0);
+    expect(steamStrength(2, 6, 0.5, 0, 1, 0)).toBe(0);
+    expect(steamStrength(2, 6, 0.5, 0, 0, 1)).toBe(0);
+  });
+  it("stays within 0..1", () => {
+    for (let h = 0; h <= 24; h += 0.5) for (const T of [-20, 0, 8, 30]) expect(steamStrength(T, h, 0, 0, 0, 0)).toBeLessThanOrEqual(1);
   });
 });
