@@ -6,6 +6,7 @@ import { attachArticles } from "./map/articles";
 import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachForest } from "./map/forest";
+import { attachWater } from "./map/water";
 import { attachModels } from "./map/models";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
@@ -56,6 +57,7 @@ const cloudSite = computed(() => {
 });
 const weatherNow = computed(() => state.value?.weather ?? null);
 attachForest(map, { light: sunLight, weather: weatherNow }); // 3D trees in the forest around the town, close up
+attachWater(map, { light: sunLight, weather: weatherNow }); // 3D water, close up
 // Clouds above everything on the map, visible only on the far globe views; their ground shadows at every zoom, just
 // under the night tint (so the lights stay bright).
 attachClouds(map, {

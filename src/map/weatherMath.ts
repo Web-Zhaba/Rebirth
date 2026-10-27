@@ -10,6 +10,9 @@ export function snowOpacity(snowpack: number): number {
   return 0.5 * smoothstep(0.01, 0.4, snowpack);
 }
 
+// The wind on the map, as the trees sway and the water ripples: westerly (the zonal wind of sim/weather.ts).
+export const WIND_DIR: [number, number] = [0.98, 0.2]; // toward the east
+
 // Ice on water: nothing until the ice has some thickness, then a translucent pale sheet.
 export function iceOpacity(ice: number): number {
   return 0.55 * smoothstep(0.15, 0.8, ice);

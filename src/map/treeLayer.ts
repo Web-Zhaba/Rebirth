@@ -24,10 +24,12 @@ import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { WIND_DIR } from "./weatherMath";
 import { bakeImpostor, IMPOSTOR_STEP, IMPOSTOR_VIEWS, impostorQuad, treeGeometry, type Impostor } from "./treeImpostor";
 import { buildTree, crownAt, TREE_LODS } from "./treeModels";
 import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
-import { eyeOf, frustumPlanes, sphereInside } from "./three/frame";
+import { chunksInView } from "./chunkView";
+import { eyeOf, frustumPlanes } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
 // The 3D forest (PLAN-3d-world.ru.md stage 4): the trees of forest.ts drawn by three.js inside the map, on the same
@@ -56,7 +58,6 @@ const TALL = 12; // m, a typical tree: sets how far trees are drawn
 const MIN_PX = 1.5; // farther than a typical tree is this tall on the screen, there are no trees
 const FAR_CAP = 12_000; // m from the camera at most
 const FADE_FROM = 0.85; // share of the far edge where the trees start to shrink away
-const BLOCK = 8; // chunks per side of the coarse blocks tested first
 const REACH_STEP = 1.15; // the thinning reach moves in these steps, so the drawn set does not shimmer
 const SLOPE = 120; // m: how much the relief may rise or fall within a chunk or under an unknown chunk (exaggerated)
 const NEAR = 450; // m from the camera: full trees within
@@ -64,7 +65,6 @@ const FLAT_PITCH = 18; // degrees: flatter views get flat crowns
 const FRAME_BUDGET = 4; // ms of chunk building per frame
 const ASSEMBLE_EVERY = 100; // ms: the instance buffers are refilled at most this often while the view changes
 const SINK = 0.3; // m: trunks start below the ground, which our samples follow only closely on slopes
-const WIND_DIR: [number, number] = [0.98, 0.2]; // toward the east
 const WIND_FULL = 14; // m/s: full sway
 const PER = 10; // floats per instance: globe base (3), mercator base (3), size, turn, hash, shade
 
@@ -451,23 +451,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         const g = k > 0 ? groundAt(lng, lat) : 0;
         return [...merc.to(lng, lat), g === null ? under : g * k];
       };
-      const half = CHUNK * Math.SQRT1_2, bs = BLOCK * CHUNK;
-      const seen: { i: number; j: number; d: number }[] = [];
-      for (let bi = Math.floor((ex - far) / bs); bi <= Math.floor((ex + far) / bs); bi++)
-        for (let bj = Math.floor((ey - far) / bs); bj <= Math.floor((ey + far) / bs); bj++) {
-          const bx = (bi + 0.5) * bs, by = (bj + 0.5) * bs;
-          if (Math.hypot(bx - ex, by - ey) - bs * Math.SQRT1_2 > far) continue;
-          const [x, y, z] = centre(bx, by);
-          if (!sphereInside(planes, x, y, z + TALL, bs * Math.SQRT1_2 + SLOPE + TALL)) continue;
-          for (let i = bi * BLOCK; i < (bi + 1) * BLOCK; i++)
-            for (let j = bj * BLOCK; j < (bj + 1) * BLOCK; j++) {
-              const cx = (i + 0.5) * CHUNK, cy = (j + 0.5) * CHUNK;
-              if (Math.hypot(cx - ex, cy - ey) - half > far) continue;
-              const [mx, my, mz] = centre(cx, cy);
-              if (!sphereInside(planes, mx, my, mz + TALL, half + SLOPE + TALL)) continue;
-              seen.push({ i, j, d: Math.max(1, Math.hypot(mx - eye[0], my - eye[1], mz - eye[2])) });
-            }
-        }
+      const seen = chunksInView({ planes, eye, at: [ex, ey], far, size: CHUNK, rise: TALL, slope: SLOPE, centre });
       // build what is missing, nearest first, within the frame's budget
       const t0 = performance.now();
       let missing = false;

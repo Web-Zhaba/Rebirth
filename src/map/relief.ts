@@ -107,13 +107,20 @@ const SKY = "#c9d6dc"; // pale overcast blue above the paper
 const HORIZON = "#e6e4d6";
 const NIGHT = 0.8; // how far the sky goes toward dusk at full night
 
+// The sky above and at the horizon at an hour (the water reflects them too).
+export function skyColours(hour: number): { sky: string; horizon: string } {
+  const n = (1 - daylight(hour)) * NIGHT;
+  return { sky: mixHex(SKY, PALETTE.dusk, n), horizon: mixHex(HORIZON, PALETTE.dusk, n) };
+}
+
 // Sky colours at an hour: the paper sky by day, toward dusk at night (the night tint does not reach the sky).
 export function skyAt(hour: number): maplibregl.SkySpecification {
   const n = (1 - daylight(hour)) * NIGHT;
   const fog = mixHex(PALETTE.paper, PALETTE.dusk, n);
+  const c = skyColours(hour);
   return {
-    "sky-color": mixHex(SKY, PALETTE.dusk, n),
-    "horizon-color": mixHex(HORIZON, PALETTE.dusk, n),
+    "sky-color": c.sky,
+    "horizon-color": c.horizon,
     "fog-color": fog,
     "sky-horizon-blend": 0.6,
     "horizon-fog-blend": 0.6,

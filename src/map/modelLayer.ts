@@ -352,6 +352,7 @@ const keyOf = (it: ModelItem, p: number, k: number): string => {
 // when the material has them; `light` is the uLight value). Shared with the tree layer (treeLayer.ts).
 export function frameSetter(lt: ModelLayerOptions["light"]): {
   light: Vector3;
+  sun: Vector3; // toward the sun itself (below the horizon at night), east/north/up; with set()
   set: (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => void;
   // mercator: local metres -> clip through the fallback (always the mercator matrix); float64
   mercator: (args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => Float64Array;
@@ -359,6 +360,7 @@ export function frameSetter(lt: ModelLayerOptions["light"]): {
   const lg = new Float64Array(16);
   const g64 = new Float64Array(16);
   const light = new Vector3(...norm3(FALLBACK_LIGHT));
+  const sunDir = new Vector3(0, 0, 1);
   const mercator = (args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) =>
     mercatorLocalMatrix(host.frame(args.defaultProjectionData).fallback, lngLatToMercator(o.lng, o.lat), metresPerMercator(o.lat));
   const set = (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => {
@@ -382,6 +384,7 @@ export function frameSetter(lt: ModelLayerOptions["light"]): {
     if (lt && phase !== null && phase !== undefined) {
       const sl = sunLocal(weatherToSphere(sunDirection(lt.clock.peek(), phase)), f);
       sun = sunStrength(sl.sinElev);
+      sunDir.set(...norm3([sl.east, sl.north, sl.sinElev]));
       if (sun > 0) {
         const d = norm3([sl.east, sl.north, Math.max(sl.sinElev, 0.05)]);
         const fb = norm3(FALLBACK_LIGHT);
@@ -402,7 +405,7 @@ export function frameSetter(lt: ModelLayerOptions["light"]): {
       } else tint.set(0, 0, 0, 0);
     }
   };
-  return { light, set, mercator };
+  return { light, sun: sunDir, set, mercator };
 }
 
 export type ModelLayer = maplibregl.CustomLayerInterface;

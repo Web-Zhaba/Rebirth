@@ -20,6 +20,7 @@ export interface Poly {
   rings: number[][]; // flat [x, y, x, y, ...] per ring; even-odd across all rings
 }
 export interface Line {
+  cls: string;
   bbox: BBox;
   pts: number[]; // flat [x, y, ...]
 }
@@ -139,7 +140,7 @@ export function getWaterwayTile(x: number, y: number): Promise<WaterwayTile> {
     for (let i = 0; i < layer.length; i++) {
       const f = layer.feature(i);
       if (f.type !== 2 || !isNatureWaterway(f.properties)) continue;
-      for (const line of f.loadGeometry()) out.lines.push({ bbox: bboxOf([line]), pts: flat(line) });
+      for (const line of f.loadGeometry()) out.lines.push({ cls: String(f.properties.class ?? ""), bbox: bboxOf([line]), pts: flat(line) });
     }
     return out;
   });
