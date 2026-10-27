@@ -157,6 +157,14 @@ export const TOWN_COLORS = {
   canvas: ["#cdbf9f", "#b8a888", "#d6c8a8"],
   goods: ["#b24d46", "#c49a2c", "#6f8a3a", "#4f7f9c", "#b9772f"],
   water: ["#3f6a82"],
+  flowers: ["#c9a2c8", "#e0c050", "#d0d8e8", "#b24d46"],
+  healerRoof: ["#5f7a52", "#4f6a5a", "#6f7f5a"],
+  cross: ["#3f9a5a"],
+  clay: ["#b06a42", "#a45a38", "#c27a4e"],
+  ember: ["#d0632a"],
+  iron: ["#3a3a3c"],
+  hide: ["#c2a06e"],
+  bell: ["#b08a3a"],
 } as const;
 
 export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();

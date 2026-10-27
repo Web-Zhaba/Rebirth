@@ -374,6 +374,12 @@ export function roofOf(shape: RoofShape, hl: number, hw: number, rise: number): 
   }
 }
 
+// The same roof with its frame moved to (cu, cv): a roof over part of a box.
+export function shiftRoof(roof: Roof, cu: number, cv: number): Roof {
+  if (!cu && !cv) return roof;
+  return { rise: (u, v) => roof.rise(u - cu, v - cv), lines: roof.lines.map(([a, b, c]): Line => [a, b, c + a * cu + b * cv]) };
+}
+
 // Ring pushed out by d metres (mitred corners); null when a corner is too sharp or the result crosses itself.
 export function offsetRing(ring: readonly XY[], d: number): XY[] | null {
   const n = ring.length;
@@ -571,5 +577,38 @@ export function cornerPosts(mesh: Mesh, uv: readonly XY[], z1: number, col: RGB,
     if (turn > Math.PI) turn = 2 * Math.PI - turn;
     if (turn < 0.4) continue;
     prism(mesh, square(inner[i][0], inner[i][1], side), 0, z1, col, col);
+  }
+}
+
+// A closed cylinder of radius r from a to b (any direction: logs, poles), with flat ends.
+export function cylinder(mesh: Mesh, a: P3, b: P3, r: number, col: RGB, end: RGB = col, seg = 8): void {
+  const d: P3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const l = Math.hypot(d[0], d[1], d[2]);
+  if (l < 1e-6) return;
+  const t: P3 = [d[0] / l, d[1] / l, d[2] / l];
+  const up: P3 = Math.abs(t[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  let e1: P3 = [t[1] * up[2] - t[2] * up[1], t[2] * up[0] - t[0] * up[2], t[0] * up[1] - t[1] * up[0]];
+  const l1 = Math.hypot(e1[0], e1[1], e1[2]);
+  e1 = [e1[0] / l1, e1[1] / l1, e1[2] / l1];
+  const e2: P3 = [t[1] * e1[2] - t[2] * e1[1], t[2] * e1[0] - t[0] * e1[2], t[0] * e1[1] - t[1] * e1[0]];
+  const side: number[][] = [[], []];
+  const caps: number[][] = [[], []];
+  for (let k = 0; k < seg; k++) {
+    const q = (k / seg) * Math.PI * 2, cq = Math.cos(q), sq = Math.sin(q);
+    const n: P3 = [e1[0] * cq + e2[0] * sq, e1[1] * cq + e2[1] * sq, e1[2] * cq + e2[2] * sq];
+    for (const [j, p] of [a, b].entries()) {
+      const v: P3 = [p[0] + n[0] * r, p[1] + n[1] * r, p[2] + n[2] * r];
+      side[j].push(mesh.vert(v[0], v[1], v[2], n, col));
+      caps[j].push(mesh.vert(v[0], v[1], v[2], j ? t : [-t[0], -t[1], -t[2]], end));
+    }
+  }
+  for (let k = 0; k < seg; k++) {
+    const k2 = (k + 1) % seg;
+    mesh.idx(side[0][k], side[0][k2], side[1][k2]);
+    mesh.idx(side[0][k], side[1][k2], side[1][k]);
+    if (k > 0 && k2 > 0) {
+      mesh.idx(caps[0][0], caps[0][k], caps[0][k2]);
+      mesh.idx(caps[1][0], caps[1][k], caps[1][k2]);
+    }
   }
 }

@@ -47,7 +47,11 @@ describe("buildTownModel", () => {
   it("maps templates to forms", () => {
     expect(townForm("izba")).toBe("cabin");
     expect(townForm("smithy")).toBe("workshop");
-    expect(townForm("gumno")).toBe("barn");
+    expect(townForm("gumno")).toBe("farm");
+    expect(townForm("barn")).toBe("store");
+    expect(townForm("healer")).toBe("healer");
+    expect(townForm("shop")).toBe("shop");
+    expect(townForm("school")).toBe("school");
     expect(townForm("orchard")).toBe("orchard");
     expect(townForm("chapel")).toBe("chapel");
     expect(townForm("whatever")).toBe("cabin");
