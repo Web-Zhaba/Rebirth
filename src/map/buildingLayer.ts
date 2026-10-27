@@ -1,14 +1,13 @@
 import type maplibregl from "maplibre-gl";
-import type { ExpressionSpecification } from "maplibre-gl";
-import { effect, signal } from "@preact/signals";
+import { computed, effect, signal, type ReadonlySignal } from "@preact/signals";
 import { covers } from "../sim/services";
 import type { Building, ClientState } from "../sim/types";
 import { pointInPolygon } from "../sim/zones";
 import { buildings, frame, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
-import { restoredFilter, restoredIds } from "./restoredIds";
-import { BUILDING_COLORS, overlay, OVERLAY_COLORS, PLACED_COLORS, tool, type Overlay } from "./tools";
+import type { ModelItem, ModelLayerOptions } from "./modelLayer";
+import { overlay, OVERLAY_COLORS, tool, type Overlay } from "./tools";
 
 const SRC = "buildings";
 const OUTLINE_MAX_PITCH = 10; // degrees
@@ -42,42 +41,57 @@ function tintOf(b: Building, ov: Overlay, st: ClientState): string {
   return covers(st.coverage[b.id], ov) ? GOOD : BAD;
 }
 
-// Buildings as fill-extrusions at real size: finished ones in full colour, those under construction
-// pale and growing with progress, planned ones as a dashed outline.
-export function attachBuildingLayer(map: maplibregl.Map): void {
+// Unit vector from a lot towards its road (the door side): the opposite of growth.ts `away`.
+const towardsRoad = (b: Building): [number, number] => [Math.sin(b.lot.angle) * b.side, -Math.cos(b.lot.angle) * b.side];
+
+// What the model layer draws: every building that is not just planned. A restored old building is drawn by its OSM class.
+// The same list comes back while nothing visible changed, so the layer does not rebuild every tick.
+let lastItems: ModelItem[] = [];
+const itemSig = (i: ModelItem): string => `${i.id}|${i.kind}|${i.height}|${i.progress >= 1 ? 1 : Math.floor(i.progress * 24)}|${i.level ?? 1}|${i.tint ?? ""}|${i.upgrading ? 1 : 0}`;
+export const modelItems: ReadonlySignal<ModelItem[]> = computed(() => {
+  const st = state.value;
+  const ov = overlay.value;
+  if (!st) return lastItems;
+  const out: ModelItem[] = [];
+  for (const b of Object.values(st.buildings)) {
+    if (b.state === "planned") continue;
+    const progress = b.state === "active" ? 1 : b.labor > 0 ? Math.min(1, b.done / b.labor) : 0;
+    if (b.siteId) {
+      const site = st.finds.foundations.find((f) => f.id === b.siteId);
+      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress, style: "heritage" });
+    } else
+      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade });
+  }
+  if (out.length !== lastItems.length || out.some((it, k) => itemSig(it) !== itemSig(lastItems[k]))) lastItems = out;
+  return lastItems;
+});
+
+export interface BuildingLayerOptions {
+  light?: ModelLayerOptions["light"];
+  debug?: boolean; // show every model kind (modelLayer.ts attachModelDebug) instead of the town
+}
+
+// Buildings: finished ones and building sites as three.js models (modelLayer.ts, loaded with the first building), planned
+// ones as a dashed outline; footprint outlines near a top-down view.
+export function attachBuildingLayer(map: maplibregl.Map, opts: BuildingLayerOptions = {}): void {
   let ready = false;
+
+  const attachModels = () => {
+    if (opts.debug) {
+      void import("./modelLayer").then((m) => m.attachModelDebug(map, { frame, light: opts.light }));
+      return;
+    }
+    let loading = false;
+    const stopWatch = effect(() => {
+      if (loading || !modelItems.value.length) return;
+      loading = true;
+      void import("./modelLayer").then((m) => m.attachModelLayer(map, { items: modelItems, frame, light: opts.light }));
+      queueMicrotask(() => stopWatch());
+    });
+  };
 
   const setup = () => {
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    const byZone = ["match", ["get", "zone"], "res", BUILDING_COLORS.res, "craft", BUILDING_COLORS.craft, BUILDING_COLORS.trade];
-    // Placed buildings have a colour of their own per template.
-    const placed = ["match", ["get", "template"], ...Object.entries(PLACED_COLORS).flat(), byZone];
-    // An overlay tint wins over the building's own colour.
-    const color = ["case", ["!=", ["get", "tint"], ""], ["to-color", ["get", "tint"]], placed];
-    map.addLayer({
-      id: "buildings-active",
-      type: "fill-extrusion",
-      source: SRC,
-      filter: ["==", ["get", "state"], "active"],
-      paint: {
-        "fill-extrusion-color": color as never,
-        "fill-extrusion-height": ["get", "h"],
-        "fill-extrusion-base": 0,
-        "fill-extrusion-opacity": 1,
-      },
-    });
-    map.addLayer({
-      id: "buildings-building",
-      type: "fill-extrusion",
-      source: SRC,
-      filter: ["==", ["get", "state"], "building"],
-      paint: {
-        "fill-extrusion-color": PALETTE.paperRaised,
-        "fill-extrusion-height": ["get", "hp"],
-        "fill-extrusion-base": 0,
-        "fill-extrusion-opacity": 1,
-      },
-    });
     map.addLayer({
       id: "buildings-planned-fill",
       type: "fill",
@@ -108,41 +122,17 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
     map.on("pitch", outlineByTilt);
     outlineByTilt();
     ready = true;
-
-    // What three.js draws as a restored model is dropped from the extrusions (hit-testing uses the footprints).
-    const baseFilters: Record<string, ExpressionSpecification> = {
-      "buildings-active": ["==", ["get", "state"], "active"],
-      "buildings-building": ["==", ["get", "state"], "building"],
-      "buildings-outline": ["in", ["get", "state"], ["literal", ["active", "building"]]],
-    };
-    effect(() => {
-      const ex = restoredFilter(restoredIds.value);
-      for (const [id, base] of Object.entries(baseFilters)) map.setFilter(id, ex ? ["all", base, ex] : base);
-    });
+    attachModels();
 
     effect(() => {
       const list = buildings.value;
       const f = frame.value;
-      const st = state.value;
-      const ov = overlay.value;
-      if (!list || !f || !st) return;
-      const features: GeoJSON.Feature[] = Object.values(list).map((b) => {
-        const progress = b.labor > 0 ? Math.min(1, b.done / b.labor) : 1;
-        return {
-          type: "Feature",
-          properties: {
-            id: b.id,
-            zone: b.zone,
-            template: b.template,
-            state: b.state,
-            tint: tintOf(b, ov, st),
-            up: !!b.upgrade,
-            h: b.height,
-            hp: Math.max(0.5, b.height * progress),
-          },
-          geometry: { type: "Polygon", coordinates: [ringOf(b, f)] },
-        };
-      });
+      if (!list || !f) return;
+      const features: GeoJSON.Feature[] = Object.values(list).map((b) => ({
+        type: "Feature",
+        properties: { id: b.id, state: b.state, up: !!b.upgrade },
+        geometry: { type: "Polygon", coordinates: [ringOf(b, f)] },
+      }));
       (map.getSource(SRC) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
       if (ringCache.size > features.length * 3 + 100) {
         for (const id of ringCache.keys()) if (!(id in list)) ringCache.delete(id);

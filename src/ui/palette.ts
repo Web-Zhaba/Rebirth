@@ -140,6 +140,25 @@ export const MODEL_COLORS = {
 } as const satisfies Record<string, { wall: readonly string[]; roof: readonly string[]; accent: readonly string[] }>;
 export type ModelFamily = keyof typeof MODEL_COLORS;
 
+// The town's own buildings drawn as 3D models (townModels.ts): material choices, each building picks from its seed. Map only.
+export const TOWN_COLORS = {
+  logs: ["#a47c52", "#8f6a45", "#b38a5c", "#9a7a5a", "#7d5e40", "#a88a64"],
+  plaster: ["#d8ccb0", "#e2d6bc", "#cdbf9f", "#d6c29c"],
+  stone: ["#9a948a", "#8a847a", "#a39b8c"],
+  planks: ["#8c7a60", "#7a6a52", "#9c8a6c"],
+  roofPlank: ["#7a7366", "#6b665c", "#857c6c"],
+  thatch: ["#b39a5e", "#a68c52", "#bfa66a"],
+  shingle: ["#7a5a44", "#8c6a3e", "#6e5440"],
+  turf: ["#6a7448", "#5f6a40"],
+  trim: ["#e8dcc0", "#d9c9a8", "#c9b48a"],
+  foliage: ["#5f7a3a", "#6f8a3a", "#4f6a32", "#7a8a3a"],
+  soil: ["#6e5638", "#7d6340"],
+  hive: ["#d9c08a", "#c9a86a", "#e0d0a8"],
+  canvas: ["#cdbf9f", "#b8a888", "#d6c8a8"],
+  goods: ["#b24d46", "#c49a2c", "#6f8a3a", "#4f7f9c", "#b9772f"],
+  water: ["#3f6a82"],
+} as const;
+
 export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();
 
 // "#rrggbb" mixed towards another by t (0..1).

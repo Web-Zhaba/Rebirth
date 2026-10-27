@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MODEL_COLORS } from "../ui/palette";
-import { buildHeritageModel, buildScaffold, modelFamily, orientedBox, PATTERN, pickVariant, prepareRing, ringSeed, type HeritageModel, type Variant, type XY } from "./heritageModels";
+import { buildHeritageModel, modelFamily, pickVariant, type Variant } from "./heritageModels";
+import { buildScaffold, orientedBox, PATTERN, prepareRing, ringSeed, type Model, type XY } from "./modelGeometry";
 
 const rect = (cx: number, cy: number, w: number, d: number, rot = 0): XY[] => {
   const c = Math.cos(rot), s = Math.sin(rot);
@@ -10,7 +11,7 @@ const L_SHAPE: XY[] = [[0, 0], [20, 0], [20, 8], [8, 8], [8, 20], [0, 20]];
 
 const KINDS = ["house", "place_of_worship", "monastery", "castle", "town_hall", "monument", "station", "harbor", "school", "museum", "hospital", "car_repair", "mall"];
 
-function check(m: HeritageModel): void {
+function check(m: Model): void {
   const n = m.positions.length / 3;
   expect(n).toBeGreaterThan(0);
   expect(m.normals.length).toBe(m.positions.length);
@@ -24,11 +25,11 @@ function check(m: HeritageModel): void {
   for (let i = 0; i < n; i++) if (Math.abs(Math.hypot(m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]) - 1) > 1e-4) unit = false;
   expect(unit).toBe(true);
 }
-const zRange = (m: HeritageModel): [number, number] => {
+const zRange = (m: Model): [number, number] => {
   const zs = m.positions.filter((_, i) => i % 3 === 2);
   return [Math.min(...zs), Math.max(...zs)];
 };
-const xyRange = (m: HeritageModel) => {
+const xyRange = (m: Model) => {
   const xs = m.positions.filter((_, i) => i % 3 === 0), ys = m.positions.filter((_, i) => i % 3 === 1);
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
 };
@@ -86,7 +87,7 @@ const seedWhere = (kind: string, len: number, wid: number, ok: (v: Variant) => b
 };
 const SEEDS = [1, 2, 3, 17, 99, 12345];
 
-describe("buildHeritageModel", () => {
+describe("buildModel", () => {
   it("builds valid meshes for every kind on rectangles, concave and degenerate rings, whatever the seed", () => {
     for (const kind of KINDS)
       for (const ring of [rect(100, 200, 24, 10, 0.4), rect(0, 0, 8, 8), L_SHAPE, rect(0, 0, 40, 18), rect(0, 0, 0.5, 0.5), [] as XY[]])
@@ -205,7 +206,7 @@ describe("buildHeritageModel", () => {
 
 describe("buildScaffold", () => {
   // top of the log walls (the deck)
-  const deck = (m: HeritageModel) => Math.max(...m.positions.filter((_, i) => i % 3 === 2 && m.facade[((i - 2) / 3) * 4 + 3] === PATTERN.logs));
+  const deck = (m: Model) => Math.max(...m.positions.filter((_, i) => i % 3 === 2 && m.facade[((i - 2) / 3) * 4 + 3] === PATTERN.logs));
   it("grows with progress and never collapses to nothing", () => {
     expect(deck(buildScaffold(rect(0, 0, 10, 8), 10, 0.5))).toBeCloseTo(5, 6);
     expect(deck(buildScaffold(rect(0, 0, 10, 8), 10, 1))).toBeCloseTo(10, 6);
