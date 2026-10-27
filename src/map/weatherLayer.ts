@@ -6,6 +6,7 @@ import { WATER_EXCLUDED_CLASSES } from "../world/nature";
 import { PALETTE } from "../ui/palette";
 import { iceOpacity, overcastOpacity, snowOpacity, sunAzimuth, weatherCoverVisibility } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
+import { reliefScale } from "./relief";
 
 const BEFORE = "night-tint";
 const SRC = "weather-world";
@@ -14,6 +15,11 @@ const WATER = "weather-water";
 const ICE = "weather-ice";
 const HAZE = "weather-haze";
 const ORDER = [SNOW, WATER, ICE, HAZE];
+const GROUND = [SNOW, WATER, ICE];
+// The 3D layers and what sits over them: on the flat map the snow, the water and the ice go under these, or they
+// would paint over the trees and the buildings that stand in front of the water (on the relief MapLibre lays all the
+// fills on the ground anyway). The haze stays over everything.
+const ABOVE_GROUND = ["building-models", "forest-trees", "buildings-outline"];
 const HILLSHADE = "hillshade";
 
 const WATER_FILTER: FilterSpecification = [
@@ -24,8 +30,8 @@ const WATER_FILTER: FilterSpecification = [
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-// Weather cover on the map: snow, water repainted above it, ice, and an overcast haze, all directly under the night
-// tint so roads, buildings and lights keep their contrast. The hillshade follows the real sun.
+// Weather cover on the map: snow, water repainted above it and ice, under the 3D models and trees, and an overcast
+// haze directly under the night tint, so roads, buildings and lights keep their contrast. The hillshade follows the real sun.
 export function attachWeatherLayer(map: maplibregl.Map, opts: { weather: ReadonlySignal<WeatherState | null>; clock: ReadonlySignal<number> }): () => void {
   let ready = false;
   let detached = false;
@@ -34,16 +40,21 @@ export function attachWeatherLayer(map: maplibregl.Map, opts: { weather: Readonl
   let stopZoom: (() => void) | null = null;
   const last = { snow: -1, water: -1, ice: -1, haze: -1 };
 
+  // Keeps `ids` together just under `before` (on top without it).
+  const keep = (ids: string[], before: string | undefined) => {
+    const order = map.getLayersOrder();
+    const b = before ? order.indexOf(before) : order.length;
+    if (b - ids.length >= 0 && ids.every((id, i) => order[b - ids.length + i] === id)) return;
+    for (const id of ids) if (map.getLayer(id)) map.moveLayer(id, before);
+  };
   const place = () => {
-    if (!ready) return;
+    // on the relief relief.ts orders the layers, and every fill lies on the ground under the 3D ones anyway
+    if (!ready || reliefScale.peek() > 0) return;
     try {
       const order = map.getLayersOrder();
-      const before = order.indexOf(BEFORE);
-      if (before >= 0) {
-        const at = before - ORDER.length;
-        if (at >= 0 && ORDER.every((id, i) => order[at + i] === id)) return;
-      }
-      for (const id of ORDER) if (map.getLayer(id)) map.moveLayer(id, before >= 0 ? BEFORE : undefined);
+      keep([HAZE], map.getLayer(BEFORE) ? BEFORE : undefined);
+      const first = ABOVE_GROUND.map((id) => order.indexOf(id)).filter((i) => i >= 0);
+      keep(GROUND, first.length ? order[Math.min(...first)] : HAZE);
     } catch {
       // The map can be removed while a style event is still queued.
     }
