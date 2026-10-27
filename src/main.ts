@@ -47,7 +47,6 @@ attachBuildingLayer(map);
 // The map's clock and weather: the game's, or another season's while the admin panel previews one (seasonPreview.ts).
 const mapClock = previewClock(gameClock);
 const sunLight = { clock: mapClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) };
-attachModels(map, { light: sunLight, debug: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1" });
 attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
 attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec });
@@ -60,6 +59,7 @@ const cloudSite = computed(() => {
   return w ? { seed: w.seed, phase: w.phase } : null;
 });
 const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
+attachModels(map, { light: sunLight, weather: weatherNow, debug: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1" });
 // 3D trees in the forest around the town, close up, with bushes, reeds, boulders and the overgrown old foundations
 attachForest(map, { light: sunLight, weather: weatherNow, ruins: computed(() => (ruinsShown.value ? (oldWorld.value?.foundations ?? null) : null)) });
 attachWater(map, { light: sunLight, weather: weatherNow }); // 3D water, close up

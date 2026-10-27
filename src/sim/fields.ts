@@ -198,3 +198,29 @@ export const workOf = (fields: Record<number, FieldWork>, id: number, year: numb
 export const sownShare = (f: Field, w: FieldWork): number => Math.min(1, w.sowH / (FIELD.sowHoursHa * haOf(f)));
 // Kg the field can still give this year (what sowing made possible, times the yield potential `crop` of the weather).
 export const expectedKg = (f: Field, w: FieldWork, crop = 1): number => FIELD.yieldKgHa * haOf(f) * sownShare(f, w) * crop;
+
+// ---------- progress for the 3D fields ----------
+
+// What a field shows of this year's work: the share of its area sown and the share of its area harvested (0..1, in steps of
+// 1/PROGRESS_STEPS so the client sees a change only when it is visible). Fields with no work this year are absent.
+export const PROGRESS_STEPS = 50;
+export interface FieldProgress {
+  sown: number;
+  harv: number;
+}
+const quant = (x: number): number => Math.round(Math.min(1, Math.max(0, x)) * PROGRESS_STEPS) / PROGRESS_STEPS;
+
+export function fieldProgress(s: Pick<SimState, "zones" | "prod" | "gameMinutes"> & Partial<Pick<SimState, "weather" | "progress">>): Record<number, FieldProgress> {
+  const out: Record<number, FieldProgress> = {};
+  const year = calendar(s.gameMinutes).year;
+  const crop = cropOf(s);
+  for (const f of s.zones.fields) {
+    const w = s.prod.fields[f.id];
+    if (!w || w.year !== year) continue;
+    const sown = sownShare(f, w);
+    const need = FIELD.harvestHoursHa * haOf(f) * sown * crop;
+    const harv = need > 1e-9 ? Math.min(1, w.harvH / need) * sown : 0;
+    if (sown > 0 || harv > 0) out[f.id] = { sown: quant(sown), harv: quant(harv) };
+  }
+  return out;
+}

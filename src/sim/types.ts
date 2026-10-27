@@ -449,6 +449,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
   research: ResearchView;
+  fieldProgress: Record<number, { sown: number; harv: number }>; // field id -> share of its area sown / harvested this year (steps of 0.02), for the 3D fields
   heritageMul: number; // scarcity multiplier of the next restoration, 1..3
   callBlock: string | null; // why a call for settlers cannot be made now, or null
 };

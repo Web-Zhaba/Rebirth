@@ -17,6 +17,7 @@ export interface TileWater {
   shores: number[]; // x0, y0, x1, y1 per segment
   pieceOf: number[]; // the polygon of each piece (its index in the tile)
   shoreOf: number[]; // the polygon of each shore segment
+  tones: number[]; // per shore segment: 0 bare ground .. 1 forest on the land behind it (tileWater's `tone`)
 }
 
 // A waterway line, its points in town metres and in the direction it flows.
@@ -32,6 +33,7 @@ export interface WaterChunk {
   xy: number[]; // x, y per vertex
   shore: number[]; // m, capped at SHORE_CAP
   flow: number[]; // x, y per vertex: direction times speed
+  tone: number[]; // per vertex: the tone of the nearest shore segment (0 ground .. 1 forest; -1 on a ribbon: no shore reflection)
   index: number[];
 }
 
@@ -69,8 +71,10 @@ const area2 = (r: ArrayLike<number>) => {
 
 // The water polygons of a tile (rings flat in tile coordinates, as world/tiles.ts gives them: a ring winding like the
 // first starts a polygon, the others are its holes) -> convex pieces inside the tile and the shore, in town metres.
-export function tileWater(polys: readonly { rings: number[][] }[], extent: number, toLocal: (tx: number, ty: number) => XY): TileWater {
-  const pieces: XY[][] = [], shores: number[] = [], pieceOf: number[] = [], shoreOf: number[] = [];
+// `tone(x, y)` (tile coordinates) says what the land is there (0 ground .. 1 forest), probed `probe` tile units to both
+// sides of every shore segment.
+export function tileWater(polys: readonly { rings: number[][] }[], extent: number, toLocal: (tx: number, ty: number) => XY, tone?: (tx: number, ty: number) => number, probe = 0): TileWater {
+  const pieces: XY[][] = [], shores: number[] = [], pieceOf: number[] = [], shoreOf: number[] = [], tones: number[] = [];
   const box: Box = [0, 0, extent, extent];
   // an edge along the tile's border or outside it on one side is where the tile cut the water, not a shore
   const cut = (ax: number, ay: number, bx: number, by: number) =>
@@ -90,6 +94,11 @@ export function tileWater(polys: readonly { rings: number[][] }[], extent: numbe
         if (cut(r[i], r[i + 1], r[j], r[j + 1])) continue;
         shores.push(...toLocal(r[i], r[i + 1]), ...toLocal(r[j], r[j + 1]));
         shoreOf.push(poly);
+        if (tone) {
+          const l = Math.hypot(r[j] - r[i], r[j + 1] - r[i + 1]) || 1;
+          const mx = (r[i] + r[j]) / 2, my = (r[i + 1] + r[j + 1]) / 2, nx = (-(r[j + 1] - r[i + 1]) / l) * probe, ny = ((r[j] - r[i]) / l) * probe;
+          tones.push(Math.max(tone(mx + nx, my + ny), tone(mx - nx, my - ny)));
+        } else tones.push(0);
       }
     }
     for (const g of groups) {
@@ -107,7 +116,7 @@ export function tileWater(polys: readonly { rings: number[][] }[], extent: numbe
     }
     groups = [];
   });
-  return { pieces, shores, pieceOf, shoreOf };
+  return { pieces, shores, pieceOf, shoreOf, tones };
 }
 
 // Nearest segment within `cap` of a point: segments binned in cells of `cap` over the region they are asked about.
@@ -159,7 +168,8 @@ function flowSegments(ways: readonly Waterway[]): { segs: number[]; flow: number
 
 // The shore segments near a region that have land on one side: where two water polygons meet (a river running into a
 // lake, the tiles the water was cut into) both sides are water, and that is no shore.
-export function realShores(shores: readonly number[], region: Box, water: (x: number, y: number) => boolean): number[] {
+// `tones` (one per segment) is carried along into `toneOut` for the segments kept.
+export function realShores(shores: readonly number[], region: Box, water: (x: number, y: number) => boolean, tones?: readonly number[], toneOut?: number[]): number[] {
   const out: number[] = [];
   for (let k = 0; k < shores.length; k += 4) {
     const [ax, ay, bx, by] = [shores[k], shores[k + 1], shores[k + 2], shores[k + 3]];
@@ -169,22 +179,24 @@ export function realShores(shores: readonly number[], region: Box, water: (x: nu
     const mx = (ax + bx) / 2, my = (ay + by) / 2, nx = (-(by - ay) / l) * 0.5, ny = ((bx - ax) / l) * 0.5;
     if (water(mx + nx, my + ny) && water(mx - nx, my - ny)) continue;
     out.push(ax, ay, bx, by);
+    toneOut?.push(tones?.[k / 4] ?? 0);
   }
   return out;
 }
 
 // One chunk of water: the pieces laid on cells of `cell` metres inside `box`, and the ribbons of the waterways whose
 // segments start in it (a segment belongs to the chunk holding its first point), each split every `cell` metres.
-// `shores` near the chunk only (realShores).
-export function buildWaterChunk(pieces: readonly XY[][], shores: readonly number[], rivers: readonly Waterway[], ribbons: readonly Waterway[], box: Box, cell: number): WaterChunk {
-  const out: WaterChunk = { ribbons: 0, piece: [], xy: [], shore: [], flow: [], index: [] };
+// `shores` near the chunk only (realShores), `tones` one per segment of them.
+export function buildWaterChunk(pieces: readonly XY[][], shores: readonly number[], rivers: readonly Waterway[], ribbons: readonly Waterway[], box: Box, cell: number, tones: readonly number[] = []): WaterChunk {
+  const out: WaterChunk = { ribbons: 0, piece: [], xy: [], shore: [], flow: [], tone: [], index: [] };
   const region: Box = [box[0] - SHORE_CAP, box[1] - SHORE_CAP, box[2] + SHORE_CAP, box[3] + SHORE_CAP];
   const toShore = nearest(shores, SHORE_CAP, region);
   const fl = flowSegments(rivers);
   const toRiver = nearest(fl.segs, FLOW_REACH, [box[0] - FLOW_REACH, box[1] - FLOW_REACH, box[2] + FLOW_REACH, box[3] + FLOW_REACH]);
-  const push = (x: number, y: number, shore: number, fx: number, fy: number) => {
+  const push = (x: number, y: number, shore: number, fx: number, fy: number, tone = -1) => {
     out.xy.push(x, y);
     out.shore.push(shore);
+    out.tone.push(tone);
     out.flow.push(fx, fy);
     return out.xy.length / 2 - 1;
   };
@@ -201,7 +213,8 @@ export function buildWaterChunk(pieces: readonly XY[][], shores: readonly number
         const ids = q.map(([x, y]) => {
           const r = toRiver(x, y);
           out.piece.push(pi);
-          return push(x, y, toShore(x, y).d, r.k < 0 ? 0 : fl.flow[r.k / 2], r.k < 0 ? 0 : fl.flow[r.k / 2 + 1]);
+          const sh = toShore(x, y);
+          return push(x, y, sh.d, r.k < 0 ? 0 : fl.flow[r.k / 2], r.k < 0 ? 0 : fl.flow[r.k / 2 + 1], sh.k < 0 ? 0 : (tones[sh.k / 4] ?? 0));
         });
         for (let k = 1; k + 1 < ids.length; k++) out.index.push(ids[0], ids[k], ids[k + 1]);
       }
@@ -261,4 +274,60 @@ export function runsOutside(w: Waterway, inside: (x: number, y: number) => boole
   }
   if (cur.length > 1) runs.push({ ...w, pts: cur });
   return runs;
+}
+
+// ---------- piers of bridges (foam and wake in the water shader) ----------
+
+export interface Pier {
+  x: number;
+  y: number;
+  r: number; // m, how far its foam ring reaches from the middle
+}
+
+// The point at distance s along a polyline.
+function pointAlong(pts: readonly XY[], s: number): XY | null {
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (s <= l || i + 2 === pts.length) {
+      const t = l > 0 ? Math.min(1, Math.max(0, s / l)) : 0;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+    s -= l;
+  }
+  return null;
+}
+
+// What stands in the water under a built bridge, as roadModels.ts lays it out: a pile bridge has a pair of piles about
+// every 4.5 m on its raised middle (one ring per 9 m here), a stone bridge has a pier between each two arches; a
+// footbridge has posts on the banks only.
+export function bridgePiers(pts: readonly XY[], kind: string): Pier[] {
+  let len = 0;
+  for (let i = 0; i + 1 < pts.length; i++) len += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+  const out: Pier[] = [];
+  const put = (s: number, r: number) => {
+    const p = pointAlong(pts, s);
+    if (p) out.push({ x: p[0], y: p[1], r });
+  };
+  if (kind === "bridge") {
+    const ramp = Math.min(6, len * 0.3);
+    for (let s = ramp + 2.25; s <= len - ramp; s += 9) put(s, 1.9);
+  } else if (kind === "stonebridge") {
+    const ramp = Math.min(8, len * 0.3), PIER = 1.6, mid = Math.max(0, len - 2 * ramp);
+    const n = Math.max(1, Math.round(mid / 12));
+    const span = (mid - (n - 1) * PIER) / n;
+    if (span >= 2) for (let k = 1; k < n; k++) put(ramp + k * span + (k - 0.5) * PIER, 2.9);
+  }
+  return out;
+}
+
+// The `max` piers nearest to (x, y) within `reach` metres, nearest first.
+export function nearestPiers(piers: readonly Pier[], x: number, y: number, max: number, reach: number): Pier[] {
+  const r2 = reach * reach;
+  return piers
+    .map((p) => ({ p, d: (p.x - x) ** 2 + (p.y - y) ** 2 }))
+    .filter((q) => q.d <= r2)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, max)
+    .map((q) => q.p);
 }

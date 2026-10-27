@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { XY } from "./modelGeometry";
-import { buildWaterChunk, clipBox, runsOutside, SHORE_CAP, tileWater, type Box, type Waterway } from "./waterMesh";
+import { bridgePiers, buildWaterChunk, clipBox, nearestPiers, realShores, runsOutside, SHORE_CAP, tileWater, type Box, type Waterway } from "./waterMesh";
 
 const area = (p: XY[]) => Math.abs(p.reduce((a, [x, y], i) => a + x * p[(i + 1) % p.length][1] - p[(i + 1) % p.length][0] * y, 0)) / 2;
 const ring = (pts: XY[]) => pts.flat();
@@ -79,5 +79,45 @@ describe("runsOutside", () => {
     const w: Waterway = { pts: [[0, 0], [10, 0], [20, 0], [30, 0], [40, 0]], half: 3, speed: 1 };
     const runs = runsOutside(w, (x) => x > 12 && x < 28);
     expect(runs.map((r) => r.pts)).toEqual([[[0, 0], [10, 0]], [[30, 0], [40, 0]]]);
+  });
+});
+
+describe("bridgePiers", () => {
+  it("puts piers in the water under a pile bridge and a stone bridge, none under a footbridge", () => {
+    const pile = bridgePiers([[0, 0], [60, 0]], "bridge");
+    expect(pile.length).toBeGreaterThan(2);
+    for (const p of pile) expect(p.x > 6 && p.x < 54 && p.y === 0).toBe(true);
+    const stone = bridgePiers([[0, 0], [0, 80]], "stonebridge");
+    expect(stone.length).toBeGreaterThanOrEqual(2);
+    for (const p of stone) expect(p.x === 0 && p.y > 8 && p.y < 72).toBe(true);
+    expect(bridgePiers([[0, 0], [20, 0]], "footbridge")).toEqual([]);
+    expect(bridgePiers([[0, 0], [5, 0]], "stonebridge")).toEqual([]);
+  });
+  it("follows the bends of the chain", () => {
+    const ps = bridgePiers([[0, 0], [30, 0], [30, 40]], "bridge");
+    expect(ps.some((p) => p.x === 30 && p.y > 0)).toBe(true);
+  });
+});
+
+describe("nearestPiers", () => {
+  it("takes the nearest within reach, nearest first, up to the cap", () => {
+    const ps = [10, 50, 20, 900].map((x) => ({ x, y: 0, r: 2 }));
+    expect(nearestPiers(ps, 0, 0, 2, 500).map((p) => p.x)).toEqual([10, 20]);
+    expect(nearestPiers(ps, 0, 0, 10, 500).map((p) => p.x)).toEqual([10, 20, 50]);
+  });
+});
+
+describe("shore tones", () => {
+  it("carries the tone of the land behind a shore to the water near it, none on ribbons", () => {
+    const water = [{ rings: [ring([[0, 0], [100, 0], [100, 100], [0, 100]])] }];
+    const tw = tileWater(water, 100000, id, (x) => (x > 50 ? 1 : 0), 5);
+    expect(tw.tones.length).toBe(tw.shores.length / 4);
+    const kept: number[] = [];
+    const near = realShores(tw.shores, [-1, -1, 101, 101], () => false, tw.tones, kept);
+    expect(kept.length).toBe(near.length / 4);
+    const c = buildWaterChunk(tw.pieces, near, [], [{ pts: [[200, 10], [260, 10]], half: 5, speed: 1 }], [0, 0, 800, 800], 100, kept);
+    expect(c.tone.length).toBe(c.xy.length / 2);
+    expect(c.tone.slice(0, c.ribbons).every((t) => t >= 0)).toBe(true);
+    expect(c.tone.slice(c.ribbons).every((t) => t === -1)).toBe(true);
   });
 });
