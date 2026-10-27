@@ -40,4 +40,13 @@ describe("projectModel / mergePacked", () => {
     expect(Array.from(all.g.slice(p.g.length))).toEqual(Array.from(q.g));
     expect(mergePacked([]).i.length).toBe(0);
   });
+
+  it("carries the lamp of each model through the merge", () => {
+    const p = projectModel(buildHeritageModel(ring, 6, "house"), frame.toLngLat, origin, 1.25);
+    const q = projectModel(buildHeritageModel(ring, 6, "station"), frame.toLngLat, origin);
+    const all = mergePacked([p, q]);
+    expect(all.l.length).toBe(all.g.length / 3);
+    expect(Array.from(all.l.slice(0, p.l.length)).every((v) => v === 1.25)).toBe(true);
+    expect(Array.from(all.l.slice(p.l.length)).every((v) => v === 0)).toBe(true);
+  });
 });

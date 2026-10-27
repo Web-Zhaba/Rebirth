@@ -12,6 +12,7 @@ export interface Trip {
   speed: number; // m per game minute
 }
 export interface Light {
+  id: number; // the building
   x: number;
   y: number;
   kind: "house" | "work" | "tavern";
@@ -30,6 +31,7 @@ const EQUATOR_M = 40075016.686;
 const FRAME_MS = 50; // ~20 fps
 const MAX_EXTRAP = 15; // game minutes of extrapolation past the last clock update
 const DAY_MIN = 1440;
+const HALO = 0.3; // share of a night glow left close up, where the lit windows show
 const WORK_LIGHTS_END = 21; // workplaces are lit until 21:00
 const TAVERN_LIGHTS = [18, 24]; // taverns glow in the evening, from dusk to midnight
 
@@ -150,7 +152,8 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
       const o = lightOpacity(kind, minuteOfDay / 60);
       if (Math.abs(o - shown[kind]) < 0.01) continue;
       shown[kind] = o;
-      map.setPaintProperty(`life-lights-${kind}`, "circle-opacity", o);
+      // close up the windows of the 3D models carry the light (modelLayer.ts): the glow fades to a halo there
+      map.setPaintProperty(`life-lights-${kind}`, "circle-opacity", ["interpolate", ["linear"], ["zoom"], 15.5, o, 17.5, o * HALO]);
     }
   };
 

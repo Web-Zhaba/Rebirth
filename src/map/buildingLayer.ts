@@ -3,7 +3,7 @@ import { computed, effect, signal, type ReadonlySignal } from "@preact/signals";
 import { covers } from "../sim/services";
 import type { Building, ClientState } from "../sim/types";
 import { pointInPolygon } from "../sim/zones";
-import { buildings, frame, state } from "../simClient";
+import { buildings, frame, lifeLights, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
 import type { ModelItem } from "./modelLayer";
@@ -47,20 +47,22 @@ const towardsRoad = (b: Building): [number, number] => [Math.sin(b.lot.angle) * 
 // What the model layer draws of the buildings: every one that is not just planned. A restored old building is drawn by its OSM class.
 // The same list comes back while nothing visible changed, so the layer does not rebuild every tick.
 let lastItems: ModelItem[] = [];
-const itemSig = (i: ModelItem): string => `${i.id}|${i.kind}|${i.height}|${i.progress >= 1 ? 1 : Math.floor(i.progress * 24)}|${i.level ?? 1}|${i.tint ?? ""}|${i.upgrading ? 1 : 0}`;
+const itemSig = (i: ModelItem): string => `${i.id}|${i.kind}|${i.height}|${i.progress >= 1 ? 1 : Math.floor(i.progress * 24)}|${i.level ?? 1}|${i.tint ?? ""}|${i.upgrading ? 1 : 0}|${i.lamp ?? ""}`;
 export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   const st = state.value;
   const ov = overlay.value;
   if (!st) return lastItems;
+  // which buildings light up in the evening, and how (sim/life.ts)
+  const lamps = new Map(lifeLights.value.map((l) => [l.id, l.kind]));
   const out: ModelItem[] = [];
   for (const b of Object.values(st.buildings)) {
     if (b.state === "planned") continue;
     const progress = b.state === "active" ? 1 : b.labor > 0 ? Math.min(1, b.done / b.labor) : 0;
     if (b.siteId) {
       const site = st.finds.foundations.find((f) => f.id === b.siteId);
-      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress, style: "heritage" });
+      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress, style: "heritage", lamp: lamps.get(b.id) });
     } else
-      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade });
+      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade, lamp: lamps.get(b.id) });
   }
   if (out.length !== lastItems.length || out.some((it, k) => itemSig(it) !== itemSig(lastItems[k]))) lastItems = out;
   return lastItems;

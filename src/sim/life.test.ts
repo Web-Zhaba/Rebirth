@@ -198,8 +198,8 @@ describe("lights", () => {
     ];
     const s = town(bs, [{ home: 1, jobs: [4] }, { home: 3, jobs: [null] }, { home: null, jobs: [null] }]);
     const { lights } = computeLife(s);
-    expect(lights.filter((l) => l.kind === "house")).toEqual([{ x: 100.5, y: 5.5, kind: "house" }]);
-    expect(lights.filter((l) => l.kind === "work")).toEqual([{ x: 400.5, y: 5.5, kind: "work" }]);
+    expect(lights.filter((l) => l.kind === "house")).toEqual([{ id: expect.any(Number), x: 100.5, y: 5.5, kind: "house" }]);
+    expect(lights.filter((l) => l.kind === "work")).toEqual([{ id: expect.any(Number), x: 400.5, y: 5.5, kind: "work" }]);
   });
 });
 

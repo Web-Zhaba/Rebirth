@@ -1,12 +1,14 @@
 import type maplibregl from "maplibre-gl";
 import type { ReadonlySignal } from "@preact/signals";
 import { effect, signal } from "@preact/signals";
-import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, Scene, ShaderMaterial, Vector3 } from "three";
+import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, OneFactor, Scene, ShaderMaterial, Vector3 } from "three";
+import { START_MINUTE_OF_DAY } from "../sim/clock";
 import { sunDirection } from "../sim/weather";
 import { BUILDINGS } from "../sim/buildings";
 import { isRoadKind } from "../sim/roads";
 import type { Frame as TownFrame } from "../world/frame";
 import { sunLocal, sunStrength } from "./clouds/shadowMath";
+import { lightOpacity, type Light } from "./lifeLayer";
 import { buildHeritageModel } from "./heritageModels";
 import { mergePacked, projectModel, type Packed } from "./modelBuffers";
 import { buildScaffold, type Model, type XY } from "./modelGeometry";
@@ -40,6 +42,10 @@ import { acquireHost, type ThreeHost } from "./three/host";
 // The vertex shader mixes the two clip positions with `projectionTransition`, exactly like MapLibre's
 // interpolateProjectionFor3D does for fill-extrusion, so depth values agree through the projection transition.
 //
+// Window light: a second layer (LAMP_LAYER_ID) above the night tint draws the same mesh again with only the glass of lit
+// buildings, added on top (ONE, ONE), depth test LEQUAL against the first pass, no depth write. Above the tint, so the
+// dusk does not dim the windows; the same hours as the ground glows of lifeLayer.ts.
+//
 // Lighting: faces are shaded by the sun direction (sim/weather sunDirection, in the town's east/north/up frame) like the
 // fill-extrusions' default light: unlit faces at about half brightness. With the sun down (or no clock given) a fixed
 // fallback direction is used, slightly dimmer; the night tint layer above darkens everything else. Walls darken towards
@@ -47,6 +53,7 @@ import { acquireHost, type ThreeHost } from "./three/host";
 // (modelGeometry.ts PATTERN) and fade to their average tone once they shrink to a few pixels, so distant towns do not shimmer.
 
 export const MODEL_LAYER_ID = "building-models";
+export const LAMP_LAYER_ID = "building-lamps";
 const R = EARTH_RADIUS_M;
 const PROGRESS_STEPS = 24; // progress < 1 is quantised, so a slowly growing site does not rebuild its model every tick
 const FALLBACK_LIGHT: [number, number, number] = [-0.45, -0.55, 0.7];
@@ -67,6 +74,7 @@ export interface ModelItem {
   front?: XY | null; // town: unit vector towards the street (the door side)
   tint?: string; // town: overlay colour, "" or absent for none
   upgrading?: boolean; // town: a rebuild in progress
+  lamp?: Light["kind"]; // lit in the evening like this (sim/life.ts lights), absent: dark
 }
 
 export interface ModelLayerOptions {
@@ -82,6 +90,7 @@ const VERT = /* glsl */ `
 attribute vec3 aMerc;
 attribute vec3 aColor;
 attribute vec4 aFacade;
+attribute float aLamp;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
@@ -90,6 +99,7 @@ varying vec3 vC;
 varying vec4 vF;
 varying float vZ;
 varying vec2 vXY;
+varying float vLamp;
 void main() {
   vec4 m = uM * vec4(aMerc, 1.0);
   vec4 g = uG * vec4(position, 1.0);
@@ -100,28 +110,32 @@ void main() {
   vF = aFacade;
   vZ = aMerc.z; // height above the ground in metres
   vXY = aMerc.xy; // metres east and north of the origin, for patterns laid out in world space
+  vLamp = aLamp;
 }`;
 
 // Facade codes (modelGeometry.ts PATTERN): 1 house, 2 hall, 3 worship, 4 log courses, 5 wide, 6 tower, 7 roof rows,
 // 8 boards, 9 log cabin; + 10 a door, + 20 a gate at the middle of the wall. Roads (roadModels.ts) from 30: 30 track, 31
 // ruts, 32 cobbles, 33 plank deck, 34 ashlar; there the facade is (s along, offset across, width, code).
-const FRAG = /* glsl */ `
-uniform vec3 uLight;
-uniform float uSun;
+// Shared by the surface pass (FRAG) and the window-light pass (LAMP_FRAG).
+const COMMON = /* glsl */ `
 varying vec3 vN;
 varying vec3 vC;
 varying vec4 vF;
 varying float vZ;
 varying vec2 vXY;
+varying float vLamp;
 
 // Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
-// metres along s and z; once windows get that small the grid turns into its average coverage.
-float windows(float s, float len, float z, float top, float aw, float az, float floorH, float sill, float wh, float ww, float sp) {
+// metres along s and z; once windows get that small the grid turns into its average coverage. id: which window (floor
+// and column) the point belongs to.
+float windows(float s, float len, float z, float top, float aw, float az, float floorH, float sill, float wh, float ww, float sp, out float id) {
   float n = len >= ww + 1.4 ? floor((len - 1.4 - ww) / sp) + 1.0 : 0.0;
   float fl = floor(z / floorH);
+  id = 0.0;
   if (n < 1.0 || fl * floorH + sill + wh > top - 0.25) return 0.0;
   float start = (len - (n - 1.0) * sp) * 0.5;
   float c = clamp(floor((s - start) / sp + 0.5), 0.0, n - 1.0);
+  id = fl * 31.0 + c;
   float dx = abs(s - start - c * sp);
   float zl = z - fl * floorH;
   float mx = 1.0 - smoothstep(ww * 0.5 - aw, ww * 0.5 + aw, dx);
@@ -129,6 +143,30 @@ float windows(float s, float len, float z, float top, float aw, float az, float 
   float far = smoothstep(0.25, 0.6, max(aw / ww, az / wh));
   return mix(mx * mz, 0.7 * ww * wh / (sp * floorH), far);
 }
+
+// Window grid of a facade: floor height, sill, window height, width (g) and spacing (sp, 0: no windows).
+void grid(int p, out vec4 g, out float sp) {
+  g = vec4(0.0);
+  sp = 0.0;
+  if (p == 1) { g = vec4(3.0, 0.9, 1.25, 1.0); sp = 2.6; }
+  else if (p == 2) { g = vec4(3.8, 1.0, 2.0, 1.3); sp = 3.0; }
+  else if (p == 3) { g = vec4(100.0, 2.2, clamp(vF.z - 3.4, 1.4, 4.0), 0.9); sp = 3.4; }
+  else if (p == 5) { g = vec4(4.5, 2.0, 1.6, 2.4); sp = 3.4; }
+  else if (p == 6) { g = vec4(3.5, 1.2, 1.3, 0.55); sp = 2.2; }
+  else if (p == 9) { g = vec4(3.0, 0.9, 1.0, 0.85); sp = 2.4; }
+}
+
+// A door at the middle of the wall (dk 1 door, 2 gate): no windows next to it on the ground floor.
+bool nearDoor(int dk, float z) {
+  float dw = dk == 2 ? 2.6 : 1.0, dh = dk == 2 ? 2.5 : 2.0;
+  return dk > 0 && abs(vF.x - vF.y * 0.5) < dw * 0.5 + 0.6 && z < dh + 0.4;
+}
+`;
+
+const FRAG = /* glsl */ `
+uniform vec3 uLight;
+uniform float uSun;
+${COMMON}
 
 // Dark seams every "period" metres of x (log courses and shingle rows along the height, boards along the wall), gone
 // once they get thinner than a pixel.
@@ -175,30 +213,23 @@ void main() {
   int dk = code < 30 ? code / 10 : 0; // 1 door, 2 gate
   int p = code - dk * 10;
   vec3 col = code >= 30 ? road(vC, code, z, aw, ay, az, axy) : vC;
-  // window grid per facade: floor height, sill, window height, width, spacing (metres)
-  vec4 g = vec4(0.0);
-  float sp = 0.0;
-  if (p == 1) { g = vec4(3.0, 0.9, 1.25, 1.0); sp = 2.6; }
-  else if (p == 2) { g = vec4(3.8, 1.0, 2.0, 1.3); sp = 3.0; }
-  else if (p == 3) { g = vec4(100.0, 2.2, clamp(vF.z - 3.4, 1.4, 4.0), 0.9); sp = 3.4; }
-  else if (p == 5) { g = vec4(4.5, 2.0, 1.6, 2.4); sp = 3.4; }
-  else if (p == 6) { g = vec4(3.5, 1.2, 1.3, 0.55); sp = 2.2; }
-  else if (p == 9) { g = vec4(3.0, 0.9, 1.0, 0.85); sp = 2.4; col *= 1.0 - 0.2 * seams(z, az, 0.3); }
-  else if (p == 4) col *= 1.0 - 0.2 * seams(z, az, 0.32);
+  vec4 g;
+  float sp;
+  grid(p, g, sp);
+  if (p == 9 || p == 4) col *= 1.0 - 0.2 * seams(z, az, p == 9 ? 0.3 : 0.32);
   else if (p == 7) col *= 1.0 - 0.12 * seams(z, az, 0.42);
   else if (p == 8) col *= 1.0 - 0.16 * seams(vF.x, aw, 0.28);
-  // a door at the middle of the wall: no windows next to it on the ground floor
-  float dw = dk == 2 ? 2.6 : 1.0, dh = dk == 2 ? 2.5 : 2.0;
-  float dx = abs(vF.x - vF.y * 0.5);
-  bool nearDoor = dk > 0 && dx < dw * 0.5 + 0.6 && z < dh + 0.4;
-  if (sp > 0.0 && !nearDoor) {
+  if (sp > 0.0 && !nearDoor(dk, z)) {
     // glass inside a light frame 0.1 m wide
-    float glass = windows(vF.x, vF.y, z, vF.z, aw, az, g.x, g.y, g.z, g.w, sp);
-    float frame = windows(vF.x, vF.y, z, vF.z, aw, az, g.x, g.y - 0.1, g.z + 0.2, g.w + 0.2, sp);
+    float id;
+    float glass = windows(vF.x, vF.y, z, vF.z, aw, az, g.x, g.y, g.z, g.w, sp, id);
+    float frame = windows(vF.x, vF.y, z, vF.z, aw, az, g.x, g.y - 0.1, g.z + 0.2, g.w + 0.2, sp, id);
     col = mix(col, mix(col, vec3(0.95, 0.92, 0.84), 0.6), max(frame - glass, 0.0));
     col = mix(col, vec3(0.22, 0.25, 0.28), glass);
   }
   if (dk > 0) {
+    float dw = dk == 2 ? 2.6 : 1.0, dh = dk == 2 ? 2.5 : 2.0;
+    float dx = abs(vF.x - vF.y * 0.5);
     float leaf = doorway(dx, z, aw, az, dw, dh);
     float frame = doorway(dx, z, aw, az, dw + 0.24, dh + 0.12);
     vec3 wood = vec3(0.30, 0.22, 0.15);
@@ -211,6 +242,34 @@ void main() {
   float k = mix(0.55, 1.0, d) * mix(0.88, 1.0, uSun);
   if (abs(n.z) < 0.5) k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z)); // walls darken towards the ground
   gl_FragColor = vec4(col * k, 1.0);
+}`;
+
+// Window light: only the glass of lit buildings, added on top of what is drawn (blending ONE, ONE). uLamp: how bright
+// the house, work and tavern lights are at this hour (lifeLayer.ts lightOpacity). Each window of a building is lit or not
+// by a hash of the window and the building's seed, so a house never shows every window lit.
+const LAMP_FRAG = /* glsl */ `
+uniform vec3 uLamp;
+${COMMON}
+
+void main() {
+  float z = vZ;
+  float aw = max(fwidth(vF.x), 1e-4), az = max(fwidth(z), 1e-4);
+  float kind = floor(vLamp + 0.01);
+  float on = kind < 0.5 ? 0.0 : kind < 1.5 ? uLamp.x : kind < 2.5 ? uLamp.y : uLamp.z;
+  int code = int(vF.w + 0.5);
+  int dk = code < 30 ? code / 10 : 0;
+  int p = code - dk * 10;
+  vec4 g;
+  float sp;
+  grid(p, g, sp);
+  if (on < 0.01 || sp <= 0.0 || code >= 30 || nearDoor(dk, z)) discard;
+  float id;
+  float glass = windows(vF.x, vF.y, z, vF.z, aw, az, g.x, g.y, g.z, g.w, sp, id);
+  float share = kind < 1.5 ? 0.65 : kind < 2.5 ? 0.85 : 1.0;
+  float h = fract(sin(id * 12.9898 + fract(vLamp) * 311.7 + vF.y * 7.13) * 43758.5453);
+  float a = glass * on * step(h, share);
+  if (a < 0.01) discard;
+  gl_FragColor = vec4(vec3(1.0, 0.72, 0.38) * a, 0.0);
 }`;
 
 function mul4(a: ArrayLike<number>, b: ArrayLike<number>, out = new Float64Array(16)): Float64Array {
@@ -236,6 +295,15 @@ export function modelOf(it: ModelItem): Model {
   return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading });
 }
 
+const LAMP_CODE: Record<Light["kind"], number> = { house: 1, work: 2, tavern: 3 };
+// Lamp attribute of an item: its kind plus a seed from its id in 0..1 (which of its windows are lit).
+function lampOf(it: ModelItem): number {
+  if (!it.lamp) return 0;
+  let h = 7;
+  for (const ch of String(it.id)) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+  return LAMP_CODE[it.lamp] + (h % 997) / 1000;
+}
+
 const quantise = (p: number): number => (p >= 1 ? 1 : Math.min(PROGRESS_STEPS - 1, Math.max(0, Math.floor((Number.isFinite(p) ? p : 0) * PROGRESS_STEPS))) / PROGRESS_STEPS);
 // Everything that shapes an item's model (its id is not: two identical buildings share a model).
 const keyOf = (it: ModelItem, p: number): string => {
@@ -243,16 +311,20 @@ const keyOf = (it: ModelItem, p: number): string => {
   if (it.style === "road") return `road|${it.kind}|${ring}`;
   if (p < 1) return `site|${it.height}|${p}|${ring}`;
   const f = it.front ? `${it.front[0].toFixed(3)},${it.front[1].toFixed(3)}` : "";
-  return `${it.style}|${it.kind}|${it.height}|${it.level ?? 1}|${f}|${it.tint ?? ""}|${it.upgrading ? 1 : 0}|${ring}`;
+  return `${it.style}|${it.kind}|${it.height}|${it.level ?? 1}|${f}|${it.tint ?? ""}|${it.upgrading ? 1 : 0}|${lampOf(it)}|${ring}`;
 };
 
 export type ModelLayer = maplibregl.CustomLayerInterface;
 
-export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): ModelLayer {
+// The model layer and its window-light layer (drawn later, above the night tint); they share the mesh.
+export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): { layer: ModelLayer; lamps: ModelLayer } {
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
   let mesh: Mesh | null = null;
   let mat: ShaderMaterial | null = null;
+  let lampScene: Scene | null = null;
+  let lampMesh: Mesh | null = null;
+  let lampMat: ShaderMaterial | null = null;
   let stop: (() => void) | null = null;
   let dirty = true;
   let origin: { lng: number; lat: number } | null = null; // the layer origin the packs were projected for
@@ -270,10 +342,12 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     geo.setAttribute("normal", new BufferAttribute(b.n, 3));
     geo.setAttribute("aColor", new BufferAttribute(b.c, 3));
     geo.setAttribute("aFacade", new BufferAttribute(b.f, 4));
+    geo.setAttribute("aLamp", new BufferAttribute(b.l, 1));
     geo.setIndex(new BufferAttribute(b.i, 1));
     mesh.geometry.dispose();
     mesh.geometry = geo;
     mesh.visible = b.i.length > 0;
+    if (lampMesh) lampMesh.geometry = geo;
   };
 
   // Rebuilds the merged mesh; runs once per change of the item list (or the town frame), never per frame.
@@ -290,12 +364,51 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       const key = keyOf(it, p);
       used.add(key);
       let pack = cache.get(key);
-      if (!pack) cache.set(key, (pack = projectModel(modelOf({ ...it, progress: p }), tf.toLngLat, origin)));
+      if (!pack) cache.set(key, (pack = projectModel(modelOf({ ...it, progress: p }), tf.toLngLat, origin, p >= 1 ? lampOf(it) : 0)));
       packs.push(pack);
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
     fill(mergePacked(packs));
     dirty = false;
+  };
+
+  // Matrices and sun of this frame into a material's uniforms.
+  const setFrame = (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput) => {
+    if (!origin) return;
+    const o = origin;
+    const fr = host!.frame(args.defaultProjectionData);
+    // mercator: local metres -> clip through the fallback (always the mercator matrix)
+    const s = metresPerMercator(o.lat);
+    const um = Float32Array.from(mercatorLocalMatrix(fr.fallback, lngLatToMercator(o.lng, o.lat), s));
+    // globe: local metres -> unit sphere (affine) -> clip
+    const f = localFrame(o.lng, o.lat);
+    for (let i = 0; i < 3; i++) {
+      lg[i] = f.e[i] / R;
+      lg[4 + i] = f.n[i] / R;
+      lg[8 + i] = f.o[i] / R;
+      lg[12 + i] = f.o[i];
+    }
+    lg[3] = lg[7] = lg[11] = 0;
+    lg[15] = 1;
+    const ug = Float32Array.from(mul4(fr.main, lg, g64));
+    // sun in the origin's east/north/up frame
+    let sun = 1;
+    light.set(...norm3(FALLBACK_LIGHT));
+    const lt = opts.light;
+    const phase = lt?.phase.peek();
+    if (lt && phase !== null && phase !== undefined) {
+      const sl = sunLocal(weatherToSphere(sunDirection(lt.clock.peek(), phase)), f);
+      sun = sunStrength(sl.sinElev);
+      if (sun > 0) {
+        const d = norm3([sl.east, sl.north, Math.max(sl.sinElev, 0.05)]);
+        const fb = norm3(FALLBACK_LIGHT);
+        light.set(...norm3([fb[0] + (d[0] - fb[0]) * sun, fb[1] + (d[1] - fb[1]) * sun, fb[2] + (d[2] - fb[2]) * sun]));
+      }
+    }
+    (u.uM.value as Matrix4).fromArray(um);
+    (u.uG.value as Matrix4).fromArray(ug);
+    u.uT.value = fr.transition;
+    if (u.uSun) u.uSun.value = sun;
   };
 
   const layer: ModelLayer = {
@@ -317,6 +430,24 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       mesh = Object.assign(new Mesh(new BufferGeometry(), mat), { frustumCulled: false, visible: false });
       scene = new Scene();
       scene.add(mesh);
+      lampMat = new ShaderMaterial({
+        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLamp: { value: new Vector3() } },
+        vertexShader: VERT,
+        fragmentShader: LAMP_FRAG,
+        side: DoubleSide,
+        transparent: true,
+        blending: CustomBlending,
+        blendSrc: OneFactor,
+        blendDst: OneFactor,
+        blendSrcAlpha: OneFactor,
+        blendDstAlpha: OneFactor,
+        depthTest: true,
+        depthWrite: false,
+        depthFunc: LessEqualDepth,
+      });
+      lampMesh = Object.assign(new Mesh(mesh.geometry, lampMat), { frustumCulled: false });
+      lampScene = new Scene();
+      lampScene.add(lampMesh);
       dirty = true;
       stop = effect(() => {
         void opts.items.value;
@@ -330,6 +461,8 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       stop = null;
       mesh?.geometry.dispose();
       mat?.dispose();
+      lampMat?.dispose();
+      lampScene = lampMesh = lampMat = null;
       host?.release();
       host = null;
       scene = mesh = mat = null;
@@ -339,57 +472,42 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       if (!host || !scene || !mesh || !mat) return;
       if (dirty) rebuild();
       if (!origin || !mesh.visible) return;
-      const o = origin;
-      const fr = host.frame(args.defaultProjectionData);
-      // mercator: local metres -> clip through the fallback (always the mercator matrix)
-      const s = metresPerMercator(o.lat);
-      const um = Float32Array.from(mercatorLocalMatrix(fr.fallback, lngLatToMercator(o.lng, o.lat), s));
-      // globe: local metres -> unit sphere (affine) -> clip
-      const f = localFrame(o.lng, o.lat);
-      for (let i = 0; i < 3; i++) {
-        lg[i] = f.e[i] / R;
-        lg[4 + i] = f.n[i] / R;
-        lg[8 + i] = f.o[i] / R;
-        lg[12 + i] = f.o[i];
-      }
-      lg[3] = lg[7] = lg[11] = 0;
-      lg[15] = 1;
-      const ug = Float32Array.from(mul4(fr.main, lg, g64));
-      // sun in the origin's east/north/up frame
-      let sun = 1;
-      light.set(...norm3(FALLBACK_LIGHT));
-      const lt = opts.light;
-      const phase = lt?.phase.peek();
-      if (lt && phase !== null && phase !== undefined) {
-        const sl = sunLocal(weatherToSphere(sunDirection(lt.clock.peek(), phase)), f);
-        sun = sunStrength(sl.sinElev);
-        if (sun > 0) {
-          const d = norm3([sl.east, sl.north, Math.max(sl.sinElev, 0.05)]);
-          const fb = norm3(FALLBACK_LIGHT);
-          light.set(...norm3([fb[0] + (d[0] - fb[0]) * sun, fb[1] + (d[1] - fb[1]) * sun, fb[2] + (d[2] - fb[2]) * sun]));
-        }
-      }
       const u = mat.uniforms;
-      (u.uM.value as Matrix4).fromArray(um);
-      (u.uG.value as Matrix4).fromArray(ug);
-      u.uT.value = fr.transition;
-      u.uSun.value = sun;
+      setFrame(u, args);
       host.draw((r) => r.render(scene!, camera));
     },
   };
-  return layer;
+  // Window lights: the same mesh, glass only, when some light is on at this hour.
+  const lamps: ModelLayer = {
+    id: LAMP_LAYER_ID,
+    type: "custom",
+    renderingMode: "3d",
+    render(_gl, args) {
+      if (!host || !lampScene || !lampMat || !mesh?.visible || !origin || !opts.light) return;
+      const minute = (((opts.light.clock.peek() + START_MINUTE_OF_DAY) % 1440) + 1440) % 1440;
+      const k = (["house", "work", "tavern"] as const).map((kind) => lightOpacity(kind, minute / 60));
+      if (Math.max(...k) < 0.01) return;
+      const u = lampMat.uniforms;
+      (u.uLamp.value as Vector3).set(k[0], k[1], k[2]);
+      setFrame(u, args);
+      host.draw((r) => r.render(lampScene!, camera));
+    },
+  };
+  return { layer, lamps };
 }
 
 // Adds the layer to the map once the style has the layer it goes before ("buildings-outline", else "night-tint").
 // Returns a function that detaches it.
 export function attachModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): () => void {
-  const layer = createModelLayer(map, opts);
+  const { layer, lamps } = createModelLayer(map, opts);
   const before = () => (opts.beforeId ? [opts.beforeId] : ["buildings-outline", "night-tint"]).find((id) => map.getLayer(id));
   let disposed = false;
   const add = () => {
     const b = before();
     if (disposed || map.getLayer(MODEL_LAYER_ID) || !b) return;
     map.addLayer(layer, b);
+    // window lights above the night tint, under the ground glows
+    map.addLayer(lamps, map.getLayer("life-lights-house") ? "life-lights-house" : undefined);
     map.off("styledata", add);
   };
   if (before()) add();
@@ -398,6 +516,7 @@ export function attachModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     disposed = true;
     map.off("styledata", add);
     if (map.getLayer(MODEL_LAYER_ID)) map.removeLayer(MODEL_LAYER_ID);
+    if (map.getLayer(LAMP_LAYER_ID)) map.removeLayer(LAMP_LAYER_ID);
   };
 }
 

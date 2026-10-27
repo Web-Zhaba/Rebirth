@@ -71,14 +71,14 @@ export function computeLife(s: SimState, day = 0): LifeData {
     if (!isFinishedHouse(b)) continue;
     lit.add(b.id);
     const [x, y] = centre(b);
-    lights.push({ x, y, kind: "house" });
+    lights.push({ id: b.id, x, y, kind: "house" });
   }
   for (const b of Object.values(s.buildings)) {
     if (!isWorkplace(b) || !worked.has(b.id)) continue;
     const input = WORKSHOP_INPUT[b.template];
     if (input && s.stock[input] <= 1e-9) continue;
     const [x, y] = centre(b);
-    lights.push({ x, y, kind: b.template === "tavern" ? "tavern" : "work" });
+    lights.push({ id: b.id, x, y, kind: b.template === "tavern" ? "tavern" : "work" });
   }
   if (net.adj.size === 0) return { day, trips, traffic, lights };
 
