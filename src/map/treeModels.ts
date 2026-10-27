@@ -5,14 +5,31 @@ import type { TreeKind } from "./treeScatter";
 
 // One tree of each kind, 1 m tall, on the shared mesh of modelGeometry.ts; the tree layer (treeLayer.ts) scales, turns
 // and sways each instance. `crown` marks the vertices of the foliage (1) against the trunk (0): the layer recolours
-// deciduous crowns by season and whitens snow on them.
+// seasonal crowns and whitens snow on them. The small details (a bush, a clump of reeds, a boulder) are built the same
+// way and drawn by the same layer: a boulder is all "crown" (snow lies on its top), its colour kept through the year.
 
 export interface TreeModel extends Model {
   crown: number[]; // per vertex
 }
 
+// How the layer treats each kind: a typical height (m, sets how far it is drawn), what turns its crown with the year
+// (leaves, reeds, nothing) and how much it sways in the wind.
+export const KIND_INFO: Record<TreeKind, { tall: number; season: "leaf" | "reed" | null; sway: number }> = {
+  conifer: { tall: 12, season: null, sway: 1 },
+  broadleaf: { tall: 12, season: "leaf", sway: 1 },
+  birch: { tall: 12, season: "leaf", sway: 1 },
+  bush: { tall: 1.5, season: "leaf", sway: 1.5 },
+  reed: { tall: 1.8, season: "reed", sway: 5 },
+  boulder: { tall: 1.2, season: null, sway: 0 },
+};
+
+// The colour a kind's crown is built with (seasonal crowns keep its light and shade when recoloured).
+export const leafOf = (kind: TreeKind): string =>
+  kind === "conifer" ? TREE_COLORS.conifer : kind === "reed" ? TREE_COLORS.reed : kind === "boulder" ? TREE_COLORS.stone : TREE_COLORS.summer;
+
+type Shaped = "conifer" | "broadleaf" | "birch" | "bush";
 // Profiles of revolution: (radius, height) bottom to top, in tree heights.
-const SHAPES: Record<TreeKind, { trunk: XY[]; bark: string; crowns: { at: XY; z: number; prof: XY[] }[] }> = {
+const SHAPES: Record<Shaped, { trunk: XY[]; bark: string; crowns: { at: XY; z: number; prof: XY[] }[] }> = {
   // a spruce: three stacked cones
   conifer: {
     trunk: [[0.035, 0], [0.022, 0.3]],
@@ -38,22 +55,77 @@ const SHAPES: Record<TreeKind, { trunk: XY[]; bark: string; crowns: { at: XY; z:
     bark: TREE_COLORS.birchBark,
     crowns: [{ at: [0, 0], z: 0.35, prof: [[0.04, 0], [0.17, 0.1], [0.2, 0.3], [0.14, 0.5], [0, 0.65]] }],
   },
+  // a bush: three leafy lumps from the ground, no trunk to see
+  bush: {
+    trunk: [],
+    bark: TREE_COLORS.bark,
+    crowns: [
+      { at: [0, 0], z: 0, prof: [[0.12, 0], [0.4, 0.15], [0.45, 0.45], [0.32, 0.8], [0, 1]] },
+      { at: [0.32, 0.12], z: 0, prof: [[0.1, 0], [0.3, 0.12], [0.32, 0.35], [0.2, 0.6], [0, 0.7]] },
+      { at: [-0.22, -0.28], z: 0, prof: [[0.1, 0], [0.26, 0.1], [0.28, 0.3], [0.17, 0.5], [0, 0.58]] },
+    ],
+  },
 };
+
+const hash1 = (k: number) => {
+  const x = Math.sin(k * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+// A clump of reeds: thin blades leaning out from the middle, a few with a brown head (not recoloured, no snow).
+function reeds(mesh: Mesh): number {
+  const green = rgb(TREE_COLORS.reed), head = rgb(TREE_COLORS.cattail);
+  for (let b = 0; b < 14; b++) {
+    const a = hash1(b) * Math.PI * 2, r0 = 0.05 * hash1(b + 50), lean = 0.08 + 0.22 * hash1(b + 100), h = 0.6 + 0.4 * hash1(b + 150);
+    const c = Math.cos(a), s = Math.sin(a), w = 0.012;
+    const bx = c * r0, by = s * r0, tx = c * (r0 + lean), ty = s * (r0 + lean);
+    const n: [number, number, number] = [c, s, 0.3];
+    const p = [mesh.vert(bx - s * w, by + c * w, 0, n, green), mesh.vert(bx + s * w, by - c * w, 0, n, green), mesh.vert(tx, ty, h, n, green)];
+    mesh.idx(p[0], p[1], p[2]);
+  }
+  const first = mesh.m.positions.length / 3;
+  for (let b = 0; b < 3; b++) {
+    const a = hash1(b + 200) * Math.PI * 2, r = 0.06 + 0.1 * hash1(b + 250), h = 0.68 + 0.14 * hash1(b + 300);
+    revolve(mesh, Math.cos(a) * r, Math.sin(a) * r, h, [[0.018, 0], [0.025, 0.04], [0.025, 0.12], [0, 0.16]], head, 4);
+  }
+  return first; // the heads start here
+}
+
+// A boulder: a squat faceted lump.
+function boulder(mesh: Mesh): void {
+  revolve(mesh, 0, 0, -0.1, [[0.5, 0], [0.62, 0.3], [0.55, 0.65], [0.3, 1.0], [0, 1.1]], rgb(TREE_COLORS.stone), 6);
+  // knock it out of round: each vertex in or out by its angle and height
+  const p = mesh.m.positions;
+  for (let i = 0; i < p.length; i += 3) {
+    const k = 1 + 0.18 * Math.sin(Math.atan2(p[i + 1], p[i]) * 3 + p[i + 2] * 5) + 0.08 * Math.sin(Math.atan2(p[i + 1], p[i]) * 5);
+    (p[i] *= k), (p[i + 1] *= k * 0.85), (p[i + 2] = Math.min(1, p[i + 2]));
+  }
+}
 
 // Levels of detail: 0 full, 1 an impostor of the full tree for the distance (treeImpostor.ts, built from level 0), 2 a
 // flat crown seen from straight above.
 export const TREE_LODS = 3;
 
 // The flat crown: its radius and height in tree heights.
-const FLAT: Record<TreeKind, { r: number; z: number }> = { conifer: { r: 0.24, z: 0.45 }, broadleaf: { r: 0.37, z: 0.6 }, birch: { r: 0.2, z: 0.65 } };
+const FLAT: Record<TreeKind, { r: number; z: number }> = {
+  conifer: { r: 0.24, z: 0.45 },
+  broadleaf: { r: 0.37, z: 0.6 },
+  birch: { r: 0.2, z: 0.65 },
+  bush: { r: 0.45, z: 0.7 },
+  reed: { r: 0.25, z: 0.6 },
+  boulder: { r: 0.55, z: 0.8 },
+};
 
 export function buildTree(kind: TreeKind, lod: 0 | 2 = 0): TreeModel {
   const mesh = new Mesh({ cx: 0, cy: 0, ux: 1, uy: 0, len: 0, wid: 0 });
-  const sh = SHAPES[kind];
-  const leaf = rgb(kind === "conifer" ? TREE_COLORS.conifer : TREE_COLORS.summer);
+  const leaf = rgb(leafOf(kind));
   let trunkVerts = 0;
-  if (lod === 0) {
-    revolve(mesh, 0, 0, 0, sh.trunk, rgb(sh.bark), 5);
+  let headsFrom = Infinity; // the reeds' heads: not crown
+  if (lod === 0 && kind === "reed") headsFrom = reeds(mesh);
+  else if (lod === 0 && kind === "boulder") boulder(mesh);
+  else if (lod === 0) {
+    const sh = SHAPES[kind as Shaped];
+    if (sh.trunk.length) revolve(mesh, 0, 0, 0, sh.trunk, rgb(sh.bark), 5);
     trunkVerts = mesh.m.positions.length / 3;
     for (const c of sh.crowns) revolve(mesh, c.at[0], c.at[1], c.z, c.prof, leaf, 7);
   } else {
@@ -65,7 +137,18 @@ export function buildTree(kind: TreeKind, lod: 0 | 2 = 0): TreeModel {
     for (let k = 0; k < 6; k++) mesh.idx(mid, rim[k], rim[(k + 1) % 6]);
   }
   const n = mesh.m.positions.length / 3;
-  return { ...mesh.m, crown: Array.from({ length: n }, (_, i) => (i < trunkVerts ? 0 : 1)) };
+  return { ...mesh.m, crown: Array.from({ length: n }, (_, i) => (i < trunkVerts || i >= headsFrom ? 0 : 1)) };
+}
+
+// Reeds at a point of the year: last year's straw in early spring, green over the summer, drying through the autumn
+// and standing straw all winter (never bare).
+export function reedAt(gameMinutes: number): { a: string; b: string; t: number } {
+  const cal = calendar(gameMinutes);
+  const f = cal.season + (cal.dayOfSeason - 1 + cal.hour / 24) / DAYS_PER_SEASON;
+  const C = TREE_COLORS;
+  const ramp = (x: number, a: number, b: number) => Math.min(1, Math.max(0, (x - a) / (b - a)));
+  if (f < 2) return { a: C.reedDry, b: C.reed, t: ramp(f, 0.3, 1) };
+  return { a: C.reed, b: C.reedDry, t: ramp(f, 2.1, 2.8) };
 }
 
 // Deciduous crowns at a point of the year: two colours (mixed per tree) and how bare they are.

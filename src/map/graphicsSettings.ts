@@ -24,6 +24,7 @@ function stored(key: string): { on: Signal<boolean>; set: (v: boolean) => void }
 
 const forest = stored("rebirth.forest3d");
 const water = stored("rebirth.water3d");
+const fields = stored("rebirth.fields3d");
 const motion = stored("rebirth.motion");
 
 // The 3D forest (treeLayer.ts); off, the forest is the 2D fill.
@@ -32,6 +33,9 @@ export const setForest3d = forest.set;
 // The 3D water (waterLayer.ts); off, the water is the 2D fill.
 export const water3dOn = water.on;
 export const setWater3d = water.set;
+// The 3D farm fields (fieldLayer.ts); off, the fields are the 2D fill and furrow lines.
+export const fields3dOn = fields.on;
+export const setFields3d = fields.set;
 // Trees swaying in the wind and the water rippling; off, both stand still and the map is not redrawn every frame.
 export const motionOn = motion.on;
 export const setMotion = motion.set;

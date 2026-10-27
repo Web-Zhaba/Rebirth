@@ -2,7 +2,7 @@ import type maplibregl from "maplibre-gl";
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
 import { doneKinds } from "../sim/heritage";
 import { isBridge, oldStreetKind, ROAD_KINDS } from "../sim/roads";
-import { DOMAIN_COLORS, PALETTE } from "../ui/palette";
+import { DOMAIN_COLORS, mixHex, PALETTE, TREE_COLORS } from "../ui/palette";
 import type { Frame } from "../world/frame";
 import { ringCentroid, type OldWorld, type XY } from "../world/oldworld";
 import { pointInPolygon } from "../sim/zones";
@@ -90,13 +90,19 @@ function selfIntersects(r: XY[]): boolean {
 
 // Ring moved `d` m towards its inside (mitred corners). Returns an open ring in counter-clockwise
 // order, or null when the inset degenerates (too thin, spiky, self-intersecting, flipped).
-export function insetRing(ring: XY[], d: number): XY[] | null {
+// The ring without repeated or closing points, counter-clockwise; null when it encloses nothing.
+function cleanRing(ring: XY[]): XY[] | null {
   let p: XY[] = ring.filter((q, i) => i === 0 || q[0] !== ring[i - 1][0] || q[1] !== ring[i - 1][1]);
   if (p.length > 1 && p[0][0] === p[p.length - 1][0] && p[0][1] === p[p.length - 1][1]) p = p.slice(0, -1);
   if (p.length < 3) return null;
   const a0 = area2(p);
   if (Math.abs(a0) < 1e-9) return null;
-  if (a0 < 0) p = p.slice().reverse(); // counter-clockwise: the inside is on the left of every edge
+  return a0 < 0 ? p.slice().reverse() : p; // counter-clockwise: the inside is on the left of every edge
+}
+
+export function insetRing(ring: XY[], d: number): XY[] | null {
+  const p = cleanRing(ring);
+  if (!p) return null;
   const n = p.length;
   const normals: XY[] = [];
   for (let i = 0; i < n; i++) {
@@ -129,6 +135,39 @@ export function insetRing(ring: XY[], d: number): XY[] | null {
   const a1 = area2(out);
   if (a1 <= 0 || a1 >= area2(p)) return null;
   if (selfIntersects(out)) return null;
+  return out;
+}
+
+// The walls of a foundation as they stand after a century: pieces about PIECE m along the ring, each its own height
+// (a hash of the foundation and the piece), higher at the corners, which hold out longest, and higher for a building
+// that was tall; about one piece in six has fallen to a stub. Null when the ring is too thin for walls.
+const PIECE = 2.5; // m
+export function brokenWalls(ring: XY[], key: string, height = 6): { quad: XY[]; h: number }[] | null {
+  const p = cleanRing(ring);
+  const inner = p && insetRing(p, WALL_THICKNESS);
+  if (!p || !inner) return null;
+  let seed = 0;
+  for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) | 0;
+  const rnd = (a: number, b: number) => {
+    let h = Math.imul(seed ^ Math.imul(a + 1, 374761393) ^ Math.imul(b + 1, 668265263), 1274126177);
+    h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  };
+  const top = Math.min(3, Math.max(1.2, height * 0.3)); // m, the best kept piece of this building
+  const out: { quad: XY[]; h: number }[] = [];
+  const lerp = (a: XY, b: XY, t: number): XY => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  for (let i = 0; i < p.length; i++) {
+    const j = (i + 1) % p.length;
+    const len = Math.hypot(p[j][0] - p[i][0], p[j][1] - p[i][1]);
+    const n = Math.max(1, Math.round(len / PIECE));
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n;
+      const corner = Math.max(0, 1 - Math.min(k, n - 1 - k) * 0.6); // 1 at an end of the side
+      const r = rnd(i, k);
+      const h = r < 0.16 ? 0.1 : WALL_HEIGHT * 0.5 + (top - WALL_HEIGHT * 0.5) * Math.min(1, rnd(i, k + 1000) ** 2 * 0.8 + corner * 0.5 * r);
+      out.push({ quad: [lerp(p[i], p[j], t0), lerp(p[i], p[j], t1), lerp(inner[i], inner[j], t1), lerp(inner[i], inner[j], t0)], h });
+    }
+  }
   return out;
 }
 
@@ -222,10 +261,12 @@ export function attachRuinsLayer(
         minzoom: 14,
         filter: ["==", ["get", "thin"], 0],
         paint: {
-          "fill-extrusion-color": PALETTE.pencilFaint,
-          "fill-extrusion-height": WALL_HEIGHT,
+          // weathered stone, the lowest pieces grown over with moss
+          "fill-extrusion-color": ["interpolate", ["linear"], ["get", "h"], 0.1, mixHex(PALETTE.pencilFaint, TREE_COLORS.summer, 0.45), 1, PALETTE.pencilFaint, 2.5, mixHex(PALETTE.pencilFaint, TREE_COLORS.stone, 0.5)],
+          "fill-extrusion-height": ["get", "h"],
           "fill-extrusion-base": 0,
-          "fill-extrusion-opacity": 0.9,
+          "fill-extrusion-opacity": 0.95,
+          "fill-extrusion-vertical-gradient": true,
         },
       },
       beneath,
@@ -317,9 +358,11 @@ export function attachRuinsLayer(
       if (fd.ring.length < 3) continue;
       const outer = fd.ring.map(([x, y]) => f.toLngLat(x, y));
       floors.push({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [close(outer)] } });
-      const inner = insetRing(fd.ring, WALL_THICKNESS);
-      const coords = inner ? [close(outer), close(inner.map(([x, y]) => f.toLngLat(x, y)))] : [close(outer)];
-      walls.push({ type: "Feature", properties: { thin: inner ? 0 : 1 }, geometry: { type: "Polygon", coordinates: coords } });
+      const pieces = brokenWalls(fd.ring, fd.id, fd.height);
+      if (!pieces) walls.push({ type: "Feature", properties: { thin: 1 }, geometry: { type: "Polygon", coordinates: [close(outer)] } });
+      else
+        for (const q of pieces)
+          walls.push({ type: "Feature", properties: { thin: 0, h: q.h }, geometry: { type: "Polygon", coordinates: [close(q.quad.map(([x, y]) => f.toLngLat(x, y)))] } });
     }
     const streets: GeoJSON.Feature[] = w.streets
       .filter((s) => s.pts.length >= 2)

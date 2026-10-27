@@ -16,6 +16,7 @@ import { decodeTerrariumPixels, TERRARIUM_SIZE } from "./terrain";
 export type BBox = [number, number, number, number];
 export interface Poly {
   cls: string;
+  sub: string; // subclass ("" when none): heath, scrub, marsh, bare_rock, ...
   bbox: BBox;
   rings: number[][]; // flat [x, y, x, y, ...] per ring; even-odd across all rings
 }
@@ -123,7 +124,7 @@ export function getLandTile(x: number, y: number): Promise<LandTile> {
         const f = layer.feature(i);
         if (f.type !== 3 || !keep(f.properties)) continue;
         const rings = f.loadGeometry();
-        list.push({ cls: String(f.properties.class ?? ""), bbox: bboxOf(rings), rings: rings.map(flat) });
+        list.push({ cls: String(f.properties.class ?? ""), sub: String(f.properties.subclass ?? ""), bbox: bboxOf(rings), rings: rings.map(flat) });
       }
     }
     return out;

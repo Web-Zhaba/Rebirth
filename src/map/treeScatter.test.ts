@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DAYS_PER_SEASON, START_MINUTE_OF_DAY } from "../sim/clock";
 import { TREE_COLORS } from "../ui/palette";
-import { buildTree, crownAt } from "./treeModels";
+import { buildTree, crownAt, KIND_INFO, reedAt } from "./treeModels";
 import { impostorRadius } from "./treeImpostor";
-import { coniferShare, keepAt, MIN_KEEP, scatterTrees, thinReach, TREE_KINDS, TREE_STRIDE, type ForestPoly } from "./treeScatter";
+import { coniferShare, keepAt, MIN_KEEP, scatterDetails, scatterTrees, thinReach, TREE_KINDS, TREE_STRIDE, type DetailPoly, type ForestPoly } from "./treeScatter";
 
 const square = (x0: number, y0: number, x1: number, y1: number): ForestPoly => ({ bbox: [x0, y0, x1, y1], rings: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1]]] });
 const base = { rect: [-400, -400, 400, 400] as [number, number, number, number], spacing: 6, lat: 59, blocked: () => false };
@@ -66,13 +66,14 @@ describe("trees", () => {
         expect(Math.max(...z)).toBeLessThanOrEqual(1.0001);
         return t.indices.length / 3;
       });
-      expect(buildTree(kind, 0).crown).toContain(0); // the full tree has a trunk
       expect(tris[1]).toBeLessThanOrEqual(6);
       // the impostor's view holds the whole tree, turned any way about its middle, and not much more
       const r = impostorRadius(buildTree(kind, 0));
       expect(r).toBeGreaterThan(0.5);
-      expect(r).toBeLessThan(0.65);
+      expect(r).toBeLessThan(KIND_INFO[kind].tall > 5 ? 0.65 : 0.9);
     }
+    for (const kind of ["conifer", "broadleaf", "birch", "reed"] as const) expect(buildTree(kind, 0).crown).toContain(0); // a trunk, or the reeds' heads
+    expect(buildTree("boulder", 0).crown).not.toContain(0); // snow lies all over a boulder
   });
 
   it("turns deciduous crowns with the seasons", () => {
@@ -81,6 +82,36 @@ describe("trees", () => {
     expect(crownAt(at(1, 3))).toMatchObject({ a: TREE_COLORS.summer, bare: 0 });
     expect(crownAt(at(2, 5)).a).toBe(TREE_COLORS.autumn);
     expect(crownAt(at(3, 4)).bare).toBe(1); // winter
+  });
+});
+
+describe("details", () => {
+  const square = (x0: number, x1: number): DetailPoly["rings"] => [[[x0, 0], [x1, 0], [x1, 100], [x0, 100]]];
+  const polys: DetailPoly[] = [
+    { bbox: [0, 0, 50, 100], rings: square(0, 50), mix: { reed: { share: 0.8, size: [1, 2] } } },
+    { bbox: [50, 0, 100, 100], rings: square(50, 100), mix: { boulder: { share: 0.5, size: [0.5, 2] }, bush: { share: 0.3, size: [0.5, 1] } } },
+  ];
+  const all = scatterDetails({ polys, rect: [0, 0, 100, 100], blocked: () => false });
+  const recs = Array.from({ length: all.length / TREE_STRIDE }, (_, k) => all.subarray(k * TREE_STRIDE, (k + 1) * TREE_STRIDE));
+  it("grows each kind only where its ground has it, in its size range", () => {
+    const kind = (name: string) => recs.filter((r) => TREE_KINDS[r[3]] === name);
+    expect(kind("reed").length).toBeGreaterThan(100);
+    expect(kind("reed").every((r) => r[0] < 50 && r[2] >= 1 && r[2] <= 2)).toBe(true);
+    expect(kind("boulder").every((r) => r[0] >= 50 && r[2] >= 0.5 && r[2] <= 2)).toBe(true);
+    expect(kind("bush").length).toBeGreaterThan(20);
+    expect(recs.some((r) => TREE_KINDS[r[3]] === "conifer")).toBe(false);
+  });
+  it("stays put whichever rect builds it, and keeps off blocked ground", () => {
+    const a = scatterDetails({ polys, rect: [0, 0, 60, 100], blocked: () => false });
+    const b = scatterDetails({ polys, rect: [60, 0, 100, 100], blocked: () => false });
+    expect(a.length + b.length).toBe(all.length);
+    expect(scatterDetails({ polys, rect: [0, 0, 100, 100], blocked: (x) => x < 50 }).length).toBeLessThan(all.length / 2);
+  });
+  it("dries the reeds in the autumn and greens them in the summer", () => {
+    const at = (season: number, day: number) => (season * DAYS_PER_SEASON + day) * 1440 + 12 * 60 - START_MINUTE_OF_DAY;
+    const col = (r: ReturnType<typeof reedAt>) => (r.t > 0.5 ? r.b : r.a);
+    expect(col(reedAt(at(1, 4)))).toBe(TREE_COLORS.reed);
+    expect(col(reedAt(at(3, 2)))).toBe(TREE_COLORS.reedDry);
   });
 });
 

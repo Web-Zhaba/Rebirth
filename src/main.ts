@@ -7,6 +7,7 @@ import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachForest } from "./map/forest";
 import { attachWater } from "./map/water";
+import { attachFields3d } from "./map/fields3d";
 import { attachModels } from "./map/models";
 import { attachCityMarker } from "./map/cityLayer";
 import { attachExcavation, oldWorld } from "./map/excavation";
@@ -16,7 +17,7 @@ import { attachRevealTool } from "./map/revealTool";
 import { attachReachLayer } from "./map/reachLayer";
 import { attachRelief } from "./map/relief";
 import { attachRoadLayer } from "./map/roadLayer";
-import { attachRuinsLayer } from "./map/ruinsLayer";
+import { attachRuinsLayer, ruinsShown } from "./map/ruinsLayer";
 import { attachRoadTool } from "./map/roadTool";
 import { attachLifeLayer } from "./map/lifeLayer";
 import { attachClouds } from "./map/clouds/attach";
@@ -59,8 +60,10 @@ const cloudSite = computed(() => {
   return w ? { seed: w.seed, phase: w.phase } : null;
 });
 const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
-attachForest(map, { light: sunLight, weather: weatherNow }); // 3D trees in the forest around the town, close up
+// 3D trees in the forest around the town, close up, with bushes, reeds, boulders and the overgrown old foundations
+attachForest(map, { light: sunLight, weather: weatherNow, ruins: computed(() => (ruinsShown.value ? (oldWorld.value?.foundations ?? null) : null)) });
 attachWater(map, { light: sunLight, weather: weatherNow }); // 3D water, close up
+attachFields3d(map, { light: sunLight, weather: weatherNow }); // ploughland and crops on the farm fields, close up
 // Clouds above everything on the map, visible only on the far globe views; their ground shadows at every zoom, just
 // under the night tint (so the lights stay bright).
 attachClouds(map, {

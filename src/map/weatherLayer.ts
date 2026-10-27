@@ -19,7 +19,7 @@ const GROUND = [SNOW, WATER, ICE];
 // The 3D layers and what sits over them: on the flat map the snow, the water and the ice go under these, or they
 // would paint over the trees and the buildings that stand in front of the water (on the relief MapLibre lays all the
 // fills on the ground anyway). The haze stays over everything.
-const ABOVE_GROUND = ["building-models", "forest-trees", "buildings-outline"];
+const ABOVE_GROUND = ["fields-3d", "building-models", "forest-trees", "buildings-outline"];
 const HILLSHADE = "hillshade";
 
 const WATER_FILTER: FilterSpecification = [

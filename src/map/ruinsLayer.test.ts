@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { doneKinds } from "../sim/heritage";
-import { insetRing, streetWidth } from "./ruinsLayer";
+import { brokenWalls, insetRing, streetWidth, WALL_HEIGHT } from "./ruinsLayer";
 import type { XY } from "../world/oldworld";
 
 const area = (r: XY[]) => {
@@ -70,5 +70,24 @@ describe("doneKinds", () => {
   it("lists kinds with a restoring or restored site, not lost or untouched ones", () => {
     const k = doneKinds([{ cls: "castle", state: "restored" }, { cls: "school", state: "restoring" }, { cls: "library", state: "lost" }, { cls: "museum" }, { state: "restored" }]);
     expect([...k].sort()).toEqual(["castle", "school"]);
+  });
+});
+
+describe("brokenWalls", () => {
+  const house: XY[] = [[0, 0], [12, 0], [12, 8], [0, 8]];
+  it("breaks the walls into pieces of different heights, the same every time", () => {
+    const a = brokenWalls(house, "way/1", 9)!;
+    expect(a.length).toBeGreaterThanOrEqual(14); // 40 m of wall in ~2.5 m pieces
+    const hs = a.map((q) => q.h);
+    expect(new Set(hs).size).toBeGreaterThan(5);
+    expect(Math.min(...hs)).toBeLessThan(WALL_HEIGHT);
+    expect(Math.max(...hs)).toBeLessThanOrEqual(3);
+    expect(brokenWalls(house, "way/1", 9)).toEqual(a);
+    expect(brokenWalls(house, "way/2", 9)!.map((q) => q.h)).not.toEqual(hs);
+  });
+  it("covers the band of the wall and nothing for a ring too thin", () => {
+    const sum = brokenWalls(house, "x")!.reduce((s, q) => s + Math.abs(area(q.quad)), 0);
+    expect(sum).toBeCloseTo(12 * 8 - 11 * 7, 6);
+    expect(brokenWalls([[0, 0], [10, 0], [10, 0.6], [0, 0.6]], "x")).toBeNull();
   });
 });

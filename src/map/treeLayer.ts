@@ -27,7 +27,7 @@ import { groundAt, loadGround, reliefScale } from "./relief";
 import { WIND_DIR } from "./weatherMath";
 import { forest3dOn, motionOn, motionTime, showWhile } from "./graphicsSettings";
 import { bakeImpostor, IMPOSTOR_STEP, IMPOSTOR_VIEWS, impostorQuad, treeGeometry, type Impostor } from "./treeImpostor";
-import { buildTree, crownAt, TREE_LODS } from "./treeModels";
+import { buildTree, crownAt, KIND_INFO, leafOf, reedAt, TREE_LODS } from "./treeModels";
 import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
 import { chunksInView } from "./chunkView";
 import { eyeOf, frustumPlanes } from "./three/frame";
@@ -50,6 +50,10 @@ import { acquireHost, type ThreeHost } from "./three/host";
 // Close up only: below TREES_FROM_ZOOM the forest is the 2D fill alone, and up to GROW_TO the trees grow in. Deciduous
 // crowns follow the season (bare in winter), snow lies on the crowns while there is a snowpack, and the trees sway in
 // the wind of the weather (westerly, the zonal wind of sim/weather.ts).
+//
+// The small details of stage 6 (bushes, reeds, boulders: treeScatter.ts DETAIL_KINDS) ride in the same chunks and
+// meshes, each kind drawn as far as its own typical height stays MIN_PX tall (treeModels.ts KIND_INFO), at most
+// DETAIL_CAP: full near, impostors beyond DETAIL_NEAR. They are few against the trees and never thinned.
 
 export const TREE_LAYER_ID = "forest-trees";
 const GROW_TO = TREES_FROM_ZOOM + 1;
@@ -67,6 +71,8 @@ const FRAME_BUDGET = 4; // ms of chunk building per frame
 const ASSEMBLE_EVERY = 100; // ms: the instance buffers are refilled at most this often while the view changes
 const SINK = 0.3; // m: trunks start below the ground, which our samples follow only closely on slopes
 const WIND_FULL = 14; // m/s: full sway
+const DETAIL_CAP = 2000; // m from the camera at most for the details
+const DETAIL_NEAR = 60; // m: full details within
 const PER = 10; // floats per instance: globe base (3), mercator base (3), size, turn, hash, shade
 
 // Level 1 is built with IMPOSTOR defined: a quad (treeImpostor.ts) instead of the tree's mesh.
@@ -218,7 +224,7 @@ interface Chunk {
   i: number;
   j: number;
   kinds: Float32Array[];
-  n: number; // trees in all
+  n: number; // trees in all (the details are not thinned and do not count)
   lod: number; // the level it was last drawn at (levels switch with some slack, so they do not flicker)
   seen: number; // frame it was last under the screen
   stale: boolean; // what it stands on changed: built again when in view, drawn as it was until then
@@ -232,6 +238,7 @@ interface Slot {
 }
 
 const chunkKey = (i: number, j: number) => `${i},${j}`;
+const isTree = TREE_KINDS.map((kind) => KIND_INFO[kind].tall > 5);
 const overlaps = (c: Chunk, b: Box) => (c.i + 1) * CHUNK >= b[0] && c.i * CHUNK <= b[2] && (c.j + 1) * CHUNK >= b[1] && c.j * CHUNK <= b[3];
 
 export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): maplibregl.CustomLayerInterface {
@@ -291,14 +298,15 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       return out;
     });
-    return { i, j, kinds, n: kinds.reduce((a, q) => a + q.length / PER, 0), lod: -1, seen: 0, stale: false };
+    return { i, j, kinds, n: kinds.reduce((a, q, kind) => a + (isTree[kind] ? q.length / PER : 0), 0), lod: -1, seen: 0, stale: false };
   };
 
-  // Refills the instance buffers from the chosen chunks (a buffer is replaced only when it has to grow).
+  // Refills the instance buffers from the chosen chunks (a buffer is replaced only when it has to grow). lods: per kind,
+  // the level the chunk draws it at, -1 not at all.
   const taken = (a: Float32Array, keep: number) => Math.round((a.length / PER) * keep);
-  const assemble = (chosen: { c: Chunk; lod: number; keep: number }[]) => {
+  const assemble = (chosen: { c: Chunk; lods: number[]; keep: number }[]) => {
     const counts = slots.map(() => 0);
-    for (const { c, lod, keep } of chosen) c.kinds.forEach((a, kind) => (counts[kind * TREE_LODS + lod] += taken(a, keep)));
+    for (const { c, lods, keep } of chosen) c.kinds.forEach((a, kind) => lods[kind] >= 0 && (counts[kind * TREE_LODS + lods[kind]] += taken(a, isTree[kind] ? keep : 1)));
     slots.forEach((s, k) => {
       if (!s.buf || s.buf.count < counts[k]) {
         // a new geometry, not new attributes on the old one: three keeps the instance limit of the first binding
@@ -315,9 +323,10 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       s.count = 0;
     });
-    for (const { c, lod, keep } of chosen)
+    for (const { c, lods, keep } of chosen)
       c.kinds.forEach((a, kind) => {
-        const s = slots[kind * TREE_LODS + lod], n = taken(a, keep);
+        if (lods[kind] < 0) return;
+        const s = slots[kind * TREE_LODS + lods[kind]], n = taken(a, isTree[kind] ? keep : 1);
         (s.buf!.array as Float32Array).set(a.subarray(0, n * PER), s.count * PER);
         s.count += n;
       });
@@ -360,14 +369,14 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
               uEye: { value: new Vector3() },
               uReach: { value: 1e9 },
               uFar: { value: 1e9 },
-              uSeasonal: { value: kind === "conifer" ? 0 : 1 },
+              uSeasonal: { value: KIND_INFO[kind].season ? 1 : 0 },
               uBare: { value: 0 },
               uSnow: { value: 0 },
               uCrownA: { value: new Vector3(...rgb(TREE_COLORS.summer)) },
               uCrownB: { value: new Vector3(...rgb(TREE_COLORS.summer)) },
               uBareCol: { value: new Vector3(...rgb(TREE_COLORS.bare)) },
               uSnowCol: { value: new Vector3(...rgb(TREE_COLORS.snow)) },
-              uLeafBase: { value: new Vector3(...rgb(TREE_COLORS.summer)) },
+              uLeafBase: { value: new Vector3(...rgb(leafOf(kind))) },
             },
             vertexShader: VERT,
             fragmentShader: FRAG,
@@ -443,7 +452,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const [elng, elat] = merc.from(eye[0], eye[1]);
       const [ex, ey] = tf.toLocal(elng, elat);
       const fov = ((map as unknown as { transform?: { fov?: number } }).transform?.fov ?? 36.87) * (Math.PI / 180);
-      const far = Math.min(FAR_CAP, (TALL * 0.5 * map.getCanvas().clientHeight) / Math.tan(fov / 2) / MIN_PX);
+      const farOf = (tall: number) => (tall * 0.5 * map.getCanvas().clientHeight) / Math.tan(fov / 2) / MIN_PX;
+      const far = Math.min(FAR_CAP, farOf(TALL));
+      const farK = TREE_KINDS.map((kind, k) => (isTree[k] ? far : Math.min(DETAIL_CAP, farOf(KIND_INFO[kind].tall))));
       farNow = far;
       const k = reliefScale.peek();
       const under = k > 0 ? (groundAt(elng, elat) ?? 0) * k : 0;
@@ -487,10 +498,15 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const step = (r: number) => REACH_STEP ** Math.floor(Math.log(r) / Math.log(REACH_STEP));
       if (want < reach) reach = step(want);
       else if (want >= reach * REACH_STEP * REACH_STEP) reach = want === Infinity ? Infinity : step(want) / REACH_STEP;
-      const chosen = ready.map((r) => ({ c: r.c, lod: r.lod, keep: r.d < NEAR ? 1 : Math.floor(keepAt(r.d, reach) * 16) / 16 }));
+      const detailLod = (d: number) => (flat ? 2 : d < DETAIL_NEAR ? 0 : 1);
+      const chosen = ready.map((r) => ({
+        c: r.c,
+        lods: TREE_KINDS.map((_, k) => (isTree[k] ? r.lod : r.d < farK[k] ? detailLod(r.d) : -1)),
+        keep: r.d < NEAR ? 1 : Math.floor(keepAt(r.d, reach) * 16) / 16,
+      }));
       // forget chunks long out of sight
       if (chunks.size > MAX_CHUNKS) for (const [key, c] of chunks) if (frameNo - c.seen > 600) chunks.delete(key);
-      const sig = `${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lod}:${q.keep}`).join(";");
+      const sig = `${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lods.join(",")}:${q.keep}`).join(";");
       const now = performance.now();
       if (sig !== shown) {
         if (shown === null || now - lastAssemble > ASSEMBLE_EVERY) {
@@ -514,27 +530,30 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       // uniforms of this frame
       const clock = opts.light?.clock.peek() ?? 0;
-      const crown = crownAt(clock);
+      const crown = crownAt(clock), reed = reedAt(clock);
       const w = opts.weather.peek();
       const wind = Math.min(1, (w?.now.wind ?? 2) / WIND_FULL);
       const snow = Math.min(1, (w?.snowpack ?? 0) / 0.05);
       const grow = Math.min(1, (zoom - TREES_FROM_ZOOM) / (GROW_TO - TREES_FROM_ZOOM));
-      const a = rgb(crown.a), b = rgb(crown.b);
-      for (const mat of mats) {
+      const leafCols = [rgb(crown.a), rgb(crown.b), crown.t] as const, reedCols = [rgb(reed.a), rgb(reed.b), reed.t] as const;
+      mats.forEach((mat, m) => {
+        const kind = Math.floor(m / TREE_LODS), info = KIND_INFO[TREE_KINDS[kind]];
         const u = mat.uniforms;
-        framer.set(u, args, host, origin);
+        framer.set(u, args, host!, origin!);
         u.uTime.value = motionTime();
         (u.uEye.value as Vector3).set(...eye);
-        u.uReach.value = Math.min(reach, 1e9);
-        u.uFar.value = far;
+        u.uReach.value = isTree[kind] ? Math.min(reach, 1e9) : 1e9;
+        u.uFar.value = farK[kind];
         u.uGrow.value = grow * grow * (3 - 2 * grow);
-        (u.uWind.value as Vector3).set(WIND_DIR[0], WIND_DIR[1], flat ? 0 : wind);
-        const seasonal = u.uSeasonal.value > 0.5;
-        u.uBare.value = seasonal ? crown.bare : 0;
-        (u.uCrownA.value as Vector3).set(a[0] + (b[0] - a[0]) * crown.t, a[1] + (b[1] - a[1]) * crown.t, a[2] + (b[2] - a[2]) * crown.t);
+        (u.uWind.value as Vector3).set(WIND_DIR[0], WIND_DIR[1], flat ? 0 : wind * info.sway);
+        // seasonal crowns: leaves mix two colours and drop in the winter, letting the snow through to the twigs;
+        // reeds turn to straw and keep standing, a little snow caught in them
+        const [a, b, t] = info.season === "reed" ? reedCols : leafCols;
+        u.uBare.value = info.season === "leaf" ? crown.bare : 0;
+        (u.uCrownA.value as Vector3).set(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t);
         (u.uCrownB.value as Vector3).set(...b);
-        u.uSnow.value = seasonal ? snow * crown.bare * 0.6 : snow;
-      }
+        u.uSnow.value = info.season === "leaf" ? snow * crown.bare * 0.6 : info.season === "reed" ? snow * 0.4 : snow;
+      });
       host.draw((r) => {
         // the impostors write their coverage to the alpha (alphaToCoverage): keep it off the canvas, which stays opaque
         const color = r.state.buffers.color;

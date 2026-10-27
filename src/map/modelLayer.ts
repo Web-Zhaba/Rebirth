@@ -416,6 +416,11 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
   let scene: Scene | null = null;
   let mesh: Mesh | null = null;
   let mat: ShaderMaterial | null = null;
+  // roads: a mesh of their own, drawn first without depth writes; ribbons of two chains overlap at a junction, and
+  // with depth writes their equal depths would flip per pixel (flicker)
+  let roadScene: Scene | null = null;
+  let roadMesh: Mesh | null = null;
+  let roadMat: ShaderMaterial | null = null;
   let lampScene: Scene | null = null;
   let lampMesh: Mesh | null = null;
   let lampMat: ShaderMaterial | null = null;
@@ -425,8 +430,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
   const cache = new Map<string, Packed>();
   const camera = new Camera();
 
-  const fill = (b: Packed) => {
-    if (!mesh) return;
+  const fill = (target: Mesh, b: Packed) => {
     const geo = new BufferGeometry();
     geo.setAttribute("position", new BufferAttribute(b.g, 3));
     geo.setAttribute("aMerc", new BufferAttribute(b.m, 3));
@@ -436,10 +440,10 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     geo.setAttribute("aLamp", new BufferAttribute(b.l, 1));
     geo.setAttribute("aZ", new BufferAttribute(b.z, 1));
     geo.setIndex(new BufferAttribute(b.i, 1));
-    mesh.geometry.dispose();
-    mesh.geometry = geo;
-    mesh.visible = b.i.length > 0;
-    if (lampMesh) lampMesh.geometry = geo;
+    target.geometry.dispose();
+    target.geometry = geo;
+    target.visible = b.i.length > 0;
+    if (target === mesh && lampMesh) lampMesh.geometry = geo;
   };
 
   // Rebuilds the merged mesh; runs once per change of the item list (or the town frame), never per frame.
@@ -469,17 +473,18 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       };
     }
     const used = new Set<string>();
-    const packs: Packed[] = [];
+    const packs: Packed[] = [], roadPacks: Packed[] = [];
     for (const it of items) {
       const p = it.style === "road" ? 1 : quantise(it.progress);
       const key = keyOf(it, p, k);
       used.add(key);
       let pack = cache.get(key);
       if (!pack) cache.set(key, (pack = projectModel(seatedModelOf({ ...it, progress: p }, ground), tf.toLngLat, origin, p >= 1 ? lampOf(it) : 0)));
-      packs.push(pack);
+      (it.style === "road" ? roadPacks : packs).push(pack);
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
-    fill(mergePacked(packs));
+    fill(mesh, mergePacked(packs));
+    fill(roadMesh!, mergePacked(roadPacks));
     dirty = false;
   };
 
@@ -508,6 +513,19 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       mesh = Object.assign(new Mesh(new BufferGeometry(), mat), { frustumCulled: false, visible: false });
       scene = new Scene();
       scene.add(mesh);
+      roadMat = new ShaderMaterial({
+        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uTint: { value: new Vector4() } },
+        vertexShader: VERT,
+        fragmentShader: FRAG,
+        side: DoubleSide,
+        blending: NoBlending,
+        depthTest: true,
+        depthWrite: false,
+        depthFunc: LessEqualDepth,
+      });
+      roadMesh = Object.assign(new Mesh(new BufferGeometry(), roadMat), { frustumCulled: false, visible: false });
+      roadScene = new Scene();
+      roadScene.add(roadMesh);
       lampMat = new ShaderMaterial({
         uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLamp: { value: new Vector3() } },
         vertexShader: VERT,
@@ -541,19 +559,25 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       mesh?.geometry.dispose();
       mat?.dispose();
       lampMat?.dispose();
+      roadMesh?.geometry.dispose();
+      roadMat?.dispose();
       lampScene = lampMesh = lampMat = null;
       host?.release();
       host = null;
       scene = mesh = mat = null;
+      roadScene = roadMesh = roadMat = null;
       cache.clear();
     },
     render(_gl, args) {
-      if (!host || !scene || !mesh || !mat) return;
+      if (!host || !scene || !mesh || !mat || !roadScene || !roadMesh || !roadMat) return;
       if (dirty) rebuild();
-      if (!origin || !mesh.visible) return;
-      const u = mat.uniforms;
-      setFrame(u, args);
-      host.draw((r) => r.render(scene!, camera));
+      if (!origin || (!mesh.visible && !roadMesh.visible)) return;
+      setFrame(mat.uniforms, args);
+      setFrame(roadMat.uniforms, args);
+      host.draw((r) => {
+        r.render(roadScene!, camera);
+        r.render(scene!, camera);
+      });
     },
   };
   // Window lights: the same mesh, glass only, when some light is on at this hour.

@@ -182,9 +182,29 @@ export const TREE_COLORS = {
   autumnLate: "#a5562a",
   bare: "#7a6a58",
   snow: "#f3f4ef",
+  reed: "#6f8a45",
+  reedDry: "#b8a26c",
+  cattail: "#5e4430",
+  stone: "#8e8b82",
 } as const;
 
-export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();
+// Farm fields of the 3D map (fieldLayer.ts): soil, the crop through the year, stubble, the grass of the headland and of
+// fields no farm works. Map only.
+export const FIELD_COLORS = {
+  soil: "#4d3b2b", // freshly ploughed
+  soilDry: "#6b5540", // the ridges, dried
+  shoot: "#9cc063", // young shoots
+  crop: "#5f8a38", // dense green
+  ripe: "#d6b455", // gold
+  straw: "#cfbd7c", // stubble
+  stubbleRow: "#a58f57",
+  grass: "#7f9c52", // the headland strip
+  fallow: "#8b9c5b", // a field no farm works: grass and weeds
+  fallowDry: "#a29a62",
+  snow: "#f3f4ef",
+} as const;
+
+export const toKebab =(k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();
 
 // "#rrggbb" mixed towards another by t (0..1).
 export function mixHex(a: string, b: string, t: number): string {
