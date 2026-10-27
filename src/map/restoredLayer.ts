@@ -1,7 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import type { ReadonlySignal } from "@preact/signals";
 import { effect, signal } from "@preact/signals";
-import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, OneFactor, OneMinusSrcAlphaFactor, Scene, ShaderMaterial, Vector3 } from "three";
+import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, Scene, ShaderMaterial, Vector3 } from "three";
 import { sunDirection } from "../sim/weather";
 import type { Building } from "../sim/types";
 import type { Frame as TownFrame } from "../world/frame";
@@ -20,10 +20,8 @@ import { acquireHost, type ThreeHost } from "./three/host";
 // LEQUAL, read-write, 3D depth range) before `render`, and the materials keep depth test on, so meshes and fill-extrusions
 // occlude each other per pixel.
 //
-// GL-state contract (host.draw resets three's state, so each material states everything it needs):
-// - finished buildings: one opaque mesh, NoBlending, depth test LEQUAL + write, DoubleSide;
-// - buildings under construction: one pale mesh drawn after it, premultiplied blending (ONE, ONE_MINUS_SRC_ALPHA, as
-//   MapLibre custom layers composite), depth test on, depth write off.
+// GL-state contract (host.draw resets three's state, so the material states everything it needs): one opaque mesh for
+// finished buildings and building sites alike, NoBlending, depth test LEQUAL + write, DoubleSide.
 // The layer is added before "night-tint" (like the cloud shadows), so the dusk tint and the cloud shadows darken it.
 //
 // Projection: each vertex is stored twice (restoredBuffers.ts), in a globe tangent frame and in a mercator frame, both in
@@ -37,16 +35,17 @@ import { acquireHost, type ThreeHost } from "./three/host";
 //
 // Lighting: faces are shaded by the sun direction (sim/weather sunDirection, in the town's east/north/up frame) like the
 // fill-extrusions' default light: unlit faces at about half brightness. With the sun down (or no clock given) a fixed
-// fallback direction is used, slightly dimmer; the night tint layer above darkens everything else.
+// fallback direction is used, slightly dimmer; the night tint layer above darkens everything else. Walls darken towards
+// the ground. Windows, log courses and shingle rows are painted from each vertex's facade code (heritageModels.ts PATTERN)
+// and fade to their average tone once they shrink to a few pixels, so distant towns do not shimmer.
 
 export const RESTORED_LAYER_ID = "restored-buildings";
 const R = EARTH_RADIUS_M;
-const SCAFFOLD_ALPHA = 0.72;
 const PROGRESS_STEPS = 24; // progress < 1 is quantised, so a slowly growing site does not rebuild its model every tick
 const FALLBACK_LIGHT: [number, number, number] = [-0.45, -0.55, 0.7];
 
 // A building to draw: ring in town-local metres, eaves height in metres, OSM kind (the `cls` of src/sim/heritage.ts),
-// progress 0..1 (below 1 the pale scaffold look: walls only, as high as the progress allows).
+// progress 0..1 (below 1 the building-site look: log walls as high as the progress allows, corner posts at full height).
 export interface RestoredItem {
   id: string | number;
   ring: XY[];
@@ -69,11 +68,14 @@ export interface RestoredOptions {
 const VERT = /* glsl */ `
 attribute vec3 aMerc;
 attribute vec3 aColor;
+attribute vec4 aFacade;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
 varying vec3 vN;
 varying vec3 vC;
+varying vec4 vF;
+varying float vZ;
 void main() {
   vec4 m = uM * vec4(aMerc, 1.0);
   vec4 g = uG * vec4(position, 1.0);
@@ -81,18 +83,68 @@ void main() {
   gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
   vN = normal;
   vC = aColor;
+  vF = aFacade;
+  vZ = aMerc.z; // height above the ground in metres
 }`;
 
+// Facade codes (heritageModels.ts PATTERN): 1 house, 2 hall, 3 worship, 4 log courses, 5 wide, 6 tower, 7 roof rows.
 const FRAG = /* glsl */ `
 uniform vec3 uLight;
 uniform float uSun;
-uniform float uAlpha;
 varying vec3 vN;
 varying vec3 vC;
+varying vec4 vF;
+varying float vZ;
+
+// Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
+// metres along s and z; once windows get that small the grid turns into its average coverage.
+float windows(float s, float len, float z, float top, float aw, float az, float floorH, float sill, float wh, float ww, float sp) {
+  float n = len >= ww + 1.4 ? floor((len - 1.4 - ww) / sp) + 1.0 : 0.0;
+  float fl = floor(z / floorH);
+  if (n < 1.0 || fl * floorH + sill + wh > top - 0.25) return 0.0;
+  float start = (len - (n - 1.0) * sp) * 0.5;
+  float c = clamp(floor((s - start) / sp + 0.5), 0.0, n - 1.0);
+  float dx = abs(s - start - c * sp);
+  float zl = z - fl * floorH;
+  float mx = 1.0 - smoothstep(ww * 0.5 - aw, ww * 0.5 + aw, dx);
+  float mz = smoothstep(sill - az, sill + az, zl) * (1.0 - smoothstep(sill + wh - az, sill + wh + az, zl));
+  float far = smoothstep(0.25, 0.6, max(aw / ww, az / wh));
+  return mix(mx * mz, 0.7 * ww * wh / (sp * floorH), far);
+}
+
+// Dark seams every "period" metres of height (log courses, shingle rows), gone once they get thinner than a pixel.
+float seams(float z, float az, float period) {
+  float f = fract(z / period);
+  return smoothstep(0.8, 0.9, f) * (1.0 - smoothstep(0.2, 0.5, az / period));
+}
+
 void main() {
-  float d = max(dot(normalize(vN), uLight), 0.0);
+  float z = vZ;
+  float aw = max(fwidth(vF.x), 1e-4), az = max(fwidth(z), 1e-4); // outside any branch: derivatives need uniform flow
+  int p = int(vF.w + 0.5);
+  vec3 col = vC;
+  // window grid per facade: floor height, sill, window height, width, spacing (metres)
+  vec4 g = vec4(0.0);
+  float sp = 0.0;
+  if (p == 1) { g = vec4(3.0, 0.9, 1.25, 1.0); sp = 2.6; }
+  else if (p == 2) { g = vec4(3.8, 1.0, 2.0, 1.3); sp = 3.0; }
+  else if (p == 3) { g = vec4(100.0, 2.2, clamp(vF.z - 3.4, 1.4, 4.0), 0.9); sp = 3.4; }
+  else if (p == 5) { g = vec4(4.5, 2.0, 1.6, 2.4); sp = 3.4; }
+  else if (p == 6) { g = vec4(3.5, 1.2, 1.3, 0.55); sp = 2.2; }
+  else if (p == 4) col *= 1.0 - 0.2 * seams(z, az, 0.32);
+  else if (p == 7) col *= 1.0 - 0.12 * seams(z, az, 0.42);
+  if (sp > 0.0) {
+    // glass inside a light frame 0.1 m wide
+    float glass = windows(vF.x, vF.y, z, vF.z, aw, az, g.x, g.y, g.z, g.w, sp);
+    float frame = windows(vF.x, vF.y, z, vF.z, aw, az, g.x, g.y - 0.1, g.z + 0.2, g.w + 0.2, sp);
+    col = mix(col, mix(col, vec3(0.95, 0.92, 0.84), 0.6), max(frame - glass, 0.0));
+    col = mix(col, vec3(0.22, 0.25, 0.28), glass);
+  }
+  vec3 n = normalize(vN);
+  float d = max(dot(n, uLight), 0.0);
   float k = mix(0.55, 1.0, d) * mix(0.88, 1.0, uSun);
-  gl_FragColor = vec4(vC * k * uAlpha, uAlpha); // premultiplied (alpha 1 for opaque)
+  if (abs(n.z) < 0.5) k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z)); // walls darken towards the ground
+  gl_FragColor = vec4(col * k, 1.0);
 }`;
 
 function mul4(a: ArrayLike<number>, b: ArrayLike<number>, out = new Float64Array(16)): Float64Array {
@@ -123,10 +175,8 @@ export type RestoredLayer = maplibregl.CustomLayerInterface;
 export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions): RestoredLayer {
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
-  let done: Mesh | null = null; // finished buildings
-  let site: Mesh | null = null; // under construction
-  let doneMat: ShaderMaterial | null = null;
-  let siteMat: ShaderMaterial | null = null;
+  let mesh: Mesh | null = null;
+  let mat: ShaderMaterial | null = null;
   let stop: (() => void) | null = null;
   let dirty = true;
   let origin: { lng: number; lat: number } | null = null; // the layer origin the buffers were built for
@@ -142,6 +192,7 @@ export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions):
     geo.setAttribute("aMerc", new BufferAttribute(new Float32Array(b.m), 3));
     geo.setAttribute("normal", new BufferAttribute(new Float32Array(b.n), 3));
     geo.setAttribute("aColor", new BufferAttribute(new Float32Array(b.c), 3));
+    geo.setAttribute("aFacade", new BufferAttribute(new Float32Array(b.f), 4));
     geo.setIndex(new BufferAttribute(new Uint32Array(b.i), 1));
     mesh.geometry.dispose();
     mesh.geometry = geo;
@@ -151,10 +202,10 @@ export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions):
   // Rebuilds the merged meshes; runs once per change of the item list (or the town frame), never per frame.
   const rebuild = () => {
     const tf = opts.frame.peek();
-    if (!done || !site || !tf) return;
+    if (!mesh || !tf) return;
     const [lng, lat] = tf.toLngLat(0, 0);
     origin = { lng, lat };
-    const a = emptyBuffers(), b = emptyBuffers();
+    const a = emptyBuffers();
     const used = new Set<string>();
     for (const it of opts.items.peek()) {
       const p = quantise(it.progress);
@@ -162,28 +213,22 @@ export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions):
       used.add(key);
       let model = cache.get(key);
       if (!model) cache.set(key, (model = modelOf({ ...it, progress: p })));
-      appendModel(p >= 1 ? a : b, model, tf.toLngLat, origin);
+      appendModel(a, model, tf.toLngLat, origin);
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
-    fill(done, a);
-    fill(site, b);
+    fill(mesh, a);
     dirty = false;
   };
 
-  const material = (alpha: number, transparent: boolean) =>
+  const material = () =>
     new ShaderMaterial({
-      uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uAlpha: { value: alpha } },
+      uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 } },
       vertexShader: VERT,
       fragmentShader: FRAG,
       side: DoubleSide,
-      transparent,
-      blending: transparent ? CustomBlending : NoBlending,
-      blendSrc: OneFactor,
-      blendDst: OneMinusSrcAlphaFactor,
-      blendSrcAlpha: OneFactor,
-      blendDstAlpha: OneMinusSrcAlphaFactor,
+      blending: NoBlending,
       depthTest: true,
-      depthWrite: !transparent,
+      depthWrite: true,
       depthFunc: LessEqualDepth,
     });
 
@@ -193,12 +238,10 @@ export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions):
     renderingMode: "3d",
     onAdd(_m, gl) {
       host = acquireHost(map, gl as WebGL2RenderingContext);
-      doneMat = material(1, false);
-      siteMat = material(SCAFFOLD_ALPHA, true);
-      done = Object.assign(new Mesh(new BufferGeometry(), doneMat), { frustumCulled: false, visible: false });
-      site = Object.assign(new Mesh(new BufferGeometry(), siteMat), { frustumCulled: false, visible: false, renderOrder: 1 });
+      mat = material();
+      mesh = Object.assign(new Mesh(new BufferGeometry(), mat), { frustumCulled: false, visible: false });
       scene = new Scene();
-      scene.add(done, site);
+      scene.add(mesh);
       dirty = true;
       stop = effect(() => {
         void opts.items.value;
@@ -210,19 +253,17 @@ export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions):
     onRemove() {
       stop?.();
       stop = null;
-      done?.geometry.dispose();
-      site?.geometry.dispose();
-      doneMat?.dispose();
-      siteMat?.dispose();
+      mesh?.geometry.dispose();
+      mat?.dispose();
       host?.release();
       host = null;
-      scene = done = site = doneMat = siteMat = null;
+      scene = mesh = mat = null;
       cache.clear();
     },
     render(_gl, args) {
-      if (!host || !scene || !done || !site || !doneMat || !siteMat) return;
+      if (!host || !scene || !mesh || !mat) return;
       if (dirty) rebuild();
-      if (!origin || (!done.visible && !site.visible)) return;
+      if (!origin || !mesh.visible) return;
       const o = origin;
       const fr = host.frame(args.defaultProjectionData);
       // mercator: local metres -> clip through the fallback (always the mercator matrix)
@@ -253,13 +294,11 @@ export function createRestoredLayer(map: maplibregl.Map, opts: RestoredOptions):
           light.set(...norm3([fb[0] + (d[0] - fb[0]) * sun, fb[1] + (d[1] - fb[1]) * sun, fb[2] + (d[2] - fb[2]) * sun]));
         }
       }
-      for (const m of [doneMat, siteMat]) {
-        const u = m.uniforms;
-        (u.uM.value as Matrix4).fromArray(um);
-        (u.uG.value as Matrix4).fromArray(ug);
-        u.uT.value = fr.transition;
-        u.uSun.value = sun;
-      }
+      const u = mat.uniforms;
+      (u.uM.value as Matrix4).fromArray(um);
+      (u.uG.value as Matrix4).fromArray(ug);
+      u.uT.value = fr.transition;
+      u.uSun.value = sun;
       host.draw((r) => r.render(scene!, camera));
     },
   };

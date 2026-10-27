@@ -14,10 +14,11 @@ export interface Buffers {
   m: number[]; // mercator frame (east, north, up) at the origin latitude scale
   n: number[]; // normals, town-local (east, north, up)
   c: number[]; // colours
+  f: number[]; // facade codes, 4 per vertex (heritageModels.ts PATTERN)
   i: number[]; // triangle indices
 }
 
-export const emptyBuffers = (): Buffers => ({ g: [], m: [], n: [], c: [], i: [] });
+export const emptyBuffers = (): Buffers => ({ g: [], m: [], n: [], c: [], f: [], i: [] });
 
 // Appends a model whose x, y are town-local metres; `toLngLat` is the town frame's local -> lng/lat.
 export function appendModel(out: Buffers, model: HeritageModel, toLngLat: (x: number, y: number) => [number, number], origin: { lng: number; lat: number }): void {
@@ -42,5 +43,6 @@ export function appendModel(out: Buffers, model: HeritageModel, toLngLat: (x: nu
   }
   for (const v of model.normals) out.n.push(v);
   for (const v of model.colors) out.c.push(v);
+  for (const v of model.facade) out.f.push(v);
   for (const v of model.indices) out.i.push(base + v);
 }

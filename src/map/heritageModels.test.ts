@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MODEL_COLORS } from "../ui/palette";
-import { buildHeritageModel, buildScaffold, modelFamily, orientedBox, prepareRing, type HeritageModel, type XY } from "./heritageModels";
+import { buildHeritageModel, buildScaffold, modelFamily, orientedBox, PATTERN, pickVariant, prepareRing, ringSeed, type HeritageModel, type Variant, type XY } from "./heritageModels";
 
 const rect = (cx: number, cy: number, w: number, d: number, rot = 0): XY[] => {
   const c = Math.cos(rot), s = Math.sin(rot);
@@ -15,11 +15,14 @@ function check(m: HeritageModel): void {
   expect(n).toBeGreaterThan(0);
   expect(m.normals.length).toBe(m.positions.length);
   expect(m.colors.length).toBe(m.positions.length);
+  expect(m.facade.length).toBe((m.positions.length / 3) * 4);
   expect(m.indices.length % 3).toBe(0);
-  expect(Math.max(...m.indices)).toBeLessThan(n);
-  expect(Math.min(...m.indices)).toBeGreaterThanOrEqual(0);
-  for (const v of [...m.positions, ...m.normals, ...m.colors]) expect(Number.isFinite(v)).toBe(true);
-  for (let i = 0; i < n; i++) expect(Math.hypot(m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2])).toBeCloseTo(1, 4);
+  // one expect per property: this runs on hundreds of meshes
+  expect(m.indices.every((i) => i >= 0 && i < n)).toBe(true);
+  expect([...m.positions, ...m.normals, ...m.colors, ...m.facade].every(Number.isFinite)).toBe(true);
+  let unit = true;
+  for (let i = 0; i < n; i++) if (Math.abs(Math.hypot(m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]) - 1) > 1e-4) unit = false;
+  expect(unit).toBe(true);
 }
 const zRange = (m: HeritageModel): [number, number] => {
   const zs = m.positions.filter((_, i) => i % 3 === 2);
@@ -41,7 +44,7 @@ describe("modelFamily", () => {
     expect(modelFamily("unknown")).toBe("house");
   });
   it("has a colour set per family", () => {
-    for (const set of Object.values(MODEL_COLORS)) for (const c of Object.values(set)) expect(c).toMatch(/^#[0-9a-f]{6}$/);
+    for (const set of Object.values(MODEL_COLORS)) for (const list of Object.values(set)) for (const c of list) expect(c).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
 
@@ -76,64 +79,118 @@ describe("prepareRing", () => {
   });
 });
 
+// First seed whose variant passes `ok` (the variant is a pure function of kind, seed and box size).
+const seedWhere = (kind: string, len: number, wid: number, ok: (v: Variant) => boolean): number => {
+  for (let s = 1; s < 5000; s++) if (ok(pickVariant(kind, s, len, wid))) return s;
+  throw new Error("no seed");
+};
+const SEEDS = [1, 2, 3, 17, 99, 12345];
+
 describe("buildHeritageModel", () => {
-  it("builds valid meshes for every kind on rectangles, concave and degenerate rings", () => {
+  it("builds valid meshes for every kind on rectangles, concave and degenerate rings, whatever the seed", () => {
     for (const kind of KINDS)
-      for (const ring of [rect(100, 200, 24, 10, 0.4), rect(0, 0, 8, 8), L_SHAPE, rect(0, 0, 40, 18), rect(0, 0, 0.5, 0.5), [] as XY[]]) check(buildHeritageModel(ring, 7, kind));
+      for (const ring of [rect(100, 200, 24, 10, 0.4), rect(0, 0, 8, 8), L_SHAPE, rect(0, 0, 40, 18), rect(0, 0, 0.5, 0.5), [] as XY[]])
+        for (const seed of SEEDS) check(buildHeritageModel(ring, 7, kind, seed));
   });
   it("survives odd heights", () => {
     for (const h of [0, -3, NaN, 1e6]) check(buildHeritageModel(rect(0, 0, 12, 8), h, "house"));
   });
-  it("stays inside the ring footprint (plus nothing sticking out)", () => {
+  it("keeps a building's look: the default seed comes from the ring", () => {
     const ring = rect(50, -20, 16, 9);
-    const m = buildHeritageModel(ring, 6, "house");
-    const r = xyRange(m);
-    expect(r.x0).toBeGreaterThan(50 - 8 - 1e-6);
-    expect(r.x1).toBeLessThan(50 + 8 + 1e-6);
-    expect(r.y0).toBeGreaterThan(-20 - 4.5 - 1e-6);
-    expect(r.y1).toBeLessThan(-20 + 4.5 + 1e-6);
+    expect(buildHeritageModel(ring, 6, "house")).toEqual(buildHeritageModel(ring, 6, "house"));
+    expect(buildHeritageModel(ring, 6, "house")).toEqual(buildHeritageModel(ring, 6, "house", ringSeed(prepareRing(ring))));
   });
-  it("gives a gabled house a ridge above the eaves, within sane clamps", () => {
-    const [z0, z1] = zRange(buildHeritageModel(rect(0, 0, 14, 8), 6, "house"));
-    expect(z0).toBe(0);
-    expect(z1).toBeGreaterThan(6 + 1.2 - 1e-9);
-    expect(z1).toBeLessThanOrEqual(6 + 5.5 + 1e-9);
-    const [, big] = zRange(buildHeritageModel(rect(0, 0, 80, 60), 6, "house"));
-    expect(big).toBeLessThanOrEqual(6 + 5.5 + 1e-9);
+  it("varies roof shapes, colours and chimneys between seeds", () => {
+    const vs = Array.from({ length: 60 }, (_, s) => pickVariant("house", s + 1, 14, 8));
+    expect(new Set(vs.map((v) => v.roof)).size).toBeGreaterThanOrEqual(4);
+    expect(new Set(vs.map((v) => v.wall.join())).size).toBeGreaterThanOrEqual(3);
+    expect(vs.some((v) => v.chimneys.length) && vs.some((v) => !v.chimneys.length)).toBe(true);
+    const domes = Array.from({ length: 60 }, (_, s) => pickVariant("place_of_worship", s + 1, 30, 12));
+    expect(new Set(domes.map((v) => v.dome)).size).toBe(3);
+    expect(domes.some((v) => v.fiveDomes)).toBe(true);
   });
-  it("puts the ridge along the long axis", () => {
-    const m = buildHeritageModel(rect(0, 0, 20, 8), 5, "house");
+  it("stays on its footprint; only the eaves and cornice reach past the walls", () => {
+    const ring = rect(50, -20, 16, 9);
+    for (const kind of ["house", "station", "school"])
+      for (const seed of SEEDS) {
+        const r = xyRange(buildHeritageModel(ring, 6, kind, seed));
+        expect(r.x0).toBeGreaterThan(50 - 8 - 0.7);
+        expect(r.x1).toBeLessThan(50 + 8 + 0.7);
+        expect(r.y0).toBeGreaterThan(-20 - 4.5 - 0.7);
+        expect(r.y1).toBeLessThan(-20 + 4.5 + 0.7);
+      }
+  });
+  it("gives a house a roof above the eaves, within sane clamps", () => {
+    for (const seed of SEEDS) {
+      const [z0, z1] = zRange(buildHeritageModel(rect(0, 0, 14, 8), 6, "house", seed));
+      expect(z0).toBe(0);
+      expect(z1).toBeGreaterThan(6 + 1);
+      expect(z1).toBeLessThanOrEqual(6 + 5.5 + 1);
+      const [, big] = zRange(buildHeritageModel(rect(0, 0, 80, 60), 6, "house", seed));
+      expect(big).toBeLessThanOrEqual(6 + 5.5 + 1);
+    }
+  });
+  it("puts a gable ridge along the long axis", () => {
+    const seed = seedWhere("house", 20, 8, (v) => v.roof === "gable" && !v.chimneys.length);
+    const m = buildHeritageModel(rect(0, 0, 20, 8), 5, "house", seed);
     const top: [number, number][] = [];
     for (let i = 0; i < m.positions.length; i += 3) if (m.positions[i + 2] > 5 + 1.2) top.push([m.positions[i], m.positions[i + 1]]);
     expect(top.length).toBeGreaterThan(0);
     for (const p of top) expect(Math.abs(p[1])).toBeLessThan(1e-6);
   });
+  it("lets a pitched roof overhang the walls, dipping below the eaves", () => {
+    const seed = seedWhere("house", 14, 8, (v) => v.roof === "gable" && v.overhang > 0.4);
+    const m = buildHeritageModel(rect(0, 0, 14, 8), 6, "house", seed);
+    const r = xyRange(m);
+    expect(r.y1).toBeGreaterThan(4.4);
+    expect(Math.min(...m.positions.filter((_, i) => i % 3 === 2 && Math.abs(m.positions[i - 1]) > 4.3))).toBeLessThan(6);
+  });
   it("flat roofs stay low, with a parapet", () => {
-    const [, z1] = zRange(buildHeritageModel(rect(0, 0, 30, 20), 6, "station"));
+    const seed = seedWhere("station", 16, 12, (v) => !v.boxes.length);
+    const [, z1] = zRange(buildHeritageModel(rect(0, 0, 16, 12), 6, "station", seed));
     expect(z1).toBeCloseTo(6.6, 6);
   });
   it("hip roofs rise over the eaves", () => {
-    const [, z1] = zRange(buildHeritageModel(rect(0, 0, 30, 14), 8, "school"));
-    expect(z1).toBeGreaterThan(8.9);
-    expect(z1).toBeLessThanOrEqual(8 + 5 + 1e-9);
-  });
-  it("worship buildings carry a dome above the roof, and a bell tower when long", () => {
-    const [, short] = zRange(buildHeritageModel(rect(0, 0, 12, 10), 7, "place_of_worship"));
-    const [, long] = zRange(buildHeritageModel(rect(0, 0, 30, 10), 7, "place_of_worship"));
-    expect(short).toBeGreaterThan(7 + 3);
-    expect(long).toBeGreaterThan(short);
-    const house = zRange(buildHeritageModel(rect(0, 0, 12, 10), 7, "house"))[1];
-    expect(short).toBeGreaterThan(house);
-  });
-  it("castles and town halls get a tower over the main volume", () => {
-    for (const k of ["castle", "town_hall", "monument"]) {
-      const [, z1] = zRange(buildHeritageModel(rect(0, 0, 20, 14), 8, k));
-      expect(z1).toBeGreaterThan(8 + 3);
+    for (const seed of SEEDS) {
+      const [, z1] = zRange(buildHeritageModel(rect(0, 0, 30, 14), 8, "school", seed));
+      expect(z1).toBeGreaterThan(8.9);
+      expect(z1).toBeLessThanOrEqual(8 + 5.5 + 1);
     }
   });
+  it("worship buildings carry a dome above the roof, and a bell tower when long", () => {
+    for (const seed of SEEDS) {
+      const [, short] = zRange(buildHeritageModel(rect(0, 0, 12, 10), 7, "place_of_worship", seed));
+      const [, long] = zRange(buildHeritageModel(rect(0, 0, 30, 10), 7, "place_of_worship", seed));
+      expect(short).toBeGreaterThan(7 + 3);
+      expect(long).toBeGreaterThan(short);
+      const house = zRange(buildHeritageModel(rect(0, 0, 12, 10), 7, "house", seed))[1];
+      expect(short).toBeGreaterThan(house);
+    }
+  });
+  it("castles and town halls get a tower over the main volume", () => {
+    for (const k of ["castle", "town_hall", "monument"])
+      for (const seed of SEEDS) {
+        const [, z1] = zRange(buildHeritageModel(rect(0, 0, 20, 14), 8, k, seed));
+        expect(z1).toBeGreaterThan(8 + 3);
+      }
+  });
+  it("tags walls with their window pattern and pitched roofs with shingle rows", () => {
+    const m = buildHeritageModel(rect(0, 0, 14, 8), 6, "house", 1);
+    const pats = new Set<number>();
+    for (let i = 0; i < m.facade.length; i += 4) {
+      pats.add(m.facade[i + 3]);
+      if (m.facade[i + 3] === PATTERN.house) {
+        expect(m.facade[i]).toBeGreaterThanOrEqual(-1e-9);
+        expect(m.facade[i]).toBeLessThanOrEqual(m.facade[i + 1] + 1e-9);
+        expect(m.facade[i + 2]).toBe(6);
+      }
+    }
+    expect(pats.has(PATTERN.house)).toBe(true);
+    expect(pats.has(PATTERN.roof)).toBe(true);
+  });
   it("triangulates concave rings without covering the notch", () => {
-    // roof triangles all lie in the L; the notch centre (14, 14) must be uncovered
-    const m = buildHeritageModel(L_SHAPE, 6, "station");
+    // roof triangles all lie in the L; the notch centre (14, 14) must be uncovered (rooftop boxes stand above z = 6)
+    const m = buildHeritageModel(L_SHAPE, 6, "station", 1);
     const tris: number[][] = [];
     for (let i = 0; i < m.indices.length; i += 3) {
       const pts = [0, 1, 2].map((k) => m.indices[i + k] * 3);
@@ -147,13 +204,16 @@ describe("buildHeritageModel", () => {
 });
 
 describe("buildScaffold", () => {
+  // top of the log walls (the deck)
+  const deck = (m: HeritageModel) => Math.max(...m.positions.filter((_, i) => i % 3 === 2 && m.facade[((i - 2) / 3) * 4 + 3] === PATTERN.logs));
   it("grows with progress and never collapses to nothing", () => {
-    const [, a] = zRange(buildScaffold(rect(0, 0, 10, 8), 10, 0.5));
-    const [, b] = zRange(buildScaffold(rect(0, 0, 10, 8), 10, 1));
-    const [, c] = zRange(buildScaffold(rect(0, 0, 10, 8), 10, 0));
-    expect(a).toBeCloseTo(5, 6);
-    expect(b).toBeCloseTo(10, 6);
-    expect(c).toBeCloseTo(0.5, 6);
+    expect(deck(buildScaffold(rect(0, 0, 10, 8), 10, 0.5))).toBeCloseTo(5, 6);
+    expect(deck(buildScaffold(rect(0, 0, 10, 8), 10, 1))).toBeCloseTo(10, 6);
+    expect(deck(buildScaffold(rect(0, 0, 10, 8), 10, 0))).toBeCloseTo(0.5, 6);
     check(buildScaffold(L_SHAPE, 7, 0.3));
+  });
+  it("stands corner posts at the full height while unfinished", () => {
+    expect(zRange(buildScaffold(rect(0, 0, 10, 8), 10, 0.3))[1]).toBeCloseTo(10, 6);
+    expect(zRange(buildScaffold(rect(0, 0, 10, 8), 10, 1))[1]).toBeCloseTo(10, 6);
   });
 });

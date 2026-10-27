@@ -107,16 +107,37 @@ export const PLACED_BUILDING_COLORS = {
   healer: "#b24d46",
 } as const;
 
-// Restored old buildings drawn as 3D models (heritageModels.ts): wall, roof and accent (dome, spire, parapet) per model family.
-// Map only, like the colours above; the scaffold is the pale look of a building under construction.
+// Restored old buildings drawn as 3D models (heritageModels.ts): wall, roof and accent (dome, spire, chimney, cornice)
+// choices per model family; each building picks one of each from its seed. Map only, like the colours above; the
+// scaffold is the timber look of a building under construction (wall = log courses, roof = deck, accent = posts).
 export const MODEL_COLORS = {
-  house: { wall: "#c9b48a", roof: "#94503a", accent: "#6d4f2a" },
-  worship: { wall: "#e2dac4", roof: "#5f7a52", accent: "#c49a2c" },
-  tower: { wall: "#bdb4a0", roof: "#7a5a3c", accent: "#94503a" },
-  hip: { wall: "#d3c3a0", roof: "#a4562f", accent: "#7a5a3c" },
-  flat: { wall: "#b9ad96", roof: "#857b6c", accent: "#6b604f" },
-  scaffold: { wall: "#fbf7ec", roof: "#e9dfc8", accent: "#cdbf9f" },
-} as const;
+  house: {
+    wall: ["#c9b48a", "#b89468", "#d8ccb0", "#a9845c", "#cdb98f", "#bfa27a"],
+    roof: ["#94503a", "#7a5a44", "#6b5f52", "#8c6a3e", "#5f6a58", "#a0603e"],
+    accent: ["#6d4f2a", "#7a6048", "#8a7a68"],
+  },
+  worship: {
+    wall: ["#e2dac4", "#ece6d6", "#d9c9a8", "#e6d2b4"],
+    roof: ["#5f7a52", "#4f6a7a", "#7a5a3c", "#6b6f72"],
+    accent: ["#c49a2c", "#c49a2c", "#5f7a52", "#3f5f7a", "#6b6f72"],
+  },
+  tower: {
+    wall: ["#bdb4a0", "#a8987c", "#c9bfa8", "#b0a48c"],
+    roof: ["#7a5a3c", "#5f6a58", "#94503a"],
+    accent: ["#94503a", "#5f6a58", "#c49a2c"],
+  },
+  hip: {
+    wall: ["#d3c3a0", "#c9a98a", "#dcd2bc", "#b8a27e", "#d6b994"],
+    roof: ["#a4562f", "#8a4a32", "#6b5f52", "#5f6a58"],
+    accent: ["#7a5a3c", "#6d5c48"],
+  },
+  flat: {
+    wall: ["#b9ad96", "#a89c86", "#c4b8a0", "#9e8f78"],
+    roof: ["#857b6c", "#77706a", "#8e8476"],
+    accent: ["#6b604f", "#5e574e"],
+  },
+  scaffold: { wall: ["#c7a77a"], roof: ["#a98a60"], accent: ["#8a6a44"] },
+} as const satisfies Record<string, { wall: readonly string[]; roof: readonly string[]; accent: readonly string[] }>;
 export type ModelFamily = keyof typeof MODEL_COLORS;
 
 export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();
