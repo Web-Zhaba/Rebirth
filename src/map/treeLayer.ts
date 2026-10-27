@@ -154,6 +154,7 @@ interface Chunk {
   n: number; // trees in all
   lod: number; // the level it was last drawn at (levels switch with some slack, so they do not flicker)
   seen: number; // frame it was last under the screen
+  stale: boolean; // what it stands on changed: built again when in view, drawn as it was until then
 }
 
 // A growable interleaved instance buffer behind one mesh.
@@ -193,6 +194,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   let lastAssemble = 0;
   let keepFar = 1; // share of the trees drawn in far chunks
   let frameNo = 0;
+  let rebuilt = 0; // chunks built again in place: part of what the buffers hold
   const camera = new Camera();
   const framer = frameSetter(opts.light);
 
@@ -234,7 +236,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       return out;
     });
-    return { i, j, kinds, n: kinds.reduce((a, q) => a + q.length / PER, 0), lod: -1, seen: 0 };
+    return { i, j, kinds, n: kinds.reduce((a, q) => a + q.length / PER, 0), lod: -1, seen: 0, stale: false };
   };
 
   // The ground under the screen as a polygon in town metres (its border unprojected, cut at VIEW_MAX), and the
@@ -306,7 +308,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   };
 
   // devtools: what is drawn now
-  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), keepFar, chunks: chunks.size }) });
+  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), keepFar, chunks: chunks.size, rebuilt }) });
 
   return {
     id: TREE_LAYER_ID,
@@ -363,16 +365,19 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       stops.push(
         effect(() => {
           void opts.frame.value;
-          void reliefScale.value;
           reset();
+          map.triggerRepaint();
+        }),
+        // new ground or new obstacles: the old trees stay until their chunk is built again, so nothing blinks
+        effect(() => {
+          void reliefScale.value;
+          for (const c of chunks.values()) c.stale = true;
           map.triggerRepaint();
         }),
         effect(() => {
           const ch = opts.source.changed.value;
           if (!ch.n) return;
-          if (!ch.box) reset();
-          else for (const [key, c] of chunks) if (overlaps(c, ch.box)) chunks.delete(key);
-          shown = null;
+          for (const c of chunks.values()) if (!ch.box || overlaps(c, ch.box)) c.stale = true;
           map.triggerRepaint();
         }),
       );
@@ -415,15 +420,18 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const t0 = performance.now();
       let missing = false;
       for (const s of seen) {
-        const key = chunkKey(s.i, s.j);
-        if (chunks.has(key)) continue;
+        const key = chunkKey(s.i, s.j), was = chunks.get(key);
+        if (was && !was.stale) continue;
         if (performance.now() - t0 > FRAME_BUDGET) {
           missing = true;
           break;
         }
         const c = build(s.i, s.j, tf, origin);
-        if (c) chunks.set(key, c);
-        else missing = true;
+        if (!c) missing = true;
+        else {
+          if (was) (c.lod = was.lod, rebuilt++);
+          chunks.set(key, c);
+        }
       }
       // what to draw: every chunk under the screen at its level of detail; past MAX_TREES the far ones are thinned
       // evenly (near ones stay whole), in steps of THIN_STEP and with slack, so the set does not shimmer as chunks
@@ -449,7 +457,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const chosen = ready.map((r) => ({ ...r, keep: r.lod === 0 ? 1 : keepFar }));
       // forget chunks long out of sight
       if (chunks.size > MAX_CHUNKS) for (const [key, c] of chunks) if (frameNo - c.seen > 600) chunks.delete(key);
-      const sig = `${keepFar}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lod}`).join(";");
+      const sig = `${keepFar}|${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lod}`).join(";");
       const now = performance.now();
       if (sig !== shown) {
         if (shown === null || now - lastAssemble > ASSEMBLE_EVERY) {

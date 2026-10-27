@@ -1,5 +1,5 @@
 import type maplibregl from "maplibre-gl";
-import { computed, effect, signal, type ReadonlySignal } from "@preact/signals";
+import { computed, effect, signal, untracked, type ReadonlySignal } from "@preact/signals";
 import { ROAD_KINDS } from "../sim/roads";
 import { pointInPolygon } from "../sim/zones";
 import type { Clearing } from "../sim/types";
@@ -150,7 +150,8 @@ function createSource(f: Frame, lat: number): ForestSource {
   const stop = effect(() => {
     void blockSig.value;
     if (first) return void (first = false);
-    const next = makeBlocker();
+    // untracked: the blocker reads whole snapshots, which change every tick; only blockSig should wake this
+    const next = untracked(makeBlocker);
     const box = union(blocker.box, next.box);
     blocker = next;
     changed.value = { n: changed.peek().n + 1, box };

@@ -10,6 +10,8 @@ export function createMap(container: string): maplibregl.Map {
     hash: import.meta.env.DEV,
     attributionControl: false,
     maxPitch: 75, // the relief setting (relief.ts) lowers it when the map is flat
+    // multisampling: thousands of trees a few pixels wide crawl and sparkle at their edges without it
+    canvasContextAttributes: { antialias: true },
   });
   map.addControl(new maplibregl.NavigationControl(), "top-right");
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
