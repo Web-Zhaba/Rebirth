@@ -1,17 +1,21 @@
 import type maplibregl from "maplibre-gl";
 import type { ReadonlySignal } from "@preact/signals";
 import { effect, signal } from "@preact/signals";
-import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, OneFactor, Scene, ShaderMaterial, Vector3 } from "three";
-import { START_MINUTE_OF_DAY } from "../sim/clock";
+import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, OneFactor, Scene, ShaderMaterial, Vector3, Vector4 } from "three";
+import { calendar, START_MINUTE_OF_DAY } from "../sim/clock";
 import { sunDirection } from "../sim/weather";
 import { BUILDINGS } from "../sim/buildings";
+import { TOWN_COLORS } from "../ui/palette";
 import { isRoadKind } from "../sim/roads";
 import type { Frame as TownFrame } from "../world/frame";
 import { sunLocal, sunStrength } from "./clouds/shadowMath";
 import { lightOpacity, type Light } from "./lifeLayer";
+import { nightTint } from "./nightLayer";
 import { buildHeritageModel } from "./heritageModels";
 import { mergePacked, projectModel, type Packed } from "./modelBuffers";
-import { buildScaffold, type Model, type XY } from "./modelGeometry";
+import { buildScaffold, rgb, type Model, type XY } from "./modelGeometry";
+import { seatBridge, seatBuilding, drapeRoad, type Ground } from "./groundSeat";
+import { groundAt, loadGround, reliefScale } from "./relief";
 import { buildRoadModel } from "./roadModels";
 import { buildTownModel } from "./townModels";
 import { EARTH_RADIUS_M, localFrame, lngLatToMercator, mercatorLocalMatrix, metresPerMercator, weatherToSphere } from "./three/frame";
@@ -166,6 +170,7 @@ bool nearDoor(int dk, float z) {
 const FRAG = /* glsl */ `
 uniform vec3 uLight;
 uniform float uSun;
+uniform vec4 uTint; // the night tint (nightLayer.ts) where it cannot reach us: on the relief it is draped on the ground
 ${COMMON}
 
 // Dark seams every "period" metres of x (log courses and shingle rows along the height, boards along the wall), gone
@@ -241,7 +246,7 @@ void main() {
   float d = max(dot(n, uLight), 0.0);
   float k = mix(0.55, 1.0, d) * mix(0.88, 1.0, uSun);
   if (abs(n.z) < 0.5) k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z)); // walls darken towards the ground
-  gl_FragColor = vec4(col * k, 1.0);
+  gl_FragColor = vec4(mix(col * k, uTint.rgb, uTint.a), 1.0);
 }`;
 
 // Window light: only the glass of lit buildings, added on top of what is drawn (blending ONE, ONE). uLamp: how bright
@@ -288,6 +293,34 @@ const norm3 = (v: [number, number, number]): [number, number, number] => {
 };
 
 // Model of an item. Unfinished: the building site.
+// Points every 1 km over the items' bounds, padded: their DEM tiles (about 10 km wide) cover every model vertex.
+function coverOf(items: readonly ModelItem[]): XY[] {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const it of items) for (const [x, y] of it.ring) (x0 = Math.min(x0, x)), (y0 = Math.min(y0, y)), (x1 = Math.max(x1, x)), (y1 = Math.max(y1, y));
+  if (!(x1 >= x0)) return [];
+  const pad = 60, step = 1000, out: XY[] = [];
+  for (let x = x0 - pad; ; x += step) {
+    const cx = Math.min(x, x1 + pad);
+    for (let y = y0 - pad; ; y += step) {
+      out.push([cx, Math.min(y, y1 + pad)]);
+      if (y >= y1 + pad) break;
+    }
+    if (x >= x1 + pad) break;
+  }
+  return out;
+}
+
+const BRIDGES = new Set(["footbridge", "bridge", "stonebridge"]);
+const PLINTH = TOWN_COLORS.stone[1];
+
+// An item's model on the relief (ground: town metres -> exaggerated ground height; null: flat ground).
+export function seatedModelOf(it: ModelItem, ground: Ground | null): Model {
+  const m = modelOf(it);
+  if (!ground) return m;
+  if (it.style !== "road") return seatBuilding(m, it.ring, ground, PLINTH);
+  return BRIDGES.has(it.kind) ? seatBridge(m, it.ring, ground) : drapeRoad(m, ground);
+}
+
 export function modelOf(it: ModelItem): Model {
   if (it.style === "road") return buildRoadModel(it.ring, isRoadKind(it.kind) ? it.kind : "path");
   if (it.progress < 1) return buildScaffold(it.ring, it.height, it.progress);
@@ -306,8 +339,8 @@ function lampOf(it: ModelItem): number {
 
 const quantise = (p: number): number => (p >= 1 ? 1 : Math.min(PROGRESS_STEPS - 1, Math.max(0, Math.floor((Number.isFinite(p) ? p : 0) * PROGRESS_STEPS))) / PROGRESS_STEPS);
 // Everything that shapes an item's model (its id is not: two identical buildings share a model).
-const keyOf = (it: ModelItem, p: number): string => {
-  const ring = it.ring.map((q) => `${q[0]},${q[1]}`).join(";");
+const keyOf = (it: ModelItem, p: number, k: number): string => {
+  const ring = `${it.ring.map((q) => `${q[0]},${q[1]}`).join(";")}|${k}`;
   if (it.style === "road") return `road|${it.kind}|${ring}`;
   if (p < 1) return `site|${it.height}|${p}|${ring}`;
   const f = it.front ? `${it.front[0].toFixed(3)},${it.front[1].toFixed(3)}` : "";
@@ -357,14 +390,33 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     const [lng, lat] = tf.toLngLat(0, 0);
     if (!origin || origin.lng !== lng || origin.lat !== lat) cache.clear();
     origin = { lng, lat };
+    const items = opts.items.peek();
+    // on the relief: wait for the DEM tiles under every item (the last mesh stays meanwhile), then lift the models
+    const k = reliefScale.peek();
+    let ground: Ground | null = null;
+    if (k > 0) {
+      const pts = coverOf(items).map(([x, y]) => tf.toLngLat(x, y));
+      if (pts.some(([a, b]) => groundAt(a, b) === null)) {
+        void loadGround(pts).then(() => {
+          dirty = true;
+          map.triggerRepaint();
+        });
+        dirty = false;
+        return;
+      }
+      ground = (x, y) => {
+        const [a, b] = tf.toLngLat(x, y);
+        return (groundAt(a, b) ?? 0) * k;
+      };
+    }
     const used = new Set<string>();
     const packs: Packed[] = [];
-    for (const it of opts.items.peek()) {
+    for (const it of items) {
       const p = it.style === "road" ? 1 : quantise(it.progress);
-      const key = keyOf(it, p);
+      const key = keyOf(it, p, k);
       used.add(key);
       let pack = cache.get(key);
-      if (!pack) cache.set(key, (pack = projectModel(modelOf({ ...it, progress: p }), tf.toLngLat, origin, p >= 1 ? lampOf(it) : 0)));
+      if (!pack) cache.set(key, (pack = projectModel(seatedModelOf({ ...it, progress: p }, ground), tf.toLngLat, origin, p >= 1 ? lampOf(it) : 0)));
       packs.push(pack);
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
@@ -409,6 +461,15 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     (u.uG.value as Matrix4).fromArray(ug);
     u.uT.value = fr.transition;
     if (u.uSun) u.uSun.value = sun;
+    if (u.uTint) {
+      // on the relief MapLibre drapes the night tint over the terrain only, so the models tint themselves
+      const tint = u.uTint.value as Vector4;
+      if (reliefScale.peek() > 0 && lt) {
+        const cal = calendar(lt.clock.peek());
+        const t = nightTint(cal.hour + cal.minute / 60);
+        tint.set(...rgb(t.color), t.opacity);
+      } else tint.set(0, 0, 0, 0);
+    }
   };
 
   const layer: ModelLayer = {
@@ -418,7 +479,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     onAdd(_m, gl) {
       host = acquireHost(map, gl as WebGL2RenderingContext);
       mat = new ShaderMaterial({
-        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 } },
+        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uTint: { value: new Vector4() } },
         vertexShader: VERT,
         fragmentShader: FRAG,
         side: DoubleSide,
@@ -452,6 +513,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       stop = effect(() => {
         void opts.items.value;
         void opts.frame.value;
+        void reliefScale.value;
         dirty = true;
         map.triggerRepaint();
       });

@@ -1,5 +1,6 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
+import { reliefOn, setRelief } from "../map/relief";
 import { CLOUD_QUALITIES, cloudQuality, highQualityAvailable, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
 import { Button, Dialog, Segmented, type SegmentOption } from "./kit";
@@ -46,6 +47,10 @@ export function SettingsDialog() {
         <label class="settings-row" title="Дождь, ветер и снег; громкость общая со звуком">
           <input type="checkbox" checked={weatherSoundOn.value} onChange={(e) => setWeatherSound((e.target as HTMLInputElement).checked)} />
           <span>Шум погоды</span>
+        </label>
+        <label class="settings-row" title="Холмы и горы в объёме; без него карта плоская и рисуется быстрее">
+          <input type="checkbox" checked={reliefOn.value} onChange={(e) => setRelief((e.target as HTMLInputElement).checked)} />
+          <span>Рельеф</span>
         </label>
         <div class="settings-row">
           <span>Качество облаков</span>

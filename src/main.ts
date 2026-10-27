@@ -12,6 +12,7 @@ import { attachPlaceLabels } from "./map/placeLabels";
 import { attachPlaceTool } from "./map/placeTool";
 import { attachRevealTool } from "./map/revealTool";
 import { attachReachLayer } from "./map/reachLayer";
+import { attachRelief } from "./map/relief";
 import { attachRoadLayer } from "./map/roadLayer";
 import { attachRuinsLayer } from "./map/ruinsLayer";
 import { attachRoadTool } from "./map/roadTool";
@@ -45,6 +46,7 @@ attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
 attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec });
 attachNightTint(map, gameClock); // dusk tint of the map itself; sits just under the lights
+attachRelief(map, gameClock); // 3D terrain (a setting) and the sky over it
 attachReachLayer(map);
 attachCityMarker(map);
 const cloudSite = computed(() => {

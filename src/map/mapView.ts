@@ -9,6 +9,7 @@ export function createMap(container: string): maplibregl.Map {
     zoom: 1.8,
     hash: import.meta.env.DEV,
     attributionControl: false,
+    maxPitch: 75, // the relief setting (relief.ts) lowers it when the map is flat
   });
   map.addControl(new maplibregl.NavigationControl(), "top-right");
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");

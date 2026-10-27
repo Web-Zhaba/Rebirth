@@ -14,6 +14,7 @@ import { Mesh, PATTERN, prism, rgb, shade, square, type Model, type RGB, type XY
 // - stonebridge: a cobbled deck on arches between piers, with parapets.
 
 const GROUND_Z: Partial<Record<RoadKind, number>> = { path: 0.02, dirt: 0.035, stone: 0.05 }; // apart, so junctions do not flicker
+const GROUND_STEP = 6; // m; ground ribbons get a point this often, so they can follow the relief (groundSeat.ts)
 const JOINT_TURN = 0.35; // rad: bends sharper than this get a round joint
 
 type P3 = [number, number, number];
@@ -138,7 +139,7 @@ function every(st: readonly Station[], s0: number, s1: number, step: number): St
 const stationIndex = (st: readonly Station[], x: Station) => st.indexOf(x);
 
 function groundRoad(mesh: Mesh, pts: readonly XY[], kind: RoadKind): void {
-  const st = stations(pts, 0);
+  const st = stations(pts, GROUND_STEP);
   const w = ROAD_KINDS[kind].width, hw = w / 2;
   const z = GROUND_Z[kind] ?? 0.03;
   const pat = kind === "stone" ? PATTERN.cobbles : kind === "dirt" ? PATTERN.ruts : PATTERN.track;
