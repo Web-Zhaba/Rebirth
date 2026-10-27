@@ -350,15 +350,20 @@ const keyOf = (it: ModelItem, p: number, k: number): string => {
 
 // Matrices, sun and (on the relief) night tint of this frame into a material's uniforms (uM, uG, uT, and uSun / uTint
 // when the material has them; `light` is the uLight value). Shared with the tree layer (treeLayer.ts).
-export function frameSetter(lt: ModelLayerOptions["light"]): { light: Vector3; set: (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => void } {
+export function frameSetter(lt: ModelLayerOptions["light"]): {
+  light: Vector3;
+  set: (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => void;
+  // mercator: local metres -> clip through the fallback (always the mercator matrix); float64
+  mercator: (args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => Float64Array;
+} {
   const lg = new Float64Array(16);
   const g64 = new Float64Array(16);
   const light = new Vector3(...norm3(FALLBACK_LIGHT));
+  const mercator = (args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) =>
+    mercatorLocalMatrix(host.frame(args.defaultProjectionData).fallback, lngLatToMercator(o.lng, o.lat), metresPerMercator(o.lat));
   const set = (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => {
     const fr = host.frame(args.defaultProjectionData);
-    // mercator: local metres -> clip through the fallback (always the mercator matrix)
-    const s = metresPerMercator(o.lat);
-    const um = Float32Array.from(mercatorLocalMatrix(fr.fallback, lngLatToMercator(o.lng, o.lat), s));
+    const um = Float32Array.from(mercator(args, host, o));
     // globe: local metres -> unit sphere (affine) -> clip
     const f = localFrame(o.lng, o.lat);
     for (let i = 0; i < 3; i++) {
@@ -397,7 +402,7 @@ export function frameSetter(lt: ModelLayerOptions["light"]): { light: Vector3; s
       } else tint.set(0, 0, 0, 0);
     }
   };
-  return { light, set };
+  return { light, set, mercator };
 }
 
 export type ModelLayer = maplibregl.CustomLayerInterface;

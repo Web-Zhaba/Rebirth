@@ -66,3 +66,22 @@ export function scatterTrees(inp: ScatterInput): Float32Array {
     }
   return Float32Array.from(out);
 }
+
+// Share of a chunk's trees kept at distance d when the far forest is thinned to a reach: whole up to it, then reach / d
+// (trees shrink on the screen with distance, so the screen keeps about the same density), never below MIN_KEEP.
+export const MIN_KEEP = 1 / 16;
+export const keepAt = (d: number, reach: number): number => Math.min(1, Math.max(MIN_KEEP, reach / d));
+
+// The reach that brings the trees of the chunks (n trees at distance d) down to about max, those nearer than `whole`
+// always kept in full. Infinity when everything fits.
+export function thinReach(chunks: readonly { n: number; d: number }[], max: number, whole: number): number {
+  const total = (reach: number) => chunks.reduce((a, c) => a + (c.d < whole ? c.n : c.n * keepAt(c.d, reach)), 0);
+  if (total(Infinity) <= max) return Infinity;
+  let lo = 1, hi = Math.max(whole, ...chunks.map((c) => c.d));
+  for (let k = 0; k < 30; k++) {
+    const mid = (lo + hi) / 2;
+    if (total(mid) > max) hi = mid;
+    else lo = mid;
+  }
+  return lo;
+}

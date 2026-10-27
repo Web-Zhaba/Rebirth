@@ -2,12 +2,14 @@ import type maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import { calendar, daylight } from "../sim/clock";
 import { mixHex, PALETTE } from "../ui/palette";
+import { keepUnder } from "./relief";
 
 const SRC = "night";
 const LAYER = "night-tint";
 const NIGHT_MAX = 0.45; // opacity of the dusk color at full night
 const WARM_MAX = 0.16; // opacity of the amber at dawn and dusk
-const BEFORE = "life-lights-house"; // everything under the tint except the lights, walkers and carts
+// everything under the tint except the lights: the windows of the models (modelLayer.ts), then the glows, walkers, carts
+const BEFORE = ["building-lamps", "life-lights-house"];
 
 // Colour and opacity of the map tint at an hour of the day: dusk blue at night, amber while the light changes, none by day.
 export function nightTint(hour: number): { color: string; opacity: number } {
@@ -23,12 +25,8 @@ export function attachNightTint(map: maplibregl.Map, gameMinutes: ReadonlySignal
   let ready = false;
   let stop: (() => void) | null = null;
 
-  const place = () => {
-    const order = map.getLayersOrder();
-    const lights = order.indexOf(BEFORE);
-    const want = lights >= 0 ? lights - 1 : order.length - 1;
-    if (order.indexOf(LAYER) !== want) map.moveLayer(LAYER, lights >= 0 ? BEFORE : undefined);
-  };
+  // on every style change too: layers come later, and the relief setting reorders them (it does nothing in place)
+  const place = () => ready && map.getLayer(LAYER) && keepUnder(map, LAYER, BEFORE.find((id) => map.getLayer(id)) ?? BEFORE[1]);
 
   const setup = () => {
     map.addSource(SRC, {
@@ -53,12 +51,14 @@ export function attachNightTint(map: maplibregl.Map, gameMinutes: ReadonlySignal
       map.setPaintProperty(LAYER, "fill-opacity", t.opacity);
       place();
     });
+    map.on("styledata", place);
   };
 
   if (map.isStyleLoaded()) setup();
   else map.once("load", setup);
   return () => {
     stop?.();
+    map.off("styledata", place);
     if (ready && map.getLayer(LAYER)) map.removeLayer(LAYER);
   };
 }

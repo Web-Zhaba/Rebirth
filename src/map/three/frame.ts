@@ -109,6 +109,32 @@ export function mercatorLocalMatrix(main: ArrayLike<number>, origin: [number, nu
   return out;
 }
 
+// The side planes and the near plane of a view-projection matrix (Gribb-Hartmann), each [a, b, c, d] with the
+// inside where a x + b y + c z + d >= 0 and (a, b, c) of unit length. No far plane: callers cut by distance.
+export function frustumPlanes(m: ArrayLike<number>): Float64Array {
+  const out = new Float64Array(20);
+  const row = (r: number, k: number) => m[k * 4 + r];
+  [[0, 1], [0, -1], [1, 1], [1, -1], [2, 1]].forEach(([r, sign], p) => {
+    for (let k = 0; k < 4; k++) out[p * 4 + k] = row(3, k) + sign * row(r, k);
+    const l = Math.hypot(out[p * 4], out[p * 4 + 1], out[p * 4 + 2]) || 1;
+    for (let k = 0; k < 4; k++) out[p * 4 + k] /= l;
+  });
+  return out;
+}
+
+// Whether a sphere touches the inside of all the planes.
+export function sphereInside(planes: ArrayLike<number>, x: number, y: number, z: number, r: number): boolean {
+  for (let p = 0; p < planes.length; p += 4) if (planes[p] * x + planes[p + 1] * y + planes[p + 2] * z + planes[p + 3] < -r) return false;
+  return true;
+}
+
+// The eye of a perspective view-projection matrix: the point it sends to w = 0 with x = y = 0.
+export function eyeOf(m: ArrayLike<number>): Vec3 | null {
+  const inv = invert4(m);
+  if (!inv || !inv[11]) return null;
+  return [inv[8] / inv[11], inv[9] / inv[11], inv[10] / inv[11]];
+}
+
 // Multiplies a point (w = 1) by a matrix and divides by w; returns the resulting xyz (NDC for a projection matrix).
 export function transformPoint(m: ArrayLike<number>, p: ArrayLike<number>): Vec3 {
   const x = p[0], y = p[1], z = p[2];

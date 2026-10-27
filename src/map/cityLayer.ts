@@ -3,6 +3,7 @@ import { effect } from "@preact/signals";
 import { ORIGIN_RADIUS } from "../sim/roads";
 import { PALETTE } from "../ui/palette";
 import { city, frame, roads } from "../simClient";
+import { UNDER_BUILDINGS } from "./roadLayer";
 
 const SRC = "city";
 const CAMP_SRC = "camp";
@@ -38,7 +39,7 @@ export function attachCityMarker(map: maplibregl.Map): void {
       return;
     }
     map.addSource(CAMP_SRC, { type: "geojson", data: camp });
-    const beneath = map.getLayer("roads-casing") ? "roads-casing" : undefined; // under the roads when they exist
+    const beneath = ["roads-casing", ...UNDER_BUILDINGS].find((id) => map.getLayer(id)); // under the roads when they exist
     map.addLayer(
       { id: "camp-fill", type: "fill", source: CAMP_SRC, minzoom: 14, paint: { "fill-color": PALETTE.warn, "fill-opacity": 0.12 } },
       beneath,

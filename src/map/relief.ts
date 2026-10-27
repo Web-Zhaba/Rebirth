@@ -123,20 +123,103 @@ export function skyAt(hour: number): maplibregl.SkySpecification {
 }
 
 // Turns the terrain on and off with the setting and keeps the sky in step with the hour.
+// Layers MapLibre drapes over the relief (its render-to-texture types).
+const DRAPED = new Set(["background", "fill", "line", "raster", "hillshade", "color-relief"]);
+
+// Where a layer that is not draped sits in the flat order: just under a draped layer (null: above all of them), ordered
+// by seq among the layers under the same one, as map.addLayer(layer, before) puts them.
+export interface Anchor {
+  before: string | null;
+  seq: number;
+}
+
+// The layer order for the relief, or null when the map has it already. On the relief MapLibre renders the draped
+// layers into a texture per terrain tile and keeps them while nothing changes, but every other layer (3D, circles,
+// symbols) between them starts a new stack of textures, and with a few stacks its pool of 30 overflows and nothing is
+// kept: every tile is drawn again every frame (about 4x the frame). So the draped layers go first, in their order, and
+// the others above them in their flat order (anchors: noted the first time a layer is seen, so a layer added later
+// before a draped one still lands where it would on the flat map).
+export function reliefOrder(order: readonly { id: string; type: string }[], anchors: Map<string, Anchor>): string[] | null {
+  noteAnchors(order, anchors);
+  const draped = order.filter((l) => DRAPED.has(l.type)).map((l) => l.id);
+  const rank = (id: string) => {
+    const a = anchors.get(id)!, k = a.before === null ? -1 : draped.indexOf(a.before);
+    return k < 0 ? draped.length : k;
+  };
+  const others = order.filter((l) => !DRAPED.has(l.type)).map((l) => l.id);
+  others.sort((a, b) => rank(a) - rank(b) || anchors.get(a)!.seq - anchors.get(b)!.seq);
+  const want = [...draped, ...others];
+  return want.every((id, i) => order[i].id === id) ? null : want;
+}
+
+function noteAnchors(order: readonly { id: string; type: string }[], anchors: Map<string, Anchor>): void {
+  order.forEach((l, i) => {
+    if (DRAPED.has(l.type) || anchors.has(l.id)) return;
+    // the first layer above that is draped, or placed already: just under it (later arrivals nearer it)
+    const next = order.slice(i + 1).find((n) => DRAPED.has(n.type) || anchors.has(n.id));
+    const known = next && anchors.get(next.id);
+    anchors.set(l.id, known ? { before: known.before, seq: known.seq - 1 / (anchors.size + 2) } : { before: next?.id ?? null, seq: anchors.size });
+  });
+}
+
+// The flat places of the layers that are not draped, while the relief is on (one map).
+const anchors = new Map<string, Anchor>();
+// getLayersOrder, not getStyle: the style as JSON leaves out the custom (3D) layers
+const layersOf = (map: maplibregl.Map) => map.getLayersOrder().map((id) => ({ id, type: map.getLayer(id)!.type }));
+
+// Keeps a draped layer just under another layer as the flat map has it (the night tint under the lights). On the relief
+// the draped layers lie under all the others, so it goes under the draped layer that follows the other one there.
+export function keepUnder(map: maplibregl.Map, id: string, before: string): void {
+  const order = layersOf(map);
+  let target: string | undefined = map.getLayer(before) ? before : undefined;
+  if (reliefScale.peek() > 0 && target) {
+    noteAnchors(order, anchors);
+    target = anchors.get(before)?.before ?? order.find((l) => !DRAPED.has(l.type))?.id;
+  }
+  const at = order.findIndex((l) => l.id === id);
+  const next = order.slice(at + 1).find((l) => l.id !== id)?.id;
+  if (next !== target && target !== id) map.moveLayer(id, target);
+}
+
 export function attachRelief(map: maplibregl.Map, gameMinutes: ReadonlySignal<number>): () => void {
   let stops: (() => void)[] = [];
+  let busy = false;
+  const moving = (fn: () => void) => {
+    busy = true;
+    try {
+      fn();
+    } catch (e) {
+      console.error("relief: layer order", e);
+    } finally {
+      busy = false;
+    }
+  };
+  const group = () => {
+    if (busy || reliefScale.peek() <= 0) return;
+    const want = reliefOrder(layersOf(map), anchors);
+    if (want) moving(() => want.filter((id) => !DRAPED.has(map.getLayer(id)!.type)).forEach((id) => map.moveLayer(id)));
+  };
+  const ungroup = () => {
+    const back = [...anchors].filter(([id]) => map.getLayer(id)).sort((a, b) => a[1].seq - b[1].seq);
+    anchors.clear();
+    moving(() => back.forEach(([id, a]) => map.moveLayer(id, a.before && map.getLayer(a.before) ? a.before : undefined)));
+  };
   const setup = () => {
+    map.on("styledata", group);
     stops = [
       effect(() => {
         const k = reliefScale.value;
         map.setTerrain(k > 0 ? { source: "terrain", exaggeration: k } : null);
         // the horizon, the sky and the haze show only on steep views; flat, they would show the end of the map
         map.setMaxPitch(k > 0 ? RELIEF_MAX_PITCH : FLAT_MAX_PITCH);
+        if (k > 0) group();
+        else ungroup();
       }),
       effect(() => {
         const cal = calendar(gameMinutes.value);
         map.setSky(skyAt(cal.hour + cal.minute / 60));
       }),
+      () => map.off("styledata", group),
     ];
   };
   if (map.isStyleLoaded()) setup();

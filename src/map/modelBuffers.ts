@@ -23,11 +23,19 @@ export interface Packed {
 
 // Town-local points (x, y, z metres, flat) into the globe tangent and mercator frames about `origin`; `toLngLat` is the
 // town frame's local -> lng/lat.
+// The mercator frame of the models: metres east and north of the origin on its mercator plane (x scaled by the cosine
+// of the origin's latitude), and back.
+export function mercatorLocal(origin: { lng: number; lat: number }): { to: (lng: number, lat: number) => [number, number]; from: (x: number, y: number) => [number, number] } {
+  const l0 = origin.lng * RAD, k = R * Math.cos(origin.lat * RAD), ym0 = atanh(Math.sin(origin.lat * RAD));
+  return {
+    to: (lng, lat) => [(lng * RAD - l0) * k, k * (atanh(Math.sin(lat * RAD)) - ym0)],
+    from: (x, y) => [(l0 + x / k) / RAD, Math.asin(Math.tanh(y / k + ym0)) / RAD],
+  };
+}
+
 export function projectPoints(p: ArrayLike<number>, toLngLat: (x: number, y: number) => [number, number], origin: { lng: number; lat: number }): { g: Float32Array; m: Float32Array } {
   const f = localFrame(origin.lng, origin.lat);
-  const l0 = origin.lng * RAD;
-  const cp0 = Math.cos(origin.lat * RAD);
-  const ym0 = atanh(Math.sin(origin.lat * RAD));
+  const merc = mercatorLocal(origin).to;
   const g = new Float32Array(p.length), m = new Float32Array(p.length);
   for (let k = 0; k + 2 < p.length; k += 3) {
     const [lng, lat] = toLngLat(p[k], p[k + 1]);
@@ -42,8 +50,7 @@ export function projectPoints(p: ArrayLike<number>, toLngLat: (x: number, y: num
     g[k] = dx * f.e[0] + dy * f.e[1] + dz * f.e[2];
     g[k + 1] = dx * f.n[0] + dy * f.n[1] + dz * f.n[2];
     g[k + 2] = dx * f.o[0] + dy * f.o[1] + dz * f.o[2];
-    m[k] = (l - l0) * R * cp0;
-    m[k + 1] = R * cp0 * (atanh(Math.sin(ph)) - ym0);
+    [m[k], m[k + 1]] = merc(lng, lat);
     m[k + 2] = z;
   }
   return { g, m };

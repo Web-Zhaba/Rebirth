@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DAYS_PER_SEASON, START_MINUTE_OF_DAY } from "../sim/clock";
 import { TREE_COLORS } from "../ui/palette";
 import { buildTree, crownAt } from "./treeModels";
-import { coniferShare, scatterTrees, TREE_KINDS, TREE_STRIDE, type ForestPoly } from "./treeScatter";
+import { coniferShare, keepAt, MIN_KEEP, scatterTrees, thinReach, TREE_KINDS, TREE_STRIDE, type ForestPoly } from "./treeScatter";
 
 const square = (x0: number, y0: number, x1: number, y1: number): ForestPoly => ({ bbox: [x0, y0, x1, y1], rings: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1]]] });
 const base = { rect: [-400, -400, 400, 400] as [number, number, number, number], spacing: 6, lat: 59, blocked: () => false };
@@ -77,5 +77,20 @@ describe("trees", () => {
     expect(crownAt(at(1, 3))).toMatchObject({ a: TREE_COLORS.summer, bare: 0 });
     expect(crownAt(at(2, 5)).a).toBe(TREE_COLORS.autumn);
     expect(crownAt(at(3, 4)).bare).toBe(1); // winter
+  });
+});
+
+describe("far thinning", () => {
+  const ring = Array.from({ length: 60 }, (_, k) => ({ n: 500, d: 100 + k * 150 }));
+  const total = (reach: number) => ring.reduce((a, c) => a + (c.d < 450 ? c.n : c.n * keepAt(c.d, reach)), 0);
+  it("keeps everything when it fits", () => {
+    expect(thinReach(ring, 1e6, 450)).toBe(Infinity);
+  });
+  it("brings the total down to the cap, near chunks whole, the share falling with distance", () => {
+    const r = thinReach(ring, 12_000, 450);
+    expect(total(r)).toBeLessThanOrEqual(12_000);
+    expect(total(r)).toBeGreaterThan(11_500);
+    expect(keepAt(500, r)).toBeGreaterThan(keepAt(5000, r));
+    expect(keepAt(1e6, r)).toBe(MIN_KEEP);
   });
 });

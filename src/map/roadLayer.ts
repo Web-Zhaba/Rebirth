@@ -53,6 +53,10 @@ export const roadItems: ReadonlySignal<ModelItem[]> = computed(() => {
 
 // Roads as lines at real width: built ones while zoomed out (closer, the three.js models draw them), planned and waiting
 // edges dashed and faded, cut-off ones red.
+// The layers the ground of the town (roads, the camp) goes under, whichever exist yet: the buildings and the night, so
+// the layers that load later find it in place.
+export const UNDER_BUILDINGS = ["buildings-planned-fill", "building-models", "buildings-outline", "weather-snow", "night-tint"];
+
 export function attachRoadLayer(map: maplibregl.Map): void {
   let styled = false;
 
@@ -61,6 +65,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     // Round caps fill the joint where two chains meet; round joins smooth every bend inside a chain.
     const common = { source: SRC, layout: { "line-cap": "round", "line-join": "round" } } as const;
+    const before = UNDER_BUILDINGS.find((id) => map.getLayer(id));
     map.addLayer({
       ...common,
       id: "roads-casing",
@@ -68,7 +73,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
       maxzoom: LINES_MAX_ZOOM,
       filter: ["==", ["get", "state"], "built"],
       paint: { "line-color": CASING_COLOR as never, "line-width": realWidth(k, 1.5) },
-    });
+    }, before);
     map.addLayer({
       ...common,
       id: "roads-built",
@@ -76,7 +81,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
       maxzoom: LINES_MAX_ZOOM,
       filter: ["==", ["get", "state"], "built"],
       paint: { "line-color": BUILT_COLOR as never, "line-width": realWidth(k) },
-    });
+    }, before);
     map.addLayer({
       ...common,
       id: "roads-planned",
@@ -88,7 +93,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
         "line-opacity": ["match", ["get", "state"], "active", 0.7, 0.4],
         "line-dasharray": [2, 2],
       },
-    });
+    }, before);
     // Wider than real so a cut-off road stands out even when zoomed out.
     map.addLayer({
       ...common,
@@ -101,7 +106,7 @@ export function attachRoadLayer(map: maplibregl.Map): void {
         "line-opacity": 0.8,
         "line-dasharray": [2, 1.5],
       },
-    });
+    }, before);
     styled = true;
   };
 

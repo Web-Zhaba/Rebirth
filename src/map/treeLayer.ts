@@ -21,20 +21,23 @@ import type { WeatherState } from "../sim/weather";
 import { TREE_COLORS } from "../ui/palette";
 import type { Frame as TownFrame } from "../world/frame";
 import type { Box, ForestSource } from "./forest";
-import { projectPoints } from "./modelBuffers";
+import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
 import { buildTree, crownAt, TREE_LODS } from "./treeModels";
-import { CHUNK, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
+import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
+import { eyeOf, frustumPlanes, sphereInside } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
 // The 3D forest (PLAN-3d-world.ru.md stage 4): the trees of forest.ts drawn by three.js inside the map, on the same
 // projection and light as the building models (modelLayer.ts frameSetter; each instance's base is projected in float64
 // on the CPU into both frames, its tree added in metres). Import only with a dynamic `import()` (it pulls in three.js).
 //
-// Only what the camera sees: the plane is cut into square chunks (forest.ts CHUNK); each frame picks the chunks under
-// the screen (its border unprojected onto the ground, no farther than VIEW_MAX), nearest first, up to MAX_TREES trees.
+// Only what the camera sees: the plane is cut into square chunks (forest.ts CHUNK); each frame picks the chunks inside
+// the camera's frustum (tested against its matrix, which holds on the relief too, where the sky has no ground point),
+// as far as a typical tree stays MIN_PX tall on the screen. Past MAX_TREES the far ones are thinned with distance and
+// their trees drawn a little bigger, and the last stretch before the far edge fades the trees out.
 // A chunk's trees are scattered and projected once and cached; new chunks are built within FRAME_BUDGET ms per frame,
 // so moving the camera never stalls on them. Levels of detail per chunk by its distance from the camera: full trees
 // near, a few faces farther, and flat crowns for a view from straight above. One instanced mesh per kind and level, its
@@ -47,9 +50,14 @@ import { acquireHost, type ThreeHost } from "./three/host";
 export const TREE_LAYER_ID = "forest-trees";
 const GROW_TO = TREES_FROM_ZOOM + 1;
 const MAX_TREES = 80_000; // drawn at once; past it the far chunks are thinned
-const THIN_STEP = 0.125;
 const MAX_CHUNKS = 3000; // cached; beyond it chunks unseen for a while are dropped
-const VIEW_MAX = 3000; // m from the camera's ground point toward the horizon (at least)
+const TALL = 12; // m, a typical tree: sets how far trees are drawn
+const MIN_PX = 1.5; // farther than a typical tree is this tall on the screen, there are no trees
+const FAR_CAP = 12_000; // m from the camera at most
+const FADE_FROM = 0.85; // share of the far edge where the trees start to shrink away
+const BLOCK = 8; // chunks per side of the coarse blocks tested first
+const REACH_STEP = 1.15; // the thinning reach moves in these steps, so the drawn set does not shimmer
+const SLOPE = 120; // m: how much the relief may rise or fall within a chunk or under an unknown chunk (exaggerated)
 const NEAR = 450; // m from the camera: full trees within
 const FLAT_PITCH = 18; // degrees: flatter views get flat crowns
 const FRAME_BUDGET = 4; // ms of chunk building per frame
@@ -72,6 +80,9 @@ uniform float uTime;
 uniform float uGrow;
 uniform float uBare;
 uniform vec3 uWind; // direction, strength
+uniform vec3 uEye; // camera in the mercator frame
+uniform float uReach; // the far thinning (treeScatter.ts keepAt)
+uniform float uFar;
 varying vec3 vN;
 varying vec3 vC;
 varying float vCrown;
@@ -80,7 +91,10 @@ varying float vHash;
 varying float vShade;
 varying vec3 vP;
 void main() {
-  float s = iP.x * uGrow;
+  // thinned far trees are drawn bigger, so the forest keeps its cover; past FADE_FROM they shrink away
+  float dist = length(iM - uEye);
+  float keep = clamp(uReach / dist, ${MIN_KEEP}, 1.0);
+  float s = iP.x * uGrow * min(2.0, pow(keep, -0.3)) * (1.0 - smoothstep(uFar * ${FADE_FROM}, uFar, dist));
   vec3 p = position;
   if (aCrown > 0.5) p.xy *= 1.0 - 0.45 * uBare; // leafless: only the thinner frame of branches
   float c = cos(iP.y), sn = sin(iP.y);
@@ -167,21 +181,6 @@ interface Slot {
 const chunkKey = (i: number, j: number) => `${i},${j}`;
 const overlaps = (c: Chunk, b: Box) => (c.i + 1) * CHUNK >= b[0] && c.i * CHUNK <= b[2] && (c.j + 1) * CHUNK >= b[1] && c.j * CHUNK <= b[3];
 
-function pointSegDist(px: number, py: number, a: [number, number], b: [number, number]): number {
-  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
-  const t = Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / l2));
-  return Math.hypot(a[0] + dx * t - px, a[1] + dy * t - py);
-}
-
-function inPoly(x: number, y: number, poly: readonly [number, number][]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i], [xj, yj] = poly[j];
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
 export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): maplibregl.CustomLayerInterface {
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
@@ -192,7 +191,8 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   let origin: { lng: number; lat: number } | null = null;
   let shown: string | null = null; // signature of what the buffers hold
   let lastAssemble = 0;
-  let keepFar = 1; // share of the trees drawn in far chunks
+  let reach = Infinity; // the far thinning now (treeScatter.ts thinReach)
+  let farNow = 0;
   let frameNo = 0;
   let rebuilt = 0; // chunks built again in place: part of what the buffers hold
   const camera = new Camera();
@@ -239,39 +239,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     return { i, j, kinds, n: kinds.reduce((a, q) => a + q.length / PER, 0), lod: -1, seen: 0, stale: false };
   };
 
-  // The ground under the screen as a polygon in town metres (its border unprojected, cut at VIEW_MAX), and the
-  // camera's ground point and height.
-  const view = (tf: TownFrame) => {
-    const c = map.getCanvas(), w = c.clientWidth, h = c.clientHeight;
-    // the camera from the view: MapLibre puts it cameraToCenterDistance (0.5 h / tan(fov / 2) pixels) from the centre
-    const centre = map.getCenter();
-    const [mx, my] = tf.toLocal(centre.lng, centre.lat);
-    const fov = ((map as unknown as { transform?: { fov?: number } }).transform?.fov ?? 36.87) * (Math.PI / 180);
-    const mpp = (40075016.686 * Math.cos((centre.lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom());
-    const camDist = ((0.5 * h) / Math.tan(fov / 2)) * mpp;
-    const pitch = (map.getPitch() * Math.PI) / 180, bearing = (map.getBearing() * Math.PI) / 180;
-    const back = camDist * Math.sin(pitch);
-    const cam: [number, number] = [mx - Math.sin(bearing) * back, my - Math.cos(bearing) * back];
-    const alt = camDist * Math.cos(pitch);
-    // the border, cut where it runs toward the horizon: no farther than VIEW_MAX, or than a few times the near edge
-    // (a view from above sees all of its ground)
-    const edge: [number, number][] = [[0, 0], [w / 2, 0], [w, 0], [w, h / 2], [w, h], [w / 2, h], [0, h], [0, h / 2]];
-    const ground = edge.map(([sx, sy]) => {
-      const ll = map.unproject([sx, sy]);
-      return tf.toLocal(ll.lng, ll.lat);
-    });
-    const dist = ([x, y]: [number, number]) => Math.hypot(x - cam[0], y - cam[1]);
-    const near = Math.max(...[4, 5, 6].map((k) => dist(ground[k])).filter(Number.isFinite), 0);
-    const far = Math.max(VIEW_MAX, near * 3);
-    const border: [number, number][] = [];
-    for (const p of ground) {
-      const d = dist(p);
-      if (!Number.isFinite(d)) continue;
-      border.push(d > far ? [cam[0] + ((p[0] - cam[0]) * far) / d, cam[1] + ((p[1] - cam[1]) * far) / d] : p);
-    }
-    return { border, cam, alt };
-  };
-
   // Refills the instance buffers from the chosen chunks (a buffer is replaced only when it has to grow).
   const taken = (a: Float32Array, keep: number) => Math.round((a.length / PER) * keep);
   const assemble = (chosen: { c: Chunk; lod: number; keep: number }[]) => {
@@ -308,7 +275,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   };
 
   // devtools: what is drawn now
-  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), keepFar, chunks: chunks.size, rebuilt }) });
+  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), reach, far: farNow, chunks: chunks.size, rebuilt }) });
 
   return {
     id: TREE_LAYER_ID,
@@ -338,6 +305,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
               uTime: { value: 0 },
               uGrow: { value: 1 },
               uWind: { value: new Vector3() },
+              uEye: { value: new Vector3() },
+              uReach: { value: 1e9 },
+              uFar: { value: 1e9 },
               uSeasonal: { value: kind === "conifer" ? 0 : 1 },
               uBare: { value: 0 },
               uSnow: { value: 0 },
@@ -403,19 +373,41 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         origin = { lng, lat };
         reset();
       }
-      // the chunks under the screen, nearest the camera first
-      const { border, cam, alt } = view(tf);
-      if (border.length < 3) return;
-      const xs = border.map((p) => p[0]), ys = border.map((p) => p[1]);
-      const half = CHUNK * Math.SQRT1_2;
+      // the chunks in the frustum, nearest the camera first; all in the mercator frame of the models (metres)
+      const M = framer.mercator(args, host, origin);
+      const eye = eyeOf(M);
+      if (!eye) return;
+      const planes = frustumPlanes(M);
+      const merc = mercatorLocal(origin);
+      const [elng, elat] = merc.from(eye[0], eye[1]);
+      const [ex, ey] = tf.toLocal(elng, elat);
+      const fov = ((map as unknown as { transform?: { fov?: number } }).transform?.fov ?? 36.87) * (Math.PI / 180);
+      const far = Math.min(FAR_CAP, (TALL * 0.5 * map.getCanvas().clientHeight) / Math.tan(fov / 2) / MIN_PX);
+      farNow = far;
+      const k = reliefScale.peek();
+      const under = k > 0 ? (groundAt(elng, elat) ?? 0) * k : 0;
+      const centre = (x: number, y: number): [number, number, number] => {
+        const [lng, lat] = tf.toLngLat(x, y);
+        const g = k > 0 ? groundAt(lng, lat) : 0;
+        return [...merc.to(lng, lat), g === null ? under : g * k];
+      };
+      const half = CHUNK * Math.SQRT1_2, bs = BLOCK * CHUNK;
       const seen: { i: number; j: number; d: number }[] = [];
-      for (let i = Math.floor((Math.min(...xs) - half) / CHUNK); i <= Math.floor((Math.max(...xs) + half) / CHUNK); i++)
-        for (let j = Math.floor((Math.min(...ys) - half) / CHUNK); j <= Math.floor((Math.max(...ys) + half) / CHUNK); j++) {
-          const cx = (i + 0.5) * CHUNK, cy = (j + 0.5) * CHUNK;
-          if (!inPoly(cx, cy, border) && !border.some((p, k) => pointSegDist(cx, cy, p, border[(k + 1) % border.length]) < half)) continue;
-          seen.push({ i, j, d: Math.hypot(cx - cam[0], cy - cam[1], alt) });
+      for (let bi = Math.floor((ex - far) / bs); bi <= Math.floor((ex + far) / bs); bi++)
+        for (let bj = Math.floor((ey - far) / bs); bj <= Math.floor((ey + far) / bs); bj++) {
+          const bx = (bi + 0.5) * bs, by = (bj + 0.5) * bs;
+          if (Math.hypot(bx - ex, by - ey) - bs * Math.SQRT1_2 > far) continue;
+          const [x, y, z] = centre(bx, by);
+          if (!sphereInside(planes, x, y, z + TALL, bs * Math.SQRT1_2 + SLOPE + TALL)) continue;
+          for (let i = bi * BLOCK; i < (bi + 1) * BLOCK; i++)
+            for (let j = bj * BLOCK; j < (bj + 1) * BLOCK; j++) {
+              const cx = (i + 0.5) * CHUNK, cy = (j + 0.5) * CHUNK;
+              if (Math.hypot(cx - ex, cy - ey) - half > far) continue;
+              const [mx, my, mz] = centre(cx, cy);
+              if (!sphereInside(planes, mx, my, mz + TALL, half + SLOPE + TALL)) continue;
+              seen.push({ i, j, d: Math.max(1, Math.hypot(mx - eye[0], my - eye[1], mz - eye[2])) });
+            }
         }
-      seen.sort((a, b) => a.d - b.d);
       // build what is missing, nearest first, within the frame's budget
       const t0 = performance.now();
       let missing = false;
@@ -433,31 +425,27 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
           chunks.set(key, c);
         }
       }
-      // what to draw: every chunk under the screen at its level of detail; past MAX_TREES the far ones are thinned
-      // evenly (near ones stay whole), in steps of THIN_STEP and with slack, so the set does not shimmer as chunks
-      // come and go at the edges
+      // what to draw: every chunk in view at its level of detail; past MAX_TREES the far ones keep a share falling with
+      // distance (treeScatter.ts thinReach), the reach moving in steps and with slack so the set does not shimmer
       frameNo++;
       const flat = map.getPitch() < FLAT_PITCH;
-      const ready: { c: Chunk; lod: number }[] = [];
-      let nearN = 0, farN = 0;
+      const ready: { c: Chunk; lod: number; d: number; n: number }[] = [];
       for (const s of seen) {
         const c = chunks.get(chunkKey(s.i, s.j));
         if (!c) continue;
         c.seen = frameNo;
         const lod = flat ? 2 : c.lod === 0 ? (s.d < NEAR * 1.2 ? 0 : 1) : s.d < NEAR ? 0 : 1;
         c.lod = lod;
-        ready.push({ c, lod });
-        if (lod === 0) nearN += c.n;
-        else farN += c.n;
+        ready.push({ c, lod, d: s.d, n: c.n });
       }
-      const want = farN > 0 ? Math.min(1, Math.max(0, MAX_TREES - nearN) / farN) : 1;
-      // move the share only when it is a full step off (up) or too high to fit (down)
-      if (want < keepFar) keepFar = Math.max(THIN_STEP / 4, Math.floor(want / THIN_STEP) * THIN_STEP);
-      else if (want >= keepFar + THIN_STEP) keepFar = Math.min(1, Math.floor(want / THIN_STEP) * THIN_STEP);
-      const chosen = ready.map((r) => ({ ...r, keep: r.lod === 0 ? 1 : keepFar }));
+      const want = thinReach(ready, MAX_TREES, NEAR);
+      const step = (r: number) => REACH_STEP ** Math.floor(Math.log(r) / Math.log(REACH_STEP));
+      if (want < reach) reach = step(want);
+      else if (want >= reach * REACH_STEP * REACH_STEP) reach = want === Infinity ? Infinity : step(want) / REACH_STEP;
+      const chosen = ready.map((r) => ({ c: r.c, lod: r.lod, keep: r.d < NEAR ? 1 : Math.floor(keepAt(r.d, reach) * 16) / 16 }));
       // forget chunks long out of sight
       if (chunks.size > MAX_CHUNKS) for (const [key, c] of chunks) if (frameNo - c.seen > 600) chunks.delete(key);
-      const sig = `${keepFar}|${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lod}`).join(";");
+      const sig = `${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lod}:${q.keep}`).join(";");
       const now = performance.now();
       if (sig !== shown) {
         if (shown === null || now - lastAssemble > ASSEMBLE_EVERY) {
@@ -480,6 +468,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         const u = mat.uniforms;
         framer.set(u, args, host, origin);
         u.uTime.value = performance.now() / 1000;
+        (u.uEye.value as Vector3).set(...eye);
+        u.uReach.value = Math.min(reach, 1e9);
+        u.uFar.value = far;
         u.uGrow.value = grow * grow * (3 - 2 * grow);
         (u.uWind.value as Vector3).set(WIND_DIR[0], WIND_DIR[1], flat ? 0 : wind);
         const seasonal = u.uSeasonal.value > 0.5;

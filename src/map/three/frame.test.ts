@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { sunDirection } from "../../sim/weather";
 import {
   EARTH_RADIUS_M,
+  eyeOf,
+  frustumPlanes,
+  sphereInside,
   invert4,
   lngLatToMercator,
   lngLatToSphere,
@@ -107,5 +110,25 @@ describe("matrices and rays", () => {
   it("hits the ground plane", () => {
     expect(close(rayGround([0, 0, 10], [0.6, 0, -0.8])!, [7.5, 0, 0])).toBe(true);
     expect(rayGround([0, 0, 10], [1, 0, 0])).toBeNull();
+  });
+});
+
+describe("frustum", () => {
+  // GL perspective (60 deg, square, near 1, far 100) times a view from (0, 0, 10) down -z, column-major
+  const f = 1 / Math.tan(Math.PI / 6);
+  const m = new Float64Array([f, 0, 0, 0, 0, f, 0, 0, 0, 0, -101 / 99, -1, 0, 0, -200 / 99 - (10 * -101) / 99, 10]);
+  it("finds the eye", () => {
+    const e = eyeOf(m)!;
+    expect(e[0]).toBeCloseTo(0);
+    expect(e[1]).toBeCloseTo(0);
+    expect(e[2]).toBeCloseTo(10);
+  });
+  it("keeps what is in front and drops what is behind or aside, with no far plane", () => {
+    const pl = frustumPlanes(m);
+    expect(sphereInside(pl, 0, 0, 0, 1)).toBe(true);
+    expect(sphereInside(pl, 0, 0, -1e6, 1)).toBe(true);
+    expect(sphereInside(pl, 0, 0, 20, 1)).toBe(false);
+    expect(sphereInside(pl, 100, 0, 0, 1)).toBe(false);
+    expect(sphereInside(pl, 7, 0, 0, 2)).toBe(true); // the edge of the view at 10 m is ~5.8 m off the axis
   });
 });
