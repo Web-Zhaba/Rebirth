@@ -19,6 +19,7 @@ export interface Model {
   colors: number[]; // r, g, b in 0..1 per vertex
   facade: number[]; // s, len, top, pattern per vertex (see PATTERN)
   indices: number[];
+  lift?: number[]; // per vertex: how far groundSeat.ts raised it onto the relief (the facade keeps the height above that)
 }
 
 export const MAX_VERTS = 48; // rings with more vertices are simplified

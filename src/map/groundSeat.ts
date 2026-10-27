@@ -17,8 +17,13 @@ export type Ground = (x: number, y: number) => number;
 
 function shifted(model: Model, dz: (x: number, y: number, z: number) => number): Model {
   const p = model.positions.slice();
-  for (let k = 0; k < p.length; k += 3) p[k + 2] = dz(p[k], p[k + 1], p[k + 2]);
-  return { ...model, positions: p };
+  const lift: number[] = [];
+  for (let k = 0; k < p.length; k += 3) {
+    const z = dz(p[k], p[k + 1], p[k + 2]);
+    lift.push(z - p[k + 2] + (model.lift?.[k / 3] ?? 0));
+    p[k + 2] = z;
+  }
+  return { ...model, positions: p, lift };
 }
 
 export function seatBuilding(model: Model, ring: readonly XY[], ground: Ground, plinth: string): Model {
@@ -40,7 +45,7 @@ export function seatBuilding(model: Model, ring: readonly XY[], ground: Ground, 
   }
   // the top is seen in yards and gardens (houses cover it with their floor); concave lots need the real triangulation
   for (const [p, q, s] of tris) mesh.flat([p[0], p[1], top], [q[0], q[1], top], [s[0], s[1], top], col);
-  return merge(out, mesh.m);
+  return merge(out, { ...mesh.m, lift: new Array<number>(mesh.m.positions.length / 3).fill(top) }); // its facade height is below 0: plain stone
 }
 
 export function drapeRoad(model: Model, ground: Ground): Model {
@@ -89,5 +94,6 @@ function merge(a: Model, b: Model): Model {
     colors: [...a.colors, ...b.colors],
     facade: [...a.facade, ...b.facade],
     indices: [...a.indices, ...b.indices.map((i) => i + n)],
+    lift: [...(a.lift ?? new Array<number>(n).fill(0)), ...(b.lift ?? new Array<number>(b.positions.length / 3).fill(0))],
   };
 }

@@ -3,6 +3,8 @@ import { buildHeritageModel } from "./heritageModels";
 import { drapeRoad, ROAD_LIFT, seatBridge, seatBuilding } from "./groundSeat";
 import type { Model, XY } from "./modelGeometry";
 import { buildRoadModel } from "./roadModels";
+import { projectModel } from "./modelBuffers";
+import { makeFrame } from "../world/frame";
 
 const zs = (m: Model) => m.positions.filter((_, i) => i % 3 === 2);
 const ring: XY[] = [[0, 0], [10, 0], [10, 6], [0, 6]];
@@ -20,6 +22,16 @@ describe("groundSeat", () => {
     expect(Math.min(...zs(s))).toBeLessThan(100);
     expect(s.indices.length).toBeGreaterThan(m.indices.length);
     expect(Math.max(...s.indices)).toBeLessThan(s.positions.length / 3);
+  });
+
+  it("keeps the facade height above the model's own ground (windows are laid out by it)", () => {
+    const m = buildHeritageModel(ring, 6, "house");
+    const frame = makeFrame(55.75, 37.6);
+    const origin = { lng: frame.toLngLat(0, 0)[0], lat: frame.toLngLat(0, 0)[1] };
+    const flat = projectModel(m, frame.toLngLat, origin);
+    const seated = projectModel(seatBuilding(m, ring, (x) => 130 + x * 0.3, "#888888"), frame.toLngLat, origin);
+    expect(Array.from(seated.z.slice(0, flat.z.length))).toEqual(Array.from(flat.z));
+    expect(Math.max(...seated.m.filter((_, i) => i % 3 === 2))).toBeGreaterThan(133);
   });
 
   it("adds no plinth on flat ground", () => {

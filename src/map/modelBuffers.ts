@@ -16,6 +16,7 @@ export interface Packed {
   n: Float32Array; // normals, town-local (east, north, up)
   c: Float32Array; // colours
   f: Float32Array; // facade codes, 4 per vertex (modelGeometry.ts PATTERN)
+  z: Float32Array; // height above the model's own ground per vertex (what facades are laid out by; Model.lift)
   l: Float32Array; // lamp per vertex: kind (0 none, 1 house, 2 work, 3 tavern) + a building seed in 0..1
   i: Uint32Array; // triangle indices, from 0 within the pack
 }
@@ -52,14 +53,16 @@ export function projectPoints(p: ArrayLike<number>, toLngLat: (x: number, y: num
 export function projectModel(model: Model, toLngLat: (x: number, y: number) => [number, number], origin: { lng: number; lat: number }, lamp = 0): Packed {
   const { g, m } = projectPoints(model.positions, toLngLat, origin);
   const n = model.positions.length / 3;
-  return { g, m, n: Float32Array.from(model.normals), c: Float32Array.from(model.colors), f: Float32Array.from(model.facade), l: new Float32Array(n).fill(lamp), i: Uint32Array.from(model.indices) };
+  const z = new Float32Array(n);
+  for (let k = 0; k < n; k++) z[k] = model.positions[k * 3 + 2] - (model.lift?.[k] ?? 0);
+  return { g, m, n: Float32Array.from(model.normals), c: Float32Array.from(model.colors), f: Float32Array.from(model.facade), z, l: new Float32Array(n).fill(lamp), i: Uint32Array.from(model.indices) };
 }
 
 // One pack of many, indices offset.
 export function mergePacked(list: readonly Packed[]): Packed {
   let nv = 0, ni = 0;
   for (const p of list) (nv += p.g.length / 3), (ni += p.i.length);
-  const out: Packed = { g: new Float32Array(nv * 3), m: new Float32Array(nv * 3), n: new Float32Array(nv * 3), c: new Float32Array(nv * 3), f: new Float32Array(nv * 4), l: new Float32Array(nv), i: new Uint32Array(ni) };
+  const out: Packed = { g: new Float32Array(nv * 3), m: new Float32Array(nv * 3), n: new Float32Array(nv * 3), c: new Float32Array(nv * 3), f: new Float32Array(nv * 4), z: new Float32Array(nv), l: new Float32Array(nv), i: new Uint32Array(ni) };
   let v = 0, k = 0;
   for (const p of list) {
     out.g.set(p.g, v * 3);
@@ -67,6 +70,7 @@ export function mergePacked(list: readonly Packed[]): Packed {
     out.n.set(p.n, v * 3);
     out.c.set(p.c, v * 3);
     out.f.set(p.f, v * 4);
+    out.z.set(p.z, v);
     out.l.set(p.l, v);
     for (let j = 0; j < p.i.length; j++) out.i[k + j] = p.i[j] + v;
     v += p.g.length / 3;

@@ -95,6 +95,7 @@ attribute vec3 aMerc;
 attribute vec3 aColor;
 attribute vec4 aFacade;
 attribute float aLamp;
+attribute float aZ;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
@@ -112,7 +113,7 @@ void main() {
   vN = normal;
   vC = aColor;
   vF = aFacade;
-  vZ = aMerc.z; // height above the ground in metres
+  vZ = aZ; // height above the model's own ground in metres (on the relief aMerc.z also has the ground)
   vXY = aMerc.xy; // metres east and north of the origin, for patterns laid out in world space
   vLamp = aLamp;
 }`;
@@ -425,6 +426,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     geo.setAttribute("aColor", new BufferAttribute(b.c, 3));
     geo.setAttribute("aFacade", new BufferAttribute(b.f, 4));
     geo.setAttribute("aLamp", new BufferAttribute(b.l, 1));
+    geo.setAttribute("aZ", new BufferAttribute(b.z, 1));
     geo.setIndex(new BufferAttribute(b.i, 1));
     mesh.geometry.dispose();
     mesh.geometry = geo;
