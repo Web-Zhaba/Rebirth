@@ -19,7 +19,7 @@ import { mercatorToLngLat } from "./three/frame";
 // their way near the town. The three.js layer (treeLayer.ts) picks the chunks the camera sees and loads with the first
 // close view.
 
-export const FOREST_RANGE = 25_000; // m from the founding point: no trees beyond (the town frame is local)
+export const FOREST_RANGE = 150_000; // m from the founding point: no trees beyond (float32 offsets from the town stay at about a centimetre)
 const SPACING = 9; // m between trees
 const CELL = 4; // m, occupancy grid of houses, roads and lots
 const PROGRESS_STEPS = 10; // a clearing under way fells its trees in this many steps

@@ -46,8 +46,10 @@ import { acquireHost, type ThreeHost } from "./three/host";
 
 export const TREE_LAYER_ID = "forest-trees";
 const GROW_TO = TREES_FROM_ZOOM + 1;
-const MAX_TREES = 80_000;
-const VIEW_MAX = 3000; // m from the camera's ground point
+const MAX_TREES = 80_000; // drawn at once; past it the far chunks are thinned
+const THIN_STEP = 0.125;
+const MAX_CHUNKS = 3000; // cached; beyond it chunks unseen for a while are dropped
+const VIEW_MAX = 3000; // m from the camera's ground point toward the horizon (at least)
 const NEAR = 450; // m from the camera: full trees within
 const FLAT_PITCH = 18; // degrees: flatter views get flat crowns
 const FRAME_BUDGET = 4; // ms of chunk building per frame
@@ -144,11 +146,14 @@ export interface TreeLayerOptions {
   weather: ReadonlySignal<WeatherState | null>;
 }
 
-// One chunk's instances by kind, PER floats each.
+// One chunk's instances by kind, PER floats each, in hash order (treeScatter.ts).
 interface Chunk {
   i: number;
   j: number;
   kinds: Float32Array[];
+  n: number; // trees in all
+  lod: number; // the level it was last drawn at (levels switch with some slack, so they do not flicker)
+  seen: number; // frame it was last under the screen
 }
 
 // A growable interleaved instance buffer behind one mesh.
@@ -186,6 +191,8 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   let origin: { lng: number; lat: number } | null = null;
   let shown: string | null = null; // signature of what the buffers hold
   let lastAssemble = 0;
+  let keepFar = 1; // share of the trees drawn in far chunks
+  let frameNo = 0;
   const camera = new Camera();
   const framer = frameSetter(opts.light);
 
@@ -208,8 +215,11 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     }
     const kinds = TREE_KINDS.map((_, kind) => {
       const base: number[] = [], par: number[] = [];
-      for (let t = 0; t < trees.length; t += TREE_STRIDE) {
-        if (trees[t + 3] !== kind) continue;
+      // by hash: any prefix is an even thinning of the chunk, and a thinner prefix keeps the trees of a thicker one
+      const order: number[] = [];
+      for (let t = 0; t < trees.length; t += TREE_STRIDE) if (trees[t + 3] === kind) order.push(t);
+      order.sort((a, b) => trees[a + 5] - trees[b + 5]);
+      for (const t of order) {
         const x = trees[t], y = trees[t + 1];
         const [a, b] = tf.toLngLat(x, y);
         base.push(x, y, k > 0 ? (groundAt(a, b) ?? 0) * k - SINK : -SINK);
@@ -224,7 +234,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       return out;
     });
-    return { i, j, kinds };
+    return { i, j, kinds, n: kinds.reduce((a, q) => a + q.length / PER, 0), lod: -1, seen: 0 };
   };
 
   // The ground under the screen as a polygon in town metres (its border unprojected, cut at VIEW_MAX), and the
@@ -236,55 +246,67 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     const [mx, my] = tf.toLocal(centre.lng, centre.lat);
     const fov = ((map as unknown as { transform?: { fov?: number } }).transform?.fov ?? 36.87) * (Math.PI / 180);
     const mpp = (40075016.686 * Math.cos((centre.lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom());
-    const dist = ((0.5 * h) / Math.tan(fov / 2)) * mpp;
+    const camDist = ((0.5 * h) / Math.tan(fov / 2)) * mpp;
     const pitch = (map.getPitch() * Math.PI) / 180, bearing = (map.getBearing() * Math.PI) / 180;
-    const back = dist * Math.sin(pitch);
+    const back = camDist * Math.sin(pitch);
     const cam: [number, number] = [mx - Math.sin(bearing) * back, my - Math.cos(bearing) * back];
-    const alt = dist * Math.cos(pitch);
-    const border: [number, number][] = [];
+    const alt = camDist * Math.cos(pitch);
+    // the border, cut where it runs toward the horizon: no farther than VIEW_MAX, or than a few times the near edge
+    // (a view from above sees all of its ground)
     const edge: [number, number][] = [[0, 0], [w / 2, 0], [w, 0], [w, h / 2], [w, h], [w / 2, h], [0, h], [0, h / 2]];
-    for (const [sx, sy] of edge) {
+    const ground = edge.map(([sx, sy]) => {
       const ll = map.unproject([sx, sy]);
-      let [x, y] = tf.toLocal(ll.lng, ll.lat);
-      const d = Math.hypot(x - cam[0], y - cam[1]);
+      return tf.toLocal(ll.lng, ll.lat);
+    });
+    const dist = ([x, y]: [number, number]) => Math.hypot(x - cam[0], y - cam[1]);
+    const near = Math.max(...[4, 5, 6].map((k) => dist(ground[k])).filter(Number.isFinite), 0);
+    const far = Math.max(VIEW_MAX, near * 3);
+    const border: [number, number][] = [];
+    for (const p of ground) {
+      const d = dist(p);
       if (!Number.isFinite(d)) continue;
-      if (d > VIEW_MAX) (x = cam[0] + ((x - cam[0]) * VIEW_MAX) / d), (y = cam[1] + ((y - cam[1]) * VIEW_MAX) / d);
-      border.push([x, y]);
+      border.push(d > far ? [cam[0] + ((p[0] - cam[0]) * far) / d, cam[1] + ((p[1] - cam[1]) * far) / d] : p);
     }
     return { border, cam, alt };
   };
 
   // Refills the instance buffers from the chosen chunks (a buffer is replaced only when it has to grow).
-  const assemble = (chosen: { c: Chunk; lod: number }[]) => {
+  const taken = (a: Float32Array, keep: number) => Math.round((a.length / PER) * keep);
+  const assemble = (chosen: { c: Chunk; lod: number; keep: number }[]) => {
     const counts = slots.map(() => 0);
-    for (const { c, lod } of chosen) c.kinds.forEach((a, kind) => (counts[kind * TREE_LODS + lod] += a.length / PER));
+    for (const { c, lod, keep } of chosen) c.kinds.forEach((a, kind) => (counts[kind * TREE_LODS + lod] += taken(a, keep)));
     slots.forEach((s, k) => {
-      const geo = s.mesh.geometry as InstancedBufferGeometry;
       if (!s.buf || s.buf.count < counts[k]) {
+        // a new geometry, not new attributes on the old one: three keeps the instance limit of the first binding
+        const old = s.mesh.geometry as InstancedBufferGeometry;
+        const geo = new InstancedBufferGeometry();
+        for (const name of ["position", "normal", "aColor", "aCrown"]) geo.setAttribute(name, old.getAttribute(name));
+        geo.setIndex(old.getIndex());
         s.buf = new InstancedInterleavedBuffer(new Float32Array(Math.max(256, Math.ceil(counts[k] * 1.5)) * PER), PER).setUsage(DynamicDrawUsage);
         geo.setAttribute("iG", new InterleavedBufferAttribute(s.buf, 3, 0));
         geo.setAttribute("iM", new InterleavedBufferAttribute(s.buf, 3, 3));
         geo.setAttribute("iP", new InterleavedBufferAttribute(s.buf, 4, 6));
+        s.mesh.geometry = geo;
+        old.dispose();
       }
       s.count = 0;
     });
-    for (const { c, lod } of chosen)
+    for (const { c, lod, keep } of chosen)
       c.kinds.forEach((a, kind) => {
-        const s = slots[kind * TREE_LODS + lod];
-        (s.buf!.array as Float32Array).set(a, s.count * PER);
-        s.count += a.length / PER;
+        const s = slots[kind * TREE_LODS + lod], n = taken(a, keep);
+        (s.buf!.array as Float32Array).set(a.subarray(0, n * PER), s.count * PER);
+        s.count += n;
       });
     for (const s of slots) {
       const geo = s.mesh.geometry as InstancedBufferGeometry;
       geo.instanceCount = s.count;
       s.mesh.visible = s.count > 0;
-      if (s.buf && s.count) {
-        s.buf.clearUpdateRanges();
-        s.buf.addUpdateRange(0, s.count * PER);
-        s.buf.needsUpdate = true;
-      }
+      if (s.buf && s.count) s.buf.needsUpdate = true;
     }
   };
+
+  // devtools: what is drawn now
+  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), keepFar, chunks: chunks.size }) });
 
   return {
     id: TREE_LAYER_ID,
@@ -403,19 +425,31 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         if (c) chunks.set(key, c);
         else missing = true;
       }
-      // what to draw: up to MAX_TREES, each chunk at its level of detail
+      // what to draw: every chunk under the screen at its level of detail; past MAX_TREES the far ones are thinned
+      // evenly (near ones stay whole), in steps of THIN_STEP and with slack, so the set does not shimmer as chunks
+      // come and go at the edges
+      frameNo++;
       const flat = map.getPitch() < FLAT_PITCH;
-      const chosen: { c: Chunk; lod: number }[] = [];
-      let total = 0;
+      const ready: { c: Chunk; lod: number }[] = [];
+      let nearN = 0, farN = 0;
       for (const s of seen) {
         const c = chunks.get(chunkKey(s.i, s.j));
         if (!c) continue;
-        const n = c.kinds.reduce((a, k) => a + k.length / PER, 0);
-        if (total + n > MAX_TREES) break;
-        total += n;
-        chosen.push({ c, lod: flat ? 2 : s.d < NEAR ? 0 : 1 });
+        c.seen = frameNo;
+        const lod = flat ? 2 : c.lod === 0 ? (s.d < NEAR * 1.2 ? 0 : 1) : s.d < NEAR ? 0 : 1;
+        c.lod = lod;
+        ready.push({ c, lod });
+        if (lod === 0) nearN += c.n;
+        else farN += c.n;
       }
-      const sig = chosen.map((q) => `${q.c.i},${q.c.j}:${q.lod}`).join(";");
+      const want = farN > 0 ? Math.min(1, Math.max(0, MAX_TREES - nearN) / farN) : 1;
+      // move the share only when it is a full step off (up) or too high to fit (down)
+      if (want < keepFar) keepFar = Math.max(THIN_STEP / 4, Math.floor(want / THIN_STEP) * THIN_STEP);
+      else if (want >= keepFar + THIN_STEP) keepFar = Math.min(1, Math.floor(want / THIN_STEP) * THIN_STEP);
+      const chosen = ready.map((r) => ({ ...r, keep: r.lod === 0 ? 1 : keepFar }));
+      // forget chunks long out of sight
+      if (chunks.size > MAX_CHUNKS) for (const [key, c] of chunks) if (frameNo - c.seen > 600) chunks.delete(key);
+      const sig = `${keepFar}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lod}`).join(";");
       const now = performance.now();
       if (sig !== shown) {
         if (shown === null || now - lastAssemble > ASSEMBLE_EVERY) {
