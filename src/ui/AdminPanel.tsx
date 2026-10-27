@@ -5,6 +5,7 @@ import { ADMIN } from "../sim/admin";
 import type { AdminOp } from "../sim/admin";
 import { revealRadius } from "../map/revealTool";
 import { flash } from "../map/tools";
+import { SEASON_NAMES, seasonPreview } from "../map/seasonPreview";
 import { sendCmd, setSpeed, speed } from "../simClient";
 import { Button } from "./kit";
 
@@ -62,6 +63,17 @@ export function AdminPanel() {
         {RADII.map((m) => (
           <Button key={m} variant={r === m ? "primary" : "default"} aria-pressed={r === m} onClick={() => (revealRadius.value = r === m ? null : m)}>
             {m} м
+          </Button>
+        ))}
+      </div>
+      <div class="admin-sub">Сезон на карте (игра не меняется):</div>
+      <div class="admin-grid">
+        <Button variant={seasonPreview.value === null ? "primary" : "default"} aria-pressed={seasonPreview.value === null} onClick={() => (seasonPreview.value = null)}>
+          Как в игре
+        </Button>
+        {SEASON_NAMES.map((name, k) => (
+          <Button key={name} variant={seasonPreview.value === k ? "primary" : "default"} aria-pressed={seasonPreview.value === k} onClick={() => (seasonPreview.value = k)}>
+            {name}
           </Button>
         ))}
       </div>

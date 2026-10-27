@@ -18,6 +18,7 @@ import { acquireHost, type ThreeHost } from "./three/host";
 import { buildWaterChunk, FLOW_REACH, realShores, runsOutside, SHORE_CAP, tileWater, type Box, type TileWater, type Waterway } from "./waterMesh";
 import { iceOpacity, snowOpacity, weatherCoverVisibility, WIND_DIR } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
+import { motionOn, motionTime, showWhile, water3dOn } from "./graphicsSettings";
 
 // The 3D water (PLAN-3d-world.ru.md stage 5): the water polygons of the landcover tiles (the same the 2D water fill
 // and the game read) and the streams of the waterway tiles, drawn by three.js over the 2D water, which stays under it
@@ -565,7 +566,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       const u = mat.uniforms;
       framer.set(u, args, host, origin);
       (u.uEye.value as Vector3).set(...eye);
-      u.uTime.value = performance.now() / 1000;
+      u.uTime.value = motionTime();
       const clock = opts.light?.clock.peek() ?? 0;
       const cal = calendar(clock);
       const sky = skyColours(cal.hour + cal.minute / 60);
@@ -583,7 +584,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       const t = Math.min(1, (zoom - WATER_FROM_ZOOM) / (WATER_FULL_ZOOM - WATER_FROM_ZOOM));
       u.uIn.value = t * t * (3 - 2 * t);
       host.draw((r) => r.render(scene!, camera));
-      map.triggerRepaint(); // the ripples move every frame
+      if (motionOn.peek()) map.triggerRepaint(); // the ripples move every frame
     },
   };
 }
@@ -605,16 +606,19 @@ export function attachWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
   const layer = createWaterLayer(map, opts);
   const before = () => ["weather-haze", "night-tint"].find((id) => map.getLayer(id));
   let disposed = false;
+  let stopShow: (() => void) | null = null;
   const add = () => {
     const b = before();
     if (disposed || map.getLayer(WATER_LAYER_ID) || !b) return;
     map.addLayer(layer, b);
     map.off("styledata", add);
+    stopShow = showWhile(map, WATER_LAYER_ID, water3dOn);
   };
   if (before()) add();
   else map.on("styledata", add);
   return () => {
     disposed = true;
+    stopShow?.();
     map.off("styledata", add);
     if (map.getLayer(WATER_LAYER_ID)) map.removeLayer(WATER_LAYER_ID);
   };

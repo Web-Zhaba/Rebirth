@@ -26,6 +26,7 @@ import { attachTrafficLayer } from "./map/trafficLayer";
 import { attachWeatherLayer } from "./map/weatherLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
 import { attachZoneTool } from "./map/zoneTool";
+import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
 import { App } from "./ui/App";
@@ -42,7 +43,9 @@ attachArticles();
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
 // Buildings and built roads as three.js models (loaded with the first one); localStorage debug3dModels = "1" shows every model kind instead.
-const sunLight = { clock: gameClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) };
+// The map's clock and weather: the game's, or another season's while the admin panel previews one (seasonPreview.ts).
+const mapClock = previewClock(gameClock);
+const sunLight = { clock: mapClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) };
 attachModels(map, { light: sunLight, debug: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1" });
 attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
@@ -55,7 +58,7 @@ const cloudSite = computed(() => {
   const w = state.value?.weather?.site;
   return w ? { seed: w.seed, phase: w.phase } : null;
 });
-const weatherNow = computed(() => state.value?.weather ?? null);
+const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
 attachForest(map, { light: sunLight, weather: weatherNow }); // 3D trees in the forest around the town, close up
 attachWater(map, { light: sunLight, weather: weatherNow }); // 3D water, close up
 // Clouds above everything on the map, visible only on the far globe views; their ground shadows at every zoom, just
@@ -65,7 +68,7 @@ attachClouds(map, {
   site: cloudSite,
   extraLayers: [{ beforeId: "night-tint", load: async () => (await import("./map/clouds/cloudShadows")).createShadowLayer(map, { clock: gameClock, site: cloudSite }) }],
 });
-attachWeatherLayer(map, { weather: weatherNow, clock: gameClock });
+attachWeatherLayer(map, { weather: weatherNow, clock: mapClock });
 attachPrecipitation(map, { weather: weatherNow });
 attachRoadTool(map);
 attachZoneTool(map);

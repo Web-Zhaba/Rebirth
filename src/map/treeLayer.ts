@@ -25,6 +25,7 @@ import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
 import { WIND_DIR } from "./weatherMath";
+import { forest3dOn, motionOn, motionTime, showWhile } from "./graphicsSettings";
 import { bakeImpostor, IMPOSTOR_STEP, IMPOSTOR_VIEWS, impostorQuad, treeGeometry, type Impostor } from "./treeImpostor";
 import { buildTree, crownAt, TREE_LODS } from "./treeModels";
 import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
@@ -522,7 +523,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       for (const mat of mats) {
         const u = mat.uniforms;
         framer.set(u, args, host, origin);
-        u.uTime.value = performance.now() / 1000;
+        u.uTime.value = motionTime();
         (u.uEye.value as Vector3).set(...eye);
         u.uReach.value = Math.min(reach, 1e9);
         u.uFar.value = far;
@@ -542,7 +543,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         r.render(scene!, camera);
         color.setLocked(false);
       });
-      if (wind > 0.02 && !flat) map.triggerRepaint(); // the sway moves every frame
+      if (wind > 0.02 && !flat && motionOn.peek()) map.triggerRepaint(); // the sway moves every frame
     },
   };
 }
@@ -552,16 +553,19 @@ export function attachTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ()
   const layer = createTreeLayer(map, opts);
   const before = () => ["buildings-outline", "night-tint"].find((id) => map.getLayer(id));
   let disposed = false;
+  let stopShow: (() => void) | null = null;
   const add = () => {
     const b = before();
     if (disposed || map.getLayer(TREE_LAYER_ID) || !b) return;
     map.addLayer(layer, b);
     map.off("styledata", add);
+    stopShow = showWhile(map, TREE_LAYER_ID, forest3dOn);
   };
   if (before()) add();
   else map.on("styledata", add);
   return () => {
     disposed = true;
+    stopShow?.();
     map.off("styledata", add);
     if (map.getLayer(TREE_LAYER_ID)) map.removeLayer(TREE_LAYER_ID);
   };

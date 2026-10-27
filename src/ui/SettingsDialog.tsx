@@ -1,6 +1,7 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
 import { reliefOn, setRelief } from "../map/relief";
+import { forest3dOn, motionOn, setForest3d, setMotion, setWater3d, water3dOn } from "../map/graphicsSettings";
 import { CLOUD_QUALITIES, cloudQuality, highQualityAvailable, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
 import { Button, Dialog, Segmented, type SegmentOption } from "./kit";
@@ -51,6 +52,18 @@ export function SettingsDialog() {
         <label class="settings-row" title="Холмы и горы в объёме; без него карта плоская и рисуется быстрее">
           <input type="checkbox" checked={reliefOn.value} onChange={(e) => setRelief((e.target as HTMLInputElement).checked)} />
           <span>Рельеф</span>
+        </label>
+        <label class="settings-row" title="Деревья в объёме вблизи; без них лес — плоская заливка">
+          <input type="checkbox" checked={forest3dOn.value} onChange={(e) => setForest3d((e.target as HTMLInputElement).checked)} />
+          <span>Объёмный лес</span>
+        </label>
+        <label class="settings-row" title="Рябь, отражения неба, блики и лёд вблизи; без неё вода — плоская заливка">
+          <input type="checkbox" checked={water3dOn.value} onChange={(e) => setWater3d((e.target as HTMLInputElement).checked)} />
+          <span>Объёмная вода</span>
+        </label>
+        <label class="settings-row" title="Деревья качаются на ветру, по воде бежит рябь; без этого карта не перерисовывается каждый кадр">
+          <input type="checkbox" checked={motionOn.value} onChange={(e) => setMotion((e.target as HTMLInputElement).checked)} />
+          <span>Ветер и волны</span>
         </label>
         <div class="settings-row">
           <span>Качество облаков</span>
