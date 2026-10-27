@@ -121,7 +121,7 @@ void main() {
   float fade = 1.0 - smoothstep(0.2, 0.5, fw / ${ROW}); // the rows fade before they get finer than a pixel
   float ridge = 0.5 + 0.5 * sin(ph); // 0 in the furrow .. 1 on the ridge
   vec2 pp = vLoc + hsh * 97.0;
-  float patch = noise(pp * 0.06) * 0.6 + noise(pp * 0.23) * 0.4;
+  float blotch = noise(pp * 0.06) * 0.6 + noise(pp * 0.23) * 0.4;
   float fine = noise(pp * 1.7);
   // the calendar, in seasons, shifted a little for this field
   float u = (uDay + (hsh - 0.5) * ${JITTER}) / ${SEASON};
@@ -130,7 +130,7 @@ void main() {
   float edge = vEdge + (noise(vLoc * 0.4 + hsh * 31.0) - 0.5) * 1.2;
   float hw = 2.0 + 2.0 * fract(hsh * 7.3);
   float headland = 1.0 - smoothstep(hw - 0.5, hw + 0.5, edge);
-  vec3 grass = mix(uGrass, uFallowDry, dryYear * 0.7) * (0.86 + 0.28 * fine) * (0.92 + 0.16 * patch);
+  vec3 grass = mix(uGrass, uFallowDry, dryYear * 0.7) * (0.86 + 0.28 * fine) * (0.92 + 0.16 * blotch);
   vec3 col;
   float amp = 0.0; // how high the ridges stand
   if (vInfo.x > 0.5) {
@@ -142,13 +142,13 @@ void main() {
     float prog = clamp((u - 2.0) / 0.5, 0.0, 1.0); // the share harvested
     float plough = clamp(smoothstep(2.7, 2.8, u) + smoothstep(3.0, 3.01, u) + (1.0 - smoothstep(-0.1, 0.0, u)), 0.0, 1.0);
     // soil: ridges dried, a little different in patches
-    vec3 soil = mix(uSoil, uSoilDry, ridge * 0.6 * fade + 0.2 * patch) * (0.9 + 0.2 * patch);
+    vec3 soil = mix(uSoil, uSoilDry, ridge * 0.6 * fade + 0.2 * blotch) * (0.9 + 0.2 * blotch);
     // the crop in rows on the ridges, or covering all of it when dense
     float t = ridge + 0.15 * (fine - 0.5);
     float rows = smoothstep(1.0 - cov * 1.15 - 0.08, 1.0 - cov * 1.15 + 0.08, t) * smoothstep(0.0, 0.05, g);
     float mask = mix(cov * 0.8 * smoothstep(0.0, 0.05, g), rows, fade);
     vec3 crop = mix(uShoot, uCrop, smoothstep(0.1, 0.7, g));
-    crop = mix(crop, uRipe, ripe) * (0.88 + 0.24 * patch) * (0.94 + 0.12 * fine);
+    crop = mix(crop, uRipe, ripe) * (0.88 + 0.24 * blotch) * (0.94 + 0.12 * fine);
     vec3 standing = mix(soil, crop, mask);
     // the cut part: a band that sweeps along the furrows
     float span = max(vInfo.w - vInfo.z, 1.0);
@@ -157,7 +157,7 @@ void main() {
     float aa = fw / span;
     float cut = prog >= 0.999 ? 1.0 : (1.0 - smoothstep(prog - aa, prog + aa, uh)) * step(0.001, prog);
     float dash = smoothstep(0.35, 0.65, noise(vec2(along * 1.4, floor(a) * 7.0)));
-    vec3 stubble = mix(uStraw * (0.92 + 0.14 * fine), uStubble, ridge * 0.55 * dash * fade + 0.1 * (1.0 - fade)) * (0.9 + 0.16 * patch);
+    vec3 stubble = mix(uStraw * (0.92 + 0.14 * fine), uStubble, ridge * 0.55 * dash * fade + 0.1 * (1.0 - fade)) * (0.9 + 0.16 * blotch);
     col = mix(standing, stubble, cut);
     col = mix(col, soil, plough);
     amp = mix(1.0, 0.45, cov * (1.0 - cut) * (1.0 - plough)) * mix(1.0, 0.5, cut * (1.0 - plough));
@@ -165,7 +165,7 @@ void main() {
     amp *= 1.0 - headland;
   } else {
     // ---- fallow: grass and weeds, no rows ----
-    col = mix(uFallow, uFallowDry, dryYear) * (0.84 + 0.32 * patch) * (0.92 + 0.16 * fine);
+    col = mix(uFallow, uFallowDry, dryYear) * (0.84 + 0.32 * blotch) * (0.92 + 0.16 * fine);
     col = mix(col, grass, headland * 0.5);
     col = mix(col, uFallowDry * 1.05, smoothstep(0.62, 0.8, noise(pp * 0.3 + 11.0)) * 0.35);
   }
@@ -176,7 +176,7 @@ void main() {
   col *= shade * (1.0 - 0.22 * (1.0 - ridge) * amp * fade) * mix(0.86, 1.0, uSun);
   // snow settles in the furrows first and leaves the ridges standing out
   float thr = 0.5 + 0.5 * sin(ph) * amp * fade;
-  float cover = smoothstep(thr * 0.7 - 0.05 + (patch - 0.5) * 0.25, thr * 0.7 + 0.2 + (patch - 0.5) * 0.25, uSnow * 1.1);
+  float cover = smoothstep(thr * 0.7 - 0.05 + (blotch - 0.5) * 0.25, thr * 0.7 + 0.2 + (blotch - 0.5) * 0.25, uSnow * 1.1);
   col = mix(col, uSnowCol * mix(0.9, 1.0, shade * 0.5) * mix(0.86, 1.0, uSun), cover);
   col *= 1.0 - 0.3 * uRain * (1.0 - cover); // rain darkens the soil and the crop
   float alpha = uIn * (1.0 - smoothstep(${FAR}.0 * 0.75, ${FAR}.0, dist)) * smoothstep(0.0, 0.8, vEdge + (noise(vLoc * 0.7) - 0.5) * 0.5 + 0.15);

@@ -286,6 +286,29 @@ button.event-card-pause-btn {
   }
 }
 
+/* FPS counter (FpsCounter.tsx): bottom-left, just above the attribution bar; never in the way of map gestures. */
+.fps {
+  position: absolute;
+  left: 12px;
+  bottom: 44px; /* clear the attribution bar */
+  z-index: var(--z-label);
+  pointer-events: none;
+  padding: 2px 8px;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  box-shadow: var(--shadow-hard-sm);
+  font-size: var(--fs-sm);
+  color: var(--pencil);
+  font-variant-numeric: tabular-nums;
+}
+
+.fps-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--ink);
+}
+
 /* Builders' tasks: bottom-right, on the same bottom line as the build bar; sized by its content. Moves left of the right
    slot while it is open. */
 .builder-tasks {

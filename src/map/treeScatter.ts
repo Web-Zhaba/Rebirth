@@ -52,7 +52,7 @@ export interface DetailPoly extends ForestPoly {
   mix: DetailMix;
 }
 // m between the grid cells of each detail kind
-export const DETAIL_SPACING: Record<DetailKind, number> = { bush: 5, reed: 3, boulder: 7 };
+export const DETAIL_SPACING: Record<DetailKind, number> = { bush: 5, reed: 2.5, boulder: 7 };
 
 export interface DetailInput {
   polys: readonly DetailPoly[];

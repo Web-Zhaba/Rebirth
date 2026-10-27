@@ -183,7 +183,7 @@ export const TREE_COLORS = {
   bare: "#7a6a58",
   snow: "#f3f4ef",
   reed: "#6f8a45",
-  reedDry: "#b8a26c",
+  reedDry: "#c2a755",
   cattail: "#5e4430",
   stone: "#8e8b82",
 } as const;

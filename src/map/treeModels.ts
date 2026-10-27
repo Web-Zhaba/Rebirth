@@ -75,18 +75,18 @@ const hash1 = (k: number) => {
 // A clump of reeds: thin blades leaning out from the middle, a few with a brown head (not recoloured, no snow).
 function reeds(mesh: Mesh): number {
   const green = rgb(TREE_COLORS.reed), head = rgb(TREE_COLORS.cattail);
-  for (let b = 0; b < 14; b++) {
-    const a = hash1(b) * Math.PI * 2, r0 = 0.05 * hash1(b + 50), lean = 0.08 + 0.22 * hash1(b + 100), h = 0.6 + 0.4 * hash1(b + 150);
-    const c = Math.cos(a), s = Math.sin(a), w = 0.012;
+  for (let b = 0; b < 12; b++) {
+    const a = hash1(b) * Math.PI * 2, r0 = 0.05 * hash1(b + 50), lean = 0.1 + 0.3 * hash1(b + 100), h = 0.6 + 0.4 * hash1(b + 150);
+    const c = Math.cos(a), s = Math.sin(a), w = 0.11; // blades are drawn broader than real leaves: thinner than a pixel they would vanish
     const bx = c * r0, by = s * r0, tx = c * (r0 + lean), ty = s * (r0 + lean);
     const n: [number, number, number] = [c, s, 0.3];
     const p = [mesh.vert(bx - s * w, by + c * w, 0, n, green), mesh.vert(bx + s * w, by - c * w, 0, n, green), mesh.vert(tx, ty, h, n, green)];
     mesh.idx(p[0], p[1], p[2]);
   }
   const first = mesh.m.positions.length / 3;
-  for (let b = 0; b < 3; b++) {
+  for (let b = 0; b < 2; b++) {
     const a = hash1(b + 200) * Math.PI * 2, r = 0.06 + 0.1 * hash1(b + 250), h = 0.68 + 0.14 * hash1(b + 300);
-    revolve(mesh, Math.cos(a) * r, Math.sin(a) * r, h, [[0.018, 0], [0.025, 0.04], [0.025, 0.12], [0, 0.16]], head, 4);
+    revolve(mesh, Math.cos(a) * r, Math.sin(a) * r, h, [[0.02, 0], [0.028, 0.04], [0.028, 0.12], [0, 0.16]], head, 4);
   }
   return first; // the heads start here
 }

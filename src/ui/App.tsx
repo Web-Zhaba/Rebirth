@@ -10,6 +10,7 @@ import { BuildingPanel } from "./BuildingPanel";
 import { CentreColumn } from "./CentreColumn";
 import { ClearingPanel } from "./ClearingPanel";
 import { FoundCity } from "./FoundCity";
+import { FpsCounter } from "./FpsCounter";
 import { HeritagePanel } from "./HeritagePanel";
 import { HotkeysDialog } from "./HotkeysDialog";
 import { Hud } from "./Hud";
@@ -41,6 +42,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <NotebookHost />}
       {c && <BuildBar />}
       {c && <AdminPanel />}
+      <FpsCounter map={map} />
       <AwayNotice />
       <AboutDialog />
       <HotkeysDialog />
