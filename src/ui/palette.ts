@@ -171,6 +171,19 @@ export const TOWN_COLORS = {
   pit: ["#3a2a1c"],
 } as const;
 
+// Trees of the 3D forest (treeModels.ts, treeLayer.ts): bark and crowns, deciduous crowns by season. Map only.
+export const TREE_COLORS = {
+  bark: "#5b4632",
+  birchBark: "#d9d4c4",
+  conifer: "#3d5a3a",
+  spring: "#8fae5a",
+  summer: "#5f7d3e",
+  autumn: "#c08a2e",
+  autumnLate: "#a5562a",
+  bare: "#7a6a58",
+  snow: "#f3f4ef",
+} as const;
+
 export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();
 
 // "#rrggbb" mixed towards another by t (0..1).

@@ -20,16 +20,15 @@ export interface Packed {
   i: Uint32Array; // triangle indices, from 0 within the pack
 }
 
-// Projects a model whose x, y are town-local metres; `toLngLat` is the town frame's local -> lng/lat.
-export function projectModel(model: Model, toLngLat: (x: number, y: number) => [number, number], origin: { lng: number; lat: number }, lamp = 0): Packed {
+// Town-local points (x, y, z metres, flat) into the globe tangent and mercator frames about `origin`; `toLngLat` is the
+// town frame's local -> lng/lat.
+export function projectPoints(p: ArrayLike<number>, toLngLat: (x: number, y: number) => [number, number], origin: { lng: number; lat: number }): { g: Float32Array; m: Float32Array } {
   const f = localFrame(origin.lng, origin.lat);
   const l0 = origin.lng * RAD;
   const cp0 = Math.cos(origin.lat * RAD);
   const ym0 = atanh(Math.sin(origin.lat * RAD));
-  const p = model.positions;
-  const n = p.length / 3;
-  const g = new Float32Array(n * 3), m = new Float32Array(n * 3);
-  for (let k = 0; k < p.length; k += 3) {
+  const g = new Float32Array(p.length), m = new Float32Array(p.length);
+  for (let k = 0; k + 2 < p.length; k += 3) {
     const [lng, lat] = toLngLat(p[k], p[k + 1]);
     const z = p[k + 2];
     const l = lng * RAD;
@@ -46,6 +45,13 @@ export function projectModel(model: Model, toLngLat: (x: number, y: number) => [
     m[k + 1] = R * cp0 * (atanh(Math.sin(ph)) - ym0);
     m[k + 2] = z;
   }
+  return { g, m };
+}
+
+// Projects a model whose x, y are town-local metres.
+export function projectModel(model: Model, toLngLat: (x: number, y: number) => [number, number], origin: { lng: number; lat: number }, lamp = 0): Packed {
+  const { g, m } = projectPoints(model.positions, toLngLat, origin);
+  const n = model.positions.length / 3;
   return { g, m, n: Float32Array.from(model.normals), c: Float32Array.from(model.colors), f: Float32Array.from(model.facade), l: new Float32Array(n).fill(lamp), i: Uint32Array.from(model.indices) };
 }
 

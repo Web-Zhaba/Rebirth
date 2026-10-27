@@ -347,6 +347,58 @@ const keyOf = (it: ModelItem, p: number, k: number): string => {
   return `${it.style}|${it.kind}|${it.height}|${it.level ?? 1}|${f}|${it.tint ?? ""}|${it.upgrading ? 1 : 0}|${lampOf(it)}|${ring}`;
 };
 
+// Matrices, sun and (on the relief) night tint of this frame into a material's uniforms (uM, uG, uT, and uSun / uTint
+// when the material has them; `light` is the uLight value). Shared with the tree layer (treeLayer.ts).
+export function frameSetter(lt: ModelLayerOptions["light"]): { light: Vector3; set: (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => void } {
+  const lg = new Float64Array(16);
+  const g64 = new Float64Array(16);
+  const light = new Vector3(...norm3(FALLBACK_LIGHT));
+  const set = (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput, host: ThreeHost, o: { lng: number; lat: number }) => {
+    const fr = host.frame(args.defaultProjectionData);
+    // mercator: local metres -> clip through the fallback (always the mercator matrix)
+    const s = metresPerMercator(o.lat);
+    const um = Float32Array.from(mercatorLocalMatrix(fr.fallback, lngLatToMercator(o.lng, o.lat), s));
+    // globe: local metres -> unit sphere (affine) -> clip
+    const f = localFrame(o.lng, o.lat);
+    for (let i = 0; i < 3; i++) {
+      lg[i] = f.e[i] / R;
+      lg[4 + i] = f.n[i] / R;
+      lg[8 + i] = f.o[i] / R;
+      lg[12 + i] = f.o[i];
+    }
+    lg[3] = lg[7] = lg[11] = 0;
+    lg[15] = 1;
+    const ug = Float32Array.from(mul4(fr.main, lg, g64));
+    // sun in the origin's east/north/up frame
+    let sun = 1;
+    light.set(...norm3(FALLBACK_LIGHT));
+    const phase = lt?.phase.peek();
+    if (lt && phase !== null && phase !== undefined) {
+      const sl = sunLocal(weatherToSphere(sunDirection(lt.clock.peek(), phase)), f);
+      sun = sunStrength(sl.sinElev);
+      if (sun > 0) {
+        const d = norm3([sl.east, sl.north, Math.max(sl.sinElev, 0.05)]);
+        const fb = norm3(FALLBACK_LIGHT);
+        light.set(...norm3([fb[0] + (d[0] - fb[0]) * sun, fb[1] + (d[1] - fb[1]) * sun, fb[2] + (d[2] - fb[2]) * sun]));
+      }
+    }
+    (u.uM.value as Matrix4).fromArray(um);
+    (u.uG.value as Matrix4).fromArray(ug);
+    u.uT.value = fr.transition;
+    if (u.uSun) u.uSun.value = sun;
+    if (u.uTint) {
+      // on the relief MapLibre drapes the night tint over the terrain only, so the models tint themselves
+      const tint = u.uTint.value as Vector4;
+      if (reliefScale.peek() > 0 && lt) {
+        const cal = calendar(lt.clock.peek());
+        const t = nightTint(cal.hour + cal.minute / 60);
+        tint.set(...rgb(t.color), t.opacity);
+      } else tint.set(0, 0, 0, 0);
+    }
+  };
+  return { light, set };
+}
+
 export type ModelLayer = maplibregl.CustomLayerInterface;
 
 // The model layer and its window-light layer (drawn later, above the night tint); they share the mesh.
@@ -363,9 +415,6 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
   let origin: { lng: number; lat: number } | null = null; // the layer origin the packs were projected for
   const cache = new Map<string, Packed>();
   const camera = new Camera();
-  const lg = new Float64Array(16);
-  const g64 = new Float64Array(16);
-  const light = new Vector3(...norm3(FALLBACK_LIGHT));
 
   const fill = (b: Packed) => {
     if (!mesh) return;
@@ -424,52 +473,10 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     dirty = false;
   };
 
-  // Matrices and sun of this frame into a material's uniforms.
+  const framer = frameSetter(opts.light);
+  const light = framer.light;
   const setFrame = (u: ShaderMaterial["uniforms"], args: maplibregl.CustomRenderMethodInput) => {
-    if (!origin) return;
-    const o = origin;
-    const fr = host!.frame(args.defaultProjectionData);
-    // mercator: local metres -> clip through the fallback (always the mercator matrix)
-    const s = metresPerMercator(o.lat);
-    const um = Float32Array.from(mercatorLocalMatrix(fr.fallback, lngLatToMercator(o.lng, o.lat), s));
-    // globe: local metres -> unit sphere (affine) -> clip
-    const f = localFrame(o.lng, o.lat);
-    for (let i = 0; i < 3; i++) {
-      lg[i] = f.e[i] / R;
-      lg[4 + i] = f.n[i] / R;
-      lg[8 + i] = f.o[i] / R;
-      lg[12 + i] = f.o[i];
-    }
-    lg[3] = lg[7] = lg[11] = 0;
-    lg[15] = 1;
-    const ug = Float32Array.from(mul4(fr.main, lg, g64));
-    // sun in the origin's east/north/up frame
-    let sun = 1;
-    light.set(...norm3(FALLBACK_LIGHT));
-    const lt = opts.light;
-    const phase = lt?.phase.peek();
-    if (lt && phase !== null && phase !== undefined) {
-      const sl = sunLocal(weatherToSphere(sunDirection(lt.clock.peek(), phase)), f);
-      sun = sunStrength(sl.sinElev);
-      if (sun > 0) {
-        const d = norm3([sl.east, sl.north, Math.max(sl.sinElev, 0.05)]);
-        const fb = norm3(FALLBACK_LIGHT);
-        light.set(...norm3([fb[0] + (d[0] - fb[0]) * sun, fb[1] + (d[1] - fb[1]) * sun, fb[2] + (d[2] - fb[2]) * sun]));
-      }
-    }
-    (u.uM.value as Matrix4).fromArray(um);
-    (u.uG.value as Matrix4).fromArray(ug);
-    u.uT.value = fr.transition;
-    if (u.uSun) u.uSun.value = sun;
-    if (u.uTint) {
-      // on the relief MapLibre drapes the night tint over the terrain only, so the models tint themselves
-      const tint = u.uTint.value as Vector4;
-      if (reliefScale.peek() > 0 && lt) {
-        const cal = calendar(lt.clock.peek());
-        const t = nightTint(cal.hour + cal.minute / 60);
-        tint.set(...rgb(t.color), t.opacity);
-      } else tint.set(0, 0, 0, 0);
-    }
+    if (origin && host) framer.set(u, args, host, origin);
   };
 
   const layer: ModelLayer = {
