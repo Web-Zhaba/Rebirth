@@ -165,6 +165,10 @@ export const TOWN_COLORS = {
   iron: ["#3a3a3c"],
   hide: ["#c2a06e"],
   bell: ["#b08a3a"],
+  fruit: ["#b8402e", "#c9a632", "#a8322a"],
+  berries: ["#a8283a", "#3a3a7a", "#b8402e"],
+  mushroom: ["#8a5a32"],
+  pit: ["#3a2a1c"],
 } as const;
 
 export const toKebab = (k: string): string => k.replace(/([a-z])([A-Z0-9])/g, "$1-$2").toLowerCase();

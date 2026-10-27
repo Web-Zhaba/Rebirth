@@ -9,6 +9,7 @@ import {
   framed,
   GATE,
   Mesh,
+  NOFAC,
   offsetRing,
   PATTERN,
   planeRoof,
@@ -203,6 +204,12 @@ function streetSide(c: Ctx): { axis: 0 | 1; sign: 1 | -1 } {
   return Math.abs(f[0]) > Math.abs(f[1]) ? { axis: 0, sign: f[0] > 0 ? 1 : -1 } : { axis: 1, sign: f[1] > 0 ? 1 : -1 };
 }
 
+// Index of the lot's edge facing the street (rect edges: 0 v0, 1 u1, 2 v1, 3 u0).
+function streetEdge(c: Ctx): number {
+  const { axis, sign } = streetSide(c);
+  return axis === 1 ? (sign < 0 ? 0 : 2) : sign > 0 ? 1 : 3;
+}
+
 // The lot cut across the street direction: the back share `back` for the building, the rest (towards the street) for the
 // yard. `street`: index of the yard's edge facing the street (rect edges: 0 v0, 1 u1, 2 v1, 3 u0); the opposite one
 // borders the building.
@@ -213,8 +220,7 @@ function splitLot(c: Ctx, back: number): { house: Rect; yard: Rect; street: numb
   const house: Rect = [lo[0], lo[1], hi[0], hi[1]], yard: Rect = [lo[0], lo[1], hi[0], hi[1]];
   if (sign > 0) (house[axis + 2] = cut), (yard[axis] = cut);
   else (house[axis] = cut), (yard[axis + 2] = cut);
-  const street = axis === 1 ? (sign < 0 ? 0 : 2) : sign > 0 ? 1 : 3;
-  return { house, yard, street };
+  return { house, yard, street: streetEdge(c) };
 }
 
 // A context for a building standing on part of the lot.
@@ -257,14 +263,14 @@ function beam(c: Ctx, a: XY, b: XY, z0: number, z1: number, th: number, col: RGB
   prism(c.mesh, ccw([[a[0] - nx, a[1] - ny], [b[0] - nx, b[1] - ny], [b[0] + nx, b[1] + ny], [a[0] + nx, a[1] + ny]]), z0, z1, col, col);
 }
 
-// Wooden fence a little inside a yard: posts and two rails on every side but the one at the building, with a gate gap
-// in the middle of the street side.
-function fence(c: Ctx, r: Rect, street: number): void {
+// Wooden fence a little inside a yard: posts and two rails on every side but the one at the building (all four when
+// `closed`), with a gate gap in the middle of the street side.
+function fence(c: Ctx, r: Rect, street: number, closed = false): void {
   const wood = pick(c, TOWN_COLORS.planks);
   const ring = rect(r[0] + 0.1, r[1] + 0.1, r[2] - 0.1, r[3] - 0.1);
   const house = (street + 2) % 4;
   for (let i = 0; i < 4; i++) {
-    if (i === house) continue;
+    if (i === house && !closed) continue;
     const a = ring[i], b = ring[(i + 1) % 4];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const lerp = (t: number): XY => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -659,42 +665,6 @@ function garden(c: Ctx): void {
   }
 }
 
-// Orchard: trees in a grid.
-function orchard(c: Ctx): void {
-  const grass = shade(pick(c, TOWN_COLORS.foliage), 1.15);
-  prism(c.mesh, c.uv, 0, 0.04, grass, grass);
-  const step = 3.2;
-  const nu = Math.max(1, Math.floor((c.hl * 2) / step)), nv = Math.max(1, Math.floor((c.hw * 2) / step));
-  const bark = pick(c, TOWN_COLORS.logs);
-  for (let i = 0; i < nu; i++)
-    for (let j = 0; j < nv; j++) {
-      const cu = -c.hl + (i + 0.5) * ((c.hl * 2) / nu) + range(c, -0.3, 0.3), cv = -c.hw + (j + 0.5) * ((c.hw * 2) / nv) + range(c, -0.3, 0.3);
-      if (!inside(c, cu, cv)) continue;
-      const trunk = range(c, 1, 1.5), rr = range(c, 1, 1.5), hh = rr * range(c, 1.4, 1.8);
-      prism(c.mesh, square(cu, cv, 0.22), 0, trunk + 0.2, bark, bark);
-      revolve(c.mesh, cu, cv, trunk, [[0.3 * rr, 0], [rr, 0.3 * hh], [rr * 0.95, 0.6 * hh], [rr * 0.55, 0.9 * hh], [0, hh]], pick(c, TOWN_COLORS.foliage), 9);
-    }
-}
-
-// Excavation: dug-out earth, spoil heaps at the edges and a plank walk.
-function dig(c: Ctx): void {
-  const soil = pick(c, TOWN_COLORS.soil);
-  prism(c.mesh, c.uv, 0, 0.05, shade(soil, 0.8), shade(soil, 0.8));
-  for (const [su, sv] of [[0.6, 0.6], [-0.6, 0.55], [0.55, -0.6]]) {
-    const cu = su * c.hl, cv = sv * c.hw, s = Math.min(c.hl, c.hw) * range(c, 0.5, 0.7);
-    if (inside(c, cu, cv)) pyramid(c.mesh, square(cu, cv, s), 0.05, s * 0.45, soil);
-  }
-  prism(c.mesh, rect(-c.hl * 0.8, -0.3, c.hl * 0.8, 0.3), 0.05, 0.15, pick(c, TOWN_COLORS.planks), pick(c, TOWN_COLORS.planks));
-}
-
-// Forager's camp: a canvas tent and baskets.
-function tent(c: Ctx): void {
-  const s = Math.min(c.hl, c.hw) * 1.3;
-  pyramid(c.mesh, square(0, 0, s), 0, clamp(c.height, 1.6, 2.4), pick(c, TOWN_COLORS.canvas));
-  const basket = pick(c, TOWN_COLORS.thatch);
-  for (const [u, v] of [[0.75, 0.7], [0.75, -0.7]]) if (inside(c, u * c.hl, v * c.hw)) revolve(c.mesh, u * c.hl, v * c.hw, 0, [[0.25, 0], [0.32, 0.4], [0, 0.4]], basket, 8);
-}
-
 // Fishing pier: a deck on posts with a small hut and a drying rack.
 function pier(c: Ctx): void {
   const wood = pick(c, TOWN_COLORS.planks);
@@ -712,13 +682,145 @@ function pier(c: Ctx): void {
   prism(c.mesh, rect(c.hl * 0.55 - 0.05, -c.hw * 0.6, c.hl * 0.55 + 0.05, c.hw * 0.6), deck + 1.5, deck + 1.6, wood, wood);
 }
 
-// Cellar: a turf-covered mound with a door.
+// Orchard: one kind of fruit tree in straight rows inside a fence, trunks whitewashed, fruit on the crowns, a ladder
+// against one tree and a basket under it.
+function orchard(c: Ctx): void {
+  const grass = shade(pick(c, TOWN_COLORS.foliage), 1.2);
+  prism(c.mesh, c.uv, 0, 0.04, grass, grass);
+  const step = 3;
+  const nu = Math.max(1, Math.floor((c.hl * 2 - 0.6) / step)), nv = Math.max(1, Math.floor((c.hw * 2 - 0.6) / step));
+  const leaf = pick(c, TOWN_COLORS.foliage), fruit = pick(c, TOWN_COLORS.fruit);
+  const bark = pick(c, TOWN_COLORS.logs), white = rgb(TOWN_COLORS.trim[0]);
+  const rr = range(c, 1.05, 1.25), trunk = 1.1;
+  const trees: XY[] = [];
+  for (let i = 0; i < nu; i++)
+    for (let j = 0; j < nv; j++) {
+      const cu = -c.hl + 0.3 + (i + 0.5) * ((c.hl * 2 - 0.6) / nu), cv = -c.hw + 0.3 + (j + 0.5) * ((c.hw * 2 - 0.6) / nv);
+      if (!inside(c, cu, cv)) continue;
+      trees.push([cu, cv]);
+      cylinder(c.mesh, [cu, cv, 0], [cu, cv, 0.7], 0.11, white);
+      cylinder(c.mesh, [cu, cv, 0.7], [cu, cv, trunk + 0.3], 0.1, bark);
+      const r = rr * range(c, 0.92, 1.05);
+      revolve(c.mesh, cu, cv, trunk, [[0.35 * r, 0], [r * 0.95, 0.35 * r], [r, 0.8 * r], [r * 0.75, 1.3 * r], [0, 1.6 * r]], shade(leaf, range(c, 0.92, 1.08)), 10);
+      // fruit around the crown's widest ring
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + c.r(), z = trunk + r * (0.5 + 0.5 * c.r());
+        const rad = r * 1.0;
+        prism(c.mesh, square(cu + Math.cos(a) * rad, cv + Math.sin(a) * rad, 0.17), z, z + 0.17, fruit, fruit);
+      }
+    }
+  if (trees.length) {
+    const [tu, tv] = trees[0];
+    const wood = pick(c, TOWN_COLORS.planks);
+    for (const s of [-0.22, 0.22]) cylinder(c.mesh, [tu + 1.1, tv + s, 0.04], [tu + 0.25, tv + s, 2.2], 0.035, wood);
+    for (let k = 1; k < 6; k++) {
+      const t = k / 6;
+      cylinder(c.mesh, [tu + 1.1 - 0.85 * t, tv - 0.22, 2.2 * t], [tu + 1.1 - 0.85 * t, tv + 0.22, 2.2 * t], 0.02, wood);
+    }
+    revolve(c.mesh, tu + 1.4, tv + 0.7, 0, [[0.22, 0], [0.3, 0.32], [0, 0.32]], pick(c, TOWN_COLORS.thatch), 8);
+    revolve(c.mesh, tu + 1.4, tv + 0.7, 0.32, [[0.28, 0], [0, 0.06]], fruit, 8);
+  }
+  fence(c, [-c.hl, -c.hw, c.hl, c.hw], streetEdge(c), true);
+}
+
+// Excavation: a dark trench lined with planks under a grid of strings on pegs, rounded spoil heaps, a sieve on legs, a
+// bucket and a ladder down into the trench.
+function dig(c: Ctx): void {
+  const soil = pick(c, TOWN_COLORS.soil);
+  prism(c.mesh, c.uv, 0, 0.03, shade(soil, 1.15), shade(soil, 1.15));
+  const tu = c.hl * 0.62, tv = c.hw * 0.55, cu = -c.hl * 0.12;
+  const pit = rgb(TOWN_COLORS.pit[0]), wood = pick(c, TOWN_COLORS.planks);
+  prism(c.mesh, rect(cu - tu, -tv, cu + tu, tv), 0.03, 0.05, pit, pit);
+  const T = rect(cu - tu, -tv, cu + tu, tv);
+  for (let i = 0; i < 4; i++) beam(c, T[i], T[(i + 1) % 4], 0.03, 0.16, 0.22, wood);
+  // pegs on the rim and strings across, every metre or so
+  const n = Math.max(2, Math.round((tu * 2) / 1.2)), m = Math.max(2, Math.round((tv * 2) / 1.2));
+  const peg = (p: XY) => cylinder(c.mesh, [p[0], p[1], 0.03], [p[0], p[1], 0.55], 0.035, wood);
+  const str = rgb(TOWN_COLORS.trim[0]);
+  for (let k = 0; k <= n; k++) {
+    const u = cu - tu + (2 * tu * k) / n;
+    peg([u, -tv - 0.2]);
+    peg([u, tv + 0.2]);
+    cylinder(c.mesh, [u, -tv - 0.2, 0.5], [u, tv + 0.2, 0.5], 0.012, str, str, 4);
+  }
+  for (let k = 0; k <= m; k++) {
+    const v = -tv + (2 * tv * k) / m;
+    peg([cu - tu - 0.2, v]);
+    peg([cu + tu + 0.2, v]);
+    cylinder(c.mesh, [cu - tu - 0.2, v, 0.5], [cu + tu + 0.2, v, 0.5], 0.012, str, str, 4);
+  }
+  // spoil heaps, rounded, beside the trench
+  const side = cu + tu + (c.hl - (cu + tu)) / 2;
+  for (const [v, k] of [[-c.hw * 0.5, 1], [c.hw * 0.45, 0.8]] as const) {
+    const r = Math.min(0.9, (c.hl - (cu + tu)) * 0.55) * k;
+    revolve(c.mesh, side, v, 0.03, [[r, 0], [r * 0.85, r * 0.35], [r * 0.5, r * 0.62], [0, r * 0.72]], soil, 10);
+  }
+  // the sieve on four legs and a bucket in front of the trench
+  const sv = -c.hw + 0.55, su = cu - tu * 0.4;
+  for (const [du, dv] of [[-0.35, -0.25], [0.35, -0.25], [0.35, 0.25], [-0.35, 0.25]]) cylinder(c.mesh, [su + du, sv + dv, 0], [su + du, sv + dv, 0.7], 0.03, wood);
+  prism(c.mesh, rect(su - 0.42, sv - 0.32, su + 0.42, sv + 0.32), 0.7, 0.8, wood, shade(pit, 1.6));
+  revolve(c.mesh, su + 1, sv, 0, [[0.16, 0], [0.2, 0.32], [0, 0.32]], rgb(TOWN_COLORS.iron[0]), 8);
+  // a ladder standing in the trench
+  for (const s of [-0.2, 0.2]) cylinder(c.mesh, [cu - tu * 0.5 + s, 0.2, 0.05], [cu - tu * 0.5 + s, -0.25, 1.3], 0.03, wood);
+}
+
+// Forager's camp: a shelter of poles and bark like a cone, baskets of berries, a tray of mushrooms and a small fire.
+function tent(c: Ctx): void {
+  const r = Math.min(c.hl, c.hw) * 0.55, cu = -c.hl * 0.3, cv = -c.hw * 0.25, H = clamp(c.height + 0.6, 2.2, 3);
+  const bark = pick(c, TOWN_COLORS.logs), pole = shade(bark, 1.2);
+  revolve(c.mesh, cu, cv, 0, [[r, 0], [r * 0.55, H * 0.45], [r * 0.18, H * 0.78]], shade(bark, 0.85), 9);
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2;
+    const base: [number, number, number] = [cu + Math.cos(a) * r * 1.02, cv + Math.sin(a) * r * 1.02, 0.05];
+    const apex: [number, number, number] = [cu - Math.cos(a) * 0.15, cv - Math.sin(a) * 0.15, H];
+    cylinder(c.mesh, base, apex, 0.04, pole);
+  }
+  // baskets full of berries
+  const basket = pick(c, TOWN_COLORS.thatch);
+  for (const [fu, fv] of [[0.55, 0.55], [0.85, 0.2]]) {
+    const u = fu * c.hl, v = fv * c.hw;
+    revolve(c.mesh, u, v, 0, [[0.22, 0], [0.3, 0.32], [0, 0.32]], basket, 8);
+    revolve(c.mesh, u, v, 0.32, [[0.28, 0], [0, 0.07]], pick(c, TOWN_COLORS.berries), 8);
+  }
+  // a tray of mushrooms
+  const tu = c.hl * 0.6, tv = -c.hw * 0.55;
+  prism(c.mesh, rect(tu - 0.45, tv - 0.3, tu + 0.45, tv + 0.3), 0, 0.12, basket, basket);
+  for (const [du, dv] of [[-0.25, -0.12], [0, 0.1], [0.25, -0.08], [0.15, 0.15], [-0.2, 0.15]]) {
+    revolve(c.mesh, tu + du, tv + dv, 0.12, [[0.04, 0], [0.04, 0.07], [0.12, 0.08], [0, 0.14]], rgb(TOWN_COLORS.mushroom[0]), 6);
+  }
+  const fire: XY = [c.hl * 0.2, c.hw * 0.55];
+  revolve(c.mesh, fire[0], fire[1], 0, [[0.35, 0], [0.35, 0.15], [0.22, 0.15], [0.22, 0.04], [0, 0.04]], pick(c, TOWN_COLORS.stone), 9);
+  revolve(c.mesh, fire[0], fire[1], 0.04, [[0.2, 0], [0, 0.03]], rgb(TOWN_COLORS.ember[0]), 8);
+}
+
+// Cellar: a rounded earth mound with grass on it, an entrance of stone at the street end with a plank door and steps,
+// and a vent pipe on top.
 function cellar(c: Ctx): void {
-  const eaves = 0.5;
-  const rise = clamp(c.hw * 2 * 0.42, 1, 2.4);
-  const wall = pick(c, TOWN_COLORS.planks);
-  body(c, { eaves, roof: "gable", rise, overhang: 0.2, wall, roofC: pick(c, TOWN_COLORS.turf), pat: PATTERN.plain, doorPat: PATTERN.plain, plinth: false });
-  if (c.door >= 0) prism(c.mesh, edgeBox(c.uv, c.door, -0.6, 0.6, 0.01, 0.08), 0, 1.5, shade(wall, 0.5), shade(wall, 0.5));
+  const { axis } = streetSide(c);
+  // the mound's ridge runs towards the street; its profile across is an arch, the lowest of planes tangent to it
+  const a = axis === 1 ? c.hl : c.hw, b = clamp(a * 0.9, 1, 2.2);
+  const planes: [number, number, number][] = [];
+  for (const deg of [-78, -60, -38, -14, 14, 38, 60, 78]) {
+    const t = (deg * Math.PI) / 180, k = (b * Math.tan(t)) / a;
+    planes.push(axis === 1 ? [-k, 0, b / Math.cos(t)] : [0, -k, b / Math.cos(t)]);
+  }
+  const roof = planeRoof(planes);
+  const turf = pick(c, TOWN_COLORS.turf), earth = pick(c, TOWN_COLORS.soil);
+  band(c.mesh, c.uv, 0, roof, 0, null, earth, PATTERN.plain, 0);
+  roofSurface(c.mesh, c.tris, 0, roof, turf, NOFAC);
+  if (c.door >= 0) {
+    const stone = pick(c, TOWN_COLORS.stone), wood = pick(c, TOWN_COLORS.planks);
+    prism(c.mesh, edgeBox(c.uv, c.door, -1, -0.65, 0, 0.35), 0, 1.75, stone, shade(stone, 1.1));
+    prism(c.mesh, edgeBox(c.uv, c.door, 0.65, 1, 0, 0.35), 0, 1.75, stone, shade(stone, 1.1));
+    prism(c.mesh, edgeBox(c.uv, c.door, -1.1, 1.1, 0, 0.4), 1.75, 2.05, stone, shade(stone, 1.1));
+    prism(c.mesh, edgeBox(c.uv, c.door, -0.65, 0.65, 0.02, 0.12), 0, 1.7, shade(wood, 0.7), shade(wood, 0.7), PATTERN.boards);
+    prism(c.mesh, edgeBox(c.uv, c.door, -0.7, 0.7, 0.35, 0.75), 0, 0.15, stone, shade(stone, 1.1));
+    prism(c.mesh, edgeBox(c.uv, c.door, -0.7, 0.7, 0.75, 1.1), 0, 0.07, stone, shade(stone, 1.1));
+    const e = edgeFrame(c.uv, c.door), half = axis === 1 ? c.hw : c.hl;
+    const v: XY = [e.m[0] - e.n[0] * half * 1.3, e.m[1] - e.n[1] * half * 1.3];
+    cylinder(c.mesh, [v[0], v[1], b * 0.8], [v[0], v[1], b + 0.6], 0.1, shade(wood, 0.8));
+    prism(c.mesh, square(v[0], v[1], 0.32), b + 0.6, b + 0.68, shade(wood, 0.6), shade(wood, 0.6));
+  }
 }
 
 // Builds the model of a building of the town. `height` is the template height in metres (after any upgrade).
