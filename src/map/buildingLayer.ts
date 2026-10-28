@@ -3,11 +3,12 @@ import { computed, effect, signal, type ReadonlySignal } from "@preact/signals";
 import { covers } from "../sim/services";
 import type { Building, ClientState } from "../sim/types";
 import { pointInPolygon } from "../sim/zones";
-import { buildings, frame, lifeLights, state } from "../simClient";
+import { buildings, buildingSet, frame, lifeLights, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
 import type { ModelItem } from "./modelLayer";
 import { overlay, OVERLAY_COLORS, tool, type Overlay } from "./tools";
+import { buildBuildingSpatialIndex, buildingSpatialCandidates, type BuildingSpatialIndex } from "./buildingHitIndex";
 
 const SRC = "buildings";
 const OUTLINE_MAX_PITCH = 10; // degrees
@@ -16,6 +17,18 @@ const OUTLINE_MAX_PITCH = 10; // degrees
 export const selectedBuilding = signal<number | null>(null);
 
 const ringCache = new Map<number, [number, number][]>();
+
+let hitIndexFor = "";
+let hitIndex: BuildingSpatialIndex = buildBuildingSpatialIndex([]);
+
+function hitIndexOf(list: Record<number, Building>): BuildingSpatialIndex {
+  const sig = buildingSet.peek();
+  if (sig !== hitIndexFor) {
+    hitIndexFor = sig;
+    hitIndex = buildBuildingSpatialIndex(Object.values(list));
+  }
+  return hitIndex;
+}
 
 function ringOf(b: Building, f: Frame): [number, number][] {
   const hit = ringCache.get(b.id);
@@ -129,7 +142,11 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
     const f = frame.value;
     if (!list || !f) return null;
     const [x, y] = f.toLocal(lng, lat);
-    for (const b of Object.values(list)) if (pointInPolygon(x, y, b.footprint)) return b.id;
+    const index = hitIndexOf(list);
+    for (const id of buildingSpatialCandidates(index, x, y)) {
+      const b = list[id];
+      if (b && pointInPolygon(x, y, b.footprint)) return b.id;
+    }
     return null;
   };
 
