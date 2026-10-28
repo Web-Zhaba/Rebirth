@@ -24,6 +24,7 @@ import { useGameMinutes } from "./useGameMinutes";
 import { signedDaily } from "./resourceModel";
 import { freshWarnings, serviceWarningText, warningAction } from "./warningModel";
 import { screenshotMode } from "./screenshotMode";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
 const families = (n: number) => {
@@ -129,7 +130,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
   const text = (id: Good) => (st ? (id === "wares" ? String(Math.floor(st[id])) : amount(st[id])) : "");
 
   return (
-    <header class="topbar">
+    <header class="topbar" aria-label="Верхняя панель управления">
       <div class="tb-city">
         {map ? (
           <Tooltip text="К центру поселения (H)">
@@ -151,16 +152,16 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
           </span>
         </div>
       </div>
-      <div class="speed" role="group" aria-label="Скорость времени">
+      <div class="speed" role="toolbar" aria-label="Скорость времени" aria-orientation="horizontal">
         {SPEEDS.map((s) => (
-          <button key={s.v} type="button" aria-pressed={speed.value === s.v} title={`Клавиша ${s.key}`} aria-label={s.v === 0 ? "Пауза" : undefined} onClick={() => setSpeed(s.v)}>
+          <button key={s.v} type="button" aria-pressed={speed.value === s.v} aria-keyshortcuts={s.key} title={`Клавиша ${s.key}`} aria-label={s.v === 0 ? "Пауза" : undefined} onClick={() => setSpeed(s.v)}>
             {s.v === 0 ? <Icon name="pause" size={16} /> : s.label}
           </button>
         ))}
         {speed.value > 0 && isNight(gm) && <span class="speed-note">ночь ×{NIGHT_BOOST}</span>}
       </div>
       {p && st && eco && (
-        <div class="stats">
+        <section class="stats" aria-label="Состояние поселения">
           {wx && (
             <BarStat
               icon={wx.icon}
@@ -254,16 +255,16 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
             align="end"
             tip={<span class="tip-note">Среднее по семьям, от 0 до 100.</span>}
           />
-        </div>
+        </section>
       )}
-      <span class="tb-end">
+      <div class="tb-end" role="toolbar" aria-label="Основные действия">
         <TechButton />
-        <IconButton icon="town" size={20} label="Город" aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")} />
-        <IconButton icon="camera" size={16} label="Скрыть HUD (F10)" onClick={() => (screenshotMode.value = true)} />
-        <IconButton icon="help" size={16} label="Горячие клавиши (?)" onClick={() => (hotkeysOpen.value = true)} />
+        <IconButton icon="town" size={20} label="Город" aria-controls={SEMANTIC_IDS.townPanel} aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")} />
+        <IconButton icon="camera" size={16} label="Скрыть HUD (F10)" aria-keyshortcuts="F10" onClick={() => (screenshotMode.value = true)} />
+        <IconButton icon="help" size={16} label="Горячие клавиши (?)" aria-keyshortcuts="?" onClick={() => (hotkeysOpen.value = true)} />
         <IconButton icon="settings" size={16} label="Настройки" onClick={() => (settingsOpen.value = true)} />
         <IconButton icon="info" size={16} label="Об игре" onClick={() => (aboutOpen.value = true)} />
-      </span>
+      </div>
     </header>
   );
 }
@@ -274,7 +275,7 @@ function TechButton() {
   const text = b ? BADGE_TEXT[b] : "";
   return (
     <span class="tb-tech">
-      <IconButton icon="scroll" size={20} label={`Наука (N)${text ? `: ${text}` : ""}`} aria-pressed={rightPanel.value === "tech"} onClick={() => togglePanel("tech")} />
+      <IconButton icon="scroll" size={20} label={`Наука (N)${text ? `: ${text}` : ""}`} aria-controls={SEMANTIC_IDS.techPanel} aria-keyshortcuts="N" aria-pressed={rightPanel.value === "tech"} onClick={() => togglePanel("tech")} />
       {b && <span class={`tb-badge tb-badge-${b}`}>{text}</span>}
     </span>
   );
