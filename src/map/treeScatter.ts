@@ -142,6 +142,30 @@ export function scatterDetails(inp: DetailInput): Float32Array {
 
 export const coniferShare = (lat: number): number => Math.min(0.85, Math.max(0.1, (Math.abs(lat) - 42) / 20));
 
+function distanceToForestEdge(poly: ForestPoly, x: number, y: number): number {
+  let best = Infinity;
+
+  for (const ring of poly.rings) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const len2 = dx * dx + dy * dy;
+      const t =
+        len2 > 0
+          ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / len2))
+          : 0;
+      const px = a[0] + dx * t;
+      const py = a[1] + dy * t;
+      best = Math.min(best, Math.hypot(x - px, y - py));
+    }
+  }
+
+  return best;
+}
+
+
 export function scatterTrees(inp: ScatterInput): Float32Array {
   const [x0, y0, x1, y1] = inp.rect, sp = inp.spacing;
   const forests = inp.forests.filter((f) => f.bbox[2] >= x0 && f.bbox[0] <= x1 && f.bbox[3] >= y0 && f.bbox[1] <= y1);
@@ -169,24 +193,41 @@ export function scatterTrees(inp: ScatterInput): Float32Array {
       const y = (j + hash(i, j, 2)) * sp;
       if (x < startX || x >= endX || y < startY || y >= endY) continue;
 
-      let inside = false;
+      let matched: ForestPoly | null = null;
+
       for (let f = 0; f < forests.length; f++) {
         const poly = forests[f];
-        if (x >= poly.bbox[0] && x <= poly.bbox[2] && y >= poly.bbox[1] && y <= poly.bbox[3]) {
-          if (insideRings(x, y, poly.rings)) {
-            inside = true;
-            break;
-          }
+
+        if (
+          x >= poly.bbox[0] &&
+          x <= poly.bbox[2] &&
+          y >= poly.bbox[1] &&
+          y <= poly.bbox[3] &&
+          insideRings(x, y, poly.rings)
+        ) {
+          matched = poly;
+          break;
         }
       }
-      if (!inside) continue;
+
+      if (!matched) continue;
 
       const h = hash(i, j, 3);
       if (inp.blocked(x, y, h)) continue;
 
+      const edge = distanceToForestEdge(matched, x, y);
+      const edgeDensity = Math.min(1, Math.max(0.18, edge / 26));
+
+      // Open woodland at the edge rather than an abrupt wall of trunks.
+      if (hash(i, j, 31) > edgeDensity) continue;
+
       const r = hash(i, j, 4);
       const kind = r < conifer ? 0 : r < conifer + birch * (1 - conifer) ? 2 : 1;
-      const size = (kind === 0 ? 13 : kind === 2 ? 11 : 10) * (0.6 + 0.6 * hash(i, j, 5));
+      const edgeSize = 0.62 + 0.38 * Math.min(1, edge / 24);
+      const size =
+        (kind === 0 ? 13 : kind === 2 ? 11 : 10) *
+        (0.6 + 0.6 * hash(i, j, 5)) *
+        edgeSize;
 
       ensureBufferCapacity(count + 6);
       sharedBuffer[count++] = x;
