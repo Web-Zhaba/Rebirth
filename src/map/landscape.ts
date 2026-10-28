@@ -4,7 +4,7 @@ import { frame } from "../simClient";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { WeatherState } from "../sim/weather";
 import { groundAt, loadGround, reliefScale } from "./relief";
-import { disableCustomTerrainRenderers, disableProjectionTransition } from "./terrainDiagnostics";
+import { disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainTransition } from "./terrainDiagnostics";
 
 const LANDSCAPE_FROM_ZOOM = 12.5;
 
@@ -61,7 +61,7 @@ export function attachLandscape(
   let requestedProjection = originalProjection.type;
 
   const syncCameraToLandscape = () => {
-    if (syncingCamera || !map.isStyleLoaded()) return;
+    if (disableTerrainTransition || syncingCamera || !map.isStyleLoaded()) return;
 
     const zoom = map.getZoom();
     const active = zoom >= LANDSCAPE_FROM_ZOOM && reliefScale.peek() > 0;
@@ -132,6 +132,10 @@ export function attachLandscape(
   };
 
   const syncBaseVisibility = () => {
+    // Diagnostic mode leaves the baseline map untouched: no projection change,
+    // no visibility churn and no camera-elevation/ground-clamping changes.
+    if (disableTerrainTransition) return;
+
     const customWorld =
       map.getZoom() >= LANDSCAPE_FROM_ZOOM &&
       reliefScale.peek() > 0;
@@ -178,7 +182,7 @@ export function attachLandscape(
   const check = () => {
     syncBaseVisibility();
 
-    if (disableCustomTerrainRenderers || started || !frame.peek() || map.getZoom() < LANDSCAPE_FROM_ZOOM) return;
+    if (disableTerrainTransition || disableCustomTerrainRenderers || started || !frame.peek() || map.getZoom() < LANDSCAPE_FROM_ZOOM) return;
 
     started = true;
 
