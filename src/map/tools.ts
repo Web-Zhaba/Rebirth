@@ -138,7 +138,26 @@ export function setManualOverlay(id: Overlay): void {
 
 // Zoning is a separate map layer: hidden during normal play, available manually from the layer menu,
 // and temporarily enabled while a zoning brush is active.
-export const zonesShown = signal(false);
+const ZONES_STORE = "rebirth.layers.zones";
+const readZonesShown = (): boolean => {
+  try {
+    return localStorage.getItem(ZONES_STORE) === "1";
+  } catch {
+    return false;
+  }
+};
+export const manualZonesShown = signal(readZonesShown());
+export const zonesShown = signal(manualZonesShown.peek());
+
+export function setManualZonesShown(on: boolean): void {
+  manualZonesShown.value = on;
+  zonesShown.value = on;
+  try {
+    localStorage.setItem(ZONES_STORE, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
 
 const SERVICE_OVERLAY_TOOLS: readonly ServiceId[] = ["well", "market", "chapel", "school", "healer"];
 export const serviceOverlayForTool = (t: Tool | null): ServiceId | null =>
@@ -157,7 +176,7 @@ effect(() => {
     overlay.value = service ?? "none";
   } else if (hadAutomaticLayer) {
     hadAutomaticLayer = false;
-    zonesShown.value = false;
+    zonesShown.value = manualZonesShown.peek();
     overlay.value = manualOverlay.peek();
   }
 });
