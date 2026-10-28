@@ -1,6 +1,7 @@
 import { BUILDINGS, UPGRADE } from "./buildings";
 import { isUnlocked } from "./tech";
-import { ageOf, buildNet, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
+import { ageOf, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
+import { roadNet } from "./roadNetCache";
 import { countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import { classPupils, schoolSeats } from "./school";
 import { finishedMonuments, monumentLand, monumentsNear } from "./monuments";
@@ -12,7 +13,7 @@ export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "resid
   const out: Record<number, number> = {};
   const services = Object.values(s.buildings).filter((b) => b.state === "active" && isService(b.template));
   if (services.length === 0) return out;
-  const net = buildNet(s.roads);
+  const net = roadNet(s.roads);
   if (net.edges.length === 0) return out;
   const workers = new Map<number, number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
@@ -62,7 +63,7 @@ export function previewServiceCoverage(
   y: number,
 ): ServiceCoveragePreview {
   const zero = { houses: 0, residents: 0, newHouses: 0, newResidents: 0 };
-  const net = buildNet(s.roads);
+  const net = roadNet(s.roads);
   if (net.edges.length === 0) return zero;
   const range = SERVICES[id].reach;
   const from = snapToRoad(net, x, y);
@@ -217,7 +218,7 @@ export function serviceStats(s: Pick<SimState, "buildings" | "residents" | "hous
 
 export type Segment = [[number, number], [number, number]];
 
-export function reachSegments(roads: RoadGraph, x: number, y: number, range: number, net: Net = buildNet(roads)): Segment[] {
+export function reachSegments(roads: RoadGraph, x: number, y: number, range: number, net: Net = roadNet(roads)): Segment[] {
   const p = snapToRoad(net, x, y);
   if (!p || p.off > range) return [];
   const limit = range - p.off;
