@@ -4,7 +4,7 @@ import { frame } from "../simClient";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { WeatherState } from "../sim/weather";
 import { groundAt, loadGround, reliefScale } from "./relief";
-import { disableBaseLayerVisibilityTransition, disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainCameraSync, disableTerrainTransition } from "./terrainDiagnostics";
+import { disableBaseLayerVisibilityTransition, disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainCameraSync, disableTerrainCenterElevation, disableTerrainTransition } from "./terrainDiagnostics";
 
 const LANDSCAPE_FROM_ZOOM = 12.5;
 
@@ -95,6 +95,10 @@ export function attachLandscape(
     if (map.getCenterClampedToGround()) {
       map.setCenterClampedToGround(false);
     }
+
+    // Diagnostic isolation: retain zoom/pitch limits and ground clamping
+    // behaviour, but skip DEM sampling/loading and center-elevation updates.
+    if (disableTerrainCenterElevation) return;
 
     const center = map.getCenter();
     const elevation = groundAt(center.lng, center.lat);
