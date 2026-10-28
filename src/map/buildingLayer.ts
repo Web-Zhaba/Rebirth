@@ -131,6 +131,8 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
       const features: GeoJSON.Feature[] = Object.values(list).map((b) => {
         let base = 0;
 
+        let top = 0.12;
+
         if (needTerrain && b.state === "planned" && b.footprint.length > 0) {
           let x = 0;
           let y = 0;
@@ -139,16 +141,25 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
             y += p[1];
           }
 
-          const [lng, lat] = f.toLngLat(
-            x / b.footprint.length,
-            y / b.footprint.length,
-          );
-          const h = groundAt(lng, lat);
+          const samples = [
+            ...b.footprint.map(([px, py]) => f.toLngLat(px, py)),
+            f.toLngLat(x / b.footprint.length, y / b.footprint.length),
+          ];
+          const heights = samples.map(([lng, lat]) => groundAt(lng, lat));
 
-          if (h === null) {
-            missingGround.push([lng, lat]);
+          samples.forEach((point, index) => {
+            if (heights[index] === null) missingGround.push(point);
+          });
+
+          const scaled = heights
+            .filter((h): h is number => h !== null)
+            .map((h) => h * k);
+
+          if (scaled.length) {
+            base = Math.min(...scaled) - 0.12;
+            top = Math.max(...scaled) + 0.18;
           } else {
-            base = Math.max(0, h * k);
+            top = 0.3;
           }
         }
 
@@ -159,7 +170,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
             state: b.state,
             up: !!b.upgrade,
             base,
-            top: base + (needTerrain ? 0.25 : 0.12),
+            top,
           },
           geometry: { type: "Polygon", coordinates: [ringOf(b, f)] },
         };
