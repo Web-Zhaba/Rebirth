@@ -26,7 +26,7 @@ import { groundAt, loadGround, reliefScale } from "./relief";
 import { acquireHost, type ThreeHost } from "./three/host";
 
 export const LANDSCAPE_LAYER_ID = "landscape-terrain";
-export const LANDSCAPE_FROM_ZOOM = 10.5;
+export const LANDSCAPE_FROM_ZOOM = 12.5;
 
 const HALF = 12_000;
 const CELL = 160;
