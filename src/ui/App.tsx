@@ -23,6 +23,7 @@ import { trackLayout } from "./layout";
 import "./layout.css";
 import { TechPanel } from "./TechPanel";
 import { TownPanel } from "./TownPanel";
+import { RoadDemolishConfirm } from "./RoadDemolishConfirm";
 
 export function App({ map }: { map: maplibregl.Map }) {
   const c = city.value;
@@ -47,6 +48,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       <AboutDialog />
       <HotkeysDialog />
       <SettingsDialog />
+      <RoadDemolishConfirm />
     </>
   );
 }
