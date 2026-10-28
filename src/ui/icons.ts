@@ -54,6 +54,7 @@ import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
 import PhCloud from "~icons/ph/cloud";
 import PhCaretDown from "~icons/ph/caret-down-bold";
+import PhCamera from "~icons/ph/camera";
 import PhCaretUp from "~icons/ph/caret-up-bold";
 import PhHammer from "~icons/ph/hammer";
 import PhMinus from "~icons/ph/minus-bold";
@@ -94,6 +95,7 @@ export const ICONS = {
   pause: PhPause,
   play: PhPlay,
   help: PhQuestion,
+  camera: PhCamera,
   trash: PhTrash,
   eraser: PhEraser,
   layerNone: PhProhibit,
