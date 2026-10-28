@@ -743,7 +743,25 @@ export function attachLandscapeLayer(
   const add = () => {
     if (disposed || map.getLayer(LANDSCAPE_LAYER_ID)) return;
 
-    const before = map.getLayer("place-labels") ? "place-labels" : undefined;
+    // The terrain must be rendered before every object that relies on its
+    // depth buffer. Inserting it just before labels made it run after houses,
+    // trees, fields and water, so the ground could not occlude their buried
+    // vertices even when their elevations were correct.
+    const terrainDependent = new Set([
+      "clearings-fill",
+      "zones-fill",
+      "buildings-planned-fill",
+      "fields-3d",
+      "forest-trees",
+      "building-models",
+      "building-lamps",
+      "water-3d",
+    ]);
+
+    const order = map.getLayersOrder();
+    const before = order.find((id) => terrainDependent.has(id))
+      ?? (map.getLayer("place-labels") ? "place-labels" : undefined);
+
     map.addLayer(layer, before);
     map.off("styledata", add);
   };
