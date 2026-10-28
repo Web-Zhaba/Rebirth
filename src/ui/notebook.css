@@ -159,3 +159,49 @@
   font-family: var(--font-display);
   font-style: italic;
 }
+
+
+.notebook-map-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wiki-full-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 5px;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font: 700 12px/1 var(--font-body);
+  text-decoration: none;
+  vertical-align: text-bottom;
+}
+
+.wiki-map-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: var(--bw) solid var(--info);
+  border-radius: 50%;
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--info);
+  cursor: pointer;
+}
+.wiki-map-marker:hover {
+  background: var(--paper);
+}
