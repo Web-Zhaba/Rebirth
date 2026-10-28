@@ -121,8 +121,24 @@ export function scatterDetails(inp: DetailInput): Float32Array {
         }
 
         if (!matched) continue;
+
         const m = matched.mix[kind]!;
-        if (h >= m.share || inp.blocked(x, y, h)) continue;
+
+        let share = m.share;
+
+        if (kind === "grass" || kind === "reed") {
+          const patchScale = kind === "grass" ? 28 : 18;
+          const pi = Math.floor(x / patchScale);
+          const pj = Math.floor(y / patchScale);
+          const patch = hash(pi, pj, s + 17);
+
+          // Broad density patches make meadow/reed beds read as vegetation
+          // communities rather than a uniform procedural grid.
+          share *= 0.35 + patch * 1.15;
+          share = Math.min(1, share);
+        }
+
+        if (h >= share || inp.blocked(x, y, h)) continue;
 
         const size = m.size[0] + (m.size[1] - m.size[0]) * hash(i, j, s + 3) ** 2;
 
