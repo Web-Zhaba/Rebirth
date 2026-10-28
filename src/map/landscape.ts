@@ -4,7 +4,7 @@ import { frame } from "../simClient";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { WeatherState } from "../sim/weather";
 import { groundAt, loadGround, reliefScale } from "./relief";
-import { disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainTransition } from "./terrainDiagnostics";
+import { disableBaseLayerVisibilityTransition, disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainCameraSync, disableTerrainTransition } from "./terrainDiagnostics";
 
 const LANDSCAPE_FROM_ZOOM = 12.5;
 
@@ -61,7 +61,7 @@ export function attachLandscape(
   let requestedProjection = originalProjection.type;
 
   const syncCameraToLandscape = () => {
-    if (disableTerrainTransition || syncingCamera || !map.isStyleLoaded()) return;
+    if (disableTerrainCameraSync || syncingCamera || !map.isStyleLoaded()) return;
 
     const zoom = map.getZoom();
     const active = zoom >= LANDSCAPE_FROM_ZOOM && reliefScale.peek() > 0;
@@ -155,25 +155,27 @@ export function attachLandscape(
       }
     }
 
-    const visibility = customWorld ? "none" : "visible";
+    if (!disableBaseLayerVisibilityTransition) {
+      const visibility = customWorld ? "none" : "visible";
 
-    for (const id of baseLayers) {
-      if (!map.getLayer(id)) continue;
-      if (map.getLayoutProperty(id, "visibility") === visibility) continue;
-      map.setLayoutProperty(id, "visibility", visibility);
-    }
+      for (const id of baseLayers) {
+        if (!map.getLayer(id)) continue;
+        if (map.getLayoutProperty(id, "visibility") === visibility) continue;
+        map.setLayoutProperty(id, "visibility", visibility);
+      }
 
-    for (const id of groundOverlays) {
-      if (!map.getLayer(id)) continue;
+      for (const id of groundOverlays) {
+        if (!map.getLayer(id)) continue;
 
-      // These are all legacy 2D overlays tied to MapLibre's sea-level plane.
-      // Built roads and farm fields have their own terrain-seated 3D renderers;
-      // showing the old GeoJSON lines/fills at town zoom makes them cut through
-      // hills, foundations and the custom surface.
-      const overlayVisibility = customWorld ? "none" : "visible";
+        // These are all legacy 2D overlays tied to MapLibre's sea-level plane.
+        // Built roads and farm fields have their own terrain-seated 3D renderers;
+        // showing the old GeoJSON lines/fills at town zoom makes them cut through
+        // hills, foundations and the custom surface.
+        const overlayVisibility = customWorld ? "none" : "visible";
 
-      if (map.getLayoutProperty(id, "visibility") === overlayVisibility) continue;
-      map.setLayoutProperty(id, "visibility", overlayVisibility);
+        if (map.getLayoutProperty(id, "visibility") === overlayVisibility) continue;
+        map.setLayoutProperty(id, "visibility", overlayVisibility);
+      }
     }
 
     syncCameraToLandscape();
