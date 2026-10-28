@@ -13,6 +13,7 @@ import { buildingSet, frame, sendCmd, state, zones } from "../simClient";
 import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { PALETTE } from "../ui/palette";
 import { costText } from "./buildCost";
+import { placementCursor } from "./contextModel";
 import { flash, isPlaceTool, MIN_ZONE_ZOOM, PLACED_COLORS, placeReach, SITE_RADIUS, tool, type PlaceTool } from "./tools";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -260,6 +261,7 @@ ${costText(t.labor, t.materials)}` };
     }
     const v = evaluate(id, local[0], local[1]);
     draw(id, v);
+    map.getCanvas().style.cursor = placementCursor(true, v ? (v.pending ? "pending" : v.ok ? "ok" : "bad") : "none");
     setLabel(v ? v.text : "Здесь нет дороги");
   }
 
@@ -345,7 +347,10 @@ ${costText(t.labor, t.materials)}` };
     void buildingSet.value;
     untracked(() => {
       clearOverlay();
-      if (active() && local) refresh();
+      const id = active();
+      if (!id) map.getCanvas().style.cursor = placementCursor(false, "none");
+      else if (local) refresh();
+      else map.getCanvas().style.cursor = placementCursor(true, "pending");
     });
   });
 }
