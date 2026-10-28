@@ -30,7 +30,7 @@ export const LANDSCAPE_LAYER_ID = "landscape-terrain";
 export const LANDSCAPE_FROM_ZOOM = 12.5;
 
 const HALF = 12_000;
-const CELL = 160;
+const CELL = 120;
 const GRID = Math.ceil((HALF * 2) / CELL);
 const CENTER_STEP = 4_000;
 
@@ -124,6 +124,7 @@ export function createLandscapeLayer(
 
   const rock = rgb(PALETTE.mapRock);
   const ice = rgb(PALETTE.mapIce);
+  const shore = rgb(PALETTE.mapShore);
 
   const natureN = 2 ** NATURE_MAXZOOM;
   const natureTiles = new Map<string, LandTile>();
@@ -240,6 +241,7 @@ export function createLandscapeLayer(
     const scale = reliefScale.peek();
     const local = new Float64Array(points.length * 3);
     const colors = new Float32Array(points.length * 3);
+    const biomes = points.map(([lng, lat]) => biomeAt(lng, lat));
 
     const at = (x: number, y: number): number => {
       const cx = Math.max(0, Math.min(GRID, x));
@@ -247,12 +249,17 @@ export function createLandscapeLayer(
       return heights[cy * side + cx];
     };
 
+    const biomeAtGrid = (x: number, y: number): Land => {
+      const cx = Math.max(0, Math.min(GRID, x));
+      const cy = Math.max(0, Math.min(GRID, y));
+      return biomes[cy * side + cx];
+    };
+
     let q = 0;
     for (let y = 0; y <= GRID; y++) {
       for (let x = 0; x <= GRID; x++, q++) {
         const h = heights[q];
-        const [lng, lat] = points[q];
-        const biome = biomeAt(lng, lat);
+        const biome = biomes[q];
 
         local[q * 3] = centre[0] - HALF + x * CELL;
         local[q * 3 + 1] = centre[1] - HALF + y * CELL;
@@ -273,10 +280,27 @@ export function createLandscapeLayer(
           biome === "water" || biome === "sand" || biome === "wetland" || biome === "ice"
             ? base
             : mix3(base, rock, rocky * 0.75);
-        const color =
+
+        let color =
           biome === "ice" || biome === "water"
             ? rockyBase
             : mix3(rockyBase, ice, alpine * alpine * 0.65);
+
+        if (biome !== "water" && biome !== "ice") {
+          const touchesWater =
+            biomeAtGrid(x - 1, y) === "water" ||
+            biomeAtGrid(x + 1, y) === "water" ||
+            biomeAtGrid(x, y - 1) === "water" ||
+            biomeAtGrid(x, y + 1) === "water";
+
+          if (touchesWater) {
+            const shoreAmount =
+              biome === "sand" ? 0.7 :
+              biome === "wetland" ? 0.2 :
+              0.42;
+            color = mix3(color, shore, shoreAmount);
+          }
+        }
 
         colors[q * 3] = color[0];
         colors[q * 3 + 1] = color[1];
