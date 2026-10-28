@@ -448,9 +448,22 @@ export function createLandscapeLayer(
     const buildCentre: [number, number] = [centre[0], centre[1]];
     const outerPoints = gridPoints(tf, buildCentre, HALF, CELL, GRID);
     const finePoints = gridPoints(tf, buildCentre, FINE_HALF, FINE_CELL, FINE_GRID);
-    const points = [...outerPoints, ...finePoints];
 
-    void Promise.all([loadGround(points), loadNature(points)])
+    // Loading DEM/vector tiles does not require every mesh vertex. Walking all
+    // ~100k points through lngLatToTile/tilesAround synchronously blocked the
+    // main thread on the first close zoom. A 240m coverage lattice still hits
+    // every source tile (including neighbouring tiles near boundaries) while
+    // the full-resolution points remain available for mesh construction.
+    const coveragePoints: [number, number][] = [];
+    const side = GRID + 1;
+    const coverageStride = 2;
+    for (let y = 0; y <= GRID; y += coverageStride) {
+      for (let x = 0; x <= GRID; x += coverageStride) {
+        coveragePoints.push(outerPoints[y * side + x]);
+      }
+    }
+
+    void Promise.all([loadGround(coveragePoints), loadNature(coveragePoints)])
       .then(() => {
         if (
           buildGeneration !== generation ||
