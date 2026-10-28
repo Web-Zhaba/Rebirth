@@ -11,6 +11,7 @@ import { Button, Panel } from "./kit";
 import { siteNotes, suggestNames } from "./foundModel";
 import { PlaceSearch } from "./PlaceSearch";
 import "./journal.css";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 interface Point {
   lat: number;
@@ -112,9 +113,9 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
   return (
     <>
       <PlaceSearch map={map} />
-      <Panel class="hint">{msg || "Выберите место для нового поселения"}</Panel>
+      <Panel class="hint" role="status" aria-live="polite">{msg || "Выберите место для нового поселения"}</Panel>
       {point && (
-        <Panel class="found" role="group" aria-label="Основание поселения">
+        <section class="panel found" aria-labelledby={SEMANTIC_IDS.foundCityTitle}>
           <form
             class="found-form"
             onSubmit={(e) => {
@@ -124,7 +125,7 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
           >
             <div class="found-head">
               <Icon name="tent" size={20} />
-              <h2>Основать поселение</h2>
+              <h2 id={SEMANTIC_IDS.foundCityTitle}>Основать поселение</h2>
             </div>
             <div class="coords">
               {point.lat.toFixed(4)}, {point.lng.toFixed(4)}
@@ -187,7 +188,7 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
               Основать
             </Button>
           </form>
-        </Panel>
+        </section>
       )}
     </>
   );
