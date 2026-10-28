@@ -37,14 +37,14 @@ export function siteEta(hours: number, key: number): string {
   return Number.isFinite(ms) ? `${formatReal(ms)} (${hands} стр.)` : "очень долго";
 }
 
-export function InspectorHead({ icon, title, chip, onClose }: { icon: IconName; title: string; chip?: Chip; onClose: () => void }) {
+export function InspectorHead({ icon, title, chip, onClose, headingId }: { icon: IconName; title: string; chip?: Chip; onClose: () => void; headingId?: string }) {
   return (
     <div class="insp-head">
       <span class="insp-ic">
         <Icon name={icon} size={28} />
       </span>
       <div class="insp-title">
-        <h2>{title}</h2>
+        <h2 id={headingId}>{title}</h2>
         {chip && <span class={`chip chip-${chip.tone}`}>{chip.label}</span>}
       </div>
       <IconButton icon="close" size={16} label="Закрыть" onClick={onClose} />
