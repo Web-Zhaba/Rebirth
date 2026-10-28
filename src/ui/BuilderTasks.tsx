@@ -9,7 +9,8 @@ import { isCleared } from "../sim/clearing";
 import { ROAD_KINDS, stoneWaiting, workableEdges } from "../sim/roads";
 import { frame, gameClock, speed, state } from "../simClient";
 import { plural } from "./InspectorParts";
-import { Panel, ProgressBar } from "./kit";
+import { ProgressBar } from "./kit";
+import { LANDMARK_LABELS } from "./semanticModel";
 
 const MAX_SHOWN = 6;
 const KEY = "rebirth.builders.collapsed";
@@ -107,7 +108,7 @@ export function BuilderTasks({ map }: { map: maplibregl.Map }) {
     }
   };
   return (
-    <Panel class="builder-tasks" aria-label="Задачи строителей">
+    <aside class="panel builder-tasks" aria-label={LANDMARK_LABELS.builders}>
       <button type="button" class="builder-tasks-head" aria-expanded={!collapsed} aria-controls="builder-tasks-body" onClick={toggle}>
         <span>Строители: {builders}</span>
         <span class="builder-tasks-count">{tasks.length > 0 ? `${tasks.length} ${plural(tasks.length, "работа", "работы", "работ")}` : "работы нет"}</span>
@@ -141,6 +142,6 @@ export function BuilderTasks({ map }: { map: maplibregl.Map }) {
           {rest > 0 && <li class="builder-tasks-more">и ещё {rest}</li>}
         </ul>
       )}
-    </Panel>
+    </aside>
   );
 }
