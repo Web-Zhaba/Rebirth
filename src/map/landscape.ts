@@ -4,6 +4,7 @@ import { frame } from "../simClient";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { WeatherState } from "../sim/weather";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { disableCustomTerrainRenderers, disableProjectionTransition } from "./terrainDiagnostics";
 
 const LANDSCAPE_FROM_ZOOM = 12.5;
 
@@ -141,10 +142,12 @@ export function attachLandscape(
       // Record the target before calling MapLibre: setProjection may emit map
       // events synchronously, and the getter can lag behind during transition.
       requestedProjection = wantedProjection;
-      if (wantedProjection === "mercator") {
-        map.setProjection({ type: "mercator" });
-      } else {
-        map.setProjection(originalProjection);
+      if (!disableProjectionTransition) {
+        if (wantedProjection === "mercator") {
+          map.setProjection({ type: "mercator" });
+        } else {
+          map.setProjection(originalProjection);
+        }
       }
     }
 
@@ -175,7 +178,7 @@ export function attachLandscape(
   const check = () => {
     syncBaseVisibility();
 
-    if (started || !frame.peek() || map.getZoom() < LANDSCAPE_FROM_ZOOM) return;
+    if (disableCustomTerrainRenderers || started || !frame.peek() || map.getZoom() < LANDSCAPE_FROM_ZOOM) return;
 
     started = true;
 
