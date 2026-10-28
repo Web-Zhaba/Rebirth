@@ -13,6 +13,7 @@ import { projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { loadGround, reliefScale } from "./relief";
+import { disableCustomTerrainRenderers } from "./terrainDiagnostics";
 import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
@@ -564,6 +565,7 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
       scene = null;
     },
     render(_gl, args) {
+      if (disableCustomTerrainRenderers) return;
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
       if (!host || !scene || !mat || !tf || zoom < FIELD_FROM_ZOOM) return;
