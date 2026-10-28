@@ -12,6 +12,7 @@ import { PALETTE } from "../ui/palette";
 import { addPatterns, PATTERNS } from "./patterns";
 import { MEADOW_COLOR } from "./style";
 import { isBrushTool, MIN_ZONE_ZOOM, tool, zonesShown, ZONE_COLORS } from "./tools";
+import { cellsForKeys, indexCellsByKey } from "./zoneCellIndex";
 
 // Unfinished clearing shown in the inspector.
 export const selectedClearing = signal<number | null>(null);
@@ -154,9 +155,9 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       const visible = zonesShown.value;
       buildingSet.value; // re-run when lots change; lots are drawn fainter, as plots
       if (!z || !f) return;
-      const occupied = occupiedKeys(z.cells, state.peek()?.buildings ?? {});
       const features: GeoJSON.Feature[] = [];
       if (visible) {
+        const occupied = occupiedKeys(z.cells, state.peek()?.buildings ?? {});
         for (const c of z.cells) {
           if (c.block) continue;
           const zone = preview?.get(c.key) ?? c.zone;
@@ -182,15 +183,21 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       source("zone-grid")?.setData({ type: "FeatureCollection", features });
     });
 
-    // Brush highlight.
+    // Brush highlight. The cursor only needs a handful of cells; index them once per zone snapshot
+    // instead of scanning the full zone grid on every mouse move.
+    let hoverIndexFor: typeof zones.value = null;
+    let hoverIndex = new Map<string, ZoneCell>();
     effect(() => {
       const z = zones.value;
       const f = frame.value;
       const keys = hoverKeys.value;
       const features: GeoJSON.Feature[] = [];
       if (z && f && keys.length > 0) {
-        const want = new Set(keys);
-        for (const c of z.cells) if (want.has(c.key)) features.push(polygon(ringOf(c, f), {}));
+        if (hoverIndexFor !== z) {
+          hoverIndexFor = z;
+          hoverIndex = indexCellsByKey(z.cells);
+        }
+        for (const c of cellsForKeys(hoverIndex, keys)) features.push(polygon(ringOf(c, f), {}));
       }
       source("zone-hover")?.setData({ type: "FeatureCollection", features });
     });
