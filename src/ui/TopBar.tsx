@@ -19,6 +19,7 @@ import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
 import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
+import { signedDaily } from "./resourceModel";
 import { freshWarnings, warningAction } from "./warningModel";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -213,6 +214,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
                 <Row label="Сделано вчера" value={`+${amount(eco.yesterday.food)} кг`} />
                 <Row label="Собирают за день" value={`+${amount(eco.forage)} кг`} />
                 <Row label="Съедают за день" value={`−${amount(eco.foodPerDay)} кг`} />
+                <Row label="Чистый баланс" value={signedDaily(net, "кг")} tone={net < 0 ? "warn" : "ok"} />
                 {eco.foodPerDay > 0 && eco.outlook < 1 && <span class="tip-note">Запасов и одного урожая не хватит на год вперёд: приезжих меньше.</span>}
               </>
             }
@@ -234,6 +236,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
                     <Row label="Сделано вчера" value={`${made > 0 ? "+" : ""}${amount(made)} ${GOOD_UNIT[g.id]}`} />
                     {g.id === "logs" && clearing.length > 0 && <Row label="Вырубка уже дала" value={`+${amount(clearGot)} из ${amount(clearAll)} м³`} />}
                     {g.id === "logs" && eco.brushwood > 0 && <Row label="Хворост, без дров в запасе" value={`+${amount(eco.brushwood)} м³ в день`} />}
+                    {g.id === "logs" && eco.firewood > 0 && <Row label="Отопление сегодня" value={signedDaily(-eco.firewood, "м³")} tone="warn" />}
                     {g.id === "wares" && eco.eveningWares > 0 && <Row label="Вечерние ремёсла, 19–22 ч" value={`+${eco.eveningWares.toFixed(2).replace(".", ",")} шт/ч`} />}
                   </>
                 }
