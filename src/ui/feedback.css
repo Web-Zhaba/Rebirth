@@ -265,6 +265,19 @@ button.toast-main:hover .toast-text {
 }
 
 /* Hotkeys cheat sheet (HotkeysDialog). */
+.hotkeys-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+.hotkeys-dialog .dialog-head,
+.hotkeys-dialog .dialog-head .icon-btn {
+  position: static;
+  inset: auto;
+  transform: none;
+}
+.hotkeys-dialog .dialog-head .icon-btn {
+  flex: 0 0 32px;
+  margin-left: auto;
+}
 .hotkeys-body {
   display: grid;
   gap: var(--sp-3);
@@ -274,20 +287,30 @@ button.toast-main:hover .toast-text {
   font-family: var(--font-display);
   font-size: var(--fs-md);
 }
+.hotkeys-table {
+  display: grid;
+}
 .hotkeys-row {
-  display: flex;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: minmax(120px, 9em) minmax(0, 1fr);
+  align-items: center;
   gap: var(--sp-3);
-  padding: 2px 0;
+  padding: 3px 0;
   border-bottom: var(--bw-hair) dotted var(--rule-soft);
 }
 .hotkeys-keys {
-  display: inline-flex;
-  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: var(--sp-1);
-  min-width: 9em;
+  min-width: 0;
 }
 .hotkey-kbd {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
   padding: 0 var(--sp-1);
   border: var(--bw-hair) solid var(--rule);
   border-radius: var(--radius-sm);
@@ -295,9 +318,17 @@ button.toast-main:hover .toast-text {
   font-family: var(--font-body);
   font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .hotkeys-desc {
+  min-width: 0;
   font-size: var(--fs-sm);
+}
+@media (max-width: 520px) {
+  .hotkeys-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
 }
 
 /* Builders' tasks, bottom-right of the HUD (BuilderTasks.tsx). */
