@@ -3,9 +3,9 @@ import { signal } from "@preact/signals";
 import { groundAt } from "./relief";
 
 export const TERRAIN_OUTER_HALF = 12_000;
-export const TERRAIN_OUTER_CELL = 120;
+export const TERRAIN_OUTER_CELL = 240;
 export const TERRAIN_FINE_HALF = 2_400;
-export const TERRAIN_FINE_CELL = 20;
+export const TERRAIN_FINE_CELL = 40;
 export const TERRAIN_CENTER_STEP = 3_600;
 
 export const terrainSurfaceRevision = signal(0);
