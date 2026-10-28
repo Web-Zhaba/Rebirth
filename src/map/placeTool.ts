@@ -5,6 +5,7 @@ import { BUILDINGS, type BuildingTemplate } from "../sim/buildings";
 import { DIG } from "../sim/excavation";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
 import { canPlace, makeBuilding } from "../sim/growth";
+import { previewServiceCoverage } from "../sim/coverage";
 import { lotFront } from "../sim/people";
 import { isService, SERVICES } from "../sim/services";
 import type { Site, ZoneCell } from "../sim/types";
@@ -14,6 +15,7 @@ import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { PALETTE } from "../ui/palette";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
+import { coveragePreviewText } from "./coveragePreviewModel";
 import { flash, isPlaceTool, MIN_ZONE_ZOOM, PLACED_COLORS, placeReach, SITE_RADIUS, tool, type PlaceTool } from "./tools";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -201,8 +203,9 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     const base = { footprint, center, edge: c0.edge, side: c0.side, i: c0.i, radius, front };
     if (!check.ok) return { ...base, ok: false, pending: false, text: check.reason };
     if (pending) return { ...base, ok: true, pending: true, text: "…" };
-    return { ...base, ok: true, pending: false, text: `${siteText(id, site, t, center)}
-${costText(t.labor, t.materials)}` };
+    let detail = siteText(id, site, t, center);
+    if (isService(id) && front) detail += `\n${coveragePreviewText(previewServiceCoverage(st, id, front[0], front[1]))}`;
+    return { ...base, ok: true, pending: false, text: `${detail}\n${costText(t.labor, t.materials)}` };
   };
 
   const ring = (pts: Pt[], f: NonNullable<typeof frame.value>): [number, number][] => {
