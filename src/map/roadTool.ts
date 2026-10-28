@@ -14,6 +14,7 @@ import { PALETTE } from "../ui/palette";
 import { etaText } from "./buildCost";
 import { needsRoadDemolishConfirm } from "../ui/actionModel";
 import { arcPath, snapAngle, type Pt } from "./curve";
+import { restoreMissingPieces } from "./roadRestoreModel";
 import { flash, isRoadTool, mapMpp, roadKindOf, MIN_ROAD_ZOOM, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
 
 
@@ -435,18 +436,23 @@ export function attachRoadTool(map: maplibregl.Map): void {
       junctions = streetJunctions(all);
     }
     const r: Restore = { key, title: name ? `Улица «${name}»` : "Старая дорога", lines: [], priced: false, reason: null };
+    let hadGeometry = false;
     for (const w of ways) {
       const pts = roadLine(w.pts, MIN_SEGMENT, junctions);
       if (!pts) continue;
+      hadGeometry = true;
       // An old way comes back as the road it was: a footway as a path, anything wider as a dirt road, and a bridge
       // as the matching bridge; while that kind is locked, the lighter one of the same sort.
       let kind: RoadKind = oldStreetKind(w.cls, w.bridge === true);
       if (lockOf(kind)) kind = kind === "bridge" ? "footbridge" : kind === "dirt" ? "path" : kind;
-      const local = addRoad(g, pts, kind, CURVE_SNAP_M, laborByLength(pts, 1));
-      if (!local.ok && !r.reason) r.reason = local.reason;
-      r.lines.push({ pts, cls: w.cls, kind, labor: 0, span: 0, ok: local.ok });
+      // Existing parallel road pieces are not an error: restore only the missing gaps of the old street.
+      for (const piece of restoreMissingPieces(g, pts)) {
+        const local = addRoad(g, piece, kind, CURVE_SNAP_M, laborByLength(piece, 1));
+        if (!local.ok && !r.reason) r.reason = local.reason;
+        r.lines.push({ pts: piece, cls: w.cls, kind, labor: 0, span: 0, ok: local.ok });
+      }
     }
-    if (r.lines.length === 0) r.reason = "Слишком коротко";
+    if (r.lines.length === 0) r.reason = hadGeometry ? "Улица уже восстановлена" : "Слишком коротко";
     restore = r;
     drawRestore(r);
     void Promise.all(
