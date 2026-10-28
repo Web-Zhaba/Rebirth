@@ -11,7 +11,7 @@ import { selectedBuilding } from "./buildingLayer";
 import { PALETTE } from "../ui/palette";
 import { addPatterns, PATTERNS } from "./patterns";
 import { MEADOW_COLOR } from "./style";
-import { isBrushTool, MIN_ZONE_ZOOM, tool, ZONE_COLORS } from "./tools";
+import { isBrushTool, MIN_ZONE_ZOOM, tool, zonesShown, ZONE_COLORS } from "./tools";
 
 // Unfinished clearing shown in the inspector.
 export const selectedClearing = signal<number | null>(null);
@@ -151,14 +151,17 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       const z = zones.value;
       const f = frame.value;
       const preview = paintPreview.value;
+      const visible = zonesShown.value;
       buildingSet.value; // re-run when lots change; lots are drawn fainter, as plots
       if (!z || !f) return;
       const occupied = occupiedKeys(z.cells, state.peek()?.buildings ?? {});
       const features: GeoJSON.Feature[] = [];
-      for (const c of z.cells) {
-        if (c.block) continue;
-        const zone = preview?.get(c.key) ?? c.zone;
-        if (zone !== "none") features.push(polygon(ringOf(c, f), { zone, occ: occupied.has(c.key) }));
+      if (visible) {
+        for (const c of z.cells) {
+          if (c.block) continue;
+          const zone = preview?.get(c.key) ?? c.zone;
+          if (zone !== "none") features.push(polygon(ringOf(c, f), { zone, occ: occupied.has(c.key) }));
+        }
       }
       source("zone-cells")?.setData({ type: "FeatureCollection", features });
       if (ringCache.size > z.cells.length * 3 + 1000) {
