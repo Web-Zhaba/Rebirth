@@ -3,9 +3,11 @@ import type * as maplibregl from "maplibre-gl";
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
+import { SERVICE_LIST } from "../sim/services";
+import { lockReason } from "../sim/tech";
 import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
 import type { City, Stock } from "../sim/types";
-import { tool } from "../map/tools";
+import { setManualOverlay, tool } from "../map/tools";
 import { buildings, economy, incomingCount, people, roads, setSpeed, speed, state, stock } from "../simClient";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
@@ -20,7 +22,7 @@ import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, p
 import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
 import { signedDaily } from "./resourceModel";
-import { freshWarnings, warningAction } from "./warningModel";
+import { freshWarnings, serviceWarningText, warningAction } from "./warningModel";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
 const families = (n: number) => {
@@ -281,11 +283,20 @@ export function currentWarnings() {
   const p = people.value;
   const st = stock.value;
   const eco = economy.value;
-  if (!p || !st || !eco) return [];
+  const snap = state.value;
+  if (!p || !st || !eco || !snap) return [];
   const { queue } = roadQueue(roads.value);
   const b = buildings.value;
   const building = b ? Object.values(b).filter((x) => x.state === "building").length : 0;
-  return warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building });
+  const out = warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building });
+  if (snap.services.houses > 0) {
+    for (const service of SERVICE_LIST) {
+      if (lockReason({ progress: snap.progress }, service.id)) continue;
+      const uncovered = snap.services.houses - snap.services.covered[service.id];
+      if (uncovered > 0) out.push({ id: `service:${service.id}`, text: serviceWarningText(service.name, uncovered) });
+    }
+  }
+  return out;
 }
 
 export function Warnings() {
@@ -309,7 +320,18 @@ export function Warnings() {
       {list.map((w) => {
         const action = warningAction(w.id);
         return (
-          <button key={w.id} type="button" class="warn-chip" onClick={() => action && openPanel(action)}>
+          <button
+            key={w.id}
+            type="button"
+            class="warn-chip"
+            onClick={() => {
+              if (action === "town") openPanel("town");
+              else if (action && "overlay" in action) {
+                tool.value = null;
+                setManualOverlay(action.overlay);
+              }
+            }}
+          >
             <Icon name="warning" size={16} />
             {w.text}
           </button>
