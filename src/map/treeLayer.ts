@@ -31,7 +31,7 @@ import {
   showWhile,
 } from "./graphicsSettings";
 import { bakeImpostor, IMPOSTOR_STEP, IMPOSTOR_VIEWS, impostorQuad, treeGeometry, type Impostor } from "./treeImpostor";
-import { buildTree, crownAt, KIND_INFO, leafOf, reedAt, TREE_LODS } from "./treeModels";
+import { buildTree, crownAt, grassAt, KIND_INFO, leafOf, reedAt, TREE_LODS } from "./treeModels";
 import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
 import { chunksInView } from "./chunkView";
 import { eyeOf, frustumPlanes } from "./three/frame";
@@ -888,6 +888,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const reed =
         reedAt(clock);
 
+      const grass =
+        grassAt(clock);
+
       const w =
         opts.weather.peek();
 
@@ -926,6 +929,12 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         rgb(reed.a),
         rgb(reed.b),
         reed.t,
+      ] as const;
+
+      const grassCols = [
+        rgb(grass.a),
+        rgb(grass.b),
+        grass.t,
       ] as const;
 
       mats.forEach(
@@ -990,7 +999,10 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
             info.season ===
             "reed"
               ? reedCols
-              : leafCols;
+              : info.season ===
+                  "grass"
+                ? grassCols
+                : leafCols;
 
           u.uBare.value =
             info.season ===
