@@ -28,6 +28,7 @@ import { attachTrafficLayer } from "./map/trafficLayer";
 import { attachWeatherLayer } from "./map/weatherLayer";
 import { attachZoneLayer } from "./map/zoneLayer";
 import { attachZoneTool } from "./map/zoneTool";
+import { attachToolRepeat } from "./map/tools";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
@@ -79,6 +80,7 @@ attachRoadTool(map);
 attachZoneTool(map);
 attachPlaceTool(map);
 attachRevealTool(map);
+attachToolRepeat(map);
 let centred = false;
 effect(() => {
   const c = city.value;
