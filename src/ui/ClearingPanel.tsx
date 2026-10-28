@@ -8,6 +8,7 @@ import { act, InspectorHead, Line, num, siteEta, SiteLevers } from "./InspectorP
 import { areaText, clearingView } from "./inspectorModel";
 import { Button, Confirm, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 // Inspector of an unfinished clearing (right slot). Its lever key is -id.
 export function ClearingPanel() {
@@ -29,8 +30,8 @@ export function ClearingPanel() {
     selectedClearing.value = null;
   };
   return (
-    <div class="rs-panel inspector panel" role="region" aria-label="Вырубка">
-      <InspectorHead icon="clearing" title="Вырубка" chip={{ label: "рубят лес", tone: "build" }} onClose={closePanel} />
+    <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.clearingInspectorTitle}>
+      <InspectorHead icon="clearing" title="Вырубка" chip={{ label: "рубят лес", tone: "build" }} onClose={closePanel} headingId={SEMANTIC_IDS.clearingInspectorTitle} />
       <div class="insp-sub">
         {areaText(c.area)} · лес {Math.round(c.forest * 100)} %
       </div>
@@ -57,6 +58,6 @@ export function ClearingPanel() {
           Работа остановится. Уже полученные брёвна останутся на складе, участок можно отметить заново.
         </Confirm>
       )}
-    </div>
+    </aside>
   );
 }
