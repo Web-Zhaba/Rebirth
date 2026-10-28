@@ -3,6 +3,7 @@ import { selectedBuilding } from "../map/buildingLayer";
 import { selectedSite } from "../map/heritageSpots";
 import { tool } from "../map/tools";
 import { selectedClearing } from "../map/zoneLayer";
+import { cancelUiState } from "./inputModel";
 
 // The right-hand slot (PLAN-ui.md section 5) holds one panel at a time: the inspector of the selected
 // building or clearing, the town panel, the notebook, the science panel or an old building to restore.
@@ -46,11 +47,28 @@ effect(() => {
   } else if (rightPanel.peek() === "heritage") rightPanel.value = null;
 });
 
-// Esc closes the open panel, unless a dialog or a map tool wants the key.
+// Escape is the universal non-modal cancel: tools, selections and the right slot all close together.
+// An open dialog owns Escape and is left to the dialog component.
 if (typeof window !== "undefined") {
   window.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || e.defaultPrevented || rightPanel.peek() === null || tool.peek()) return;
-    if (document.querySelector("dialog[open]")) return;
-    closePanel();
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    const next = cancelUiState(
+      {
+        tool: tool.peek(),
+        rightPanel: rightPanel.peek(),
+        building: selectedBuilding.peek(),
+        clearing: selectedClearing.peek(),
+        site: selectedSite.peek(),
+      },
+      !!document.querySelector("dialog[open]"),
+    );
+    if (next.tool !== null || next.rightPanel !== null || next.building !== null || next.clearing !== null || next.site !== null) return;
+    batch(() => {
+      tool.value = null;
+      selectedBuilding.value = null;
+      selectedClearing.value = null;
+      selectedSite.value = null;
+      rightPanel.value = null;
+    });
   });
 }
