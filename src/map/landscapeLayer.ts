@@ -15,6 +15,10 @@ import {
 } from "three";
 import { PALETTE } from "../ui/palette";
 import type { Frame as TownFrame } from "../world/frame";
+import { pointInRings, type Land } from "../world/landcover";
+import { lngLatToTile } from "../world/mercator";
+import { NATURE_MAXZOOM } from "../world/nature";
+import { getLandTile, type LandTile } from "../world/tiles";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
@@ -104,9 +108,80 @@ export function createLandscapeLayer(
   const framer = frameSetter(opts.light);
   const stops: (() => void)[] = [];
 
-  const meadow = rgb(PALETTE.mapGrass);
+  const biomeColor: Record<Land, readonly number[]> = {
+    water: rgb(PALETTE.mapWater),
+    forest: rgb(PALETTE.mapForest),
+    meadow: rgb(PALETTE.mapGrass),
+    wetland: rgb(PALETTE.mapWetland),
+    sand: rgb(PALETTE.mapSand),
+    rock: rgb(PALETTE.mapRock),
+    ice: rgb(PALETTE.mapIce),
+  };
+
   const rock = rgb(PALETTE.mapRock);
   const ice = rgb(PALETTE.mapIce);
+
+  const natureN = 2 ** NATURE_MAXZOOM;
+  const natureTiles = new Map<string, LandTile>();
+
+  const natureKey = (tx: number, ty: number): string => {
+    const x = ((tx % natureN) + natureN) % natureN;
+    const y = Math.max(0, Math.min(natureN - 1, ty));
+    return `${x}/${y}`;
+  };
+
+  const loadNature = async (points: readonly [number, number][]): Promise<void> => {
+    const need = new Set<string>();
+
+    for (const [lng, lat] of points) {
+      const t = lngLatToTile(lng, lat, NATURE_MAXZOOM);
+      const key = natureKey(Math.floor(t.x), Math.floor(t.y));
+      if (!natureTiles.has(key)) need.add(key);
+    }
+
+    await Promise.all(
+      [...need].map(async (key) => {
+        const [x, y] = key.split("/").map(Number);
+        try {
+          natureTiles.set(key, await getLandTile(x, y));
+        } catch {
+          natureTiles.set(key, { extent: 4096, land: [], water: [] });
+        }
+      }),
+    );
+  };
+
+  const biomeAt = (lng: number, lat: number): Land => {
+    const t = lngLatToTile(lng, lat, NATURE_MAXZOOM);
+    const tx = Math.floor(t.x);
+    const ty = Math.floor(t.y);
+    const tile = natureTiles.get(natureKey(tx, ty));
+
+    if (!tile) return "meadow";
+
+    const x = (t.x - tx) * tile.extent;
+    const y = (t.y - ty) * tile.extent;
+
+    const hit = (p: LandTile["land"][number]): boolean =>
+      x >= p.bbox[0] &&
+      x <= p.bbox[2] &&
+      y >= p.bbox[1] &&
+      y <= p.bbox[3] &&
+      pointInRings(x, y, p.rings);
+
+    if (tile.water.some(hit)) return "water";
+
+    const p = tile.land.find(hit);
+    if (!p) return "meadow";
+
+    if (p.cls === "wood") return "forest";
+    if (p.cls === "wetland") return "wetland";
+    if (p.cls === "sand") return "sand";
+    if (p.cls === "rock") return "rock";
+    if (p.cls === "ice") return "ice";
+
+    return "meadow";
+  };
 
   const clearMesh = () => {
     generation++;
@@ -166,10 +241,15 @@ export function createLandscapeLayer(
     for (let y = 0; y <= GRID; y++) {
       for (let x = 0; x <= GRID; x++, q++) {
         const h = heights[q];
+        const [lng, lat] = points[q];
+        const biome = biomeAt(lng, lat);
 
         local[q * 3] = -HALF + x * CELL;
         local[q * 3 + 1] = -HALF + y * CELL;
-        local[q * 3 + 2] = h * scale;
+
+        // Water gets its own dedicated surface. Keep terrain underneath it,
+        // but slightly lower so the two opaque surfaces can never z-fight.
+        local[q * 3 + 2] = (biome === "water" ? h - 2 : h) * scale;
 
         const sx = (at(x + 1, y) - at(x - 1, y)) / (2 * CELL);
         const sy = (at(x, y + 1) - at(x, y - 1)) / (2 * CELL);
@@ -178,8 +258,15 @@ export function createLandscapeLayer(
         const rocky = Math.min(1, Math.max(0, (slope - 18) / 28));
         const alpine = Math.min(1, Math.max(0, (h - 1500) / 1300));
 
-        const ground = mix3(meadow, rock, rocky * 0.75);
-        const color = mix3(ground, ice, alpine * alpine * 0.65);
+        const base = biomeColor[biome];
+        const rockyBase =
+          biome === "water" || biome === "sand" || biome === "wetland" || biome === "ice"
+            ? base
+            : mix3(base, rock, rocky * 0.75);
+        const color =
+          biome === "ice" || biome === "water"
+            ? rockyBase
+            : mix3(rockyBase, ice, alpine * alpine * 0.65);
 
         colors[q * 3] = color[0];
         colors[q * 3 + 1] = color[1];
@@ -224,7 +311,7 @@ export function createLandscapeLayer(
     const buildOrigin = origin;
     const points = gridPoints(tf);
 
-    void loadGround(points)
+    void Promise.all([loadGround(points), loadNature(points)])
       .then(() => {
         if (
           buildGeneration !== generation ||
