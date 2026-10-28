@@ -20,6 +20,7 @@ const vertexHeights = new Map<string, number>();
 export function setTerrainSurfaceWindow(
   frame: Frame,
   center: readonly [number, number],
+  notifyDependents = true,
 ): void {
   if (
     activeFrame === frame &&
@@ -32,7 +33,10 @@ export function setTerrainSurfaceWindow(
   activeFrame = frame;
   activeCenter = [center[0], center[1]];
   vertexHeights.clear();
-  terrainSurfaceRevision.value++;
+  // Changing the active mesh window is cheap, but notifying every gameplay
+  // layer at once can cause a large synchronous rebuild cascade. Callers may
+  // update the sampler without broadcasting this revision.
+  if (notifyDependents) terrainSurfaceRevision.value++;
 }
 
 export function clearTerrainSurfaceWindow(): void {
