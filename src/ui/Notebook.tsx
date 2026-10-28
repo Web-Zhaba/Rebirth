@@ -4,6 +4,8 @@ import { Icon } from "./Icon";
 import { IconButton } from "./kit";
 import type { IconName } from "./icons";
 import { formatDate, newestFirst, unseenCount, type Article, type ChronicleEntry, type Find } from "./notebookLogic";
+import { articleDomId, notebookTabForArticle } from "./notebookFocusModel";
+import { notebookArticleFocus } from "./notebookFocus";
 
 export type { Article, ChronicleEntry, Find } from "./notebookLogic";
 
@@ -31,6 +33,22 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
   const [tab, setTab] = useState<Tab>("finds");
   const total = finds.length + articles.length;
   const unseen = unseenCount(finds, articles, seen);
+  const focusedArticle = notebookArticleFocus.value;
+
+  useEffect(() => {
+    if (!open || !focusedArticle) return;
+    const next = notebookTabForArticle(focusedArticle, tab);
+    if (next !== tab) setTab(next);
+  }, [open, focusedArticle, tab]);
+
+  useEffect(() => {
+    if (!open || tab !== "history" || !focusedArticle) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(articleDomId(focusedArticle))?.scrollIntoView({ block: "nearest" });
+      notebookArticleFocus.value = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, tab, focusedArticle]);
 
   // While the book is open everything that arrives counts as seen.
   useEffect(() => {
@@ -92,7 +110,7 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
                 <div class="notebook-empty">Ведите раскопки — здесь появятся статьи о найденных местах</div>
               ) : (
                 newestFirst(articles).map((a) => (
-                  <div class="notebook-entry" key={a.id}>
+                  <div class="notebook-entry" id={articleDomId(a.id)} key={a.id}>
                     <span class="notebook-kind">
                       <Icon name="scroll" size={18} />
                     </span>
