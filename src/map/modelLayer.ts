@@ -16,6 +16,7 @@ import { mergePacked, projectModel, type Packed } from "./modelBuffers";
 import { buildScaffold, rgb, type Model, type XY } from "./modelGeometry";
 import { seatBridge, seatBuilding, drapeRoad, type Ground } from "./groundSeat";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { disableCustomTerrainRenderers } from "./terrainDiagnostics";
 import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { buildRoadModel } from "./roadModels";
 import { buildTownModel } from "./townModels";
@@ -622,6 +623,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       cache.clear();
     },
     render(_gl, args) {
+      if (disableCustomTerrainRenderers) return;
       if (!host || !scene || !mesh || !mat || !roadScene || !roadMesh || !roadMat) return;
       if (dirty) rebuild();
       if (!origin || (!mesh.visible && !roadMesh.visible)) return;
@@ -641,6 +643,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     type: "custom",
     renderingMode: "3d",
     render(_gl, args) {
+      if (disableCustomTerrainRenderers) return;
       if (!host || !lampScene || !lampMat || !mesh?.visible || !origin || !opts.light) return;
       const minute = (((opts.light.clock.peek() + START_MINUTE_OF_DAY) % 1440) + 1440) % 1440;
       const k = (["house", "work", "tavern"] as const).map((kind) => lightOpacity(kind, minute / 60));
