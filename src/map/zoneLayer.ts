@@ -273,12 +273,21 @@ export function attachZoneLayer(map: maplibregl.Map): void {
           const done = isCleared(c);
           const [cx, cy] = fieldCentroid(c);
           const [lng, lat] = f.toLngLat(cx, cy);
-          const h = groundAt(lng, lat);
+          const samples = [
+            ...c.pts.map(([x, y]) => f.toLngLat(x, y)),
+            [lng, lat] as [number, number],
+          ];
+          const heights = samples.map(([a, b]) => groundAt(a, b));
 
-          if (h === null) missingGround.push([lng, lat]);
+          samples.forEach((point, index) => {
+            if (heights[index] === null) missingGround.push(point);
+          });
 
-          const base = h === null ? 0 : Math.max(0, h * k);
-          const top = base + (k > 0 ? 0.18 : 0.08);
+          const scaled = heights
+            .filter((h): h is number => h !== null)
+            .map((h) => h * k);
+          const base = scaled.length ? Math.min(...scaled) - 0.12 : 0;
+          const top = (scaled.length ? Math.max(...scaled) : base) + (k > 0 ? 0.18 : 0.08);
 
           shapes.push(polygon(closed(c.pts, f), { id: c.id, done, base, top }));
 
