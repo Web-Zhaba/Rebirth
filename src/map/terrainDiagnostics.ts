@@ -54,7 +54,7 @@ export const disableProjectionTransition =
 export const disableTerrainCameraSync =
   disableTerrainTransition || terrainDiagnosticMode === "camera-off";
 export const disableTerrainCenterElevation = terrainDiagnosticMode === "center-off";
-export const disableTerrainCenterSet = terrainDiagnosticMode === "center-set-off" || terrainDiagnosticMode === "dem-load-off";
+export const disableTerrainCenterSet = terrainDiagnosticMode === "center-set-off" || terrainDiagnosticMode === "dem-load-off" || terrainDiagnosticMode === "dem-no-retry";
 export const disableDemLoading = terrainDiagnosticMode === "dem-load-off";
 export const disableDemRetrySync = terrainDiagnosticMode === "dem-no-retry";
 
