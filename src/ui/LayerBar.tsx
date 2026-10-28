@@ -8,6 +8,7 @@ import { toggleWeatherMap, weatherMapOn } from "../map/weatherSettings";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { IconButton } from "./kit";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 const LAYER_ICON: Record<Overlay, IconName> = {
   none: "layerNone",
@@ -92,7 +93,7 @@ export function LayerBar() {
   const active = OVERLAYS.find((o) => o.id === cur);
   return (
     <div class="layerbar">
-      <button class="layer-head" type="button" aria-expanded={!collapsed} onClick={toggle}>
+      <button class="layer-head" type="button" aria-expanded={!collapsed} aria-controls={SEMANTIC_IDS.layerControls} onClick={toggle}>
         <Icon name="layers" size={16} />
         <span>Слои</span>
         <b class="layer-name">{zonesShown.value ? "зоны" : active?.label}</b>
@@ -100,7 +101,7 @@ export function LayerBar() {
       </button>
       {!collapsed && (
         <>
-          <div class="layer-group" role="group" aria-label="Слои карты">
+          <div class="layer-group" id={SEMANTIC_IDS.layerControls} role="toolbar" aria-label="Слои карты" aria-orientation="horizontal">
             {/* Native title tooltips: a CSS tooltip here overflows the scrolling left column and makes it jump. */}
             {OVERLAYS.map((o) => (
               <IconButton key={o.id} icon={LAYER_ICON[o.id]} label={o.label} aria-pressed={cur === o.id} onClick={() => setManualOverlay(o.id)} />
