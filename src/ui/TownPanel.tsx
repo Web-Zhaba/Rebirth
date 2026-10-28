@@ -19,6 +19,7 @@ import { closePanel, rightPanel } from "./panels";
 import { amount, pad, roadQueue } from "./topbarModel";
 import { effectLines, weatherReason } from "./weatherModel";
 import { tabId, tabPanelId } from "./tabSemantics";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 type Tab = "people" | "work" | "services" | "events" | "orders";
 
@@ -48,7 +49,7 @@ function JobRow({ k, text, hint }: { k: JobKey; text: string; hint?: string }) {
       </div>
       <Segmented options={PRIORITY_OPTIONS} value={value} label={`Приоритет: ${JOB_NAMES[k].toLowerCase()}`} onChange={(priority) => act({ type: "setJobPriority", group: k, priority })} />
       {hint && <div class="people-note">{hint}</div>}
-    </div>
+    </aside>
   );
 }
 
@@ -344,7 +345,7 @@ function OrdersTab() {
 export function TownPanel({ city, map }: { city: City; map: maplibregl.Map }) {
   if (rightPanel.value !== "town") return null;
   return (
-    <div class="rs-panel town-panel panel" role="region" aria-label="Город">
+    <aside class="rs-panel town-panel panel" id={SEMANTIC_IDS.townPanel} aria-label="Город">
       <div class="insp-head">
         <span class="insp-ic">
           <Icon name="town" size={28} />
