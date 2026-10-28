@@ -1,5 +1,5 @@
 import { flyOrJump } from "../map/motion";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { ComponentChildren } from "preact";
 import { useEffect } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";

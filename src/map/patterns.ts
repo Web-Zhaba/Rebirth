@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { PALETTE } from "../ui/palette";
 
 // Hatch patterns for the zone and field fills, so zone kinds differ by texture and not by color alone:

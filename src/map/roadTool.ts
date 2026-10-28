@@ -1,5 +1,5 @@
 import { play } from "../ui/sound";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
 import { lockReason } from "../sim/tech";

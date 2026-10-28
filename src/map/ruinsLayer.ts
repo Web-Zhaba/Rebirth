@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
 import { doneKinds } from "../sim/heritage";
 import { isBridge, oldStreetKind, ROAD_KINDS } from "../sim/roads";

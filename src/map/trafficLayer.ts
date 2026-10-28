@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { frame, lifeTraffic, roads } from "../simClient";
 import { overlay, TRAFFIC_STOPS } from "./tools";

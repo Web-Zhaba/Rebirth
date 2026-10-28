@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { reachSegments } from "../sim/coverage";
 import { lotFront } from "../sim/people";

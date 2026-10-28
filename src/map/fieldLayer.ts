@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, LessEqualDepth, Matrix4, Mesh, OneFactor, OneMinusSrcAlphaFactor, Scene, ShaderMaterial, Vector3, Vector4 } from "three";
 import { calendar, DAYS_PER_SEASON } from "../sim/clock";

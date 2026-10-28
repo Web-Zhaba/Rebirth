@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import { frame, sendCmd } from "../simClient";
 import { PALETTE } from "../ui/palette";

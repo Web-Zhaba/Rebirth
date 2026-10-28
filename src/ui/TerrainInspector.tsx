@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { landAt, nearRiver, type Land } from "../world/landcover";
 import { terrainAt } from "../world/terrain";
 

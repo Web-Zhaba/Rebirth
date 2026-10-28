@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { flyOrJump, prefersReducedMotion } from "../map/motion";
 import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
 import { MIN_QUERY, searchPlaces, type PlaceHit } from "../world/geocode";

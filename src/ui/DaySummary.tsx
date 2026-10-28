@@ -1,5 +1,5 @@
 import { flyOrJump } from "../map/motion";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useState } from "preact/hooks";
 import { summaryShown } from "../sim/summary";
 import type { SummaryLine } from "../sim/types";

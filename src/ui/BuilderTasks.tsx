@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { selectedBuilding } from "../map/buildingLayer";
 import { compactScreen, flyOrJump } from "../map/motion";
 import { etaRealMs, formatReal } from "../sim/buildEta";

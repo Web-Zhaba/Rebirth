@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { ReadonlySignal } from "@preact/signals";
 import { BufferAttribute, BufferGeometry, Camera, Color, CustomBlending, DstColorFactor, Matrix4, Mesh, Scene, ShaderMaterial, Vector2, Vector3, ZeroFactor, OneFactor } from "three";
 import { DAY_MIN } from "../../sim/time";

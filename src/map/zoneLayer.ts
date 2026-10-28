@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
 import { isCleared } from "../sim/clearing";

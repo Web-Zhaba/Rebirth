@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import { FADE_TO } from "./constants";
 import { cloudsOn, type CloudSite } from "./settings";

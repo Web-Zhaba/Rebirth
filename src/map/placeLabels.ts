@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { computed, effect, signal } from "@preact/signals";
 import { city } from "../simClient";
 import { PLACE_LABELS_LAYER } from "./style";

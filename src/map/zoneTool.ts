@@ -1,5 +1,5 @@
 import { play } from "../ui/sound";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
 import { clearingLabor, clearingLogs, validateClearing } from "../sim/clearing";

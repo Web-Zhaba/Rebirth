@@ -1,6 +1,6 @@
 import { flyOrJump } from "../map/motion";
 import { signal } from "@preact/signals";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { calendar } from "../sim/clock";

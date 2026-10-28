@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { ColorManagement, HalfFloatType, LinearFilter, LinearSRGBColorSpace, RGBAFormat, UnsignedByteType, WebGLRenderTarget, WebGLRenderer } from "three";
 import { invert4 } from "./frame";
 

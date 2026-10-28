@@ -1,6 +1,6 @@
 import { flyOrJump } from "../map/motion";
 import { useEffect, useRef, useState } from "preact/hooks";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { found as foundCity } from "../simClient";
 import { sampleSite } from "../world/site";
 import { landAt, nearRiver, type Land } from "../world/landcover";

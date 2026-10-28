@@ -1,5 +1,5 @@
 import { computed } from "@preact/signals";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect } from "preact/hooks";
 import { city, state } from "../simClient";
 import { AboutDialog } from "./AboutDialog";

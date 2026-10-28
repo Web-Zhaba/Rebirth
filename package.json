@@ -16,7 +16,7 @@
     "@mapbox/vector-tile": "^3.0.0",
     "@preact/signals": "^2.11.3",
     "earcut": "^3.2.4",
-    "maplibre-gl": "^5.0.0",
+    "maplibre-gl": "^6.16.0",
     "pbf": "^5.1.2",
     "preact": "^11.0.2",
     "three": "0.186.1"

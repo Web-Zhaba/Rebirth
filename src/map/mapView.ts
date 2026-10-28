@@ -1,16 +1,18 @@
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { rewildedStyle } from "./style";
+
+maplibregl.setWorkerUrl(workerUrl);
 
 export function createMap(container: string): maplibregl.Map {
   const map = new maplibregl.Map({
     container,
     style: rewildedStyle(),
-    center: [15, 50], // Europe, globe overview
+    center: [15, 50],
     zoom: 1.8,
     hash: import.meta.env.DEV,
     attributionControl: false,
-    maxPitch: 75, // the relief setting (relief.ts) lowers it when the map is flat
-    // multisampling: thousands of trees a few pixels wide crawl and sparkle at their edges without it
+    maxPitch: 75,
     canvasContextAttributes: { antialias: true },
   });
   map.addControl(new maplibregl.NavigationControl(), "top-right");

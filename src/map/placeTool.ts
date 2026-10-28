@@ -1,5 +1,5 @@
 import { play } from "../ui/sound";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect, untracked } from "@preact/signals";
 import { BUILDINGS, type BuildingTemplate } from "../sim/buildings";
 import { DIG } from "../sim/excavation";

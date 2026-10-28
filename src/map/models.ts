@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { ReadonlySignal } from "@preact/signals";
 import type { WeatherState } from "../sim/weather";
 import { computed, effect } from "@preact/signals";

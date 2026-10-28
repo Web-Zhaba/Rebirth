@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { state } from "../simClient";
 import { techOf } from "../sim/tech";
 import { DaySummary } from "./DaySummary";

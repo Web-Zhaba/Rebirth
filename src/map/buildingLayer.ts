@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { computed, effect, signal, type ReadonlySignal } from "@preact/signals";
 import { covers } from "../sim/services";
 import type { Building, ClientState } from "../sim/types";

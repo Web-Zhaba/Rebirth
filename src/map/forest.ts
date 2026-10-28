@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { computed, effect, signal, untracked, type ReadonlySignal } from "@preact/signals";
 import { ROAD_KINDS } from "../sim/roads";
 import { pointInPolygon } from "../sim/zones";

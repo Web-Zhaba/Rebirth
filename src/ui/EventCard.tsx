@@ -1,5 +1,5 @@
 import { flyOrJump } from "../map/motion";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { frame, pendingChoice, sendCmd, setSpeed, speed } from "../simClient";
 import { play } from "./sound";

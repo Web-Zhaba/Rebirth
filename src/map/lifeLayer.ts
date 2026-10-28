@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import { daylight, START_MINUTE_OF_DAY } from "../sim/clock";
 import { MAP_ONLY, PALETTE } from "../ui/palette";
