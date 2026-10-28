@@ -9,12 +9,16 @@ import { buildingSet, frame, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { selectedBuilding } from "./buildingLayer";
 import { PALETTE } from "../ui/palette";
+import { groundAt, loadGround, reliefScale } from "./relief";
 import { addPatterns, PATTERNS } from "./patterns";
 import { MEADOW_COLOR } from "./style";
 import { isBrushTool, MIN_ZONE_ZOOM, tool, ZONE_COLORS } from "./tools";
 
 // Unfinished clearing shown in the inspector.
 export const selectedClearing = signal<number | null>(null);
+
+// Rebuild ground-aware overlays after missing DEM tiles finish loading.
+const terrainRevision = signal(0);
 
 // Optimistic paint while a drag is in progress or a command is in flight: key -> zone.
 export const paintPreview = signal<Map<string, "none" | ZoneType> | null>(null);
@@ -62,10 +66,16 @@ export function attachZoneLayer(map: maplibregl.Map): void {
     // Cleared forest is plain meadow; a clearing in progress is an outline with its percent done.
     map.addLayer({
       id: "clearings-fill",
-      type: "fill",
+      type: "fill-extrusion",
       source: "clearings",
       filter: ["get", "done"],
-      paint: { "fill-color": MEADOW_COLOR, "fill-opacity": 1 },
+      paint: {
+        "fill-extrusion-color": MEADOW_COLOR,
+        "fill-extrusion-opacity": 1,
+        "fill-extrusion-base": ["get", "base"],
+        "fill-extrusion-height": ["get", "top"],
+        "fill-extrusion-vertical-gradient": false,
+      },
     });
     map.addLayer({
       id: "clearings-line",
@@ -101,10 +111,16 @@ export function attachZoneLayer(map: maplibregl.Map): void {
     });
     map.addLayer({
       id: "zones-fill",
-      type: "fill",
+      type: "fill-extrusion",
       source: "zone-cells",
       minzoom: MIN_ZONE_ZOOM,
-      paint: { "fill-color": FILL_COLOR as never, "fill-opacity": ["case", ["get", "occ"], 0.14, 0.34] as never },
+      paint: {
+        "fill-extrusion-color": FILL_COLOR as never,
+        "fill-extrusion-opacity": ["case", ["get", "occ"], 0.14, 0.34] as never,
+        "fill-extrusion-base": ["get", "base"],
+        "fill-extrusion-height": ["get", "top"],
+        "fill-extrusion-vertical-gradient": false,
+      },
     });
     map.addLayer({
       id: "zones-pattern",
@@ -151,19 +167,49 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       const z = zones.value;
       const f = frame.value;
       const preview = paintPreview.value;
+      const k = reliefScale.value;
+      terrainRevision.value;
       buildingSet.value; // re-run when lots change; lots are drawn fainter, as plots
       if (!z || !f) return;
+
       const occupied = occupiedKeys(z.cells, state.peek()?.buildings ?? {});
       const features: GeoJSON.Feature[] = [];
+      const missingGround: [number, number][] = [];
+
       for (const c of z.cells) {
         if (c.block) continue;
         const zone = preview?.get(c.key) ?? c.zone;
-        if (zone !== "none") features.push(polygon(ringOf(c, f), { zone, occ: occupied.has(c.key) }));
+        if (zone === "none") continue;
+
+        const [lng, lat] = f.toLngLat(c.cx, c.cy);
+        const h = groundAt(lng, lat);
+
+        if (h === null) missingGround.push([lng, lat]);
+
+        const base = h === null ? 0 : Math.max(0, h * k);
+        const top = base + (k > 0 ? 0.28 : 0.12);
+
+        features.push(
+          polygon(ringOf(c, f), {
+            zone,
+            occ: occupied.has(c.key),
+            base,
+            top,
+          }),
+        );
       }
+
       source("zone-cells")?.setData({ type: "FeatureCollection", features });
+
+      if (missingGround.length) {
+        void loadGround(missingGround).then(() => {
+          terrainRevision.value++;
+        });
+      }
+
       if (ringCache.size > z.cells.length * 3 + 1000) {
         const live = new Set(z.cells.map((c) => c.key));
-        for (const k of ringCache.keys()) if (!live.has(k)) ringCache.delete(k);
+        for (const key of ringCache.keys()) if (!live.has(key)) ringCache.delete(key);
       }
     });
 
@@ -203,22 +249,47 @@ export function attachZoneLayer(map: maplibregl.Map): void {
     effect(() => {
       const list = state.value?.clearings ?? [];
       const f = frame.value;
+      const k = reliefScale.value;
+      terrainRevision.value;
       if (list.length === 0 && !hadClearings) return;
       hadClearings = list.length > 0;
+
       const shapes: GeoJSON.Feature[] = [];
       const labels: GeoJSON.Feature[] = [];
+      const missingGround: [number, number][] = [];
+
       if (f) {
         for (const c of list) {
           const done = isCleared(c);
-          shapes.push(polygon(closed(c.pts, f), { id: c.id, done }));
+          const [cx, cy] = fieldCentroid(c);
+          const [lng, lat] = f.toLngLat(cx, cy);
+          const h = groundAt(lng, lat);
+
+          if (h === null) missingGround.push([lng, lat]);
+
+          const base = h === null ? 0 : Math.max(0, h * k);
+          const top = base + (k > 0 ? 0.18 : 0.08);
+
+          shapes.push(polygon(closed(c.pts, f), { id: c.id, done, base, top }));
+
           if (!done) {
-            const [x, y] = fieldCentroid(c);
-            labels.push({ type: "Feature", properties: { text: `${Math.floor((c.done / c.labor) * 100)} %` }, geometry: { type: "Point", coordinates: f.toLngLat(x, y) } });
+            labels.push({
+              type: "Feature",
+              properties: { text: `${Math.floor((c.done / c.labor) * 100)} %` },
+              geometry: { type: "Point", coordinates: [lng, lat] },
+            });
           }
         }
       }
+
       source("clearings")?.setData({ type: "FeatureCollection", features: shapes });
       source("clearing-labels")?.setData({ type: "FeatureCollection", features: labels });
+
+      if (missingGround.length) {
+        void loadGround(missingGround).then(() => {
+          terrainRevision.value++;
+        });
+      }
     });
 
     effect(() => {
