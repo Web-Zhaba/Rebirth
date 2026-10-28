@@ -10,6 +10,7 @@ import { BuilderTasks } from "./BuilderTasks";
 import { Icon } from "./Icon";
 import { openPanel } from "./panels";
 import { researchStatusView } from "./researchStatusModel";
+import { LANDMARK_LABELS } from "./semanticModel";
 
 function ResearchStatus() {
   const s = state.value;
@@ -41,13 +42,13 @@ export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
   return (
     <>
       <TopBar city={city} map={map} />
-      <div class="side-col">
+      <aside class="side-col" aria-label={LANDMARK_LABELS.status}>
         <ResearchStatus />
         <Warnings />
         <LeftPanel />
         <EventCard map={map} />
         <Toasts map={map} />
-      </div>
+      </aside>
       <BuilderTasks map={map} />
     </>
   );
