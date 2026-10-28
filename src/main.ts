@@ -5,6 +5,7 @@ import { createMap } from "./map/mapView";
 import { attachContextLayer } from "./map/contextLayer";
 import { attachTrackpadGestures } from "./map/trackpadGestures";
 import { attachArticles } from "./map/articles";
+import { attachArticleMarkers } from "./map/articleMarkerLayer";
 import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
 import { attachForest } from "./map/forest";
@@ -47,6 +48,7 @@ attachZoneLayer(map); // zones beneath everything else we add
 attachRuinsLayer(map, oldWorld, frame); // old foundations and streets, beneath the roads
 attachExcavation();
 attachArticles();
+attachArticleMarkers(map);
 attachRoadLayer(map); // before the city marker so roads draw beneath it
 attachBuildingLayer(map);
 // Buildings and built roads as three.js models (loaded with the first one); localStorage debug3dModels = "1" shows every model kind instead.
