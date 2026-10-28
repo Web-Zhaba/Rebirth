@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { OVERLAY_COLORS, OVERLAYS, overlay, setManualOverlay, TRAFFIC_STOPS, zonesShown, type Overlay } from "../map/tools";
+import { OVERLAY_COLORS, OVERLAYS, overlay, setManualOverlay, setManualZonesShown, TRAFFIC_STOPS, zonesShown, type Overlay } from "../map/tools";
 import { compactScreen } from "../map/motion";
 import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
 import { cloudsOn, toggleClouds } from "../map/clouds/settings";
@@ -106,7 +106,7 @@ export function LayerBar() {
               <IconButton key={o.id} icon={LAYER_ICON[o.id]} label={o.label} aria-pressed={cur === o.id} onClick={() => setManualOverlay(o.id)} />
             ))}
             <span class="layer-sep" aria-hidden="true" />
-            <IconButton icon="layers" label="Зоны" aria-pressed={zonesShown.value} onClick={() => (zonesShown.value = !zonesShown.value)} />
+            <IconButton icon="layers" label="Зоны" aria-pressed={zonesShown.value} onClick={() => setManualZonesShown(!zonesShown.value)} />
             <IconButton icon="placeNames" label="Старые названия" aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
             <IconButton icon="dig" label="Старый город" aria-pressed={ruinsShown.value} onClick={toggleRuins} />
             <IconButton icon="weatherRain" label="Погода на карте" aria-pressed={weatherMapOn.value} onClick={toggleWeatherMap} />
