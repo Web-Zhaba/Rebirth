@@ -24,6 +24,7 @@ import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { disableCustomTerrainRenderers } from "./terrainDiagnostics";
 import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { WIND_DIR } from "./weatherMath";
 import {
@@ -429,6 +430,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       reset();
     },
     render(_gl, args) {
+      if (disableCustomTerrainRenderers) return;
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
 
