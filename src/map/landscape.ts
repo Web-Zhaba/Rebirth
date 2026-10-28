@@ -51,7 +51,7 @@ export function attachLandscape(
   // The globe is useful for world overview, but the custom local terrain is a
   // Mercator DEM mesh. Keep those coordinate systems from being blended while
   // the player is in the 3D world; restore the original globe at overview zooms.
-  const originalProjection = map.getProjection();
+  const originalProjection = map.getProjection() ?? { type: "globe" as const };
   let switchingProjection = false;
 
   const syncCameraToLandscape = () => {
@@ -106,7 +106,7 @@ export function attachLandscape(
     // sea-level globe. The map API does not expose a mutable camera position
     // in this version, so we prevent most terrain collisions by anchoring the
     // target elevation and reducing pitch/zoom in custom-world mode.
-    const wanted = Math.max(0, elevation * reliefScale.peek()) + 0.8;
+    const wanted = elevation * reliefScale.peek() + 0.8;
     if (Math.abs(map.getCenterElevation() - wanted) < 1.0) return;
 
     syncingCamera = true;
