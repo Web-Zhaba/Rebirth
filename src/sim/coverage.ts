@@ -2,6 +2,7 @@ import { BUILDINGS, UPGRADE } from "./buildings";
 import { isUnlocked } from "./tech";
 import { ageOf, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
 import { roadNet } from "./roadNetCache";
+import { servicePreviewIndex } from "./servicePreviewIndex";
 import { countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import { classPupils, schoolSeats } from "./school";
 import { finishedMonuments, monumentLand, monumentsNear } from "./monuments";
@@ -57,39 +58,32 @@ export interface ServiceCoveragePreview {
 // Potential coverage from a candidate service door, using the same road-distance primitives as live coverage.
 // Workers are intentionally ignored: this previews where the service can reach once it is staffed.
 export function previewServiceCoverage(
-  s: Pick<SimState, "buildings" | "roads" | "households" | "coverage">,
+  s: Pick<SimState, "buildings" | "roads" | "coverage"> & { houseResidents: Record<number, number> },
   id: ServiceId,
   x: number,
   y: number,
 ): ServiceCoveragePreview {
   const zero = { houses: 0, residents: 0, newHouses: 0, newResidents: 0 };
-  const net = roadNet(s.roads);
+  const index = servicePreviewIndex(s.roads, s.buildings, s.houseResidents);
+  const { net } = index;
   if (net.edges.length === 0) return zero;
   const range = SERVICES[id].reach;
   const from = snapToRoad(net, x, y);
   if (!from || from.off > range) return zero;
   const tree = spotTree(net, from, range);
-  const peopleAt = new Map<number, number>();
-  for (const h of Object.values(s.households)) {
-    if (h.home !== null) peopleAt.set(h.home, (peopleAt.get(h.home) ?? 0) + h.members.length);
-  }
 
   let houses = 0;
   let residents = 0;
   let newHouses = 0;
   let newResidents = 0;
-  for (const b of Object.values(s.buildings)) {
-    if (!isFinishedHouse(b)) continue;
-    const [hx, hy] = lotFront(b);
-    if (Math.abs(hx - x) > range || Math.abs(hy - y) > range) continue;
-    const spot = snapToRoad(net, hx, hy);
-    if (!spot || walkMetres(tree, from, spot) > range) continue;
-    const people = peopleAt.get(b.id) ?? 0;
+  for (const h of index.houses) {
+    if (Math.abs(h.x - x) > range || Math.abs(h.y - y) > range) continue;
+    if (walkMetres(tree, from, h.spot) > range) continue;
     houses++;
-    residents += people;
-    if (!covers(s.coverage[b.id], id)) {
+    residents += h.people;
+    if (!covers(s.coverage[h.id], id)) {
       newHouses++;
-      newResidents += people;
+      newResidents += h.people;
     }
   }
   return { houses, residents, newHouses, newResidents };
