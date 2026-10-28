@@ -33,49 +33,26 @@ import { chunksInView } from "./chunkView";
 import { eyeOf, frustumPlanes } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
-// The 3D forest (PLAN-3d-world.ru.md stage 4): the trees of forest.ts drawn by three.js inside the map, on the same
-// projection and light as the building models (modelLayer.ts frameSetter; each instance's base is projected in float64
-// on the CPU into both frames, its tree added in metres). Import only with a dynamic `import()` (it pulls in three.js).
-//
-// Only what the camera sees: the plane is cut into square chunks (forest.ts CHUNK); each frame picks the chunks inside
-// the camera's frustum (tested against its matrix, which holds on the relief too, where the sky has no ground point),
-// as far as a typical tree stays MIN_PX tall on the screen. Past MAX_TREES the far ones are thinned with distance and
-// their trees drawn a little bigger, and the last stretch before the far edge fades the trees out.
-// A chunk's trees are scattered and projected once and cached; new chunks are built within FRAME_BUDGET ms per frame,
-// so moving the camera never stalls on them. Levels of detail per chunk by its distance from the camera: full trees
-// near, impostors of them farther (treeImpostor.ts: quads facing the camera with the baked tree on them), and flat
-// crowns for a view from straight above. One instanced mesh per kind and level, its
-// instances in one interleaved buffer refilled (not reallocated) as the view changes.
-//
-// Close up only: below TREES_FROM_ZOOM the forest is the 2D fill alone, and up to GROW_TO the trees grow in. Deciduous
-// crowns follow the season (bare in winter), snow lies on the crowns while there is a snowpack, and the trees sway in
-// the wind of the weather (westerly, the zonal wind of sim/weather.ts).
-//
-// The small details of stage 6 (bushes, reeds, boulders: treeScatter.ts DETAIL_KINDS) ride in the same chunks and
-// meshes, each kind drawn as far as its own typical height stays MIN_PX tall (treeModels.ts KIND_INFO), at most
-// DETAIL_CAP: full near, impostors beyond DETAIL_NEAR. They are few against the trees and never thinned.
-
 export const TREE_LAYER_ID = "forest-trees";
 const GROW_TO = TREES_FROM_ZOOM + 1;
-const MAX_TREES = 80_000; // drawn at once; past it the far chunks are thinned
-const MAX_CHUNKS = 3000; // cached; beyond it chunks unseen for a while are dropped
-const TALL = 12; // m, a typical tree: sets how far trees are drawn
-const MIN_PX = 1.5; // farther than a typical tree is this tall on the screen, there are no trees
-const FAR_CAP = 12_000; // m from the camera at most
-const FADE_FROM = 0.85; // share of the far edge where the trees start to shrink away
-const REACH_STEP = 1.15; // the thinning reach moves in these steps, so the drawn set does not shimmer
-const SLOPE = 120; // m: how much the relief may rise or fall within a chunk or under an unknown chunk (exaggerated)
-const NEAR = 450; // m from the camera: full trees within
-const FLAT_PITCH = 18; // degrees: flatter views get flat crowns
-const FRAME_BUDGET = 4; // ms of chunk building per frame
-const ASSEMBLE_EVERY = 100; // ms: the instance buffers are refilled at most this often while the view changes
-const SINK = 0.3; // m: trunks start below the ground, which our samples follow only closely on slopes
-const WIND_FULL = 14; // m/s: full sway
-const DETAIL_CAP = 2000; // m from the camera at most for the details
-const DETAIL_NEAR = 60; // m: full details within
-const PER = 10; // floats per instance: globe base (3), mercator base (3), size, turn, hash, shade
+const MAX_TREES = 80_000;
+const MAX_CHUNKS = 3000;
+const TALL = 12;
+const MIN_PX = 1.5;
+const FAR_CAP = 12_000;
+const FADE_FROM = 0.85;
+const REACH_STEP = 1.15;
+const SLOPE = 120;
+const NEAR = 450;
+const FLAT_PITCH = 18;
+const FRAME_BUDGET = 4;
+const ASSEMBLE_EVERY = 100;
+const SINK = 0.3;
+const WIND_FULL = 14;
+const DETAIL_CAP = 2000;
+const DETAIL_NEAR = 60;
+const PER = 10;
 
-// Level 1 is built with IMPOSTOR defined: a quad (treeImpostor.ts) instead of the tree's mesh.
 const VERT = /* glsl */ `
 #ifndef IMPOSTOR
 attribute vec3 aColor;
@@ -85,7 +62,7 @@ varying float vCrown;
 varying float vH;
 varying vec3 vP;
 #else
-uniform float uRadius; // half the side of a baked view, in tree heights
+uniform float uRadius;
 varying vec2 vUV;
 varying vec3 vR;
 varying vec3 vU;
@@ -93,30 +70,26 @@ varying float vFlip;
 #endif
 attribute vec3 iG;
 attribute vec3 iM;
-attribute vec4 iP; // size, turn, hash, shade
+attribute vec4 iP;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
 uniform float uTime;
 uniform float uGrow;
 uniform float uBare;
-uniform vec3 uWind; // direction, strength
-uniform vec3 uEye; // camera in the mercator frame
-uniform float uReach; // the far thinning (treeScatter.ts keepAt)
+uniform vec3 uWind;
+uniform vec3 uEye;
+uniform float uReach;
 uniform float uFar;
 varying vec3 vN;
 varying float vHash;
 varying float vShade;
 void main() {
-  // thinned far trees are drawn bigger, so the forest keeps its cover; past FADE_FROM they shrink away
   float dist = length(iM - uEye);
   float keep = clamp(uReach / dist, ${MIN_KEEP}, 1.0);
   float s = iP.x * uGrow * min(2.0, pow(keep, -0.3)) * (1.0 - smoothstep(uFar * ${FADE_FROM}, uFar, dist));
-  // sway: grows with the square of the height, gusts out of phase from tree to tree
   float gust = 0.35 + 0.65 * sin(uTime * (1.1 + 0.5 * iP.z) + iP.z * 40.0);
 #ifdef IMPOSTOR
-  // a quad facing the camera about the tree's middle, showing the baked view nearest the camera's elevation (with an
-  // offset per tree, so the forest passes from one view to the next gradually), mirrored for half the trees
   vec3 F = normalize(uEye - iM - vec3(0.0, 0.0, 0.5 * s));
   vec3 R = cross(vec3(0.0, 0.0, 1.0), F);
   R = length(R) > 1e-4 ? normalize(R) : vec3(1.0, 0.0, 0.0);
@@ -133,7 +106,7 @@ void main() {
   vU = U;
 #else
   vec3 p = position;
-  if (aCrown > 0.5) p.xy *= 1.0 - 0.45 * uBare; // leafless: only the thinner frame of branches
+  if (aCrown > 0.5) p.xy *= 1.0 - 0.45 * uBare;
   float c = cos(iP.y), sn = sin(iP.y);
   p = vec3(c * p.x - sn * p.y, sn * p.x + c * p.y, p.z) * s;
   p.xy += uWind.xy * uWind.z * gust * position.z * position.z * s * 0.03;
@@ -141,7 +114,7 @@ void main() {
   vC = aColor;
   vCrown = aCrown;
   vH = position.z;
-  vP = position * iP.x + iP.z * 17.0; // metres in the tree, shifted per tree: holes and snow patches differ
+  vP = position * iP.x + iP.z * 17.0;
 #endif
   vec4 m = uM * vec4(iM + p, 1.0);
   vec4 g = uG * vec4(iG + p, 1.0);
@@ -161,7 +134,7 @@ uniform vec3 uCrownA;
 uniform vec3 uCrownB;
 uniform vec3 uBareCol;
 uniform vec3 uSnowCol;
-uniform vec3 uLeafBase; // the leaf colour the meshes are built with: seasonal crowns keep its light and shade
+uniform vec3 uLeafBase;
 varying vec3 vN;
 varying float vHash;
 varying float vShade;
@@ -171,7 +144,7 @@ varying float vCrown;
 varying float vH;
 varying vec3 vP;
 #else
-uniform sampler2D uColor; // treeImpostor.ts
+uniform sampler2D uColor;
 uniform sampler2D uData;
 varying vec2 vUV;
 varying vec3 vR;
@@ -181,13 +154,10 @@ varying float vFlip;
 float cell(vec3 p) {
   return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
 }
-// A point of a tree: col its colour as built, crown 1 on the foliage, h its height in the tree (0..1), spot how thick
-// the snow lies there.
 vec3 shade(vec3 col, vec3 n, float crown, float h, float spot) {
   if (crown > 0.5) {
     if (uSeasonal > 0.5) col = mix(mix(uCrownA, uCrownB, fract(vHash * 7.31)), uBareCol, uBare) * (dot(col, vec3(1.0)) / dot(uLeafBase, vec3(1.0)));
-    col *= vShade * mix(0.7, 1.05, smoothstep(0.1, 1.0, h)); // darker deep in the crown
-    // snow lies on the branches that face up
+    col *= vShade * mix(0.7, 1.05, smoothstep(0.1, 1.0, h));
     col = mix(col, uSnowCol, uSnow * smoothstep(0.12, 0.45, n.z) * mix(0.35, 0.95, spot));
   }
   float d = max(dot(n, uLight), 0.0);
@@ -199,14 +169,12 @@ void main() {
   vec4 a = texture2D(uColor, vUV);
   vec4 t = texture2D(uData, vUV);
   float crown = step(0.5, t.a);
-  // the coverage kept sharp at any size (alphaToCoverage turns it into MSAA samples); a leafless crown is see-through
   float cover = clamp((a.a - 0.5) / max(fwidth(a.a), 1e-4) + 0.5, 0.0, 1.0) * (1.0 - crown * uBare * 0.7);
   if (cover < 0.01) discard;
   vec2 nv = (t.xy * 2.0 - 1.0) * vec2(vFlip, 1.0);
   vec3 n = normalize(vR * nv.x + vU * nv.y + vN * sqrt(max(0.0, 1.0 - dot(nv, nv))));
   gl_FragColor = vec4(shade(a.rgb, n, crown, t.z, 0.5), cover);
 #else
-  // a leafless crown is a see-through tangle of twigs: most of it is cut away in small cells; snow lies in patches
   if (vCrown > 0.5 && uBare > 0.01 && cell(vP * 2.2) < uBare * 0.7) discard;
   gl_FragColor = vec4(shade(vC, normalize(vN), vCrown, vH, smoothstep(0.35, 0.65, cell(vP * 1.6 + 3.1))), 1.0);
 #endif
@@ -219,22 +187,53 @@ export interface TreeLayerOptions {
   weather: ReadonlySignal<WeatherState | null>;
 }
 
-// One chunk's instances by kind, PER floats each, in hash order (treeScatter.ts).
 interface Chunk {
   i: number;
   j: number;
   kinds: Float32Array[];
-  n: number; // trees in all (the details are not thinned and do not count)
-  lod: number; // the level it was last drawn at (levels switch with some slack, so they do not flicker)
-  seen: number; // frame it was last under the screen
-  stale: boolean; // what it stands on changed: built again when in view, drawn as it was until then
+  n: number;
+  lod: number;
+  seen: number;
+  stale: boolean;
 }
 
-// A growable interleaved instance buffer behind one mesh.
 interface Slot {
   mesh: Mesh;
   buf: InstancedInterleavedBuffer | null;
   count: number;
+}
+
+interface FrameSample {
+  total: number;
+  chunksTotal: number;
+  chunksCulling: number;
+  chunksCentreTime: number;
+  centreCalls: number;
+  seenCount: number;
+  buildChunks: number;
+  thinReach: number;
+  sig: number;
+  assemble: number;
+  uniforms: number;
+  draw: number;
+}
+
+interface ChunkBuildSample {
+  trees: number;
+  sourceChunk: number;
+  reliefCheck: number;
+  filterSort: number;
+  coordsGround: number;
+  projectPoints: number;
+  packArrays: number;
+  total: number;
+}
+
+interface StatSummary {
+  avg: number;
+  p95: number;
+  p99: number;
+  max: number;
 }
 
 const chunkKey = (i: number, j: number) => `${i},${j}`;
@@ -244,31 +243,64 @@ const overlaps = (c: Chunk, b: Box) => (c.i + 1) * CHUNK >= b[0] && c.i * CHUNK 
 export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): maplibregl.CustomLayerInterface {
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
-  const slots: Slot[] = []; // kind * TREE_LODS + lod
+  const slots: Slot[] = [];
   const mats: ShaderMaterial[] = [];
   const stops: (() => void)[] = [];
   const chunks = new Map<string, Chunk>();
   let origin: { lng: number; lat: number } | null = null;
-  let shown: string | null = null; // signature of what the buffers hold
+  let shown: string | null = null;
   let lastAssemble = 0;
-  let reach = Infinity; // the far thinning now (treeScatter.ts thinReach)
+  let reach = Infinity;
   let farNow = 0;
   let frameNo = 0;
-  let rebuilt = 0; // chunks built again in place: part of what the buffers hold
+  let rebuilt = 0;
   const camera = new Camera();
   const framer = frameSetter(opts.light);
-  let impostors: Impostor[] | null = null; // by kind; baked in the first render (and again after a lost context)
+  let impostors: Impostor[] | null = null;
+
+  // Profiler buffers
+  const MAX_FRAME_SAMPLES = 600;
+  const MAX_BUILD_SAMPLES = 400;
+  const frameSamples: FrameSample[] = [];
+  const buildSamples: ChunkBuildSample[] = [];
+
+  const summarize = (values: number[]): StatSummary => {
+    if (values.length === 0) return { avg: 0, p95: 0, p99: 0, max: 0 };
+    const sorted = values.slice().sort((a, b) => a - b);
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    const avg = sum / sorted.length;
+    const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
+    const p99 = sorted[Math.floor(sorted.length * 0.99)] ?? 0;
+    const max = sorted[sorted.length - 1] ?? 0;
+    return {
+      avg: Number(avg.toFixed(3)),
+      p95: Number(p95.toFixed(3)),
+      p99: Number(p99.toFixed(3)),
+      max: Number(max.toFixed(3)),
+    };
+  };
+
   let unRestore: (() => void) | null = null;
+
+  // Кэш вычисленных мировых координат центров чанков и блоков: key -> [mx, my, mz]
+  const centreCache = new Map<number, [number, number, number]>();
 
   const reset = () => {
     chunks.clear();
+    centreCache.clear();
     shown = null;
   };
 
-  // Scatters and projects one chunk; null while its tiles load.
+  // Detailed build profiling
   const build = (i: number, j: number, tf: TownFrame, o: { lng: number; lat: number }): Chunk | null => {
+    const tB0 = performance.now();
+
+    const tSource0 = performance.now();
     const trees = opts.source.chunk(i, j);
+    const dtSource = performance.now() - tSource0;
     if (!trees) return null;
+
+    const tRelief0 = performance.now();
     const k = reliefScale.peek();
     if (k > 0 && trees.length) {
       const cover: [number, number][] = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => tf.toLngLat((i + a) * CHUNK, (j + b) * CHUNK));
@@ -277,39 +309,70 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         return null;
       }
     }
+    const dtRelief = performance.now() - tRelief0;
+
+    let dtFilterSort = 0;
+    let dtCoordsGround = 0;
+    let dtProject = 0;
+    let dtPack = 0;
+
     const kinds = TREE_KINDS.map((_, kind) => {
       const base: number[] = [], par: number[] = [];
-      // by hash: any prefix is an even thinning of the chunk, and a thinner prefix keeps the trees of a thicker one
       const order: number[] = [];
+
+      const tFS0 = performance.now();
       for (let t = 0; t < trees.length; t += TREE_STRIDE) if (trees[t + 3] === kind) order.push(t);
       order.sort((a, b) => trees[a + 5] - trees[b + 5]);
+      dtFilterSort += performance.now() - tFS0;
+
+      const tCG0 = performance.now();
       for (const t of order) {
         const x = trees[t], y = trees[t + 1];
         const [a, b] = tf.toLngLat(x, y);
         base.push(x, y, k > 0 ? (groundAt(a, b) ?? 0) * k - SINK : -SINK);
         par.push(trees[t + 2], trees[t + 4], trees[t + 5], 0.85 + 0.3 * ((trees[t + 5] * 13.7) % 1));
       }
+      dtCoordsGround += performance.now() - tCG0;
+
+      const tProj0 = performance.now();
       const { g, m } = projectPoints(base, tf.toLngLat, o);
+      dtProject += performance.now() - tProj0;
+
+      const tPack0 = performance.now();
       const n = base.length / 3, out = new Float32Array(n * PER);
       for (let q = 0; q < n; q++) {
         out.set(g.subarray(q * 3, q * 3 + 3), q * PER);
         out.set(m.subarray(q * 3, q * 3 + 3), q * PER + 3);
         for (let r = 0; r < 4; r++) out[q * PER + 6 + r] = par[q * 4 + r];
       }
+      dtPack += performance.now() - tPack0;
+
       return out;
     });
+
+    const dtBuildTotal = performance.now() - tB0;
+    const chunkSample: ChunkBuildSample = {
+      trees: trees.length / TREE_STRIDE,
+      sourceChunk: dtSource,
+      reliefCheck: dtRelief,
+      filterSort: dtFilterSort,
+      coordsGround: dtCoordsGround,
+      projectPoints: dtProject,
+      packArrays: dtPack,
+      total: dtBuildTotal,
+    };
+    if (buildSamples.length >= MAX_BUILD_SAMPLES) buildSamples.shift();
+    buildSamples.push(chunkSample);
+
     return { i, j, kinds, n: kinds.reduce((a, q, kind) => a + (isTree[kind] ? q.length / PER : 0), 0), lod: -1, seen: 0, stale: false };
   };
 
-  // Refills the instance buffers from the chosen chunks (a buffer is replaced only when it has to grow). lods: per kind,
-  // the level the chunk draws it at, -1 not at all.
   const taken = (a: Float32Array, keep: number) => Math.round((a.length / PER) * keep);
   const assemble = (chosen: { c: Chunk; lods: number[]; keep: number }[]) => {
     const counts = slots.map(() => 0);
     for (const { c, lods, keep } of chosen) c.kinds.forEach((a, kind) => lods[kind] >= 0 && (counts[kind * TREE_LODS + lods[kind]] += taken(a, isTree[kind] ? keep : 1)));
     slots.forEach((s, k) => {
       if (!s.buf || s.buf.count < counts[k]) {
-        // a new geometry, not new attributes on the old one: three keeps the instance limit of the first binding
         const old = s.mesh.geometry as InstancedBufferGeometry;
         const geo = new InstancedBufferGeometry();
         for (const [name, attr] of Object.entries(old.attributes)) if (!(attr instanceof InterleavedBufferAttribute)) geo.setAttribute(name, attr);
@@ -338,8 +401,63 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     }
   };
 
-  // devtools: what is drawn now
-  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byKind: Object.fromEntries(TREE_KINDS.map((k, i) => [k, slots.slice(i * TREE_LODS, (i + 1) * TREE_LODS).reduce((a, q) => a + q.count, 0)])), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), reach, far: farNow, chunks: chunks.size, rebuilt }) });
+  // DevTools inspection
+  if (import.meta.env.DEV) {
+    Object.assign(window, {
+      treeStats: () => ({
+        drawn: slots.reduce((a, q) => a + q.count, 0),
+        byKind: Object.fromEntries(TREE_KINDS.map((k, i) => [k, slots.slice(i * TREE_LODS, (i + 1) * TREE_LODS).reduce((a, q) => a + q.count, 0)])),
+        byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)),
+        reach,
+        far: farNow,
+        chunks: chunks.size,
+        rebuilt,
+      }),
+      treeProfile: () => {
+        console.group("🌲 Tree Layer Profiling");
+
+        console.log(`%c1. Per-Frame Pipeline (${frameSamples.length} samples)`, "font-weight: bold; color: #4CAF50;");
+        console.table({
+          "1. chunksInView (total)": summarize(frameSamples.map((s) => s.chunksTotal)),
+          "   ↳ culling logic only": summarize(frameSamples.map((s) => s.chunksCulling)),
+          "   ↳ centre() callbacks": summarize(frameSamples.map((s) => s.chunksCentreTime)),
+          "2. buildChunks": summarize(frameSamples.map((s) => s.buildChunks)),
+          "3. thinReach": summarize(frameSamples.map((s) => s.thinReach)),
+          "4. signature": summarize(frameSamples.map((s) => s.sig)),
+          "5. assemble": summarize(frameSamples.map((s) => s.assemble)),
+          "6. uniforms": summarize(frameSamples.map((s) => s.uniforms)),
+          "7. host.draw": summarize(frameSamples.map((s) => s.draw)),
+          "TOTAL (frame)": summarize(frameSamples.map((s) => s.total)),
+        });
+
+        const avgCalls = frameSamples.length ? (frameSamples.reduce((a, b) => a + b.centreCalls, 0) / frameSamples.length).toFixed(1) : 0;
+        const avgSeen = frameSamples.length ? (frameSamples.reduce((a, b) => a + b.seenCount, 0) / frameSamples.length).toFixed(1) : 0;
+        console.log(`ℹ️ chunksInView stats: avg chunks seen = ${avgSeen}, avg centre() calls/frame = ${avgCalls}`);
+
+        console.log(`%c2. Single Chunk Build Breakdown (${buildSamples.length} chunks built)`, "font-weight: bold; color: #2196F3;");
+        if (buildSamples.length > 0) {
+          console.table({
+            "a. source.chunk()": summarize(buildSamples.map((s) => s.sourceChunk)),
+            "b. reliefCheck": summarize(buildSamples.map((s) => s.reliefCheck)),
+            "c. filter & sort (order.sort)": summarize(buildSamples.map((s) => s.filterSort)),
+            "d. coords & groundAt": summarize(buildSamples.map((s) => s.coordsGround)),
+            "e. projectPoints": summarize(buildSamples.map((s) => s.projectPoints)),
+            "f. pack Float32Array": summarize(buildSamples.map((s) => s.packArrays)),
+            "TOTAL (single chunk)": summarize(buildSamples.map((s) => s.total)),
+            "Trees per chunk (count)": summarize(buildSamples.map((s) => s.trees)),
+          });
+        } else {
+          console.log("No chunks built yet. Move the camera to trigger new chunk generation.");
+        }
+        console.groupEnd();
+      },
+      resetTreeProfile: () => {
+        frameSamples.length = 0;
+        buildSamples.length = 0;
+        console.log("Tree profiling samples reset.");
+      },
+    });
+  }
 
   return {
     id: TREE_LAYER_ID,
@@ -395,7 +513,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       });
       opts.source.onTile = () => map.triggerRepaint();
       unRestore = host.onRestore(() => {
-        impostors = null; // their textures went with the context
+        impostors = null;
         map.triggerRepaint();
       });
       stops.push(
@@ -404,7 +522,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
           reset();
           map.triggerRepaint();
         }),
-        // new ground or new obstacles: the old trees stay until their chunk is built again, so nothing blinks
         effect(() => {
           void reliefScale.value;
           for (const c of chunks.values()) c.stale = true;
@@ -435,6 +552,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       reset();
     },
     render(_gl, args) {
+      const tRender0 = performance.now();
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
       if (!host || !scene || !tf || zoom < TREES_FROM_ZOOM) return;
@@ -443,7 +561,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         origin = { lng, lat };
         reset();
       }
-      // the chunks in the frustum, nearest the camera first; all in the mercator frame of the models (metres)
       const M = framer.mercator(args, host, origin);
       const eye = eyeOf(M);
       if (!eye) return;
@@ -458,19 +575,41 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       farNow = far;
       const k = reliefScale.peek();
       const under = k > 0 ? (groundAt(elng, elat) ?? 0) * k : 0;
-      const centre = (x: number, y: number): [number, number, number] => {
-        const [lng, lat] = tf.toLngLat(x, y);
-        const g = k > 0 ? groundAt(lng, lat) : 0;
-        return [...merc.to(lng, lat), g === null ? under : g * k];
+
+      // centre profiling: count calls & cumulative time
+      let centreCalls = 0;
+      let centreTime = 0;
+      // Быстрый упаковщик двух 16-битных целых в один 32-битный ключ
+      const coordKey = (x: number, y: number) => ((Math.round(x) & 0xffff) << 16) | (Math.round(y) & 0xffff);
+
+      const centre = (x: number, y: number, out: [number, number, number]): void => {
+        const key = coordKey(x, y);
+        let pos = centreCache.get(key);
+        if (!pos) {
+          const [clng, clat] = tf.toLngLat(x, y);
+          const g = k > 0 ? groundAt(clng, clat) : 0;
+          const m = merc.to(clng, clat);
+          pos = [m[0], m[1], g === null ? under : g * k];
+          centreCache.set(key, pos);
+        }
+        out[0] = pos[0];
+        out[1] = pos[1];
+        out[2] = pos[2];
       };
+
+      // 1. chunksInView
+      const tChunks0 = performance.now();
       const seen = chunksInView({ planes, eye, at: [ex, ey], far, size: CHUNK, rise: TALL, slope: SLOPE, centre });
-      // build what is missing, nearest first, within the frame's budget
-      const t0 = performance.now();
+      const dtChunksTotal = performance.now() - tChunks0;
+      const dtChunksCulling = Math.max(0, dtChunksTotal - centreTime);
+
+      // 2. buildChunks
+      const tBuild0 = performance.now();
       let missing = false;
       for (const s of seen) {
         const key = chunkKey(s.i, s.j), was = chunks.get(key);
         if (was && !was.stale) continue;
-        if (performance.now() - t0 > FRAME_BUDGET) {
+        if (performance.now() - tBuild0 > FRAME_BUDGET) {
           missing = true;
           break;
         }
@@ -481,8 +620,10 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
           chunks.set(key, c);
         }
       }
-      // what to draw: every chunk in view at its level of detail; past MAX_TREES the far ones keep a share falling with
-      // distance (treeScatter.ts thinReach), the reach moving in steps and with slack so the set does not shimmer
+      const dtBuildChunks = performance.now() - tBuild0;
+
+      // 3. thinReach & LOD selection
+      const tThin0 = performance.now();
       frameNo++;
       const flat = map.getPitch() < FLAT_PITCH;
       const ready: { c: Chunk; lod: number; d: number; n: number }[] = [];
@@ -504,9 +645,16 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         lods: TREE_KINDS.map((_, k) => (isTree[k] ? r.lod : r.d < farK[k] ? detailLod(r.d) : -1)),
         keep: r.d < NEAR ? 1 : Math.floor(keepAt(r.d, reach) * 16) / 16,
       }));
-      // forget chunks long out of sight
       if (chunks.size > MAX_CHUNKS) for (const [key, c] of chunks) if (frameNo - c.seen > 600) chunks.delete(key);
+      const dtThinReach = performance.now() - tThin0;
+
+      // 4. signature
+      const tSig0 = performance.now();
       const sig = `${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lods.join(",")}:${q.keep}`).join(";");
+      const dtSig = performance.now() - tSig0;
+
+      // 5. assemble
+      const tAssemble0 = performance.now();
       const now = performance.now();
       if (sig !== shown) {
         if (shown === null || now - lastAssemble > ASSEMBLE_EVERY) {
@@ -515,8 +663,28 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
           lastAssemble = now;
         } else missing = true;
       }
+      const dtAssemble = performance.now() - tAssemble0;
+
       if (missing) map.triggerRepaint();
-      if (!slots.some((s) => s.count > 0)) return;
+      if (!slots.some((s) => s.count > 0)) {
+        if (frameSamples.length >= MAX_FRAME_SAMPLES) frameSamples.shift();
+        frameSamples.push({
+          total: performance.now() - tRender0,
+          chunksTotal: dtChunksTotal,
+          chunksCulling: dtChunksCulling,
+          chunksCentreTime: centreTime,
+          centreCalls,
+          seenCount: seen.length,
+          buildChunks: dtBuildChunks,
+          thinReach: dtThinReach,
+          sig: dtSig,
+          assemble: dtAssemble,
+          uniforms: 0,
+          draw: 0,
+        });
+        return;
+      }
+
       if (!impostors) {
         const baked = host.draw((r) => TREE_KINDS.map((kind) => bakeImpostor(r, buildTree(kind, 0))));
         if (!baked) return;
@@ -528,7 +696,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
           u.uRadius.value = q.radius;
         });
       }
-      // uniforms of this frame
+
+      // 6. uniforms
+      const tUniforms0 = performance.now();
       const clock = opts.light?.clock.peek() ?? 0;
       const crown = crownAt(clock), reed = reedAt(clock);
       const w = opts.weather.peek();
@@ -546,28 +716,47 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         u.uFar.value = farK[kind];
         u.uGrow.value = grow * grow * (3 - 2 * grow);
         (u.uWind.value as Vector3).set(WIND_DIR[0], WIND_DIR[1], flat ? 0 : wind * info.sway);
-        // seasonal crowns: leaves mix two colours and drop in the winter, letting the snow through to the twigs;
-        // reeds turn to straw and keep standing, a little snow caught in them
         const [a, b, t] = info.season === "reed" ? reedCols : leafCols;
         u.uBare.value = info.season === "leaf" ? crown.bare : 0;
         (u.uCrownA.value as Vector3).set(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t);
         (u.uCrownB.value as Vector3).set(...b);
         u.uSnow.value = info.season === "leaf" ? snow * crown.bare * 0.6 : info.season === "reed" ? snow * 0.4 : snow;
       });
+      const dtUniforms = performance.now() - tUniforms0;
+
+      // 7. host.draw
+      const tDraw0 = performance.now();
       host.draw((r) => {
-        // the impostors write their coverage to the alpha (alphaToCoverage): keep it off the canvas, which stays opaque
         const color = r.state.buffers.color;
         r.getContext().colorMask(true, true, true, false);
         color.setLocked(true);
         r.render(scene!, camera);
         color.setLocked(false);
       });
-      if (wind > 0.02 && !flat && motionOn.peek()) map.triggerRepaint(); // the sway moves every frame
+      const dtDraw = performance.now() - tDraw0;
+
+      const dtTotal = performance.now() - tRender0;
+      if (frameSamples.length >= MAX_FRAME_SAMPLES) frameSamples.shift();
+      frameSamples.push({
+        total: dtTotal,
+        chunksTotal: dtChunksTotal,
+        chunksCulling: dtChunksCulling,
+        chunksCentreTime: centreTime,
+        centreCalls,
+        seenCount: seen.length,
+        buildChunks: dtBuildChunks,
+        thinReach: dtThinReach,
+        sig: dtSig,
+        assemble: dtAssemble,
+        uniforms: dtUniforms,
+        draw: dtDraw,
+      });
+
+      if (wind > 0.02 && !flat && motionOn.peek()) map.triggerRepaint();
     },
   };
 }
 
-// Adds the layer just after the building models (or where they would go).
 export function attachTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): () => void {
   const layer = createTreeLayer(map, opts);
   const before = () => ["buildings-outline", "night-tint"].find((id) => map.getLayer(id));
