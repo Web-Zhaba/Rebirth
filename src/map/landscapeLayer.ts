@@ -13,39 +13,24 @@ import {
   ShaderMaterial,
   Vector4,
 } from "three";
-import type { Frame as TownFrame } from "../world/frame";
 import { PALETTE } from "../ui/palette";
-import { pointInRings, type Land } from "../world/landcover";
-import { lngLatToTile } from "../world/mercator";
-import { NATURE_MAXZOOM } from "../world/nature";
-import { getLandTile, type LandTile } from "../world/tiles";
-import { chunksInView } from "./chunkView";
+import type { Frame as TownFrame } from "../world/frame";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { groundAt, loadGround, reliefScale } from "./relief";
-import { eyeOf, frustumPlanes } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
 export const LANDSCAPE_LAYER_ID = "landscape-terrain";
 export const LANDSCAPE_FROM_ZOOM = 10.5;
 
-const CHUNK = 1200;
-const CELL = 60;
-const GRID = Math.round(CHUNK / CELL);
-const FAR = 18_000;
-const SLOPE_PAD = 300;
-const BUILD_BUDGET_MS = 5;
-const MAX_CHUNKS = 900;
+const HALF = 12_000;
+const CELL = 160;
+const GRID = Math.ceil((HALF * 2) / CELL);
 
 interface LandscapeOptions {
   frame: ReadonlySignal<TownFrame | null>;
   light?: ModelLayerOptions["light"];
-}
-
-interface Chunk {
-  mesh: Mesh;
-  seen: number;
 }
 
 const VERT = /* glsl */ `
@@ -57,6 +42,7 @@ uniform mat4 uM;
 uniform float uT;
 varying vec3 vP;
 varying vec3 vC;
+
 void main() {
   vec4 m = uM * vec4(aM, 1.0);
   vec4 g = uG * vec4(aG, 1.0);
@@ -77,22 +63,24 @@ float hash2(vec2 p) {
 }
 
 void main() {
-  vec3 dx = dFdx(vP);
-  vec3 dy = dFdy(vP);
-  vec3 n = normalize(cross(dx, dy));
+  vec3 n = normalize(cross(dFdx(vP), dFdy(vP)));
   if (n.z < 0.0) n = -n;
 
-  float lit = mix(0.55, 1.0, max(dot(n, normalize(uLight)), 0.0));
-  lit *= mix(0.9, 1.0, uSun);
+  float light = mix(0.56, 1.0, max(dot(n, normalize(uLight)), 0.0));
+  light *= mix(0.9, 1.0, uSun);
 
-  float grain = 0.96 + 0.08 * hash2(vP.xy / 14.0);
-  vec3 col = vC * lit * grain;
+  float grain = 0.965 + 0.07 * hash2(vP.xy / 18.0);
+  vec3 col = vC * light * grain;
   col = mix(col, uTint.rgb, uTint.a);
 
   gl_FragColor = vec4(col, 1.0);
 }`;
 
-function mix3(a: readonly number[], b: readonly number[], t: number): [number, number, number] {
+function mix3(
+  a: readonly number[],
+  b: readonly number[],
+  t: number,
+): [number, number, number] {
   return [
     a[0] + (b[0] - a[0]) * t,
     a[1] + (b[1] - a[1]) * t,
@@ -107,185 +95,95 @@ export function createLandscapeLayer(
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
   let mat: ShaderMaterial | null = null;
+  let mesh: Mesh | null = null;
   let origin: { lng: number; lat: number } | null = null;
-  let frameNo = 0;
+  let loading = false;
+  let generation = 0;
 
-  const chunks = new Map<string, Chunk>();
   const camera = new Camera();
   const framer = frameSetter(opts.light);
   const stops: (() => void)[] = [];
 
-  const biomeColors: Record<Land, readonly number[]> = {
-    water: rgb(PALETTE.mapWater),
-    forest: rgb(PALETTE.mapForest),
-    meadow: rgb(PALETTE.mapGrass),
-    wetland: rgb(PALETTE.mapWetland),
-    sand: rgb(PALETTE.mapSand),
-    rock: rgb(PALETTE.mapRock),
-    ice: rgb(PALETTE.mapIce),
-  };
-
+  const meadow = rgb(PALETTE.mapGrass);
   const rock = rgb(PALETTE.mapRock);
-  const high = rgb(PALETTE.mapIce);
+  const ice = rgb(PALETTE.mapIce);
 
-  const natureN = 2 ** NATURE_MAXZOOM;
-  const natureTiles = new Map<string, LandTile>();
-  const naturePending = new Map<string, Promise<void>>();
+  const clearMesh = () => {
+    generation++;
+    loading = false;
 
-  const natureKey = (x: number, y: number) => {
-    const nx = ((x % natureN) + natureN) % natureN;
-    const ny = Math.max(0, Math.min(natureN - 1, y));
-    return `${nx}/${ny}`;
-  };
-
-  const ensureNature = (lng: number, lat: number): boolean => {
-    const t = lngLatToTile(lng, lat, NATURE_MAXZOOM);
-    const tx = Math.floor(t.x);
-    const ty = Math.floor(t.y);
-    const key = natureKey(tx, ty);
-    if (natureTiles.has(key)) return true;
-
-    if (!naturePending.has(key)) {
-      const [x, y] = key.split("/").map(Number);
-      const p = getLandTile(x, y)
-        .then((tile) => {
-          natureTiles.set(key, tile);
-        })
-        .catch(() => {
-          natureTiles.set(key, { extent: 4096, land: [], water: [] });
-        })
-        .finally(() => {
-          naturePending.delete(key);
-          map.triggerRepaint();
-        });
-      naturePending.set(key, p);
+    if (mesh) {
+      scene?.remove(mesh);
+      mesh.geometry.dispose();
+      mesh = null;
     }
-
-    return false;
   };
 
-  const biomeAt = (lng: number, lat: number): Land | null => {
-    const t = lngLatToTile(lng, lat, NATURE_MAXZOOM);
-    const tx = Math.floor(t.x);
-    const ty = Math.floor(t.y);
-    const tile = natureTiles.get(natureKey(tx, ty));
-    if (!tile) return null;
-
-    const x = (t.x - tx) * tile.extent;
-    const y = (t.y - ty) * tile.extent;
-
-    const hit = (p: { bbox: [number, number, number, number]; rings: number[][] }) =>
-      x >= p.bbox[0] &&
-      x <= p.bbox[2] &&
-      y >= p.bbox[1] &&
-      y <= p.bbox[3] &&
-      pointInRings(x, y, p.rings);
-
-    if (tile.water.some(hit)) return "water";
-
-    const p = tile.land.find(hit);
-    if (!p) return "meadow";
-
-    if (p.cls === "wood") return "forest";
-    if (p.cls === "wetland") return "wetland";
-    if (p.cls === "sand") return "sand";
-    if (p.cls === "rock") return "rock";
-    if (p.cls === "ice") return "ice";
-    return "meadow";
-  };
-
-  const reset = () => {
-    for (const c of chunks.values()) {
-      scene?.remove(c.mesh);
-      c.mesh.geometry.dispose();
-    }
-    chunks.clear();
-  };
-
-  const keyOf = (i: number, j: number) => `${i},${j}`;
-
-  const build = (
-    i: number,
-    j: number,
-    tf: TownFrame,
-    o: { lng: number; lat: number },
-  ): Chunk | null => {
+  const gridPoints = (tf: TownFrame): [number, number][] => {
     const side = GRID + 1;
-    const points: [number, number][] = new Array(side * side);
-    const heights = new Float64Array(side * side);
+    const points = new Array<[number, number]>(side * side);
+    let q = 0;
 
-    let p = 0;
     for (let y = 0; y <= GRID; y++) {
-      for (let x = 0; x <= GRID; x++, p++) {
-        const lx = i * CHUNK + x * CELL;
-        const ly = j * CHUNK + y * CELL;
-        points[p] = tf.toLngLat(lx, ly);
+      for (let x = 0; x <= GRID; x++, q++) {
+        const lx = -HALF + x * CELL;
+        const ly = -HALF + y * CELL;
+        points[q] = tf.toLngLat(lx, ly);
       }
     }
 
-    let missingGround = false;
-    let missingNature = false;
-    const biomes = new Array<Land>(points.length);
+    return points;
+  };
+
+  const buildMesh = (
+    tf: TownFrame,
+    o: { lng: number; lat: number },
+    points: readonly [number, number][],
+  ): Mesh | null => {
+    if (!scene || !mat) return null;
+
+    const side = GRID + 1;
+    const heights = new Float64Array(points.length);
 
     for (let q = 0; q < points.length; q++) {
       const [lng, lat] = points[q];
-
       const h = groundAt(lng, lat);
-      if (h === null) {
-        missingGround = true;
-      } else {
-        heights[q] = h;
-      }
-
-      if (!ensureNature(lng, lat)) {
-        missingNature = true;
-      } else {
-        biomes[q] = biomeAt(lng, lat) ?? "meadow";
-      }
+      if (h === null) return null;
+      heights[q] = h;
     }
 
-    if (missingGround) {
-      void loadGround(points).then(() => map.triggerRepaint());
-    }
-
-    if (missingGround || missingNature) {
-      return null;
-    }
-
-    const k = reliefScale.peek();
+    const scale = reliefScale.peek();
     const local = new Float64Array(points.length * 3);
     const colors = new Float32Array(points.length * 3);
 
-    const at = (x: number, y: number) =>
-      heights[Math.max(0, Math.min(GRID, y)) * side + Math.max(0, Math.min(GRID, x))];
+    const at = (x: number, y: number): number => {
+      const cx = Math.max(0, Math.min(GRID, x));
+      const cy = Math.max(0, Math.min(GRID, y));
+      return heights[cy * side + cx];
+    };
 
-    p = 0;
+    let q = 0;
     for (let y = 0; y <= GRID; y++) {
-      for (let x = 0; x <= GRID; x++, p++) {
-        const h = heights[p];
-        const biome = biomes[p];
+      for (let x = 0; x <= GRID; x++, q++) {
+        const h = heights[q];
 
-        local[p * 3] = i * CHUNK + x * CELL;
-        local[p * 3 + 1] = j * CHUNK + y * CELL;
-
-        // The terrain remains present below water for depth/shore continuity,
-        // but is lowered slightly so the dedicated water surface always wins.
-        const groundH = biome === "water" ? h - 2.0 : h;
-        local[p * 3 + 2] = groundH * k;
+        local[q * 3] = -HALF + x * CELL;
+        local[q * 3 + 1] = -HALF + y * CELL;
+        local[q * 3 + 2] = h * scale;
 
         const sx = (at(x + 1, y) - at(x - 1, y)) / (2 * CELL);
         const sy = (at(x, y + 1) - at(x, y - 1)) / (2 * CELL);
         const slope = Math.atan(Math.hypot(sx, sy)) * 180 / Math.PI;
 
-        const rocky = Math.min(1, Math.max(0, (slope - 20) / 26));
-        const alpine = Math.min(1, Math.max(0, (h - 1500) / 1200));
-        const base = biomeColors[biome];
-        const c0 = biome === "water" ? base : mix3(base, rock, rocky * 0.7);
-        const c = biome === "ice" ? base : mix3(c0, high, alpine * alpine * 0.65);
+        const rocky = Math.min(1, Math.max(0, (slope - 18) / 28));
+        const alpine = Math.min(1, Math.max(0, (h - 1500) / 1300));
 
-        colors[p * 3] = c[0];
-        colors[p * 3 + 1] = c[1];
-        colors[p * 3 + 2] = c[2];
+        const ground = mix3(meadow, rock, rocky * 0.75);
+        const color = mix3(ground, ice, alpine * alpine * 0.65);
+
+        colors[q * 3] = color[0];
+        colors[q * 3 + 1] = color[1];
+        colors[q * 3 + 2] = color[2];
       }
     }
 
@@ -299,7 +197,7 @@ export function createLandscapeLayer(
         const c = a + side;
         const d = c + 1;
 
-        if (((i + j + x + y) & 1) === 0) {
+        if (((x + y) & 1) === 0) {
           indices.push(a, c, b, b, c, d);
         } else {
           indices.push(a, c, d, a, d, b);
@@ -313,11 +211,44 @@ export function createLandscapeLayer(
     geo.setAttribute("aColor", new BufferAttribute(colors, 3));
     geo.setIndex(indices);
 
-    const mesh = new Mesh(geo, mat!);
-    mesh.frustumCulled = false;
-    scene!.add(mesh);
+    const out = new Mesh(geo, mat);
+    out.frustumCulled = false;
+    return out;
+  };
 
-    return { mesh, seen: frameNo };
+  const requestBuild = (tf: TownFrame) => {
+    if (loading || mesh || !origin) return;
+
+    loading = true;
+    const buildGeneration = generation;
+    const buildOrigin = origin;
+    const points = gridPoints(tf);
+
+    void loadGround(points)
+      .then(() => {
+        if (
+          buildGeneration !== generation ||
+          !scene ||
+          !mat ||
+          !origin ||
+          origin.lng !== buildOrigin.lng ||
+          origin.lat !== buildOrigin.lat
+        ) {
+          return;
+        }
+
+        const made = buildMesh(tf, buildOrigin, points);
+        if (!made) return;
+
+        mesh = made;
+        scene.add(made);
+      })
+      .finally(() => {
+        if (buildGeneration === generation) {
+          loading = false;
+          map.triggerRepaint();
+        }
+      });
   };
 
   return {
@@ -326,7 +257,7 @@ export function createLandscapeLayer(
     renderingMode: "3d",
 
     onAdd(_m, gl) {
-      host = acquireHost(map, gl as WebGL2RenderingContext);
+      host = acquireHost(map, gl);
       scene = new Scene();
 
       mat = new ShaderMaterial({
@@ -350,13 +281,13 @@ export function createLandscapeLayer(
       stops.push(
         effect(() => {
           void reliefScale.value;
-          reset();
+          clearMesh();
           map.triggerRepaint();
         }),
         effect(() => {
           void opts.frame.value;
           origin = null;
-          reset();
+          clearMesh();
           map.triggerRepaint();
         }),
       );
@@ -365,87 +296,46 @@ export function createLandscapeLayer(
     onRemove() {
       for (const stop of stops) stop();
       stops.length = 0;
-      reset();
+
+      clearMesh();
       mat?.dispose();
       mat = null;
       scene = null;
+
       host?.release();
       host = null;
     },
 
     render(_gl, args) {
       const tf = opts.frame.peek();
-      if (!host || !scene || !mat || !tf || reliefScale.peek() <= 0 || map.getZoom() < LANDSCAPE_FROM_ZOOM) return;
+
+      if (
+        !host ||
+        !scene ||
+        !mat ||
+        !tf ||
+        reliefScale.peek() <= 0 ||
+        map.getZoom() < LANDSCAPE_FROM_ZOOM
+      ) {
+        return;
+      }
 
       const [lng, lat] = tf.toLngLat(0, 0);
+
       if (!origin || origin.lng !== lng || origin.lat !== lat) {
         origin = { lng, lat };
-        reset();
+        clearMesh();
       }
 
-      const M = framer.mercator(args, host, origin);
-      const eye = eyeOf(M);
-      if (!eye) return;
-
-      const seen = chunksInView({
-        planes: frustumPlanes(M),
-        eye,
-        at: [0, 0],
-        far: FAR,
-        size: CHUNK,
-        rise: SLOPE_PAD,
-        slope: SLOPE_PAD,
-        centre(x, y, out) {
-          const [a, b] = tf.toLngLat(x, y);
-          const h = groundAt(a, b) ?? 0;
-          out[0] = x;
-          out[1] = y;
-          out[2] = h * reliefScale.peek();
-        },
-      });
-
-      frameNo++;
-      const wanted = new Set<string>();
-      const started = performance.now();
-      let missing = false;
-
-      for (const s of seen) {
-        const key = keyOf(s.i, s.j);
-        wanted.add(key);
-
-        let c = chunks.get(key);
-        if (!c) {
-          if (performance.now() - started > BUILD_BUDGET_MS) {
-            missing = true;
-            continue;
-          }
-          c = build(s.i, s.j, tf, origin);
-          if (!c) {
-            missing = true;
-            continue;
-          }
-          chunks.set(key, c);
-        }
-
-        c.seen = frameNo;
-        c.mesh.visible = true;
+      if (!mesh) {
+        requestBuild(tf);
+        return;
       }
-
-      for (const [key, c] of chunks) {
-        if (!wanted.has(key)) c.mesh.visible = false;
-        if (chunks.size > MAX_CHUNKS && frameNo - c.seen > 300) {
-          scene.remove(c.mesh);
-          c.mesh.geometry.dispose();
-          chunks.delete(key);
-        }
-      }
-
-      if (missing) map.triggerRepaint();
 
       framer.set(mat.uniforms, args, host, origin);
 
-      host.draw((r) => {
-        r.render(scene!, camera);
+      host.draw((renderer) => {
+        renderer.render(scene!, camera);
       });
     },
   };
@@ -460,6 +350,7 @@ export function attachLandscapeLayer(
 
   const add = () => {
     if (disposed || map.getLayer(LANDSCAPE_LAYER_ID)) return;
+
     const before = map.getLayer("place-labels") ? "place-labels" : undefined;
     map.addLayer(layer, before);
     map.off("styledata", add);
@@ -471,6 +362,9 @@ export function attachLandscapeLayer(
   return () => {
     disposed = true;
     map.off("styledata", add);
-    if (map.getLayer(LANDSCAPE_LAYER_ID)) map.removeLayer(LANDSCAPE_LAYER_ID);
+
+    if (map.getLayer(LANDSCAPE_LAYER_ID)) {
+      map.removeLayer(LANDSCAPE_LAYER_ID);
+    }
   };
 }
