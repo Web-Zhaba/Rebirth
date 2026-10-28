@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Rebirth</title>
+  <desc id="desc">Abstract Rebirth mark combining a broken terrain layer, a rising form and the letter R.</desc>
+  <defs>
+    <mask id="cut">
+      <rect width="96" height="96" fill="white"/>
+      <path d="M34 30h20c8.8 0 15 5.5 15 13.2 0 4.7-2.3 8.5-6.2 10.8L34 69V30Z" fill="black"/>
+      <path d="M34 54 61 38l8 10-35 20V54Z" fill="white"/>
+    </mask>
+  </defs>
+  <path
+    fill="#63E072"
+    mask="url(#cut)"
+    d="M14 14h41c18.1 0 31 11.7 31 28.6 0 11.7-6.1 20.8-16.8 25.5L88 86H63.3L47.8 70.8H34V86H14V14Z"
+  />
+</svg>
