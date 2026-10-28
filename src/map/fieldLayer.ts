@@ -23,8 +23,8 @@ import { weatherMapOn } from "./weatherSettings";
 // crop up close. Import only with a dynamic `import()` (it pulls in three.js).
 //
 // One mesh holds every field (they are few): each polygon cut into 4 m cells draped on the relief a few centimetres
-// above the ground (fieldMesh.ts), pulled a little toward the camera like the water so the terrain does not show
-// through. Everything else is the fragment shader, procedural, in metres along and across the furrows (the longest edge
+// above the ground (fieldMesh.ts). It shares MapLibre's terrain depth buffer instead of being pulled toward the camera.
+// Everything else is the fragment shader, procedural, in metres along and across the furrows (the longest edge
 // of the field): ridges every 0.7 m with a fake normal lit by the sun, faded out before they get finer than a pixel.
 // The season follows the game calendar (the admin season preview too), in seasons S = DAYS_PER_SEASON, with a per-field
 // shift of a day or two: winter, the ploughed soil under the snow (the weather's snowpack, the ridges poking through);
@@ -66,12 +66,8 @@ varying vec4 vInfo;
 varying float vEdge;
 varying vec2 vWork;
 void main() {
-  // pulled a little toward the camera along its ray: drawn over the ground it lies on, at the same place on the screen
-  vec3 toEye = uEye - aM;
-  float d = max(length(toEye), 1.0);
-  vec3 lift = toEye * (min(d * 0.002, 25.0) / d);
-  vec4 m = uM * vec4(aM + lift, 1.0);
-  vec4 g = uG * vec4(aG + lift, 1.0);
+  vec4 m = uM * vec4(aM, 1.0);
+  vec4 g = uG * vec4(aG, 1.0);
   gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
   vM = aM;
   vLoc = aLoc;
