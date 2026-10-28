@@ -25,6 +25,12 @@ import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
 import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
+import {
+  clearTreeCollisionChunks,
+  removeTreeCollisionChunk,
+  setTreeCollisionChunk,
+  type NatureObstacle,
+} from "./natureCollision";
 import { WIND_DIR } from "./weatherMath";
 import {
   forest3dOn,
@@ -200,6 +206,7 @@ interface Chunk {
   lod: number;
   seen: number;
   stale: boolean;
+  obstacles: NatureObstacle[];
 }
 
 interface Slot {
@@ -236,6 +243,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   const reset = () => {
     chunks.clear();
     centreCache.clear();
+    clearTreeCollisionChunks();
     shown = null;
   };
 
@@ -250,6 +258,34 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         return null;
       }
     }
+    const obstacles: NatureObstacle[] = [];
+
+    if (k > 0) {
+      for (let t = 0; t < trees.length; t += TREE_STRIDE) {
+        const kind = trees[t + 3] | 0;
+        if (!isTree[kind]) continue;
+
+        const x = trees[t];
+        const y = trees[t + 1];
+        const size = trees[t + 2];
+        const [lng, lat] = tf.toLngLat(x, y);
+        const surface = terrainSurfaceAt(lng, lat, tf);
+
+        if (surface === null) {
+          void loadGround([[lng, lat]]).then(() => map.triggerRepaint());
+          return null;
+        }
+
+        obstacles.push({
+          x,
+          y,
+          base: surface * k - SINK,
+          height: Math.max(2, size * 1.05),
+          radius: Math.max(1.2, size * (kind === 0 ? 0.28 : 0.36)),
+        });
+      }
+    }
+
     const kinds = TREE_KINDS.map((_, kind) => {
       const base: number[] = [], par: number[] = [];
       const order: number[] = [];
@@ -270,7 +306,16 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       return out;
     });
-    return { i, j, kinds, n: kinds.reduce((a, q, kind) => a + (isTree[kind] ? q.length / PER : 0), 0), lod: -1, seen: 0, stale: false };
+    return {
+      i,
+      j,
+      kinds,
+      n: kinds.reduce((a, q, kind) => a + (isTree[kind] ? q.length / PER : 0), 0),
+      lod: -1,
+      seen: 0,
+      stale: false,
+      obstacles,
+    };
   };
 
   const taken = (a: Float32Array, keep: number) => Math.round((a.length / PER) * keep);
@@ -662,6 +707,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
             key,
             c,
           );
+          setTreeCollisionChunk(c.i, c.j, c.obstacles);
         }
       }
 
@@ -799,6 +845,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
             600
           ) {
             chunks.delete(key);
+            removeTreeCollisionChunk(c.i, c.j);
           }
         }
       }
