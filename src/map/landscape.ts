@@ -47,7 +47,12 @@ export function attachLandscape(
 
   let syncingCamera = false;
   let waitingForGround = false;
+  let waitingForCameraGround = false;
+  let cameraLift = 0;
   const originalMaxZoom = map.getMaxZoom();
+
+  const CAMERA_CLEARANCE_M = 45;
+  const CAMERA_HYSTERESIS_M = 180;
 
   const syncCameraToLandscape = () => {
     if (syncingCamera || !map.isStyleLoaded()) return;
@@ -57,7 +62,7 @@ export function attachLandscape(
 
     // Near the surface, a lower max pitch gives the orbit camera enough
     // clearance over the DEM instead of letting it skim through mountain faces.
-    const maxPitch = !active ? 75 : zoom >= 18 ? 30 : zoom >= 16.5 ? 42 : 58;
+    const maxPitch = !active ? 75 : zoom >= 17.5 ? 28 : zoom >= 16 ? 36 : 48;
     if (Math.abs(map.getMaxPitch() - maxPitch) > 0.1) {
       map.setMaxPitch(maxPitch);
     }
@@ -65,12 +70,14 @@ export function attachLandscape(
     // At extreme zooms the MapLibre orbit camera can enter tall buildings and
     // tree crowns. The game models are designed for a town-scale view, so cap
     // close terrain mode before the camera becomes an interior/FPS camera.
-    const maxZoom = active ? Math.min(originalMaxZoom, 18.5) : originalMaxZoom;
+    const maxZoom = active ? Math.min(originalMaxZoom, 18) : originalMaxZoom;
     if (Math.abs(map.getMaxZoom() - maxZoom) > 0.01) {
       map.setMaxZoom(maxZoom);
     }
 
     if (!active) {
+      cameraLift = 0;
+
       if (!map.getCenterClampedToGround()) {
         syncingCamera = true;
         map.setCenterClampedToGround(true);
@@ -97,9 +104,51 @@ export function attachLandscape(
       return;
     }
 
-    // Keep MapLibre's camera pivot on the same exaggerated surface as our
-    // custom terrain. Without this, orbit/rotate still pivots around sea level.
-    const wanted = Math.max(0, elevation * reliefScale.peek()) + 0.8;
+    const scale = reliefScale.peek();
+
+    // Keep MapLibre's orbit pivot on the custom DEM, not on the old sea-level
+    // sphere. In addition, guard the *actual camera position* against terrain:
+    // raising only the pitch limit cannot stop the free camera entering a hill.
+    const basePivot = Math.max(0, elevation * scale) + 0.8;
+    const free = map.getFreeCameraOptions();
+    const cameraPosition = free.position;
+
+    if (cameraPosition) {
+      const cameraLngLat = cameraPosition.toLngLat();
+      const cameraGround = groundAt(cameraLngLat.lng, cameraLngLat.lat);
+
+      if (cameraGround === null) {
+        if (!waitingForCameraGround) {
+          waitingForCameraGround = true;
+          void loadGround([[cameraLngLat.lng, cameraLngLat.lat]]).finally(() => {
+            waitingForCameraGround = false;
+            syncCameraToLandscape();
+          });
+        }
+      } else {
+        const cameraAltitude = cameraPosition.toAltitude();
+        const minimumAltitude = Math.max(0, cameraGround * scale) + CAMERA_CLEARANCE_M;
+
+        if (cameraAltitude < minimumAltitude) {
+          // MapLibre's center elevation moves the orbit target and camera
+          // together, preserving the user's bearing/pitch while pulling the
+          // camera out of terrain.
+          cameraLift = Math.max(
+            cameraLift,
+            minimumAltitude - cameraAltitude + 12,
+          );
+        } else if (cameraAltitude > minimumAltitude + CAMERA_HYSTERESIS_M && cameraLift > 0) {
+          // Release the lift gradually after leaving a mountain so the camera
+          // doesn't snap down when the terrain becomes lower.
+          cameraLift = Math.max(
+            0,
+            cameraLift - Math.min(35, (cameraAltitude - minimumAltitude - CAMERA_HYSTERESIS_M) * 0.2),
+          );
+        }
+      }
+    }
+
+    const wanted = basePivot + cameraLift;
     if (Math.abs(map.getCenterElevation() - wanted) < 1.0) return;
 
     syncingCamera = true;
