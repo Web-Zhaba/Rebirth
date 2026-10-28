@@ -364,6 +364,6 @@ export function TownPanel({ city, map }: { city: City; map: maplibregl.Map }) {
         {tab.value === "events" && <EventsTab map={map} />}
         {tab.value === "orders" && <OrdersTab />}
       </div>
-    </div>
+    </aside>
   );
 }
