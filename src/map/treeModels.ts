@@ -21,7 +21,7 @@ export const KIND_INFO: Record<TreeKind, { tall: number; season: "leaf" | "reed"
   bush: { tall: 1.5, season: "leaf", sway: 1.5 },
   reed: { tall: 1.8, season: "reed", sway: 5 },
   boulder: { tall: 1.2, season: null, sway: 0 },
-  grass: { tall: 0.9, season: "grass", sway: 7 },
+  grass: { tall: 1.8, season: "grass", sway: 7 },
 };
 
 // The colour a kind's crown is built with (seasonal crowns keep its light and shade when recoloured).
