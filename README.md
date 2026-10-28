@@ -1,209 +1,276 @@
-# Rebirth
+**English** | [Русский](README.ru.md)
 
-> **Градостроительный симулятор на настоящей карте Земли в реальном масштабе**  
-> *Основывайте поселение в любой точке планеты, развивайте его, переживайте суровые зимы и откапывайте артефакты ушедшей цивилизации.*
+<div align="center">
 
----
+# REBIRTH
 
-## 📖 О проекте
+### Civilization is gone. The coordinates survived.
 
-**Rebirth** — браузерная градостроительная игра-симуляция. Мир предстает одичавшим и первозданным: современная застройка скрыта под землей, остались лишь нетронутые леса, реки и настоящий рельеф Земли. 
+**Rebuild anywhere on Earth. In real metres. Over the buried remains of the world that came before.**
 
-Игрок выбирает любое место на планете — от предгорий Альп до берегов Волги, — закладывает поселение и развивает его в честном метрическом масштабе. Параллельно с развитием деревни ведутся археологические раскопки: из-под земли поднимаются реальные контуры улиц, фундаментов и памятников прошлого, сохраненных в картографических данных нашей планеты.
+<p>
+  <strong>Real Earth</strong> ·
+  <strong>Metric-scale simulation</strong> ·
+  <strong>Living households</strong> ·
+  <strong>Seasons</strong> ·
+  <strong>Archaeology</strong>
+</p>
 
----
+<p>
+  <a href="#build-from-source">Build from source</a> ·
+  <a href="#under-the-map">Architecture</a> ·
+  <a href="CREDITS.md">Open data & credits</a>
+</p>
 
-## ✨ Ключевые особенности
+<table>
+<tr>
+<td align="center">
+<code>GAMEPLAY PREVIEW // CAPTURE PENDING</code><br><br>
+<sub>Earth → founding → settlement → winter → excavation</sub>
+</td>
+</tr>
+</table>
 
-### 🌍 Реальный масштаб и геоданные планеты
-- **Настоящая Земля без современной застройки:** мир формируется на основе данных OpenStreetMap (OpenFreeMap) и высотной модели (DEM).
-- **Честный метрический масштаб:** ширина дорог, габариты изб и мастерских, границы полей и расстояния между объектами рассчитываются в метрах на локальной касательной плоскости (local metric frame).
-- **Рельеф и склоны:** реальные перепады высот (AWS / Mapzen Terrain Tiles) влияют на планировку: на крутых склонах сложнее строить и прокладывать дороги.
-
-### 🌲 Полноценный 3D-мир и динамическое окружение
-- **Смешанный рендер MapLibre GL JS + Three.js:** плавный переход от 2D-карты и глобального глобуса к детальному изометрическому 3D-виду.
-- **Процедурная природа:**
-  - **3D-леса:** породы деревьев зависят от биома и широты (хвойные, березы, широколиственные), ветви покачиваются на ветру, кроны меняют цвет по сезонам и покрываются снегом. Для дальних дистанций используется многоуровневая оптимизация и запеченные билборды (impostors).
-  - **Живая вода:** шейдерная 3D-вода с учетом береговой линии, рябью от ветра, речным течением, бликами солнца и луны, замерзанием в лед зимой.
-  - **3D-поля:** динамические борозды, меняющие текстуру от вспашки и сева до созревания золотых колосьев.
-- **Смена времени суток:** динамическое освещение по положению солнца, горизонт и дымка, вечерний свет в окнах домов и фонарей.
-
-### 👥 Детальная симуляция жителей (Agent-based Sim)
-- **Каждый житель уникален:** имя, возраст, семья, здоровье, настроение, уровень образования, личный дом и рабочее место.
-- **Повседневная логистика:** жители реально ходят на работу и обратно, находя кратчайшие пути по графу дорог с учетом пропускной способности.
-- **Демография и общество:** старение, браки, рождение детей, иммиграция переселенцев при хороших условиях и отток жителей при нехватке еды или жилья.
-
-### 🌾 Экономика, зонирование и ремесла
-- **Свободная прокладка дорог:** тропы, грунтовые и каменные дороги со снэппингом узлов и перекрестков, строительство мостов через реки.
-- **Зонирование:** разметка жилых, ремесленных и торговых участков вдоль улиц; выделение зон для распашки полей и расчистки леса под вырубку.
-- **Производственные цепочки:**
-  - Заготовка леса → распил на доски → строительство;
-  - Поля → сбор урожая → мельницы → пекарни → обеспечение провизией;
-  - Добыча камня, бортничество, склады и погреба.
-- **Городские службы:** колодцы с чистой водой, часовни, лекари, школы и рынки с физическим радиусом доступности по дорожной сети.
-
-### ❄️ Динамический климат и времена года
-- **Глобальная климатическая модель:** детерминированный расчет температуры, ветра, влажности и облачности для любой точки планеты без задержек сети.
-- **Физика погоды:** промерзание почвы, динамика снежного покрова, процедурные облака над глобусом с тенями на земле, дождь и снежные бури.
-- **Сельскохозяйственный цикл:** ограниченный период весеннего сева и осенней жатвы. Суровая зима или засуха могут погубить урожай, требуя запасов дров и зерна.
-
-### ⛏️ Археология, Наследие и Наука
-- **Раскопки старого мира:** инструмент раскопок вскрывает заросшие контуры реальных объектов OpenStreetMap (фундаменты зданий, старинные улицы, POI).
-- **Восстановление наследия:** откопанные исторические объекты можно восстановить либо как культурный памятник, либо как действующее здание (храм, школа, мельница, мануфактура).
-- **Инсайты и эпохи:** восстановление дает импульс научным изысканиям в одном из доменов (Строительство, Земледелие, Ремесло, Торговля, Знания, Здоровье).
-- **Записная книжка и Википедия:** реальные исторические справки из Русской Википедии о найденных достопримечательностях и подробная летопись развития города.
-
-### ⏳ Гибридный темп и офлайн-симуляция
-- Симуляция вынесена в отдельный **Web Worker** и работает на детерминированном цикле с фиксированным шагом (fixed-step).
-- Поддержка управления временем (пауза, ускорение 1×, 2×, 4×).
-- **Жизнь продолжается офлайн:** город продолжает развиваться, пока вкладка закрыта. При возвращении игра рассчитывает прошедшее время и показывает летопись событий («Хроника дня»).
-
-### 🔊 Процедурный звук
-- Звуки интерфейса и погоды (шелест ветра, шум дождя, щелчки инструментов) **полностью синтезируются на лету** средствами Web Audio API без тяжелых внешних аудиофайлов.
+</div>
 
 ---
 
-## 🛠️ Технологический стек
+Rebirth turns the real Earth into a city-building simulation.
 
-| Направление | Технологии |
-|---|---|
-| **Ядро и UI** | [TypeScript](https://www.typescriptlang.org/), [Preact](https://preactjs.com/), [@preact/signals](https://github.com/preactjs/signals) (реактивный стейт), [Vite](https://vitejs.dev/) |
-| **Картография и 3D** | [MapLibre GL JS](https://maplibre.org/) (глобус, векторные тайлы, высоты), [Three.js](https://threejs.org/) (3D-слои, меши, инстансинг, шейдеры), [Earcut](https://github.com/mapbox/earcut) |
-| **Геоданные** | [OpenStreetMap](https://www.openstreetmap.org/) via [OpenFreeMap](https://openfreemap.org/) (TileJSON), [AWS / Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) (Terrarium DEM), [Photon by Komoot](https://photon.komoot.io/) (геокодинг) |
-| **База знаний** | [MediaWiki API](https://www.mediawiki.org/wiki/API:Main_page) (геопоиск статей Википедии) |
-| **Архитектура симуляции** | Web Worker, Struct-of-Arrays (SoA) для производительности моделирования жителей, IndexedDB (персистентные сохранения) |
-| **Звуковой движок** | Web Audio API (чистый процедурный синтез) |
-| **Тестирование** | [Vitest](https://vitest.dev/) (юнит-тесты + harness темпа симуляции) |
+Choose any point on the planet. The game projects that place into a **local metric world** and gives you a handful of families, primitive infrastructure and a simple problem:
+
+**make this place survive.**
+
+Roads consume labour. Houses need materials. People need jobs they can actually reach. Fields obey the seasons. Winter does not care whether your granary is ready.
+
+And underneath the new settlement lies another city.
+
+The one that used to be there.
+
+## Show, don't tell
+
+The map is not a decorative background. Geography enters the rules of the game.
+
+<table>
+<tr>
+<td width="66%"><strong>🌍 Found anywhere on Earth</strong><br><br>Start from real latitude and longitude instead of choosing from handcrafted maps. Open geographic data becomes the raw material of the world.</td>
+<td align="center"><code>PREVIEW PENDING</code><br><sub>globe → location → settlement</sub></td>
+</tr>
+<tr>
+<td><strong>📐 Build in metres, not tiles</strong><br><br>Road lengths, building footprints, zoning cells, fields, walking distances and service reach live in a local metric coordinate system.</td>
+<td align="center"><code>PREVIEW PENDING</code><br><sub>road → lots → buildings</sub></td>
+</tr>
+<tr>
+<td><strong>👥 Simulate households, not population points</strong><br><br>Residents belong to families, occupy homes, take jobs, commute through the road graph, learn, age, arrive and leave.</td>
+<td align="center"><code>PREVIEW PENDING</code><br><sub>home → commute → workplace</sub></td>
+</tr>
+<tr>
+<td><strong>🌾 Race the calendar</strong><br><br>Sowing and harvest windows exist because the simulation has seasons. Agriculture competes for the same labour your settlement needs for construction and production.</td>
+<td align="center"><code>PREVIEW PENDING</code><br><sub>field → harvest → winter</sub></td>
+</tr>
+<tr>
+<td><strong>❄️ Let geography fight back</strong><br><br>Terrain, forest, water, elevation, slope and weather shape where the settlement can grow and how expensive that growth becomes.</td>
+<td align="center"><code>PREVIEW PENDING</code><br><sub>terrain → weather → survival</sub></td>
+</tr>
+<tr>
+<td><strong>⛏️ Dig through the map beneath the map</strong><br><br>Excavation uncovers foundations, streets and named places derived from the real-world geography buried beneath your new settlement.</td>
+<td align="center"><code>PREVIEW PENDING</code><br><sub>dig radius → old foundations</sub></td>
+</tr>
+</table>
+
+> The most important Rebirth screenshot is the one where a village built by the player and a city that once existed occupy the same coordinates.
+
+## The world remembers
+
+At the beginning, the old civilization is invisible.
+
+Forest has reclaimed the ground. Modern buildings are gone. Roads have disappeared.
+
+But the data is still there.
+
+Build an excavation site and the settlement begins to uncover traces of the world beneath it: foundations, streets, named places and historically meaningful structures.
+
+A discovery is not just a collectible.
+
+Restore an old building as a monument and it becomes part of your settlement's memory. Return it to use and the past becomes infrastructure again. Heritage feeds research, and research pushes a primitive settlement toward another era.
+
+**Progress comes partly from learning what was already here.**
+
+## A city is a graph
+
+Rebirth deliberately avoids several city-builder shortcuts.
+
+A worker does not teleport to a workshop because it lies inside a circle.
+
+A service does not reach a house because the straight-line distance is small.
+
+The settlement has a road graph. Finished roads form traversable connections. Residents and services use that network to determine whether places are actually reachable.
+
+That makes the shape of the city matter.
+
+A badly connected settlement is not merely ugly.
+
+It is badly connected.
+
+## Time keeps moving
+
+The simulation runs separately from the UI in a Web Worker.
+
+Closing the tab does not reduce the city to a timestamp plus a few resource multipliers. Rebirth persists simulation state in IndexedDB and can advance the world when the player returns.
+
+During catch-up it tracks what happened:
+
+**births · deaths · arrivals · departures · construction · production · research · events**
+
+Then it gives the player a summary of the time they missed.
 
 ---
 
-## 🚀 Быстрый старт
+## Under the map
 
-### Требования
-- [Node.js](https://nodejs.org/) (версии 18 или выше)
-- Менеджер пакетов `npm`
+The interesting part of Rebirth is not that it uses a map library and a 3D library.
 
-### Установка и запуск
-
-1. **Клонируйте репозиторий:**
-   ```bash
-   git clone https://github.com/username/rebirth.git
-   cd rebirth
-   ```
-
-2. **Установите зависимости:**
-   ```bash
-   npm install
-   ```
-
-3. **Запустите сервер для разработки:**
-   ```bash
-   npm run dev
-   ```
-   Откройте появившуюся в консоли ссылку (обычно `http://localhost:5173/`) в современном браузере с поддержкой WebGL 2.0.
-
----
-
-## 📜 Доступные npm-скрипты
-
-- `npm run dev` — запуск Vite в режиме разработки с HMR (Hot Module Replacement).
-- `npm run build` — проверка типов TypeScript (`tsc --noEmit`) и сборка production-бандла в папку `dist/`.
-- `npm run preview` — локальный запуск собранной production-версии для проверки.
-- `npm test` — запуск набора юнит-тестов через Vitest.
-- `npm run pace` — запуск автономного сценария балансировки (`vitest.pace.config.ts`), замеряющего скорость роста поселения и тайминги ключевых этапов без интерфейса.
-
----
-
-## 🎮 Управление и горячие клавиши
-
-| Клавиши | Действие |
-|---|---|
-| **Время и навигация** | |
-| `Space` / `P` | Пауза / возобновление хода времени |
-| `1`, `2`, `3` | Скорость игры (1×, 2×, 4×) |
-| `H` / `Home` | Вернуть камеру к центру поселения |
-| `N` | Открыть древо технологий и исследований |
-| **Строительство** | |
-| `F1` – `F5` | Переключение категорий инструментов (Дороги, Зоны, Хозяйство, Службы, Прошлое) |
-| `Q` – `Y` | Выбор конкретного инструмента в открытой категории |
-| `B` | Режим сноса построек (бульдозер) |
-| **Интерфейс** | |
-| `Esc` / `ПКМ` | Отмена инструмента / разрыв цепочки дороги / закрыть панель |
-| `Enter` | Быстрый безопасный выбор в карточке события |
-| `?` | Открыть встроенную справку по горячим клавишам |
-
----
-
-## 📁 Структура проекта
+It is the boundary between a planetary map and a local simulation.
 
 ```text
-rebirth/
-├── src/
-│   ├── main.ts              # Точка входа приложения, инициализация карты и UI
-│   ├── simClient.ts         # Клиент общения основного потока с Web Worker симуляции
-│   ├── style.css            # Базовые глобальные стили
-│   │
-│   ├── sim/                 # Ядро симуляции (выполняется в Web Worker)
-│   │   ├── worker.ts        # Точка входа Web Worker
-│   │   ├── people.ts        # Модель жителей, демография, потребности, настроение
-│   │   ├── roads.ts         # Граф дорог, прокладка, соединения и перекрестки
-│   │   ├── zones.ts         # Механика зонирования и генерации участков
-│   │   ├── buildings.ts     # Каталог зданий, затраты ресурсов, этапы постройки
-│   │   ├── production.ts    # Ресурсные цепочки, мастерские, склады
-│   │   ├── fields.ts        # Сельское хозяйство, сев и уборка урожая
-│   │   ├── weather.ts       # Глобальная климатическая модель Земли
-│   │   ├── weatherEffects.ts# Влияние погоды на посевы, работы и болезни
-│   │   ├── tech.ts          # Древо технологий и эпохи развития
-│   │   ├── heritage.ts      # Обработка находок и механика восстановления наследия
-│   │   ├── chronicle.ts     # Генератор летописи и дневных хроник
-│   │   └── save.ts          # Сериализация и версионирование сохранений (IndexedDB)
-│   │
-│   ├── map/                 # Интеграция с картой и графические слои
-│   │   ├── mapView.ts       # Инициализация инстанса MapLibre GL JS
-│   │   ├── relief.ts        # Подключение высот (DEM terrain) и параметров неба
-│   │   ├── three/           # Хост-контейнер и синхронизация сцены Three.js с камерой карты
-│   │   ├── models.ts        # 3D-модели зданий и инфраструктуры
-│   │   ├── forest.ts        # Процедурное размещение деревьев по тайлам природы
-│   │   ├── treeLayer.ts     # Отрисовка 3D-леса, шейдеры качания, снега и LOD
-│   │   ├── waterLayer.ts    # 3D-шейдерная вода (волны, течение, лед, блики)
-│   │   ├── fields3d.ts      # 3D-поверхность полей и сельхозкультур
-│   │   ├── clouds/          # Процедурный слой облаков на глобусе и тени
-│   │   ├── lifeLayer.ts     # Визуализация перемещения жителей и телег
-│   │   └── excavation.ts    # Слой раскопок и подсветка фундаментов старого мира
-│   │
-│   ├── world/               # Загрузка и семплирование геоданных
-│   │   ├── terrain.ts       # Чтение высот и расчет уклонов из Terrarium тайлов
-│   │   ├── oldworld.ts      # Разбор слоев зданий и POI из векторных тайлов
-│   │   ├── geocode.ts       # Поиск мест по названию через сервис Photon
-│   │   └── wiki.ts          # Запросы к Wikipedia API для извлечения описаний находок
-│   │
-│   ├── ui/                  # Пользовательский интерфейс (Preact)
-│   │   ├── App.tsx          # Корневой компонент интерфейса
-│   │   ├── Hud.tsx          # Верхняя и нижняя панели, показатели ресурсов
-│   │   ├── Notebook.tsx     # Записная книжка: летопись, найденные статьи, карта
-│   │   ├── TechPanel.tsx    # Экран исследований и древа технологий
-│   │   ├── BuildMenu.tsx    # Панель выбора строительных инструментов
-│   │   ├── sound.ts         # Синтезатор процедурного аудио на Web Audio API
-│   │   └── kit/             # Базовые UI-компоненты (кнопки, диалоги, табы, прогрессбары)
-│   │
-│   └── pace/                # Инструменты тестирования и балансировки темпа игры
-│       └── pace.run.ts      # Сценарий автоматического прогона развития поселения
-│
-├── index.html               # Шаблон HTML-страницы
-├── vite.config.ts           # Конфигурация сборщика Vite
-└── package.json             # Зависимости и скрипты
+                         REAL EARTH
+
+                  OpenStreetMap / OpenFreeMap
+                             │
+                        Terrarium DEM
+                             │
+                             ▼
+                       MapLibre GL JS
+                  planet / camera / terrain
+                             │
+                  local metric projection
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+         Three.js layers              Web Worker
+      rendered settlement             simulation
+              │                             │
+      buildings / forest         roads / households
+      water / fields             economy / farming
+      ruins / weather            weather / research
+              │                             │
+              └──────────────┬──────────────┘
+                             │
+                          Preact UI
+                             │
+                          IndexedDB
 ```
+
+### The simulation owns the rules
+
+Game state lives outside the component tree.
+
+The worker owns residents, households, roads, production, agriculture, weather, research, excavation, events and persistence.
+
+The main thread receives snapshots and focused query responses.
+
+That separation keeps the UI a view of the simulation instead of slowly turning the UI into the simulation.
+
+### The renderer is hybrid on purpose
+
+**MapLibre GL JS** solves planetary geography, vector maps and camera behaviour.
+
+**Three.js** owns game-specific 3D layers: buildings, vegetation, water, fields, residents, ruins and custom effects.
+
+Rebirth does not try to turn a cartographic engine into a game engine — or rebuild a globe renderer just to draw a village.
+
+### Balance is executable
+
+```bash
+npm run pace
+```
+
+runs a headless settlement through the real simulation handler.
+
+It records milestones such as the first house, first technology, first harvest, Era II and population growth.
+
+The point is not merely test coverage.
+
+It gives game balance something better than intuition:
+
+**numbers.**
+
+## Built with
+
+| Area | Technology |
+|---|---|
+| **Simulation** | TypeScript · Web Worker · IndexedDB |
+| **Interface** | Preact · @preact/signals |
+| **Earth** | MapLibre GL JS · OpenFreeMap · OpenStreetMap |
+| **3D world** | Three.js · Earcut |
+| **Terrain** | Terrarium DEM / AWS Open Data |
+| **Search** | Photon |
+| **History** | Wikipedia / MediaWiki |
+| **Audio** | Web Audio API |
+| **Tooling** | Vite · Vitest |
+
+## Build from source
+
+Requires **Node.js 18+** and npm.
+
+```bash
+git clone https://github.com/Web-Zhaba/rebirth.git
+cd rebirth
+npm install
+npm run dev
+```
+
+### Scripts
+
+```bash
+npm run dev       # development server
+npm run build     # typecheck + production build
+npm run preview   # preview production build
+npm test          # test suite
+npm run pace      # headless pacing simulation
+```
+
+## Controls
+
+| Keys | Action |
+|---|---|
+| `Space` / `P` | Pause / resume |
+| `1` `2` `3` | 1× / 2× / 4× speed |
+| `H` / `Home` | Return to settlement |
+| `N` | Research |
+| `F1` – `F5` | Tool categories |
+| `Q` – `Y` | Select tool |
+| `B` | Demolition |
+| `Esc` / Right click | Cancel / close |
+| `Enter` | Safe event choice |
+| `?` | Hotkey reference |
+
+## Open data
+
+Rebirth could not exist without open geographic and cultural data.
+
+🌍 **Map data:** © OpenStreetMap contributors, ODbL  
+🗺️ **Vector tiles:** OpenFreeMap / OpenMapTiles schema  
+⛰️ **Terrain:** Mapzen / AWS Open Data Terrain Tiles  
+🔎 **Place search:** Photon by komoot  
+📚 **Article extracts:** Wikipedia, CC BY-SA 4.0  
+🎨 **Icons:** game-icons.net and Phosphor Icons  
+🔤 **Fonts:** PT Serif and PT Sans  
+🧭 **Map renderer:** MapLibre GL JS
+
+See [`CREDITS.md`](CREDITS.md) for the full attribution list.
+
+## License
+
+Rebirth is open source under the **Apache License 2.0**.
+
+See [`LICENSE`](LICENSE).
 
 ---
 
-## ⚖️ Лицензии и благодарности
+<div align="center">
 
-Подробный перечень авторских прав и лицензий на используемые внешние данные и компоненты приведен в файле [`CREDITS.md`](CREDITS.md), а также доступен в игре в окне «Об игре»:
-- **Картографические данные:** © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL).
-- **Векторные тайлы:** [OpenFreeMap](https://openfreemap.org) / схема [OpenMapTiles](https://www.openmaptiles.org/).
-- **Карта высот (DEM):** [Mapzen / AWS Open Data Terrain Tiles](https://registry.opendata.aws/terrain-tiles/).
-- **Поиск мест:** [Photon by Komoot](https://photon.komoot.io/) на данных OpenStreetMap.
-- **Статьи и выжимки:** [Википедия](https://ru.wikipedia.org) (лицензия CC BY-SA 4.0).
-- **Иконки:** [game-icons.net](https://game-icons.net) (CC BY 3.0), [Phosphor Icons](https://phosphoricons.com) (MIT).
-- **Шрифты:** PT Serif и PT Sans от [ParaType](https://www.paratype.com) (SIL Open Font License 1.1).
-- **Движок рендеринга карты:** [MapLibre GL JS](https://maplibre.org) (BSD-3-Clause).
+### Build on the Earth. Dig into what came before.
+
+</div>
