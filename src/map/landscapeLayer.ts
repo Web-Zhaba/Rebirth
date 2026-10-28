@@ -554,7 +554,11 @@ export function createLandscapeLayer(
         meshes = [outer, fine];
         meshCentre = buildCentre;
         scene.add(outer, fine);
-        setTerrainSurfaceWindow(tf, buildCentre);
+        // Activate the exact surface sampler without invalidating every other
+        // layer in the same frame. Each dependent layer can still sample the
+        // updated DEM window when it next rebuilds; broadcasting the revision
+        // here caused a synchronous rebuild cascade during zoom activation.
+        setTerrainSurfaceWindow(tf, buildCentre, false);
       })
       .finally(() => {
         if (buildGeneration === generation) {
