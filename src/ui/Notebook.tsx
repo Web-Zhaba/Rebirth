@@ -15,6 +15,7 @@ export interface NotebookProps {
   onSeen: (count: number) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onArticleMap: (article: Article) => void;
 }
 
 type Tab = "finds" | "history" | "chronicle";
@@ -26,7 +27,7 @@ const TABS: [Tab, string][] = [
 ];
 const KIND_ICON: Record<Find["kind"], IconName> = { poi: "find", street: "street", foundations: "foundations" };
 
-export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpenChange }: NotebookProps) {
+export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpenChange, onArticleMap }: NotebookProps) {
   const [tab, setTab] = useState<Tab>("finds");
   const total = finds.length + articles.length;
   const unseen = unseenCount(finds, articles, seen);
@@ -96,14 +97,16 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
                       <Icon name="scroll" size={18} />
                     </span>
                     <div class="notebook-main">
-                      <div class="notebook-entry-title">{a.title}</div>
-                      <div class="notebook-text">{a.extract}</div>
-                      <div class="notebook-date">
-                        {formatDate(a.at)} ·{" "}
-                        <a href={a.url} target="_blank" rel="noopener" lang={a.lang}>
-                          Википедия, CC BY-SA 4.0
+                      <button type="button" class="link notebook-entry-title notebook-map-link" title="Показать место статьи на карте" onClick={() => onArticleMap(a)}>
+                        {a.title}
+                      </button>
+                      <div class="notebook-text">
+                        {a.extract}
+                        <a class="wiki-full-link" href={a.url} target="_blank" rel="noopener" lang={a.lang} title="Открыть полную статью" aria-label={`Открыть полную статью «${a.title}»`}>
+                          ↗
                         </a>
                       </div>
+                      <div class="notebook-date">{formatDate(a.at)} · Википедия, CC BY-SA 4.0</div>
                     </div>
                   </div>
                 ))
