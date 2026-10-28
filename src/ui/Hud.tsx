@@ -9,17 +9,28 @@ import { TopBar, Warnings } from "./TopBar";
 import { BuilderTasks } from "./BuilderTasks";
 import { Icon } from "./Icon";
 import { openPanel } from "./panels";
+import { researchStatusView } from "./researchStatusModel";
 
 function ResearchStatus() {
-  const r = state.value?.research;
-  if (!r) return null;
-  const t = r.active && techOf(r.active.techId);
-  const text = t && r.active ? `Исследуется: ${t.name}, ${Math.floor(r.active.share * 100)} %` : "Наука простаивает";
+  const s = state.value;
+  const r = s?.research;
+  if (!r || !s) return null;
+  const active = r.active ? techOf(r.active.techId) : null;
+  const queued = s.progress.research.queue.map((id) => techOf(id)?.name ?? id);
+  const view = researchStatusView(active?.name ?? null, r.active?.share ?? null, queued);
 
   return (
-    <button type="button" class="research-status" role="status" title="Открыть «Науку»" onClick={() => openPanel("tech")}>
+    <button type="button" class={`research-status${view.idle ? " research-idle" : ""}`} role="status" title="Открыть «Науку»" onClick={() => openPanel("tech")}>
       <Icon name="scroll" size={16} />
-      <span>{text}</span>
+      <span class="research-status-body">
+        <span>{view.title}</span>
+        {view.next && <small>{view.next}</small>}
+        {view.progress !== null && (
+          <span class="research-status-track" aria-hidden="true">
+            <span style={{ width: `${Math.floor(view.progress * 100)}%` }} />
+          </span>
+        )}
+      </span>
     </button>
   );
 }
