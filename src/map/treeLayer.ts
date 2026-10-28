@@ -498,7 +498,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         } else missing = true;
       }
 
-      if (missing) map.triggerRepaint();
+      // map.triggerRepaint вызывается по приходу данных через source.onTile и loadGround
       if (!slots.some((s) => s.count > 0)) return;
 
       if (!impostors) {
@@ -545,7 +545,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         color.setLocked(false);
       });
 
-      if (wind > 0.02 && !flat && motionOn.peek()) map.triggerRepaint();
+      // if (wind > 0.02 && !flat && motionOn.peek()) map.triggerRepaint();
     },
   };
 }

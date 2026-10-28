@@ -22,21 +22,19 @@ export interface LifeOptions {
   gameMinutes: ReadonlySignal<number>;
   lights: ReadonlySignal<Light[]>;
   frame: ReadonlySignal<Frame | null>;
-  gameMinPerSec: () => number; // for extrapolating between clock updates
+  gameMinPerSec: () => number;
 }
 
 const SRC_TRIPS = "life-trips";
 const SRC_LIGHTS = "life-lights";
 const EQUATOR_M = 40075016.686;
 const FRAME_MS = 50; // ~20 fps
-const MAX_EXTRAP = 15; // game minutes of extrapolation past the last clock update
+const MAX_EXTRAP = 15;
 const DAY_MIN = 1440;
-const HALO = 0.3; // share of a night glow left close up, where the lit windows show
-const WORK_LIGHTS_END = 21; // workplaces are lit until 21:00
-const TAVERN_LIGHTS = [18, 24]; // taverns glow in the evening, from dusk to midnight
+const HALO = 0.3;
+const WORK_LIGHTS_END = 21;
+const TAVERN_LIGHTS = [18, 24];
 
-// Position (local m) of a trip at `minuteOfDay` (may be fractional), or null when it is not under way.
-// The departure repeats daily, so a trip that left before midnight is still under way just after it.
 export function positionAt(trip: Trip, minuteOfDay: number): [number, number] | null {
   const { pts, speed } = trip;
   if (pts.length < 2 || !(speed > 0)) return null;
@@ -60,8 +58,6 @@ export function positionAt(trip: Trip, minuteOfDay: number): [number, number] | 
   return pts[pts.length - 1];
 }
 
-// Opacity of night lights at an hour of the day (fractional): visible when daylight < 0.4, work lights only until 21:00,
-// taverns from 18:00 to midnight (brighter than the houses).
 export function lightOpacity(kind: Light["kind"], hour: number): number {
   const h = ((hour % 24) + 24) % 24;
   const dark = Math.min(1, Math.max(0, (0.4 - daylight(h)) / 0.4));
@@ -72,20 +68,19 @@ export function lightOpacity(kind: Light["kind"], hour: number): number {
 
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 
-// Radius in px of `meters` of ground at zoom z, interpolated exponentially.
 function metersToPx(k: number, meters: number): maplibregl.ExpressionSpecification {
   const stops: unknown[] = [];
   for (let z = 8; z <= 22; z++) stops.push(z, Math.max(1, meters * k * 2 ** z));
   return ["interpolate", ["exponential", 2], ["zoom"], ...stops] as maplibregl.ExpressionSpecification;
 }
 
-// Visual life: walkers and carts moving along their trips, warm windows at night.
 export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => void {
   const { trips, gameMinutes, lights, frame, gameMinPerSec } = opts;
   let ready = false;
   let disposed = false;
   let raf = 0;
   let last = 0;
+  let lastDrawnCount = -1;
   let base = { gm: gameMinutes.peek(), at: performance.now() };
   const stops: (() => void)[] = [];
   const shown = { house: -1, work: -1, tavern: -1 };
@@ -134,8 +129,9 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
   };
 
   const drawTrips = (f: Frame, minuteOfDay: number) => {
+    const allTrips = trips.peek();
     const features: GeoJSON.Feature[] = [];
-    for (const t of trips.peek()) {
+    for (const t of allTrips) {
       const p = positionAt(t, minuteOfDay);
       if (!p) continue;
       features.push({
@@ -144,6 +140,11 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
         geometry: { type: "Point", coordinates: f.toLngLat(p[0], p[1]) },
       });
     }
+
+    // Не вызываем setData вхолостую, если никого не было и нет
+    if (features.length === 0 && lastDrawnCount === 0) return;
+    lastDrawnCount = features.length;
+
     (map.getSource(SRC_TRIPS) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
   };
 
@@ -152,14 +153,13 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
       const o = lightOpacity(kind, minuteOfDay / 60);
       if (Math.abs(o - shown[kind]) < 0.01) continue;
       shown[kind] = o;
-      // close up the windows of the 3D models carry the light (modelLayer.ts): the glow fades to a halo there
       map.setPaintProperty(`life-lights-${kind}`, "circle-opacity", ["interpolate", ["linear"], ["zoom"], 15.5, o, 17.5, o * HALO]);
     }
   };
 
   const tick = (ts: number) => {
     raf = 0;
-    if (disposed || document.hidden) return; // resumes on visibilitychange
+    if (disposed || document.hidden) return;
     raf = requestAnimationFrame(tick);
     if (ts - last < FRAME_MS) return;
     last = ts;
@@ -169,6 +169,7 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
     drawTrips(f, minuteOfDay);
     drawDarkness(minuteOfDay);
   };
+
   const kick = () => {
     if (!raf && !disposed && !document.hidden) raf = requestAnimationFrame(tick);
   };

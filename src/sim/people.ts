@@ -13,26 +13,24 @@ import { foodNeedFactor, mortalityFactor, orchardQuality } from "./weatherEffect
 import type { WeatherState } from "./weather";
 import { CELL_SIZE } from "./zones";
 
-export const FOUNDERS = 14; // founding party: 4 households in tents
-export const ADULT_MIN = 16; // years
-export const ADULT_MAX = 60; // working age is [16, 60)
-export const WALK_SPEED = 4000 / 60; // m/min, 4 km/h
-export const MAX_COMMUTE = 45; // minutes
+export const FOUNDERS = 14;
+export const ADULT_MIN = 16;
+export const ADULT_MAX = 60;
+export const WALK_SPEED = 4000 / 60;
+export const MAX_COMMUTE = 45;
 export const MAX_EVENTS = 50;
 
-// All life-event rates live here (annual unless noted).
 export const RATES = {
   birthYear: 0.3,
-  marriageDay: 0.02, // per eligible woman per day
+  marriageDay: 0.02,
   maxMarriagesPerDay: 3,
-  immigrationDay: 1.0, // per vacant house per day, times attractiveness (a hazard checked every tick)
-  moodLeaveDay: 0.1, // per household in a house with mood below MOOD_LEAVE
+  immigrationDay: 1.0,
+  moodLeaveDay: 0.1,
 };
 export const MOOD_START = 60;
 export const MOOD_LEAVE = 35;
-// Food: kg a day per person, and the days of it that immigrants bring along.
 export const FOOD = { adult: 0.7, child: 0.45, immigrantDays: 60 };
-// Annual death probability by age band.
+
 const DEATH_BANDS: [number, number][] = [
   [5, 0.03],
   [15, 0.005],
@@ -65,9 +63,7 @@ export const SURNAMES = [
 ];
 
 const FEM_SUFFIX = /(ов|ев|ёв|ин|ын)$/;
-// Surname form for a person of the given sex; masculine base forms in, invariable ones stay.
 export const surnameFor = (last: string, sex: "m" | "f"): string => (sex === "f" && FEM_SUFFIX.test(last) ? `${last}а` : last);
-// "Семья Смирновых"
 export const familyGenitive = (last: string): string => (FEM_SUFFIX.test(last) ? `${last}ых` : last);
 export const fullName = (r: Pick<Resident, "first" | "last">): string => `${r.first} ${r.last}`;
 
@@ -94,7 +90,6 @@ function cloneW(s: PeopleState, now: number): W {
   return { residents, households, nextPersonId: s.nextPersonId, nextHouseholdId: s.nextHouseholdId, events: s.events.slice(), now };
 }
 
-// Centre of a building's lot, the position of the notices about the family living there.
 const homePos = (b: { lot: { cx: number; cy: number } } | undefined): [number, number] | undefined => (b ? [b.lot.cx, b.lot.cy] : undefined);
 
 function say(w: W, kind: EventKind, text: string, pos?: [number, number]): void {
@@ -108,7 +103,6 @@ function addPerson(w: W, first: string, last: string, sex: "m" | "f", age: numbe
   return r;
 }
 
-// A married couple (ages in [ageMin, ageMax]) with `kids` children, as a new household.
 function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: number, home: number | null, founder = false): Household {
   const last = pick(SURNAMES, rand);
   const id = w.nextHouseholdId++;
@@ -130,10 +124,8 @@ function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: numb
   return h;
 }
 
-// Child counts of the four founding couples: 6 children in all, at most 2 per couple.
 const FOUNDER_KIDS = [[2, 2, 1, 1], [1, 2, 2, 1], [2, 1, 1, 2], [1, 1, 2, 2], [2, 2, 2, 0], [0, 2, 2, 2], [2, 0, 2, 2], [2, 2, 0, 2]];
 
-// 14 founders: 4 married couples (20-40) with 6 children between them, living in tents.
 export function createFounders(rng: number, now: number): { people: PeopleState; rng: number } {
   let state = rng;
   const rand: Rand = () => {
@@ -150,20 +142,22 @@ export function createFounders(rng: number, now: number): { people: PeopleState;
 
 // ---------- road net (built edges only) ----------
 
-// The road net for walking: built edges with their ends' coordinates, and the adjacency for shortest paths.
 export interface NetEdge {
   id: number;
-  a: number; // node ids
+  a: number;
   b: number;
-  length: number; // m
+  length: number;
   ax: number;
   ay: number;
   bx: number;
   by: number;
+  dx: number;
+  dy: number;
+  l2: number;
 }
 
 export interface Net {
-  adj: Map<number, [number, number][]>; // node -> [neighbour, metres]
+  adj: Map<number, [number, number][]>;
   edges: NetEdge[];
 }
 
@@ -181,13 +175,25 @@ export function buildNet(g: RoadGraph): Net {
     link(e.b, e.a, e.length);
     const a = g.nodes[e.a];
     const b = g.nodes[e.b];
-    edges.push({ id: e.id, a: e.a, b: e.b, length: e.length, ax: a.x, ay: a.y, bx: b.x, by: b.y });
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    edges.push({
+      id: e.id,
+      a: e.a,
+      b: e.b,
+      length: e.length,
+      ax: a.x,
+      ay: a.y,
+      bx: b.x,
+      by: b.y,
+      dx,
+      dy,
+      l2: dx * dx + dy * dy,
+    });
   }
   return { adj, edges };
 }
 
-// A point beside the road net: its nearest built edge, the place on that edge (`t` metres from the edge's `a` end),
-// the straight walk from the point to that place (`off`) and the place itself (`at`).
 export interface Spot {
   edge: NetEdge;
   t: number;
@@ -195,25 +201,46 @@ export interface Spot {
   at: [number, number];
 }
 
-// Projects (x, y) onto the nearest built edge. Not onto its nodes: a house in the middle of a long road
-// stands at its own place on the road, not at the nearest end of it.
+// Оптимизированный snapToRoad: без аллокаций в цикле и без вычислений sqrt для каждого ребра
 export function snapToRoad(net: Net, x: number, y: number): Spot | null {
-  let best: Spot | null = null;
-  for (const e of net.edges) {
-    const dx = e.bx - e.ax;
-    const dy = e.by - e.ay;
-    const l2 = dx * dx + dy * dy;
+  let bestEdge: NetEdge | null = null;
+  let bestF = 0;
+  let bestAtX = 0, bestAtY = 0;
+  let bestOff2 = Infinity;
+
+  const len = net.edges.length;
+  for (let i = 0; i < len; i++) {
+    const e = net.edges[i];
+    const dx = e.dx, dy = e.dy, l2 = e.l2;
     const f = l2 > 0 ? Math.min(1, Math.max(0, ((x - e.ax) * dx + (y - e.ay) * dy) / l2)) : 0;
-    const at: [number, number] = [e.ax + dx * f, e.ay + dy * f];
-    const off = Math.hypot(at[0] - x, at[1] - y);
-    if (!best || off < best.off) best = { edge: e, t: f * e.length, off, at };
+    const atX = e.ax + dx * f;
+    const atY = e.ay + dy * f;
+    const offX = atX - x;
+    const offY = atY - y;
+    const off2 = offX * offX + offY * offY;
+    if (off2 < bestOff2) {
+      bestOff2 = off2;
+      bestEdge = e;
+      bestF = f;
+      bestAtX = atX;
+      bestAtY = atY;
+    }
   }
-  return best;
+
+  if (!bestEdge) return null;
+  return {
+    edge: bestEdge,
+    t: bestF * bestEdge.length,
+    off: Math.sqrt(bestOff2),
+    at: [bestAtX, bestAtY],
+  };
 }
 
 export class MinHeap {
   private keys: number[] = [];
   private vals: number[] = [];
+  private topPair: [number, number] = [0, 0];
+
   get size(): number {
     return this.keys.length;
   }
@@ -234,7 +261,7 @@ export class MinHeap {
   }
   pop(): [number, number] {
     const { keys, vals } = this;
-    const top: [number, number] = [keys[0], vals[0]];
+    const k0 = keys[0], v0 = vals[0];
     const k = keys.pop()!;
     const v = vals.pop()!;
     const n = keys.length;
@@ -252,17 +279,17 @@ export class MinHeap {
       keys[i] = k;
       vals[i] = v;
     }
-    return top;
+    this.topPair[0] = k0;
+    this.topPair[1] = v0;
+    return this.topPair;
   }
 }
 
-// Shortest road paths from seeds: metres to every node within `limit`, and the node before each on its path.
 export interface Tree {
   dist: Map<number, number>;
   prev: Map<number, number>;
 }
 
-// Dijkstra from seeds [node, metres already walked to it].
 export function treeFrom(net: Net, seeds: [number, number][], limit: number): Tree {
   const dist = new Map<number, number>();
   const prev = new Map<number, number>();
@@ -290,7 +317,6 @@ export function treeFrom(net: Net, seeds: [number, number][], limit: number): Tr
   return { dist, prev };
 }
 
-// The tree from a point beside the net: the walk leaves it towards either end of its edge.
 export const spotTree = (net: Net, p: Spot, limit: number): Tree =>
   treeFrom(
     net,
@@ -301,8 +327,6 @@ export const spotTree = (net: Net, p: Spot, limit: number): Tree =>
     limit - p.off,
   );
 
-// Walking metres from the point the tree was built from to `q`: along the road, or straight along one edge
-// when both points lie on it.
 export function walkMetres(tree: Tree, p: Spot, q: Spot): number {
   const e = q.edge;
   let road = Math.min((tree.dist.get(e.a) ?? Infinity) + q.t, (tree.dist.get(e.b) ?? Infinity) + e.length - q.t);
@@ -310,7 +334,6 @@ export function walkMetres(tree: Tree, p: Spot, q: Spot): number {
   return p.off + road + q.off;
 }
 
-// Midpoint of the lot edge that faces the road (the door); a restored old building has its door set on its ring.
 export function lotFront(b: Building): [number, number] {
   if (b.door) return b.door;
   const { cx, cy, angle, d } = b.lot;
@@ -326,7 +349,6 @@ export const isFinishedHouse = (b: Building | undefined): b is Building => !!b &
 export const isWorkplace = (b: Building | undefined): b is Building => !!b && b.zone !== "res" && b.state === "active";
 const houseCap = (b: Building): number => houseCapacity(b);
 
-// Finished houses without a household, lowest id first.
 export function vacantHouses(buildings: Record<number, Building>, households: Record<number, Household>): number[] {
   const taken = new Set<number>();
   for (const h of Object.values(households)) if (h.home !== null) taken.add(h.home);
@@ -335,8 +357,6 @@ export function vacantHouses(buildings: Record<number, Building>, households: Re
   return out;
 }
 
-// Is there construction work (unfinished buildings, house upgrades, forest clearings or roads a work party can reach)?
-// With a `stock`, road edges that wait for stone do not count: nobody can work on them.
 export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph, clearings: readonly Clearing[] = [], stock?: Pick<Stock, "stone">): boolean {
   for (const b of Object.values(buildings)) if (b.state !== "active" || b.upgrade) return true;
   if (clearings.some((c) => !isCleared(c))) return true;
@@ -350,13 +370,12 @@ interface Counts {
   adults: number;
   children: number;
   employed: number;
-  jobless: number; // adults with no regular job
-  inClass: number; // adults in class today: no work at all
+  jobless: number;
+  inClass: number;
   commuteSum: number;
-  literate: number; // literacy of the adults, summed as shares (school / 100)
+  literate: number;
 }
 
-// Counted at the start of the game day, so the result is the same whenever it is asked within a day.
 const countCache = new WeakMap<object, { day: number; c: Counts }>();
 
 export function countResidents(residents: Record<number, Resident>, now: number): Counts {
@@ -383,17 +402,14 @@ export function countResidents(residents: Record<number, Resident>, now: number)
   return c;
 }
 
-// Food the idle adults gather for the town (berries, mushrooms, fishing, small game), kg a day each.
 export const FORAGE = { day: 1.2, winter: 0.4 };
 export const forageRate = (gameMinutes: number): number => (calendar(gameMinutes).season === 3 ? FORAGE.winter : FORAGE.day);
 
-// Adults with nothing to do: jobless (or farmers with no field work) while there is no construction work
-// for them to join. Their number is the unemployed of peopleStats.
 export function idleResidents(s: ArtelState): Set<number> {
   const out = new Set<number>();
   if (constructionWork(s.buildings, s.roads, s.clearings, s.stock)) return out;
   const farmless = idleGumnos(s);
-  const orchards = idleOrchards(s); // the gardeners out of season
+  const orchards = idleOrchards(s);
   for (const r of Object.values(s.residents)) {
     if (!isAdultAge(ageOf(r.born, s.gameMinutes)) || r.inClass) continue;
     if (r.job === null || farmless.has(r.job) || orchards.has(r.job)) out.add(r.id);
@@ -401,15 +417,10 @@ export function idleResidents(s: ArtelState): Set<number> {
   return out;
 }
 
-// Kg of food the idle adults gather in a day right now.
 export const forageKg = (s: ArtelState): number => idleResidents(s).size * forageRate(s.gameMinutes);
 
 type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock"> & { clearings?: Clearing[]; levers?: Levers };
 
-// The construction artel: every adult without a regular job, plus farmers while the land has no work
-// for them and the workers of workshops without inputs. While construction work exists it has at least
-// max(3, ceil(20 % of the adults)) hands; the shortfall is drafted from the employed (they keep their
-// jobs, but production is scaled down, see productionScale).
 export function artel(s: ArtelState): { hands: number; drafted: number; employed: number } {
   const c = countResidents(s.residents, s.gameMinutes);
   const idle = idleWorkers(s);
@@ -425,20 +436,18 @@ export function artel(s: ArtelState): { hands: number; drafted: number; employed
 export const builderCount = (s: ArtelState): number => {
   if (tolokaActive(s.levers, s.gameMinutes)) {
     const c = countResidents(s.residents, s.gameMinutes);
-    return c.adults - c.inClass; // толока: every adult who is not in class
+    return c.adults - c.inClass;
   }
   const a = artel(s);
   return a.hands + a.drafted;
 };
 
-// Share of the work done at the workplaces of each priority (index 0..3) while workers are drafted: the draft takes
-// the employed of the lowest-priority groups first, so the work of the high-priority groups is protected.
 export function productionScales(s: ArtelState): [number, number, number, number] {
-  if (tolokaActive(s.levers, s.gameMinutes)) return [0, 0, 0, 0]; // everybody is at the site
+  if (tolokaActive(s.levers, s.gameMinutes)) return [0, 0, 0, 0];
   const a = artel(s);
   const out: [number, number, number, number] = [1, 1, 1, 1];
   if (a.drafted <= 0) return out;
-  const idle = idleWorkplaces(s); // their workers already count as hands
+  const idle = idleWorkplaces(s);
   const n = [0, 0, 0, 0];
   for (const r of Object.values(s.residents)) {
     const b = r.job === null || idle.has(r.job) ? undefined : s.buildings[r.job];
@@ -453,19 +462,14 @@ export function productionScales(s: ArtelState): [number, number, number, number
   return out;
 }
 
-// Share of the work that is done at the workplaces while some of their workers are drafted (all priorities together).
 export function productionScale(s: ArtelState): number {
-  if (tolokaActive(s.levers, s.gameMinutes)) return 0; // everybody is at the site
+  if (tolokaActive(s.levers, s.gameMinutes)) return 0;
   const a = artel(s);
   return a.employed > 0 ? 1 - a.drafted / a.employed : 1;
 }
 
-// Can the food last a full year? projected = stock + exactly one harvest + the fishers' daily output x YEAR_DAYS;
-// the harvest is this year's unreaped expected amount while the window has not closed (a field not sown yet
-// counts in full: the whole yield), otherwise next year's (the full yield of every field a gumno works).
-// need = today's consumption x YEAR_DAYS. 0 below 90 % of the need, 1 from 120 %.
 export function foodOutlook(s: ArtelState & { households: SimState["households"] } & Partial<Pick<SimState, "weather">>): number {
-  const need = foodPerDay(s.residents, s.gameMinutes, s.levers); // the yearly average: today's cold does not count
+  const need = foodPerDay(s.residents, s.gameMinutes, s.levers);
   if (need <= 0) return 1;
   const cal = calendar(s.gameMinutes);
   const days = YEAR_DAYS;
@@ -487,7 +491,6 @@ export function foodOutlook(s: ArtelState & { households: SimState["households"]
     const b = s.buildings[id];
     if (!b || b.state !== "active") continue;
     if (b.template === "orchard") {
-      // a bearing orchard gives its autumn once a year, so the whole year at the quality so far
       if (bears(b, s.gameMinutes)) projected += n * FOOD_RATE.orchard.kgHour * workLength(s.levers) * DAYS_PER_SEASON * orchardQuality(s.prod.orchard);
     } else daily += n * foodKgHour(b.template, cal.season) * workLength(s.levers);
   }
@@ -495,7 +498,6 @@ export function foodOutlook(s: ArtelState & { households: SimState["households"]
   return Math.min(1, Math.max(0, (projected / (need * days) - 0.9) / 0.3));
 }
 
-// Kg of food the town eats in a day (more in the cold).
 export function foodPerDay(residents: Record<number, Resident>, now: number, levers?: Levers, weather?: WeatherState): number {
   const c = countResidents(residents, now);
   return (c.adults * FOOD.adult + c.children * FOOD.child) * rationFood(levers) * foodNeedFactor(weather);
@@ -505,7 +507,7 @@ export function peopleStats(s: ArtelState & Pick<SimState, "households">): Peopl
   const c = countResidents(s.residents, s.gameMinutes);
   const work = constructionWork(s.buildings, s.roads, s.clearings, s.stock);
   const farmers = idleFarmers(s);
-  const blocked = idleWorkers(s) - farmers; // workers of workshops without inputs: busy by job, free for the artel
+  const blocked = idleWorkers(s) - farmers;
   let tents = 0;
   let households = 0;
   for (const h of Object.values(s.households)) {
@@ -530,7 +532,6 @@ export function peopleStats(s: ArtelState & Pick<SimState, "households">): Peopl
 
 export type Rule = "death" | "birth" | "marriage" | "emigration";
 
-// `rand` replaces the seeded generator (tests); `only` limits the random rules that run.
 export interface RuleOpts {
   rand?: Rand;
   only?: Rule[];
@@ -549,7 +550,6 @@ function removePerson(w: W, r: Resident): void {
   delete w.residents[r.id];
 }
 
-// A resident dies outside the daily rules (an event): removed with the household if it was the last member.
 export function killResident(s: SimState, id: number): SimState {
   const r = s.residents[id];
   if (!r) return s;
@@ -559,7 +559,6 @@ export function killResident(s: SimState, id: number): SimState {
   return { ...s, residents: w.residents, households: w.households, events: w.events.slice(-MAX_EVENTS) };
 }
 
-// Can `r` leave the household without leaving children behind with no adult?
 function canLeave(w: W, r: Resident): boolean {
   const h = w.households[r.household];
   if (!h) return true;
@@ -575,11 +574,6 @@ function detach(w: W, r: Resident): void {
   if (h.members.length === 0) delete w.households[h.id];
 }
 
-// Jobs (PLAN-ui.md, job priorities). A workplace hires up to `capacityOf`: its jobs, down to the staff limit, none while
-// its group has priority «нет». Employed adults keep a job they can still reach, those above the capacity are released
-// (the farthest first); then, house by house, the jobless take the reachable vacancy of the HIGHEST priority (nearest on
-// a tie) and employed adults move to a reachable vacancy of a strictly higher priority, up to a few rounds.
-// `work` is true/false on the daily step (idle days count); null for a rebalance between days (idle days untouched).
 const JOB_ROUNDS = 4;
 
 interface JobCand {
@@ -622,7 +616,6 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
   if (net.edges.length === 0 || wps.length === 0) {
     for (const r of Object.values(w.residents)) lose(r);
   } else {
-    // Doors -> the road: one spot per building, so a house mid-road walks from its own place on it.
     const spot = new Map<number, Spot | null>();
     const locate = (key: number, x: number, y: number) => {
       let l = spot.get(key);
@@ -644,7 +637,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
       const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)));
       if (adults.length === 0) continue;
       if (h.home === null) {
-        for (const r of adults) lose(r); // the tent camp builds its homes first
+        for (const r of adults) lose(r);
         continue;
       }
       const home = buildings[h.home];
@@ -657,16 +650,33 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
       else for (const r of adults) lose(r);
     }
     groups.sort((p, q) => p.spot.edge.id - q.spot.edge.id || p.spot.t - q.spot.t || p.h.id - q.h.id);
-    // Workplaces within reach of each household, nearest first.
-    for (const g of groups) {
-      const tree = spotTree(net, g.spot, limit);
+
+    // Оптимизированный поиск доступных вакансий:
+    // Если рабочих мест меньше, чем семей, строим дерево Дейкстры от рабочих мест!
+    if (workAt.length < groups.length) {
       for (const wk of workAt) {
-        const m = walkMetres(tree, g.spot, wk.spot);
-        if (m <= limit) g.cands.push({ id: wk.id, m });
+        const tree = spotTree(net, wk.spot, limit);
+        for (const g of groups) {
+          const m = walkMetres(tree, wk.spot, g.spot);
+          if (m <= limit) g.cands.push({ id: wk.id, m });
+        }
       }
-      g.cands.sort((p, q) => p.m - q.m || p.id - q.id);
-      g.candMap = new Map(g.cands.map((c) => [c.id, c.m]));
+      for (const g of groups) {
+        g.cands.sort((p, q) => p.m - q.m || p.id - q.id);
+        g.candMap = new Map(g.cands.map((c) => [c.id, c.m]));
+      }
+    } else {
+      for (const g of groups) {
+        const tree = spotTree(net, g.spot, limit);
+        for (const wk of workAt) {
+          const m = walkMetres(tree, g.spot, wk.spot);
+          if (m <= limit) g.cands.push({ id: wk.id, m });
+        }
+        g.cands.sort((p, q) => p.m - q.m || p.id - q.id);
+        g.candMap = new Map(g.cands.map((c) => [c.id, c.m]));
+      }
     }
+
     for (const g of groups) {
       for (const r of g.adults) {
         if (r.job === null) continue;
@@ -676,7 +686,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
         else lose(r);
       }
     }
-    // Workplaces above their capacity release the farthest workers first.
+
     const staff = new Map<number, Resident[]>();
     for (const r of Object.values(w.residents)) {
       if (r.job === null || (workers.get(r.job) ?? 0) <= (cap.get(r.job) ?? 0)) continue;
@@ -688,7 +698,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
       list.sort((p, q) => (q.commute ?? 0) - (p.commute ?? 0) || q.id - p.id);
       for (let i = 0; i < list.length && (workers.get(id) ?? 0) > (cap.get(id) ?? 0); i++) lose(list[i]);
     }
-    // Fill: the best reachable vacancy of a strictly higher priority than the current job (any, for the jobless).
+
     const round = (): boolean => {
       let moved = false;
       for (const g of groups) {
@@ -726,15 +736,12 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
   }
 }
 
-// Reassigns jobs right away (after a priority or staff change, or when a workplace is finished); pure.
 export function rebalanceJobs(s: SimState): SimState {
   const w = cloneW(s, s.gameMinutes);
   jobsStep(w, s, null);
   return { ...s, residents: w.residents, households: w.households };
 }
 
-// One game day of life: deaths, births, marriages, moving in, migration, jobs. Pure; all randomness
-// comes from `s.rng` unless `opts.rand` is given.
 export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   const w = cloneW(s, s.gameMinutes);
   const { buildings } = s;
@@ -752,7 +759,6 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   const work = constructionWork(buildings, s.roads, s.clearings, s.stock);
   const ids = () => Object.keys(w.residents).map(Number);
 
-  // 1. deaths
   if (on("death")) {
     for (const id of ids()) {
       const r = w.residents[id];
@@ -765,7 +771,6 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // 2. births
   if (on("birth")) {
     for (const h of Object.values(w.households)) {
       if (h.home === null) continue;
@@ -787,7 +792,6 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // 3. marriages (a new household needs a vacant finished house)
   if (on("marriage")) {
     const vacant = vacantHouses(buildings, w.households);
     if (vacant.length > 0) {
@@ -825,7 +829,6 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // 4. households in tents move into vacant finished houses (lowest id first, if the family fits)
   {
     const vacant = vacantHouses(buildings, w.households);
     for (const h of Object.values(w.households)) {
@@ -837,13 +840,11 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // 6. emigration of unhappy families (never the founding households, nor tents)
   if (on("emigration")) {
     for (const h of Object.values(w.households)) {
       if (h.home === null || h.founder) continue;
       if (!(h.mood < MOOD_LEAVE) || !(rand() < RATES.moodLeaveDay)) continue;
       const n = h.members.length;
-      // They take their share of the food along.
       const pop = Object.keys(w.residents).length;
       stock = { ...stock, food: stock.food * (1 - n / pop) };
       for (const m of h.members) delete w.residents[m];
@@ -852,10 +853,8 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // 7. jobs and idle days
   jobsStep(w, s, work);
 
-  // 8. how attractive the town is to newcomers (families are sent every tick, see immigrationStep)
   const attract = (() => {
     let adults = 0;
     let jobless = 0;
@@ -888,12 +887,9 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
 
 // ---------- immigration ----------
 
-const ARRIVE_MIN = 6 * 60; // a family is on its way for 6-12 game hours
+const ARRIVE_MIN = 6 * 60;
 const ARRIVE_SPAN = 6 * 60;
 
-// One tick of `dt` game minutes: the families due now arrive, then every vacant finished house nobody is
-// coming to may get a family on its way (daily rate immigrationDay x attract, as a per-tick hazard).
-// A family moves into the house promised to it, else into another vacant house, else into a tent.
 export function immigrationStep(s: SimState, dt: number): SimState {
   const now = s.gameMinutes;
   let rng = s.rng;
@@ -916,7 +912,6 @@ export function immigrationStep(s: SimState, dt: number): SimState {
       const kids = Math.floor(rand() * (Math.min(3, room) + 1));
       const h = makeFamily(wk, rand, 18, 45, kids, house);
       say(wk, "arrival", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`, house === null ? undefined : homePos(s.buildings[house]));
-      // They bring 60 days of their own food, as far as the barns can hold it.
       let eat = 0;
       for (const m of h.members) eat += ageOf(wk.residents[m].born, now) < ADULT_MIN ? FOOD.child : FOOD.adult;
       stock = { ...stock, food: Math.min(foodCapacity(s.buildings), stock.food + eat * FOOD.immigrantDays) };
@@ -941,8 +936,6 @@ export function immigrationStep(s: SimState, dt: number): SimState {
   };
 }
 
-// Drops references to buildings that are gone: such households go back to tents, such workers lose the job.
-// Returns the same object when nothing changes.
 export function syncPeople<T extends Pick<SimState, "buildings" | "residents" | "households">>(s: T): T {
   let households = s.households;
   let residents = s.residents;
@@ -1002,7 +995,6 @@ function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: 
   return work ? "на стройке" : "без работы";
 }
 
-// Who lives in a house, or who works in a workplace. Null when there is no such building.
 export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
   const b = s.buildings[id];
   const t = b && BUILDINGS[b.template];

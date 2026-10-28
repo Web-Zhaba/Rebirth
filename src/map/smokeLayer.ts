@@ -30,45 +30,33 @@ import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 import { WIND_DIR } from "./weatherMath";
 
-// Smoke from the chimneys (PLAN-3d-world.ru.md stage 7): soft puffs, camera-facing quads with a procedural soft disc,
-// born at a chimney top (Model.smoke, carried by modelLayer.ts modelEmitters), rising, widening, bending downwind and
-// fading. A puff's whole life is computed in the vertex shader from its emitter, its index and the clock (uTime), so a
-// frame costs no CPU work per puff; with the motion setting off the clock stands still and so do the puffs.
-// Same projection and light as the building models (frameSetter; the emitters are projected in float64 into the
-// globe and mercator frames once, when they change). Import only with a dynamic `import()` (it pulls in three.js).
-//
-// Which chimneys smoke and how hard is smokeMath.ts: three strengths (home, furnace, tavern) per frame, and the shader
-// keeps alive that share of a chimney's PUFFS (a puff's phase is a golden-ratio step of its index, so any prefix is
-// spread evenly along the plume). Only the nearest MAX_EMITTERS chimneys within REACH metres of the camera are
-// uploaded; the selection is redone when the camera has moved SELECT_STEP metres or the emitters changed.
-// Beware GLSL ES 3.0 reserved words in the shaders (patch, sample, common, filter, input, output, active...): a
-// compile error hides the layer and the console shows only three's program log.
-
 export const SMOKE_LAYER_ID = "chimney-smoke";
 export const SMOKE_FROM_ZOOM = 15.5;
-const PUFFS = 12; // per chimney, at full strength
-const LIFE = 8; // s, a puff's life
-const RISE = 12; // m a puff climbs in its life
-const REACH = 650; // m from the camera: chimneys farther are dropped (they fade out from 0.75 of FAR)
+const PUFFS = 12;
+const LIFE = 8;
+const RISE = 12;
+const REACH = 650;
+const REACH_SQ = REACH * REACH;
 const FAR = 600;
 const MAX_EMITTERS = 400;
-const SELECT_STEP = 30; // m the camera moves before the nearest chimneys are chosen again
-const PER = 10; // floats per emitter: globe (3), mercator (3), kind, hash, scale, pad
+const SELECT_STEP = 30;
+const PER = 10;
 const SCALE: Record<SmokeKind, number> = { home: 1, furnace: 1.35, tavern: 1.15 };
 const KIND_INDEX: Record<SmokeKind, number> = { home: 0, furnace: 1, tavern: 2 };
+const SMOKE_REPAINT_MS = 33; // ~30 FPS для анимации дыма при статичной камере
 
 const VERT = /* glsl */ `
-attribute float aN; // the puff, 0..${PUFFS - 1}
+attribute float aN;
 attribute vec3 iG;
 attribute vec3 iM;
-attribute vec4 iP; // kind, hash, scale
+attribute vec4 iP;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
 uniform float uTime;
-uniform vec3 uEye; // camera in the mercator frame
-uniform vec3 uS; // strength of home, furnace and tavern chimneys
-uniform vec3 uWind; // direction, speed in m/s
+uniform vec3 uEye;
+uniform vec3 uS;
+uniform vec3 uWind;
 uniform float uFar;
 varying vec2 vQ;
 varying float vA;
@@ -79,17 +67,14 @@ float hash11(float x) {
 }
 void main() {
   float str = iP.x < 0.5 ? uS.x : (iP.x < 1.5 ? uS.y : uS.z);
-  // the share of the puffs alive at this strength; the last one of them is faint
   float alive = clamp(str * ${PUFFS}.0 - aN, 0.0, 1.0);
   float dist = length(iM - uEye);
   float vis = alive * (1.0 - smoothstep(uFar * 0.75, uFar, dist));
-  // the puff's place in its life: its own phase, a new draw every round
   float cyc = uTime / ${LIFE}.0 + fract(aN * 0.6180339 + iP.y);
   float t = fract(cyc);
   float seed = hash11(floor(cyc) * 7.13 + aN * 3.7 + iP.y * 91.0);
   float age = t * ${LIFE}.0;
   float rise = ${RISE}.0 * (1.0 - pow(1.0 - t, 1.6));
-  // downwind: the plume starts upright and leans over; it wanders sideways more the older it is
   float speed = 0.5 + uWind.z;
   vec2 dir = uWind.xy;
   vec2 across = vec2(-dir.y, dir.x);
@@ -97,7 +82,6 @@ void main() {
   float sway = sin(age * 1.6 + seed * 6.2831) * (0.15 + 1.1 * t) * (0.5 + 0.5 * seed);
   vec3 off = vec3(dir * bend + across * sway, 0.2 + rise);
   float rad = vis > 0.002 ? iP.z * (0.5 + 2.6 * pow(t, 0.7)) * mix(0.6, 1.0, str) : 0.0;
-  // a quad facing the camera
   vec3 c = iM + off;
   vec3 F = normalize(uEye - c);
   vec3 R = cross(vec3(0.0, 0.0, 1.0), F);
@@ -115,7 +99,7 @@ void main() {
 
 const FRAG = /* glsl */ `
 uniform float uSun;
-uniform vec4 uTint; // the night tint (nightLayer.ts) where it cannot reach us: on the relief it is draped on the ground
+uniform vec4 uTint;
 varying vec2 vQ;
 varying float vA;
 varying float vAge;
@@ -131,12 +115,10 @@ float vnoise(vec2 p) {
 void main() {
   float r = length(vQ);
   if (r > 1.0 || vA < 0.002) discard;
-  // a soft disc with a ragged edge, the rag drifting with the puff's age
   vec2 np = vQ * 1.8 + vec2(vSeed * 31.0, vSeed * 17.0 + vAge * 1.5);
   float n = 0.6 * vnoise(np) + 0.4 * vnoise(np * 2.3 + 5.0);
   float a = (1.0 - smoothstep(0.25, 0.95, r + (n - 0.5) * 0.55)) * vA;
   if (a < 0.003) discard;
-  // grey and dense when young, paler as it thins; lit from above, dim at night (the tint does the rest)
   vec3 col = mix(vec3(0.58, 0.59, 0.61), vec3(0.93, 0.93, 0.92), smoothstep(0.0, 0.7, vAge));
   col *= (0.78 + 0.22 * uSun) * (0.9 + 0.1 * vQ.y) * (0.9 + 0.2 * n);
   col = mix(col, uTint.rgb, uTint.a);
@@ -149,7 +131,6 @@ export interface SmokeLayerOptions {
   weather: ReadonlySignal<WeatherState | null>;
 }
 
-// Deterministic 0..1 from a position (a chimney's phase).
 const hashOf = (x: number, y: number) => {
   const h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
   return h - Math.floor(h);
@@ -165,15 +146,15 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
   const camera = new Camera();
   const framer = frameSetter(opts.light);
   let origin: { lng: number; lat: number } | null = null;
-  let all = new Float32Array(0); // every smoking-capable chimney, PER floats each, projected for `origin`
-  let stale = true; // the emitters, the frame or the origin changed: `all` is built again
-  let picked: [number, number, number] | null = null; // the eye the nearest chimneys were chosen for
-  let count = 0; // chimneys uploaded
+  let all = new Float32Array(0);
+  let stale = true;
+  let picked: [number, number, number] | null = null;
+  let count = 0;
+  let repaintTimer: ReturnType<typeof setTimeout> | null = null;
   const strength: [number, number, number] = [0, 0, 0];
   let hourNow = 0;
   let tempNow = 0;
 
-  // The emitters of the model layer that are in use, projected into both frames.
   const build = (tf: TownFrame, o: { lng: number; lat: number }) => {
     const base: number[] = [], par: number[] = [];
     for (const e of modelEmitters.peek()) {
@@ -188,20 +169,26 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
     for (let q = 0; q < n; q++) {
       all.set(g.subarray(q * 3, q * 3 + 3), q * PER);
       all.set(m.subarray(q * 3, q * 3 + 3), q * PER + 3);
-      all.set(par.slice(q * 4, q * 4 + 4), q * PER + 6);
+      all[q * PER + 6] = par[q * 4];
+      all[q * PER + 7] = par[q * 4 + 1];
+      all[q * PER + 8] = par[q * 4 + 2];
+      all[q * PER + 9] = par[q * 4 + 3];
     }
     stale = false;
     picked = null;
   };
 
-  // The nearest chimneys within REACH of the eye into the instance buffer.
   const select = (eye: [number, number, number]) => {
-    const near: { q: number; d: number }[] = [];
-    for (let q = 0; q < all.length / PER; q++) {
-      const d = Math.hypot(all[q * PER + 3] - eye[0], all[q * PER + 4] - eye[1], all[q * PER + 5] - eye[2]);
-      if (d < REACH) near.push({ q, d });
+    const near: { q: number; d2: number }[] = [];
+    const total = all.length / PER;
+    for (let q = 0; q < total; q++) {
+      const dx = all[q * PER + 3] - eye[0];
+      const dy = all[q * PER + 4] - eye[1];
+      const dz = all[q * PER + 5] - eye[2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < REACH_SQ) near.push({ q, d2 });
     }
-    near.sort((a, b) => a.d - b.d);
+    near.sort((a, b) => a.d2 - b.d2);
     if (near.length > MAX_EMITTERS) near.length = MAX_EMITTERS;
     const dst = buf!.array as Float32Array;
     near.forEach(({ q }, i) => dst.set(all.subarray(q * PER, (q + 1) * PER), i * PER));
@@ -211,9 +198,17 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
     picked = eye;
   };
 
-  // devtools: what is drawn now
   if (import.meta.env.DEV)
-    Object.assign(window, { smokeStats: () => ({ emitters: all.length / PER, drawn: count, puffs: Math.round(count * PUFFS * Math.max(...strength)), strength: { home: strength[0], furnace: strength[1], tavern: strength[2] }, temp: tempNow, hour: hourNow }) });
+    Object.assign(window, {
+      smokeStats: () => ({
+        emitters: all.length / PER,
+        drawn: count,
+        puffs: Math.round(count * PUFFS * Math.max(...strength)),
+        strength: { home: strength[0], furnace: strength[1], tavern: strength[2] },
+        temp: tempNow,
+        hour: hourNow,
+      }),
+    });
 
   return {
     id: SMOKE_LAYER_ID,
@@ -222,7 +217,6 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
     onAdd(_m, gl) {
       host = acquireHost(map, gl as WebGL2RenderingContext);
       scene = new Scene();
-      // PUFFS quads in one geometry, instanced per chimney (a fixed capacity: three keeps the instance limit of the first binding)
       geo = new InstancedBufferGeometry();
       const pos: number[] = [], idx: number[] = [], num: number[] = [];
       for (let k = 0; k < PUFFS; k++) {
@@ -255,7 +249,6 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
         fragmentShader: FRAG,
         side: DoubleSide,
         transparent: true,
-        // premultiplied, as MapLibre composites; read the depth of the buildings, never write
         blending: CustomBlending,
         blendSrc: OneFactor,
         blendDst: OneMinusSrcAlphaFactor,
@@ -273,7 +266,6 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
           stale = true;
           map.triggerRepaint();
         }),
-        // the weather or the hour moved: the strength changes (and a layer that drew nothing must look again)
         effect(() => {
           void opts.weather.value;
           void opts.light?.clock.value;
@@ -282,6 +274,10 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
       );
     },
     onRemove() {
+      if (repaintTimer) {
+        clearTimeout(repaintTimer);
+        repaintTimer = null;
+      }
       for (const s of stops) s();
       stops.length = 0;
       geo?.dispose();
@@ -304,7 +300,7 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
       }
       if (stale) build(tf, origin);
       if (!all.length) return;
-      // the strengths of this hour and weather
+
       const w = opts.weather.peek();
       const cal = calendar(opts.light?.clock.peek() ?? 0);
       hourNow = cal.hour + cal.minute / 60;
@@ -313,12 +309,15 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
       (["home", "furnace", "tavern"] as const).forEach((k, i) => (strength[i] = smokeStrength(k, tempNow, hourNow, precip)));
       count = 0;
       if (Math.max(...strength) <= 0) return;
+
       const M = framer.mercator(args, host, origin);
       const eye = eyeOf(M);
       if (!eye) return;
+
       if (!picked || Math.hypot(eye[0] - picked[0], eye[1] - picked[1], eye[2] - picked[2]) > SELECT_STEP) select(eye);
       else count = geo.instanceCount;
       if (!count) return;
+
       const u = mat.uniforms;
       framer.set(u, args, host, origin);
       u.uTime.value = motionTime();
@@ -326,12 +325,18 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
       (u.uS.value as Vector3).set(...strength);
       (u.uWind.value as Vector3).set(WIND_DIR[0], WIND_DIR[1], w?.now.wind ?? 2);
       host.draw((r) => r.render(scene!, camera));
-      if (motionOn.peek()) map.triggerRepaint(); // the puffs move every frame
+
+      // Троттлинг анимации дыма при статичной камере (~30 FPS): не спамим перерисовку в текущем кадре
+      if (motionOn.peek() && !repaintTimer) {
+        repaintTimer = setTimeout(() => {
+          repaintTimer = null;
+          map.triggerRepaint();
+        }, SMOKE_REPAINT_MS);
+      }
     },
   };
 }
 
-// Adds the layer just above the building models and the trees (in the group of the 3D layers, before the outlines).
 export function attachSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): () => void {
   const layer = createSmokeLayer(map, opts);
   const before = () => ["buildings-outline", "night-tint"].find((id) => map.getLayer(id));

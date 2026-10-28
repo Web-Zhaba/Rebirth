@@ -8,9 +8,6 @@ import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./t
 
 // ---------- coverage ----------
 
-// Bit mask per finished house of the services that cover it: walking road distance from the service's lot front
-// to the house's lot front within the service's reach, and the service finished and, if it has jobs, staffed by
-// at least one worker.
 export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "residents">): Record<number, number> {
   const out: Record<number, number> = {};
   const services = Object.values(s.buildings).filter((b) => b.state === "active" && isService(b.template));
@@ -19,13 +16,16 @@ export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "resid
   if (net.edges.length === 0) return out;
   const workers = new Map<number, number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) workers.set(r.job, (workers.get(r.job) ?? 0) + 1);
-  const spots: { id: number; spot: Spot }[] = [];
+
+  // Кэшируем позиции домов с их координатами для быстрой AABB-отсечки
+  const spots: { id: number; spot: Spot; x: number; y: number }[] = [];
   for (const b of Object.values(s.buildings)) {
     if (!isFinishedHouse(b)) continue;
     const [x, y] = lotFront(b);
     const p = snapToRoad(net, x, y);
-    if (p) spots.push({ id: b.id, spot: p });
+    if (p) spots.push({ id: b.id, spot: p, x, y });
   }
+
   for (const b of services) {
     const id = b.template as ServiceId;
     if (BUILDINGS[id].jobs > 0 && (workers.get(b.id) ?? 0) < 1) continue;
@@ -33,8 +33,15 @@ export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "resid
     const [x, y] = lotFront(b);
     const from = snapToRoad(net, x, y);
     if (!from || from.off > range) continue;
+
     const tree = spotTree(net, from, range);
-    for (const h of spots) if (walkMetres(tree, from, h.spot) <= range) out[h.id] = withService(out[h.id] ?? 0, id);
+    for (const h of spots) {
+      // Ранняя геометрическая отсечка: расстояние по дорогам не может быть меньше прямого евклидова расстояния
+      if (Math.abs(h.x - x) > range || Math.abs(h.y - y) > range) continue;
+      if (walkMetres(tree, from, h.spot) <= range) {
+        out[h.id] = withService(out[h.id] ?? 0, id);
+      }
+    }
   }
   return out;
 }
@@ -42,9 +49,9 @@ export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "resid
 // ---------- land value ----------
 
 const BUCKET = SERVICE.landRadius;
+const LAND_RADIUS_SQ = SERVICE.landRadius * SERVICE.landRadius;
 const bkey = (bx: number, by: number) => bx * 65536 + by;
 
-// 20 + 8 per covered service + 0.3 x (mood of the households within 100 m - 50), clamped to 0..100.
 export function computeLandValue(s: Pick<SimState, "buildings" | "households">, coverage: Record<number, number>): Record<number, number> {
   const out: Record<number, number> = {};
   const monuments = finishedMonuments(s.buildings);
@@ -67,7 +74,9 @@ export function computeLandValue(s: Pick<SimState, "buildings" | "households">, 
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (const o of grid.get(bkey(bx + dx, by + dy)) ?? []) {
-          if (Math.hypot(o.x - b.lot.cx, o.y - b.lot.cy) > SERVICE.landRadius) continue;
+          const offX = o.x - b.lot.cx;
+          const offY = o.y - b.lot.cy;
+          if (offX * offX + offY * offY > LAND_RADIUS_SQ) continue;
           sum += o.mood;
           n++;
         }
@@ -82,13 +91,11 @@ export function computeLandValue(s: Pick<SimState, "buildings" | "households">, 
 
 // ---------- daily ----------
 
-// Coverage and land value only (on load and after commands that change roads or buildings).
 export function refreshServices<T extends SimState>(s: T): T {
   const coverage = computeCoverage(s);
   return { ...s, coverage, landValue: computeLandValue(s, coverage) };
 }
 
-// The land and mood conditions of a house upgrade, as texts for what is still short; empty when both hold.
 export function upgradeShortfall(land: number, services: number | undefined, mood: number | undefined): string[] {
   const out: string[] = [];
   if (land < SERVICE.upgradeLand) {
@@ -99,15 +106,12 @@ export function upgradeShortfall(land: number, services: number | undefined, moo
   return out;
 }
 
-// Why a finished izba is not upgraded yet, for the inspector; empty when it is upgraded or nothing is left to do.
 export function upgradeBlockers(s: Pick<SimState, "progress" | "coverage" | "landValue">, b: Building, mood: number | undefined): string[] {
   if (b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) return [];
   const out = isUnlocked(s.progress, "upgrade") ? [] : ["откроется с технологией «Просторное жильё»"];
   return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood)];
 }
 
-// Runs at the end of the daily chain (moods and jobs are already today's): coverage, land value,
-// school attendance and literacy, and the upgrade of houses that stayed good for 20 days.
 export function dailyServices(s: SimState): SimState {
   const { coverage, landValue } = refreshServices(s);
   const now = s.gameMinutes;
@@ -161,12 +165,10 @@ export function serviceStats(s: Pick<SimState, "buildings" | "residents" | "hous
   return { houses, covered, pupils: classPupils(s).size, seats: schoolSeats(s), literate: c.adults > 0 ? c.literate / c.adults : 0, avgLandValue: houses > 0 ? value / houses : 0, level2 };
 }
 
-// ---------- reach drawing (also used on the main thread for the placement preview) ----------
+// ---------- reach drawing ----------
 
 export type Segment = [[number, number], [number, number]];
 
-// Built road stretches within `range` metres of a lot front (x, y), as straight segments; an edge the
-// reach ends inside is cut at that point.
 export function reachSegments(roads: RoadGraph, x: number, y: number, range: number, net: Net = buildNet(roads)): Segment[] {
   const p = snapToRoad(net, x, y);
   if (!p || p.off > range) return [];
@@ -174,7 +176,6 @@ export function reachSegments(roads: RoadGraph, x: number, y: number, range: num
   const tree = spotTree(net, p, range);
   const out: Segment[] = [];
   for (const e of net.edges) {
-    // Stretches of the edge within reach: from each end the tree reaches, and around the spot when it lies on the edge.
     const spans: [number, number][] = [];
     const da = tree.dist.get(e.a);
     const db = tree.dist.get(e.b);

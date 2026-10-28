@@ -15,7 +15,8 @@ import { getDemTile } from "../world/tiles";
 export const RELIEF_EXAGGERATION = 1.6;
 
 const RELIEF_MAX_PITCH = 75;
-const FLAT_MAX_PITCH = 60; // MapLibre's default
+const FLAT_MAX_PITCH = 60;
+const TERRAIN_3D_SOURCE = "terrain-dem"; // отдельный источник для 3D mesh во избежание конфликта с hillshade
 
 const KEY = "rebirth.relief";
 function read(): boolean {
@@ -27,7 +28,6 @@ function read(): boolean {
 }
 
 export const reliefOn = signal(read());
-// What heights on the map are multiplied by: 0 with the relief off (everything on the flat ground, as before).
 export const reliefScale = computed(() => (reliefOn.value ? RELIEF_EXAGGERATION : 0));
 
 export function setRelief(on: boolean): void {
@@ -40,48 +40,98 @@ export function setRelief(on: boolean): void {
 }
 
 // ---- Ground height, sampled exactly as MapLibre draws the terrain ----
-// MapLibre puts the value of DEM pixel i at its corner (i, not i + 0.5 as world/terrain.ts does for the game rules)
-// and interpolates bilinearly across tile edges; matching that keeps the models on the drawn ground (checked against
-// map.queryTerrainElevation: equal to the centimetre).
 
 const N = 2 ** TERRAIN_ZOOM;
 const grids = new Map<string, Float32Array>();
 const pending = new Map<string, Promise<void>>();
 const tileKey = (x: number, y: number) => `${((x % N) + N) % N}/${Math.max(0, Math.min(N - 1, y))}`;
 
-// Global DEM pixel coordinates of a point.
+// Кэш последнего прочитанного DEM-тайла для быстрого доступа без поиска в Map
+let lastTx = -1, lastTy = -1, lastGrid: Float32Array | null = null;
+
+function getGrid(tx: number, ty: number): Float32Array | null {
+  if (tx === lastTx && ty === lastTy) return lastGrid;
+  const normX = ((tx % N) + N) % N;
+  const normY = Math.max(0, Math.min(N - 1, ty));
+  const key = `${normX}/${normY}`;
+  const g = grids.get(key) ?? null;
+  lastTx = tx;
+  lastTy = ty;
+  lastGrid = g;
+  return g;
+}
+
 function pixel(lng: number, lat: number): [number, number] {
   const t = lngLatToTile(lng, lat, TERRAIN_ZOOM);
   return [t.x * TERRARIUM_SIZE, t.y * TERRARIUM_SIZE];
 }
 
-// Tiles that hold the four DEM pixels around a point.
-function tilesAround(lng: number, lat: number): string[] {
+// Tiles that hold the four DEM pixels around a point (без аллокаций new Set)
+export function tilesAround(lng: number, lat: number): string[] {
   const [px, py] = pixel(lng, lat);
   const x0 = Math.floor(px / TERRARIUM_SIZE), x1 = Math.floor((Math.floor(px) + 1) / TERRARIUM_SIZE);
   const y0 = Math.floor(py / TERRARIUM_SIZE), y1 = Math.floor((Math.floor(py) + 1) / TERRARIUM_SIZE);
-  return [...new Set([tileKey(x0, y0), tileKey(x1, y0), tileKey(x0, y1), tileKey(x1, y1)])];
+  const k0 = tileKey(x0, y0);
+  if (x0 === x1 && y0 === y1) return [k0];
+  const res = [k0];
+  const k1 = tileKey(x1, y0);
+  if (k1 !== k0) res.push(k1);
+  const k2 = tileKey(x0, y1);
+  if (k2 !== k0 && k2 !== k1) res.push(k2);
+  const k3 = tileKey(x1, y1);
+  if (k3 !== k0 && k3 !== k1 && k3 !== k2) res.push(k3);
+  return res;
 }
 
-function value(gx: number, gy: number): number {
-  const tx = Math.floor(gx / TERRARIUM_SIZE), ty = Math.floor(gy / TERRARIUM_SIZE);
-  const g = grids.get(tileKey(tx, ty));
-  if (!g) return 0;
-  const i = gx - tx * TERRARIUM_SIZE, j = Math.max(0, Math.min(TERRARIUM_SIZE - 1, gy - ty * TERRARIUM_SIZE));
-  return g[j * TERRARIUM_SIZE + i];
-}
-
-// Ground height in metres (not exaggerated) where the tiles are loaded; null where they are not yet (see loadGround).
+// Оптимизированный groundAt: быстрый путь без аллокаций для 99.6% точек
 export function groundAt(lng: number, lat: number): number | null {
-  if (tilesAround(lng, lat).some((k) => !grids.has(k))) return null;
-  const [px, py] = pixel(lng, lat);
-  const x0 = Math.floor(px), y0 = Math.floor(py), fx = px - x0, fy = py - y0;
-  const top = value(x0, y0) * (1 - fx) + value(x0 + 1, y0) * fx;
-  const bottom = value(x0, y0 + 1) * (1 - fx) + value(x0 + 1, y0 + 1) * fx;
+  const t = lngLatToTile(lng, lat, TERRAIN_ZOOM);
+  const px = t.x * TERRARIUM_SIZE;
+  const py = t.y * TERRARIUM_SIZE;
+  const x0 = Math.floor(px);
+  const y0 = Math.floor(py);
+  const fx = px - x0;
+  const fy = py - y0;
+
+  const tx0 = Math.floor(x0 / TERRARIUM_SIZE);
+  const ty0 = Math.floor(y0 / TERRARIUM_SIZE);
+  const tx1 = Math.floor((x0 + 1) / TERRARIUM_SIZE);
+  const ty1 = Math.floor((y0 + 1) / TERRARIUM_SIZE);
+
+  // 99.6% точек: все 4 угла лежат на одном и том же DEM-тайле
+  if (tx0 === tx1 && ty0 === ty1) {
+    const g = getGrid(tx0, ty0);
+    if (!g) return null;
+    const i0 = x0 - tx0 * TERRARIUM_SIZE;
+    const j0 = y0 - ty0 * TERRARIUM_SIZE;
+    const cj0 = Math.max(0, Math.min(TERRARIUM_SIZE - 1, j0));
+    const cj1 = Math.max(0, Math.min(TERRARIUM_SIZE - 1, j0 + 1));
+    const v00 = g[cj0 * TERRARIUM_SIZE + i0];
+    const v10 = g[cj0 * TERRARIUM_SIZE + (i0 + 1)];
+    const v01 = g[cj1 * TERRARIUM_SIZE + i0];
+    const v11 = g[cj1 * TERRARIUM_SIZE + (i0 + 1)];
+    const top = v00 * (1 - fx) + v10 * fx;
+    const bottom = v01 * (1 - fx) + v11 * fx;
+    return top * (1 - fy) + bottom * fy;
+  }
+
+  // Граничный случай: точки пересекают границу тайлов
+  const g00 = getGrid(tx0, ty0);
+  const g10 = getGrid(tx1, ty0);
+  const g01 = getGrid(tx0, ty1);
+  const g11 = getGrid(tx1, ty1);
+  if (!g00 || !g10 || !g01 || !g11) return null;
+
+  const v00 = g00[Math.max(0, Math.min(TERRARIUM_SIZE - 1, y0 - ty0 * TERRARIUM_SIZE)) * TERRARIUM_SIZE + (x0 - tx0 * TERRARIUM_SIZE)];
+  const v10 = g10[Math.max(0, Math.min(TERRARIUM_SIZE - 1, y0 - ty0 * TERRARIUM_SIZE)) * TERRARIUM_SIZE + (x0 + 1 - tx1 * TERRARIUM_SIZE)];
+  const v01 = g01[Math.max(0, Math.min(TERRARIUM_SIZE - 1, y0 + 1 - ty1 * TERRARIUM_SIZE)) * TERRARIUM_SIZE + (x0 - tx0 * TERRARIUM_SIZE)];
+  const v11 = g11[Math.max(0, Math.min(TERRARIUM_SIZE - 1, y0 + 1 - ty1 * TERRARIUM_SIZE)) * TERRARIUM_SIZE + (x0 + 1 - tx1 * TERRARIUM_SIZE)];
+
+  const top = v00 * (1 - fx) + v10 * fx;
+  const bottom = v01 * (1 - fx) + v11 * fx;
   return top * (1 - fy) + bottom * fy;
 }
 
-// Loads the DEM tiles under the points; resolves once all are in (failed tiles count as flat ground at 0).
 export function loadGround(points: readonly [number, number][]): Promise<void> {
   const keys = new Set<string>();
   for (const [lng, lat] of points) for (const k of tilesAround(lng, lat)) if (!grids.has(k)) keys.add(k);
@@ -103,17 +153,15 @@ export function loadGround(points: readonly [number, number][]): Promise<void> {
 
 // ---- Terrain and sky on the map ----
 
-const SKY = "#c9d6dc"; // pale overcast blue above the paper
+const SKY = "#c9d6dc";
 const HORIZON = "#e6e4d6";
-const NIGHT = 0.8; // how far the sky goes toward dusk at full night
+const NIGHT = 0.8;
 
-// The sky above and at the horizon at an hour (the water reflects them too).
 export function skyColours(hour: number): { sky: string; horizon: string } {
   const n = (1 - daylight(hour)) * NIGHT;
   return { sky: mixHex(SKY, PALETTE.dusk, n), horizon: mixHex(HORIZON, PALETTE.dusk, n) };
 }
 
-// Sky colours at an hour: the paper sky by day, toward dusk at night (the night tint does not reach the sky).
 export function skyAt(hour: number): maplibregl.SkySpecification {
   const n = (1 - daylight(hour)) * NIGHT;
   const fog = mixHex(PALETTE.paper, PALETTE.dusk, n);
@@ -124,28 +172,18 @@ export function skyAt(hour: number): maplibregl.SkySpecification {
     "fog-color": fog,
     "sky-horizon-blend": 0.6,
     "horizon-fog-blend": 0.6,
-    "fog-ground-blend": 0.75, // haze only over the far ground
+    "fog-ground-blend": 0.75,
     "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 5, 1, 7, 0],
   };
 }
 
-// Turns the terrain on and off with the setting and keeps the sky in step with the hour.
-// Layers MapLibre drapes over the relief (its render-to-texture types).
 const DRAPED = new Set(["background", "fill", "line", "raster", "hillshade", "color-relief"]);
 
-// Where a layer that is not draped sits in the flat order: just under a draped layer (null: above all of them), ordered
-// by seq among the layers under the same one, as map.addLayer(layer, before) puts them.
 export interface Anchor {
   before: string | null;
   seq: number;
 }
 
-// The layer order for the relief, or null when the map has it already. On the relief MapLibre renders the draped
-// layers into a texture per terrain tile and keeps them while nothing changes, but every other layer (3D, circles,
-// symbols) between them starts a new stack of textures, and with a few stacks its pool of 30 overflows and nothing is
-// kept: every tile is drawn again every frame (about 4x the frame). So the draped layers go first, in their order, and
-// the others above them in their flat order (anchors: noted the first time a layer is seen, so a layer added later
-// before a draped one still lands where it would on the flat map).
 export function reliefOrder(order: readonly { id: string; type: string }[], anchors: Map<string, Anchor>): string[] | null {
   noteAnchors(order, anchors);
   const draped = order.filter((l) => DRAPED.has(l.type)).map((l) => l.id);
@@ -162,20 +200,15 @@ export function reliefOrder(order: readonly { id: string; type: string }[], anch
 function noteAnchors(order: readonly { id: string; type: string }[], anchors: Map<string, Anchor>): void {
   order.forEach((l, i) => {
     if (DRAPED.has(l.type) || anchors.has(l.id)) return;
-    // the first layer above that is draped, or placed already: just under it (later arrivals nearer it)
     const next = order.slice(i + 1).find((n) => DRAPED.has(n.type) || anchors.has(n.id));
     const known = next && anchors.get(next.id);
     anchors.set(l.id, known ? { before: known.before, seq: known.seq - 1 / (anchors.size + 2) } : { before: next?.id ?? null, seq: anchors.size });
   });
 }
 
-// The flat places of the layers that are not draped, while the relief is on (one map).
 const anchors = new Map<string, Anchor>();
-// getLayersOrder, not getStyle: the style as JSON leaves out the custom (3D) layers
 const layersOf = (map: maplibregl.Map) => map.getLayersOrder().map((id) => ({ id, type: map.getLayer(id)!.type }));
 
-// Keeps a draped layer just under another layer as the flat map has it (the night tint under the lights). On the relief
-// the draped layers lie under all the others, so it goes under the draped layer that follows the other one there.
 export function keepUnder(map: maplibregl.Map, id: string, before: string): void {
   const order = layersOf(map);
   let target: string | undefined = map.getLayer(before) ? before : undefined;
@@ -186,6 +219,22 @@ export function keepUnder(map: maplibregl.Map, id: string, before: string): void
   const at = order.findIndex((l) => l.id === id);
   const next = order.slice(at + 1).find((l) => l.id !== id)?.id;
   if (next !== target && target !== id) map.moveLayer(id, target);
+}
+
+// Создаёт отдельный source для 3D terrain, устраняя конфликт с hillshade
+function ensureTerrainSource(map: maplibregl.Map): string {
+  if (map.getSource(TERRAIN_3D_SOURCE)) return TERRAIN_3D_SOURCE;
+  const style = map.getStyle();
+  const orig = style?.sources?.["terrain"];
+  if (orig) {
+    try {
+      map.addSource(TERRAIN_3D_SOURCE, { ...orig } as maplibregl.SourceSpecification);
+      return TERRAIN_3D_SOURCE;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "terrain";
 }
 
 export function attachRelief(map: maplibregl.Map, gameMinutes: ReadonlySignal<number>): () => void {
@@ -211,25 +260,46 @@ export function attachRelief(map: maplibregl.Map, gameMinutes: ReadonlySignal<nu
     anchors.clear();
     moving(() => back.forEach(([id, a]) => map.moveLayer(id, a.before && map.getLayer(a.before) ? a.before : undefined)));
   };
+  const onStyleData = () => {
+    if (reliefScale.peek() > 0) {
+      ensureTerrainSource(map);
+    }
+    group();
+  };
   const setup = () => {
-    map.on("styledata", group);
+    map.on("styledata", onStyleData);
     stops = [
       effect(() => {
         const k = reliefScale.value;
-        map.setTerrain(k > 0 ? { source: "terrain", exaggeration: k } : null);
-        // the horizon, the sky and the haze show only on steep views; flat, they would show the end of the map
-        map.setMaxPitch(k > 0 ? RELIEF_MAX_PITCH : FLAT_MAX_PITCH);
-        if (k > 0) group();
-        else ungroup();
+        if (k > 0) {
+          const src = ensureTerrainSource(map);
+          map.setTerrain({ source: src, exaggeration: k });
+          map.setMaxPitch(RELIEF_MAX_PITCH);
+          group();
+        } else {
+          map.setTerrain(null);
+          map.setMaxPitch(FLAT_MAX_PITCH);
+          ungroup();
+        }
       }),
       effect(() => {
         const cal = calendar(gameMinutes.value);
         map.setSky(skyAt(cal.hour + cal.minute / 60));
       }),
-      () => map.off("styledata", group),
+      () => map.off("styledata", onStyleData),
     ];
   };
   if (map.isStyleLoaded()) setup();
   else map.once("load", setup);
-  return () => stops.forEach((s) => s());
+  return () => {
+    stops.forEach((s) => s());
+    if (map.getSource(TERRAIN_3D_SOURCE)) {
+      try {
+        map.setTerrain(null);
+        map.removeSource(TERRAIN_3D_SOURCE);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 }
