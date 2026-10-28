@@ -14,10 +14,6 @@ import { getDemTile } from "../world/tiles";
 // Height exaggeration of the relief: the plains read flat at 1, mountains turn into a caricature well above 2.
 export const RELIEF_EXAGGERATION = 1.6;
 
-const RELIEF_MAX_PITCH = 75;
-const FLAT_MAX_PITCH = 60;
-const TERRAIN_3D_SOURCE = "terrain-dem"; // отдельный источник для 3D mesh во избежание конфликта с hillshade
-
 const KEY = "rebirth.relief";
 function read(): boolean {
   try {
@@ -177,129 +173,49 @@ export function skyAt(hour: number): maplibregl.SkySpecification {
   };
 }
 
-const DRAPED = new Set(["background", "fill", "line", "raster", "hillshade", "color-relief"]);
 
-export interface Anchor {
-  before: string | null;
-  seq: number;
-}
+// ---- Sky + our own terrain switch ----
+//
+// MapLibre's built-in terrain is intentionally not used anymore. The visible terrain is rendered by
+// landscapeLayer.ts from the same Terrarium DEM sampled by groundAt(), so water, vegetation, fields,
+// buildings and the ground all share one elevation source.
 
-export function reliefOrder(order: readonly { id: string; type: string }[], anchors: Map<string, Anchor>): string[] | null {
-  noteAnchors(order, anchors);
-  const draped = order.filter((l) => DRAPED.has(l.type)).map((l) => l.id);
-  const rank = (id: string) => {
-    const a = anchors.get(id)!, k = a.before === null ? -1 : draped.indexOf(a.before);
-    return k < 0 ? draped.length : k;
-  };
-  const others = order.filter((l) => !DRAPED.has(l.type)).map((l) => l.id);
-  others.sort((a, b) => rank(a) - rank(b) || anchors.get(a)!.seq - anchors.get(b)!.seq);
-  const want = [...draped, ...others];
-  return want.every((id, i) => order[i].id === id) ? null : want;
-}
-
-function noteAnchors(order: readonly { id: string; type: string }[], anchors: Map<string, Anchor>): void {
-  order.forEach((l, i) => {
-    if (DRAPED.has(l.type) || anchors.has(l.id)) return;
-    const next = order.slice(i + 1).find((n) => DRAPED.has(n.type) || anchors.has(n.id));
-    const known = next && anchors.get(next.id);
-    anchors.set(l.id, known ? { before: known.before, seq: known.seq - 1 / (anchors.size + 2) } : { before: next?.id ?? null, seq: anchors.size });
-  });
-}
-
-const anchors = new Map<string, Anchor>();
-const layersOf = (map: maplibregl.Map) => map.getLayersOrder().map((id) => ({ id, type: map.getLayer(id)!.type }));
-
-export function keepUnder(map: maplibregl.Map, id: string, before: string): void {
-  const order = layersOf(map);
-  let target: string | undefined = map.getLayer(before) ? before : undefined;
-  if (reliefScale.peek() > 0 && target) {
-    noteAnchors(order, anchors);
-    target = anchors.get(before)?.before ?? order.find((l) => !DRAPED.has(l.type))?.id;
-  }
-  const at = order.findIndex((l) => l.id === id);
-  const next = order.slice(at + 1).find((l) => l.id !== id)?.id;
-  if (next !== target && target !== id) map.moveLayer(id, target);
-}
-
-// Создаёт отдельный source для 3D terrain, устраняя конфликт с hillshade
-function ensureTerrainSource(map: maplibregl.Map): string {
-  if (map.getSource(TERRAIN_3D_SOURCE)) return TERRAIN_3D_SOURCE;
-  const style = map.getStyle();
-  const orig = style?.sources?.["terrain"];
-  if (orig) {
-    try {
-      map.addSource(TERRAIN_3D_SOURCE, { ...orig } as maplibregl.SourceSpecification);
-      return TERRAIN_3D_SOURCE;
-    } catch {
-      /* ignore */
-    }
-  }
-  return "terrain";
-}
+const RELIEF_MAX_PITCH = 75;
+const FLAT_MAX_PITCH = 60;
 
 export function attachRelief(map: maplibregl.Map, gameMinutes: ReadonlySignal<number>): () => void {
   let stops: (() => void)[] = [];
-  let busy = false;
-  const moving = (fn: () => void) => {
-    busy = true;
-    try {
-      fn();
-    } catch (e) {
-      console.error("relief: layer order", e);
-    } finally {
-      busy = false;
-    }
-  };
-  const group = () => {
-    if (busy || reliefScale.peek() <= 0) return;
-    const want = reliefOrder(layersOf(map), anchors);
-    if (want) moving(() => want.filter((id) => !DRAPED.has(map.getLayer(id)!.type)).forEach((id) => map.moveLayer(id)));
-  };
-  const ungroup = () => {
-    const back = [...anchors].filter(([id]) => map.getLayer(id)).sort((a, b) => a[1].seq - b[1].seq);
-    anchors.clear();
-    moving(() => back.forEach(([id, a]) => map.moveLayer(id, a.before && map.getLayer(a.before) ? a.before : undefined)));
-  };
-  const onStyleData = () => {
-    if (reliefScale.peek() > 0) {
-      ensureTerrainSource(map);
-    }
-    group();
-  };
+
   const setup = () => {
-    map.on("styledata", onStyleData);
+    // Make sure an old style/runtime terrain is not left attached.
+    try {
+      map.setTerrain(null);
+    } catch {
+      /* style not ready yet */
+    }
+
     stops = [
       effect(() => {
-        const k = reliefScale.value;
-        if (k > 0) {
-          const src = ensureTerrainSource(map);
-          map.setTerrain({ source: src, exaggeration: k });
-          map.setMaxPitch(RELIEF_MAX_PITCH);
-          group();
-        } else {
-          map.setTerrain(null);
-          map.setMaxPitch(FLAT_MAX_PITCH);
-          ungroup();
-        }
+        map.setMaxPitch(reliefScale.value > 0 ? RELIEF_MAX_PITCH : FLAT_MAX_PITCH);
+        map.triggerRepaint();
       }),
       effect(() => {
         const cal = calendar(gameMinutes.value);
         map.setSky(skyAt(cal.hour + cal.minute / 60));
       }),
-      () => map.off("styledata", onStyleData),
     ];
   };
+
   if (map.isStyleLoaded()) setup();
   else map.once("load", setup);
+
   return () => {
     stops.forEach((s) => s());
-    if (map.getSource(TERRAIN_3D_SOURCE)) {
-      try {
-        map.setTerrain(null);
-        map.removeSource(TERRAIN_3D_SOURCE);
-      } catch {
-        /* ignore */
-      }
+    stops = [];
+    try {
+      map.setTerrain(null);
+    } catch {
+      /* map already gone */
     }
   };
 }
