@@ -47,6 +47,7 @@ export function attachLandscape(
 
   let syncingCamera = false;
   let waitingForGround = false;
+  let cameraLift = 0;
   const originalMaxZoom = map.getMaxZoom();
   // The globe is useful for world overview, but the custom local terrain is a
   // Mercator DEM mesh. Keep those coordinate systems from being blended while
@@ -76,6 +77,8 @@ export function attachLandscape(
     }
 
     if (!active) {
+      cameraLift = 0;
+
       if (!map.getCenterClampedToGround()) {
         syncingCamera = true;
         map.setCenterClampedToGround(true);
@@ -106,12 +109,21 @@ export function attachLandscape(
     // sea-level globe. The map API does not expose a mutable camera position
     // in this version, so we prevent most terrain collisions by anchoring the
     // target elevation and reducing pitch/zoom in custom-world mode.
-    const wanted = elevation * reliefScale.peek() + 0.8;
+    const wanted = elevation * reliefScale.peek() + 0.8 + cameraLift;
     if (Math.abs(map.getCenterElevation() - wanted) < 1.0) return;
 
     syncingCamera = true;
     map.setCenterElevation(wanted, { landscapeCamera: true });
     syncingCamera = false;
+  };
+
+  const getCameraLift = () => cameraLift;
+
+  const setCameraLift = (next: number) => {
+    const clamped = Math.max(0, Math.min(8_000, next));
+    if (Math.abs(clamped - cameraLift) < 2) return;
+    cameraLift = clamped;
+    syncCameraToLandscape();
   };
 
   const syncBaseVisibility = () => {
@@ -172,6 +184,8 @@ export function attachLandscape(
         frame,
         light: opts.light,
         weather: opts.weather,
+        getCameraLift,
+        setCameraLift,
       }),
     );
   };
