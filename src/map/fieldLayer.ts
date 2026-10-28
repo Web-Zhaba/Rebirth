@@ -38,7 +38,7 @@ import { weatherMapOn } from "./weatherSettings";
 // Nothing moves, so it asks for no frames of its own.
 
 export const FIELD_LAYER_ID = "fields-3d";
-export const FIELD_FROM_ZOOM = 14.5; // closer than this the fields are 3D
+export const FIELD_FROM_ZOOM = 12.5; // switch to terrain-seated 3D fields as soon as the custom terrain becomes active
 const FIELD_FULL_ZOOM = 15.2; // from here it no longer fades into the flat fill
 const FAR = 2500; // m: the fields fade out toward here
 const LIFT = 0.03; // m above the ground
