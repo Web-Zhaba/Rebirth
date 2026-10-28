@@ -11,6 +11,7 @@ import { CATEGORIES, CATEGORY_KEYS, categoryOf, ITEM_KEY_LABEL, toolForKey, tool
 import { Icon } from "./Icon";
 import { Segmented, Tabs, Tooltip } from "./kit";
 import { storedChoice } from "./preferenceModel";
+import { LANDMARK_LABELS } from "./semanticModel";
 
 const CATEGORY_STORE = "rebirth.build.category";
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
@@ -167,7 +168,7 @@ function CostLine({ t }: { t: Tool }) {
           {m.text}
         </span>
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -212,7 +213,7 @@ export function BuildBar() {
   const materials = active && isMaterialTool(active) ? ROAD_MATERIALS[active] : null;
   const hint = active ? (drawsRoad ? ROAD_HINT[mode] : HINT[active]) : null;
   return (
-    <div class="build-bar">
+    <section class="build-bar" aria-label={LANDMARK_LABELS.build}>
       <div class="bb-lines" aria-live="polite">
         {msg ? (
           <div class="road-msg">{msg}</div>
