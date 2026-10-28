@@ -2,6 +2,7 @@ import "./style.css";
 import { render, h } from "preact";
 import { computed, effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
+import { attachContextLayer } from "./map/contextLayer";
 import { attachArticles } from "./map/articles";
 import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
@@ -39,6 +40,7 @@ import { App } from "./ui/App";
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
 attachPlaceLabels(map);
+attachContextLayer(map);
 attachZoneLayer(map); // zones beneath everything else we add
 attachRuinsLayer(map, oldWorld, frame); // old foundations and streets, beneath the roads
 attachExcavation();
