@@ -12,7 +12,7 @@ import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
 import type { Building, BuildingQuery, FoundFoundation, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../map/buildingLayer";
-import { tool } from "../map/tools";
+import { PLACE_TOOLS, tool, type PlaceTool } from "../map/tools";
 import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simClient";
 import { Icon } from "./Icon";
 import { act, InspectorHead, Line, num, plural, siteEta, SiteLevers } from "./InspectorParts";
@@ -21,6 +21,7 @@ import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
 import { Button, Confirm, IconButton, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
+import { duplicateTemplate } from "./actionModel";
 
 const REFRESH_MS = 4000;
 
@@ -196,6 +197,12 @@ export function BuildingPanel() {
           ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест")}`
           : null;
   const occupied = info?.kind === "house" ? info.households.some((h) => h.people.length > 0) : info?.kind === "workplace" && info.workers.length > 0;
+  const duplicate = duplicateTemplate(b.template, b.siteId, PLACE_TOOLS);
+  const onDuplicate = () => {
+    if (!duplicate) return;
+    closePanel();
+    tool.value = duplicate as PlaceTool;
+  };
   const onDemolish = () => {
     act({ type: "demolish", id: b.id });
     selectedBuilding.value = null;
@@ -331,6 +338,11 @@ export function BuildingPanel() {
         </div>
       )}
       <div class="insp-actions">
+        {duplicate && (
+          <Button icon="plus" onClick={onDuplicate}>
+            Построить ещё
+          </Button>
+        )}
         <Button variant="danger" icon="trash" aria-label="Снести" onClick={() => setConfirming(true)}>
           Снести
         </Button>
