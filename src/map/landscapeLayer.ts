@@ -11,9 +11,11 @@ import {
   NoBlending,
   Scene,
   ShaderMaterial,
+  Vector3,
   Vector4,
 } from "three";
 import { PALETTE } from "../ui/palette";
+import type { WeatherState } from "../sim/weather";
 import type { Frame as TownFrame } from "../world/frame";
 import { pointInRings, type Land } from "../world/landcover";
 import { lngLatToTile } from "../world/mercator";
@@ -23,6 +25,8 @@ import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { snowOpacity } from "./weatherMath";
+import { weatherMapOn } from "./weatherSettings";
 import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
@@ -37,6 +41,7 @@ const CENTER_STEP = 4_000;
 interface LandscapeOptions {
   frame: ReadonlySignal<TownFrame | null>;
   light?: ModelLayerOptions["light"];
+  weather: ReadonlySignal<WeatherState | null>;
 }
 
 const VERT = /* glsl */ `
@@ -61,6 +66,8 @@ const FRAG = /* glsl */ `
 uniform vec3 uLight;
 uniform float uSun;
 uniform vec4 uTint;
+uniform float uSnow;
+uniform vec3 uSnowCol;
 varying vec3 vP;
 varying vec3 vC;
 
@@ -77,6 +84,19 @@ void main() {
 
   float grain = 0.965 + 0.07 * hash2(vP.xy / 18.0);
   vec3 col = vC * light * grain;
+
+  float snowNoise = 0.55 + 0.45 * hash2(vP.xy / 7.0 + 19.0);
+  float snow =
+    uSnow *
+    smoothstep(0.45, 0.9, n.z) *
+    smoothstep(0.45, 0.72, snowNoise);
+
+  col = mix(
+    col,
+    uSnowCol * mix(0.82, 1.0, light),
+    snow
+  );
+
   col = mix(col, uTint.rgb, uTint.a);
 
   gl_FragColor = vec4(col, 1.0);
@@ -423,6 +443,8 @@ export function createLandscapeLayer(
           uLight: { value: framer.light },
           uSun: { value: 1 },
           uTint: { value: new Vector4() },
+          uSnow: { value: 0 },
+          uSnowCol: { value: new Vector3(...rgb(PALETTE.mapIce)) },
         },
         vertexShader: VERT,
         fragmentShader: FRAG,
@@ -508,6 +530,12 @@ export function createLandscapeLayer(
       if (!mesh) return;
 
       framer.set(mat.uniforms, args, host, origin);
+
+      const weather = opts.weather.peek();
+      mat.uniforms.uSnow.value =
+        weatherMapOn.peek() && weather
+          ? snowOpacity(weather.snowpack) / snowOpacity(1)
+          : 0;
 
       host.draw((renderer) => {
         renderer.render(scene!, camera);
