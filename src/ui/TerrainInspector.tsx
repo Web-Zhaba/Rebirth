@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import { formatCoordinates } from "./coordsModel";
 import type * as maplibregl from "maplibre-gl";
 import { landAt, nearRiver, type Land } from "../world/landcover";
 import { terrainAt } from "../world/terrain";
@@ -18,6 +19,8 @@ interface Info {
   elevation: number;
   slope: number;
   river: boolean;
+  lat: number;
+  lng: number;
 }
 
 const MIN_ZOOM = 13;
@@ -42,7 +45,7 @@ export function TerrainInspector({ map }: { map: maplibregl.Map }) {
       const { lng, lat } = e.lngLat;
       Promise.all([landAt(lng, lat), terrainAt(lng, lat), nearRiver(lng, lat)])
         .then(([land, t, river]) => {
-          if (mine === seq) setInfo({ land, elevation: t.elevation, slope: t.slope, river });
+          if (mine === seq) setInfo({ land, elevation: t.elevation, slope: t.slope, river, lat, lng });
         })
         .catch(() => {
           if (mine === seq) setInfo(null);
@@ -60,6 +63,19 @@ export function TerrainInspector({ map }: { map: maplibregl.Map }) {
     };
   }, [map]);
 
+  const coords = info ? formatCoordinates(info.lat, info.lng) : "";
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!info || !navigator.clipboard?.writeText) return;
+    void navigator.clipboard.writeText(coords).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1400);
+      },
+      () => setCopied(false),
+    );
+  };
+
   if (!info) return null;
   return (
     <div class="cell-panel panel">
@@ -67,6 +83,9 @@ export function TerrainInspector({ map }: { map: maplibregl.Map }) {
       <div>Высота: {Math.round(info.elevation)} м</div>
       <div>Уклон: {Math.round(info.slope)}°</div>
       {info.river && <div>Река рядом</div>}
+      <button class="cell-coords" type="button" title="Скопировать координаты" onClick={copy}>
+        {copied ? "Скопировано" : coords}
+      </button>
     </div>
   );
 }
