@@ -504,37 +504,63 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     (hs as number[]).sort((a, b) => a - b);
     return hs[hs.length >> 1]!;
   };
-  // The water level of a polygon (tile key, index in the tile) at a corner of the chunk grid: the median ground height
-  // of its own shore near the corner, the nearest reach that has any, else of all its shore; a polygon with no shore in
-  // its tile (the middle of a large lake) takes any shore near the corner, else the ground there. null while tiles or
-  // ground load.
-  const levelAt = (tf: TownFrame, tile: string, poly: number, ci: number, cj: number): number | null => {
-    const key = `${tile}:${poly}:${ci},${cj}`;
+  // One stable level per water polygon. Water is a surface, not a terrain decal:
+  // lakes do not tilt independently in every render chunk. Prefer the polygon's
+  // own shoreline elevations; for tile-interior pieces with no shore, use the
+  // DEM at the polygon centroid (Terrarium normally stores the water-surface height).
+  const levelOfPolygon = (
+    tf: TownFrame,
+    tile: string,
+    poly: number,
+  ): number | null => {
+    const key = `${tile}:${poly}`;
     const had = levels.get(key);
     if (had !== undefined) return had;
-    const x = ci * SIZE, y = cj * SIZE;
+
     const own = land.get(tile)!;
-    const ends = (t: TileWater, keep: (k: number) => boolean, r: number): XY[] => {
-      const out: XY[] = [];
-      for (let k = 0; k < t.shores.length; k += 4) if (keep(k / 4) && Math.hypot(t.shores[k] - x, t.shores[k + 1] - y) <= r) out.push([t.shores[k], t.shores[k + 1]]);
-      return out;
-    };
-    let pts: XY[] = [];
-    for (const r of [...LEVEL_REACH, Infinity]) if (!pts.length) pts = ends(own, (s) => own.shoreOf[s] === poly, r);
-    for (const r of LEVEL_REACH) {
-      if (pts.length) break;
-      const ts = tilesUnder(tf, [x - r, y - r, x + r, y + r], NATURE_MAXZOOM).map(([a, b]) => landTile(tf, a, b));
-      if (ts.some((t) => !t)) return null;
-      for (const t of ts) pts.push(...ends(t!, () => true, r));
+    const pts: XY[] = [];
+
+    for (let k = 0; k < own.shores.length; k += 4) {
+      if (own.shoreOf[k / 4] === poly) {
+        pts.push([own.shores[k], own.shores[k + 1]]);
+      }
     }
-    let level: number | null;
-    if (pts.length) level = median(tf, pts);
-    else {
-      const at = tf.toLngLat(x, y);
-      level = groundAt(at[0], at[1]);
-      if (level === null) void loadGround([at]).then(() => map.triggerRepaint());
+
+    let level: number | null = null;
+
+    if (pts.length) {
+      level = median(tf, pts);
+    } else {
+      const pieces = own.pieces.filter((_, i) => own.pieceOf[i] === poly);
+      let sx = 0;
+      let sy = 0;
+      let n = 0;
+
+      for (const piece of pieces) {
+        for (const [x, y] of piece) {
+          sx += x;
+          sy += y;
+          n++;
+        }
+      }
+
+      if (n > 0) {
+        const [lng, lat] = tf.toLngLat(sx / n, sy / n);
+        level = groundAt(lng, lat);
+
+        if (level === null) {
+          void loadGround([[lng, lat]]).then(() => map.triggerRepaint());
+        }
+      }
     }
-    if (level !== null) levels.set(key, level);
+
+    if (level !== null) {
+      // Small DEM noise between neighbouring vector-tile fragments should not
+      // become a visible step in an otherwise calm lake.
+      level = Math.round(level * 2) / 2;
+      levels.set(key, level);
+    }
+
     return level;
   };
 
@@ -575,64 +601,39 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       // Large water polygons are water surfaces, not terrain decals.
       // Their height comes only from surrounding shore levels; terrain above the
       // surface hides the water through the shared 3D depth buffer.
-      const corners = new Map<number, number[]>();
+      const polygonLevels = new Map<number, number>();
+
       for (const pi of new Set(c.piece.slice(0, c.ribbons))) {
         const owner = owners[pi];
         if (!owner) continue;
+
         const { tile, poly, cls } = owner;
 
-        // OpenMapTiles explicitly marks open sea as class "ocean".
-        // Never infer its level from DEM samples on the neighbouring shore:
-        // coastal DEM pixels are often several metres above the actual waterline.
         if (cls === "ocean") {
-          corners.set(pi, [0, 0, 0, 0]);
+          polygonLevels.set(pi, 0);
           continue;
         }
 
-        const raw = [
-          levelAt(tf, tile, poly, i, j),
-          levelAt(tf, tile, poly, i + 1, j),
-          levelAt(tf, tile, poly, i, j + 1),
-          levelAt(tf, tile, poly, i + 1, j + 1),
-        ];
-        if (raw.some((h) => h === null)) return null;
+        const waterLevel = levelOfPolygon(tf, tile, poly);
+        if (waterLevel === null) return null;
 
-        const values = raw as number[];
-        const sorted = [...values].sort((x, y) => x - y);
-        const mid = (sorted[1] + sorted[2]) * 0.5;
-        corners.set(
-          pi,
-          values.map((h) =>
-            Math.max(mid - MAX_WATER_LEVEL_DELTA, Math.min(mid + MAX_WATER_LEVEL_DELTA, h)),
-          ),
-        );
+        polygonLevels.set(pi, waterLevel);
       }
 
       for (let v = 0; v < c.ribbons; v++) {
-        const lv = corners.get(c.piece[v]);
-        if (!lv) continue;
-        const [l00, l10, l01, l11] = lv;
-        const fx = Math.min(1, Math.max(0, (c.xy[v * 2] - box[0]) / SIZE));
-        const fy = Math.min(1, Math.max(0, (c.xy[v * 2 + 1] - box[1]) / SIZE));
-        const waterLevel =
-          l00 * (1 - fx) * (1 - fy) +
-          l10 * fx * (1 - fy) +
-          l01 * (1 - fx) * fy +
-          l11 * fx * fy;
+        const waterLevel = polygonLevels.get(c.piece[v]);
+        if (waterLevel === undefined) continue;
         base[v * 3 + 2] += waterLevel * k;
       }
 
-      // Line-only rivers and streams really do follow the terrain. Prefer the
-      // exact elevation MapLibre is currently rendering (already exaggerated);
-      // fall back to our cached Terrarium DEM while MapLibre tiles are loading.
+      // Line-only rivers and streams follow the same Terrarium DEM as our
+      // landscape mesh. There is deliberately no MapLibre terrain height path.
       const centres: [number, number][] = [];
       for (let v = c.ribbons + 1; v < n; v += 3) {
         centres.push(tf.toLngLat(c.xy[v * 2], c.xy[v * 2 + 1]));
       }
 
       const riverHeights = centres.map(([lng, lat]) => {
-        const shown = map.queryTerrainElevation([lng, lat]);
-        if (typeof shown === "number" && Number.isFinite(shown)) return shown;
         const raw = groundAt(lng, lat);
         return raw === null ? null : raw * k;
       });
