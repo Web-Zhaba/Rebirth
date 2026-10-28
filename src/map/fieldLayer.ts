@@ -13,6 +13,7 @@ import { projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 import { snowOpacity } from "./weatherMath";
@@ -249,7 +250,7 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
     for (const { m } of parts) for (let v = 0; v < m.xy.length / 2; v++) lngLat.push(tf.toLngLat(m.xy[v * 2], m.xy[v * 2 + 1]));
     let ground: (number | null)[] = [];
     if (k > 0) {
-      ground = lngLat.map(([a, b]) => groundAt(a, b));
+      ground = lngLat.map(([a, b]) => terrainSurfaceAt(a, b, tf));
       if (ground.some((h) => h === null)) {
         void loadGround(lngLat.filter((_, q) => ground[q] === null)).then(() => map.triggerRepaint());
         return false;
@@ -384,7 +385,7 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
           const fs = z?.fields ?? [];
           const assign = assignFields(fs, buildings.value ?? {});
           working = new Set(assign.keys());
-          want = `${opts.frame.value ? 1 : 0}|${z?.rev ?? 0}|${fs.length}|${[...assign].join(",")}|${reliefScale.value}`;
+          want = `${opts.frame.value ? 1 : 0}|${z?.rev ?? 0}|${fs.length}|${[...assign].join(",")}|${reliefScale.value}|${terrainSurfaceRevision.value}`;
           if (want !== have) map.triggerRepaint();
         }),
         // the farms' real work: the key changes only when some field moves by a step, then the attribute is rewritten
