@@ -12,6 +12,10 @@ export const terrainSurfaceRevision = signal(0);
 
 let activeFrame: Frame | null = null;
 let activeCenter: [number, number] | null = null;
+// Every rendered terrain vertex is shared by many nearby trees and buildings.
+// Cache only real heights (never null) to avoid repeating DEM lookups while a
+// chunk of vegetation is assembled; missing tiles can then load and retry.
+const vertexHeights = new Map<string, number>();
 
 export function setTerrainSurfaceWindow(
   frame: Frame,
@@ -27,6 +31,7 @@ export function setTerrainSurfaceWindow(
 
   activeFrame = frame;
   activeCenter = [center[0], center[1]];
+  vertexHeights.clear();
   terrainSurfaceRevision.value++;
 }
 
@@ -34,6 +39,7 @@ export function clearTerrainSurfaceWindow(): void {
   if (!activeFrame && !activeCenter) return;
   activeFrame = null;
   activeCenter = null;
+  vertexHeights.clear();
   terrainSurfaceRevision.value++;
 }
 
@@ -82,15 +88,24 @@ export function terrainSurfaceAt(
   const fx = Math.max(0, Math.min(1, (x - (startX + ix * cell)) / cell));
   const fy = Math.max(0, Math.min(1, (y - (startY + iy * cell)) / cell));
 
-  const sample = (px: number, py: number): number | null => {
+  const sample = (gx: number, gy: number): number | null => {
+    const px = startX + gx * cell;
+    const py = startY + gy * cell;
+    const key = `${px.toFixed(2)}:${py.toFixed(2)}`;
+    const cached = vertexHeights.get(key);
+    if (cached !== undefined) return cached;
+
     const [sampleLng, sampleLat] = frame.toLngLat(px, py);
-    return groundAt(sampleLng, sampleLat);
+    const h = groundAt(sampleLng, sampleLat);
+
+    if (h !== null) vertexHeights.set(key, h);
+    return h;
   };
 
-  const h00 = sample(startX + ix * cell, startY + iy * cell);
-  const h10 = sample(startX + (ix + 1) * cell, startY + iy * cell);
-  const h01 = sample(startX + ix * cell, startY + (iy + 1) * cell);
-  const h11 = sample(startX + (ix + 1) * cell, startY + (iy + 1) * cell);
+  const h00 = sample(ix, iy);
+  const h10 = sample(ix + 1, iy);
+  const h01 = sample(ix, iy + 1);
+  const h11 = sample(ix + 1, iy + 1);
 
   if (
     h00 === null ||
