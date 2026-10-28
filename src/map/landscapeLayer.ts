@@ -36,6 +36,13 @@ export const LANDSCAPE_FROM_ZOOM = 12.5;
 const HALF = 12_000;
 const CELL = 120;
 const GRID = Math.ceil((HALF * 2) / CELL);
+
+// High-resolution inner patch: the outer mesh supplies broad terrain, while
+// this patch matches DEM elevation closely enough for roads/buildings and
+// prevents the 120 m triangles from cutting through their foundations.
+const FINE_HALF = 2_400;
+const FINE_CELL = 20;
+const FINE_GRID = Math.ceil((FINE_HALF * 2) / FINE_CELL);
 const CENTER_STEP = 4_000;
 
 interface LandscapeOptions {
@@ -121,7 +128,7 @@ export function createLandscapeLayer(
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
   let mat: ShaderMaterial | null = null;
-  let mesh: Mesh | null = null;
+  let meshes: Mesh[] = [];
   let origin: { lng: number; lat: number } | null = null;
   let loading = false;
   let generation = 0;
@@ -212,11 +219,11 @@ export function createLandscapeLayer(
     generation++;
     loading = false;
 
-    if (mesh) {
+    for (const mesh of meshes) {
       scene?.remove(mesh);
       mesh.geometry.dispose();
-      mesh = null;
     }
+    meshes = [];
 
     meshCentre = null;
   };
@@ -224,15 +231,18 @@ export function createLandscapeLayer(
   const gridPoints = (
     tf: TownFrame,
     centre: readonly [number, number],
+    half: number,
+    cell: number,
+    grid: number,
   ): [number, number][] => {
-    const side = GRID + 1;
+    const side = grid + 1;
     const points = new Array<[number, number]>(side * side);
     let q = 0;
 
-    for (let y = 0; y <= GRID; y++) {
-      for (let x = 0; x <= GRID; x++, q++) {
-        const lx = centre[0] - HALF + x * CELL;
-        const ly = centre[1] - HALF + y * CELL;
+    for (let y = 0; y <= grid; y++) {
+      for (let x = 0; x <= grid; x++, q++) {
+        const lx = centre[0] - half + x * cell;
+        const ly = centre[1] - half + y * cell;
         points[q] = tf.toLngLat(lx, ly);
       }
     }
@@ -245,10 +255,14 @@ export function createLandscapeLayer(
     o: { lng: number; lat: number },
     points: readonly [number, number][],
     centre: readonly [number, number],
+    half: number,
+    cell: number,
+    grid: number,
+    cutInnerPatch: boolean,
   ): Mesh | null => {
     if (!scene || !mat) return null;
 
-    const side = GRID + 1;
+    const side = grid + 1;
     const heights = new Float64Array(points.length);
 
     for (let q = 0; q < points.length; q++) {
@@ -264,32 +278,32 @@ export function createLandscapeLayer(
     const biomes = points.map(([lng, lat]) => biomeAt(lng, lat));
 
     const at = (x: number, y: number): number => {
-      const cx = Math.max(0, Math.min(GRID, x));
-      const cy = Math.max(0, Math.min(GRID, y));
+      const cx = Math.max(0, Math.min(grid, x));
+      const cy = Math.max(0, Math.min(grid, y));
       return heights[cy * side + cx];
     };
 
     const biomeAtGrid = (x: number, y: number): Land => {
-      const cx = Math.max(0, Math.min(GRID, x));
-      const cy = Math.max(0, Math.min(GRID, y));
+      const cx = Math.max(0, Math.min(grid, x));
+      const cy = Math.max(0, Math.min(grid, y));
       return biomes[cy * side + cx];
     };
 
     let q = 0;
-    for (let y = 0; y <= GRID; y++) {
-      for (let x = 0; x <= GRID; x++, q++) {
+    for (let y = 0; y <= grid; y++) {
+      for (let x = 0; x <= grid; x++, q++) {
         const h = heights[q];
         const biome = biomes[q];
 
-        local[q * 3] = centre[0] - HALF + x * CELL;
-        local[q * 3 + 1] = centre[1] - HALF + y * CELL;
+        local[q * 3] = centre[0] - half + x * cell;
+        local[q * 3 + 1] = centre[1] - half + y * cell;
 
         // Water gets its own dedicated surface. Keep terrain underneath it,
         // but slightly lower so the two opaque surfaces can never z-fight.
         local[q * 3 + 2] = (biome === "water" ? h - 2 : h) * scale;
 
-        const sx = (at(x + 1, y) - at(x - 1, y)) / (2 * CELL);
-        const sy = (at(x, y + 1) - at(x, y - 1)) / (2 * CELL);
+        const sx = (at(x + 1, y) - at(x - 1, y)) / (2 * cell);
+        const sy = (at(x, y + 1) - at(x, y - 1)) / (2 * cell);
         const slope = Math.atan(Math.hypot(sx, sy)) * 180 / Math.PI;
 
         const rocky = Math.min(1, Math.max(0, (slope - 18) / 28));
@@ -331,8 +345,18 @@ export function createLandscapeLayer(
     const projected = projectPoints(local, tf.toLngLat, o);
     const indices: number[] = [];
 
-    for (let y = 0; y < GRID; y++) {
-      for (let x = 0; x < GRID; x++) {
+    for (let y = 0; y < grid; y++) {
+      for (let x = 0; x < grid; x++) {
+        const cx = -half + (x + 0.5) * cell;
+        const cy = -half + (y + 0.5) * cell;
+        if (
+          cutInnerPatch &&
+          Math.abs(cx) < FINE_HALF + cell &&
+          Math.abs(cy) < FINE_HALF + cell
+        ) {
+          continue;
+        }
+
         const a = y * side + x;
         const b = a + 1;
         const c = a + side;
@@ -360,15 +384,12 @@ export function createLandscapeLayer(
   if (import.meta.env.DEV) {
     Object.assign(window, {
       landscapeStats: () => ({
-        active: !!mesh,
+        active: meshes.length > 0,
         loading,
         centre: meshCentre ? [...meshCentre] : null,
-        vertices: mesh
-          ? mesh.geometry.getAttribute("aM")?.count ?? 0
-          : 0,
-        triangles: mesh
-          ? (mesh.geometry.index?.count ?? 0) / 3
-          : 0,
+        meshCount: meshes.length,
+        vertices: meshes.reduce((sum, mesh) => sum + (mesh.geometry.getAttribute("aM")?.count ?? 0), 0),
+        triangles: meshes.reduce((sum, mesh) => sum + (mesh.geometry.index?.count ?? 0) / 3, 0),
         relief: reliefScale.peek(),
         zoom: map.getZoom(),
         snow:
@@ -386,7 +407,7 @@ export function createLandscapeLayer(
     if (loading || !origin) return;
 
     if (
-      mesh &&
+      meshes.length > 0 &&
       meshCentre?.[0] === centre[0] &&
       meshCentre?.[1] === centre[1]
     ) {
@@ -399,7 +420,9 @@ export function createLandscapeLayer(
     const buildGeneration = generation;
     const buildOrigin = origin;
     const buildCentre: [number, number] = [centre[0], centre[1]];
-    const points = gridPoints(tf, buildCentre);
+    const outerPoints = gridPoints(tf, buildCentre, HALF, CELL, GRID);
+    const finePoints = gridPoints(tf, buildCentre, FINE_HALF, FINE_CELL, FINE_GRID);
+    const points = [...outerPoints, ...finePoints];
 
     void Promise.all([loadGround(points), loadNature(points)])
       .then(() => {
@@ -414,17 +437,42 @@ export function createLandscapeLayer(
           return;
         }
 
-        const made = buildMesh(tf, buildOrigin, points, buildCentre);
-        if (!made) return;
+        const outer = buildMesh(
+          tf,
+          buildOrigin,
+          outerPoints,
+          buildCentre,
+          HALF,
+          CELL,
+          GRID,
+          true,
+        );
 
-        if (mesh) {
-          scene.remove(mesh);
-          mesh.geometry.dispose();
+        const fine = buildMesh(
+          tf,
+          buildOrigin,
+          finePoints,
+          buildCentre,
+          FINE_HALF,
+          FINE_CELL,
+          FINE_GRID,
+          false,
+        );
+
+        if (!outer || !fine) {
+          outer?.geometry.dispose();
+          fine?.geometry.dispose();
+          return;
         }
 
-        mesh = made;
+        for (const old of meshes) {
+          scene.remove(old);
+          old.geometry.dispose();
+        }
+
+        meshes = [outer, fine];
         meshCentre = buildCentre;
-        scene.add(made);
+        scene.add(outer, fine);
       })
       .finally(() => {
         if (buildGeneration === generation) {
@@ -541,7 +589,7 @@ export function createLandscapeLayer(
       ];
 
       if (
-        !mesh ||
+        meshes.length === 0 ||
         meshCentre?.[0] !== centre[0] ||
         meshCentre?.[1] !== centre[1]
       ) {
@@ -549,7 +597,7 @@ export function createLandscapeLayer(
         requestBuild(tf, centre);
       }
 
-      if (!mesh) return;
+      if (meshes.length === 0) return;
 
       framer.set(mat.uniforms, args, host, origin);
 
