@@ -327,3 +327,13 @@ button.event-card-pause-btn {
   }
 }
 
+
+
+/* Screenshot mode (F10): keep the map and its legal attribution, hide game chrome and navigation controls. */
+html.screenshot-mode #ui {
+  visibility: hidden;
+}
+html.screenshot-mode .maplibregl-ctrl-top-left,
+html.screenshot-mode .maplibregl-ctrl-top-right {
+  display: none;
+}
