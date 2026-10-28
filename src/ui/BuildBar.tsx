@@ -10,8 +10,26 @@ import { people, state } from "../simClient";
 import { CATEGORIES, CATEGORY_KEYS, categoryOf, ITEM_KEY_LABEL, toolForKey, toolInfo, toolLabel, TOOL_ICON, type CategoryId } from "./buildMenu";
 import { Icon } from "./Icon";
 import { Segmented, Tabs, Tooltip } from "./kit";
+import { storedChoice } from "./preferenceModel";
 
-const category = signal<CategoryId>("roads");
+const CATEGORY_STORE = "rebirth.build.category";
+const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
+const readCategory = (): CategoryId => {
+  try {
+    return storedChoice(localStorage.getItem(CATEGORY_STORE), CATEGORY_IDS, "roads");
+  } catch {
+    return "roads";
+  }
+};
+const category = signal<CategoryId>(readCategory());
+effect(() => {
+  const id = category.value;
+  try {
+    localStorage.setItem(CATEGORY_STORE, id);
+  } catch {
+    /* ignore */
+  }
+});
 
 const ROAD_HINT: Record<RoadMode, string> = {
   straight: "Протяните от начала до конца — прямая; Shift — угол 15°, Пробел — двигать карту, ПКМ или Esc — закончить",
