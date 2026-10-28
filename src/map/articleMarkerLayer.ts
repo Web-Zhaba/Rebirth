@@ -4,6 +4,8 @@ import { h, render } from "preact";
 import { articles } from "../simClient";
 import { Icon } from "../ui/Icon";
 import { articleMapTarget } from "../ui/articleMapModel";
+import { notebookArticleFocus } from "../ui/notebookFocus";
+import { openPanel } from "../ui/panels";
 
 interface MarkerEntry {
   marker: maplibregl.Marker;
@@ -35,7 +37,8 @@ export function attachArticleMarkers(map: maplibregl.Map): void {
         el.className = "maplibregl-marker wiki-map-marker";
         el.addEventListener("click", (e) => {
           e.stopPropagation();
-          map.easeTo({ center: target, zoom: Math.max(map.getZoom(), 16.5), duration: 350 });
+          notebookArticleFocus.value = article.id;
+          openPanel("notebook");
         });
         render(h(Icon, { name: "scroll", size: 14 }), el);
         entry = { marker: new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat(target).addTo(map), el, title: "" };
