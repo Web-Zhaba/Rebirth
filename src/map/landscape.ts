@@ -48,6 +48,7 @@ export function attachLandscape(
 
   let syncingCamera = false;
   let waitingForGround = false;
+  let pendingGroundSync: (() => void) | null = null;
   let cameraLift = 0;
   const originalMaxZoom = map.getMaxZoom();
   // The globe is useful for world overview, but the custom local terrain is a
@@ -109,7 +110,19 @@ export function attachLandscape(
         waitingForGround = true;
         void loadGround([[center.lng, center.lat]]).finally(() => {
           waitingForGround = false;
-          if (!disableDemRetrySync) syncCameraToLandscape();
+
+          // Do not re-enter camera synchronization directly from the DEM
+          // promise continuation. Wait until MapLibre reaches an idle frame so
+          // terrain I/O completion cannot cascade into camera/style listeners.
+          if (!disableDemRetrySync && !pendingGroundSync) {
+            const syncWhenIdle = () => {
+              pendingGroundSync = null;
+              syncCameraToLandscape();
+            };
+            pendingGroundSync = syncWhenIdle;
+            map.once("idle", syncWhenIdle);
+            map.triggerRepaint();
+          }
         });
       }
       return;
@@ -233,5 +246,7 @@ export function attachLandscape(
     map.off("zoomend", check);
     map.off("moveend", syncCameraToLandscape);
     map.off("styledata", syncBaseVisibility);
+    if (pendingGroundSync) map.off("idle", pendingGroundSync);
+    pendingGroundSync = null;
   });
 }
