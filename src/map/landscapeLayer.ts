@@ -11,11 +11,14 @@ import {
   NoBlending,
   Scene,
   ShaderMaterial,
-  Vector3,
   Vector4,
 } from "three";
 import type { Frame as TownFrame } from "../world/frame";
 import { PALETTE } from "../ui/palette";
+import { pointInRings, type Land } from "../world/landcover";
+import { lngLatToTile } from "../world/mercator";
+import { NATURE_MAXZOOM } from "../world/nature";
+import { getLandTile, type LandTile } from "../world/tiles";
 import { chunksInView } from "./chunkView";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { projectPoints } from "./modelBuffers";
@@ -112,9 +115,84 @@ export function createLandscapeLayer(
   const framer = frameSetter(opts.light);
   const stops: (() => void)[] = [];
 
-  const meadow = rgb(PALETTE.mapGrass);
+  const biomeColors: Record<Land, readonly number[]> = {
+    water: rgb(PALETTE.mapWater),
+    forest: rgb(PALETTE.mapForest),
+    meadow: rgb(PALETTE.mapGrass),
+    wetland: rgb(PALETTE.mapWetland),
+    sand: rgb(PALETTE.mapSand),
+    rock: rgb(PALETTE.mapRock),
+    ice: rgb(PALETTE.mapIce),
+  };
+
   const rock = rgb(PALETTE.mapRock);
   const high = rgb(PALETTE.mapIce);
+
+  const natureN = 2 ** NATURE_MAXZOOM;
+  const natureTiles = new Map<string, LandTile>();
+  const naturePending = new Map<string, Promise<void>>();
+
+  const natureKey = (x: number, y: number) => {
+    const nx = ((x % natureN) + natureN) % natureN;
+    const ny = Math.max(0, Math.min(natureN - 1, y));
+    return `${nx}/${ny}`;
+  };
+
+  const ensureNature = (lng: number, lat: number): boolean => {
+    const t = lngLatToTile(lng, lat, NATURE_MAXZOOM);
+    const tx = Math.floor(t.x);
+    const ty = Math.floor(t.y);
+    const key = natureKey(tx, ty);
+    if (natureTiles.has(key)) return true;
+
+    if (!naturePending.has(key)) {
+      const [x, y] = key.split("/").map(Number);
+      const p = getLandTile(x, y)
+        .then((tile) => {
+          natureTiles.set(key, tile);
+        })
+        .catch(() => {
+          natureTiles.set(key, { extent: 4096, land: [], water: [] });
+        })
+        .finally(() => {
+          naturePending.delete(key);
+          map.triggerRepaint();
+        });
+      naturePending.set(key, p);
+    }
+
+    return false;
+  };
+
+  const biomeAt = (lng: number, lat: number): Land | null => {
+    const t = lngLatToTile(lng, lat, NATURE_MAXZOOM);
+    const tx = Math.floor(t.x);
+    const ty = Math.floor(t.y);
+    const tile = natureTiles.get(natureKey(tx, ty));
+    if (!tile) return null;
+
+    const x = (t.x - tx) * tile.extent;
+    const y = (t.y - ty) * tile.extent;
+
+    const hit = (p: { bbox: [number, number, number, number]; rings: number[][] }) =>
+      x >= p.bbox[0] &&
+      x <= p.bbox[2] &&
+      y >= p.bbox[1] &&
+      y <= p.bbox[3] &&
+      pointInRings(x, y, p.rings);
+
+    if (tile.water.some(hit)) return "water";
+
+    const p = tile.land.find(hit);
+    if (!p) return "meadow";
+
+    if (p.cls === "wood") return "forest";
+    if (p.cls === "wetland") return "wetland";
+    if (p.cls === "sand") return "sand";
+    if (p.cls === "rock") return "rock";
+    if (p.cls === "ice") return "ice";
+    return "meadow";
+  };
 
   const reset = () => {
     for (const c of chunks.values()) {
@@ -145,19 +223,32 @@ export function createLandscapeLayer(
       }
     }
 
-    let missing = false;
+    let missingGround = false;
+    let missingNature = false;
+    const biomes = new Array<Land>(points.length);
+
     for (let q = 0; q < points.length; q++) {
       const [lng, lat] = points[q];
+
       const h = groundAt(lng, lat);
       if (h === null) {
-        missing = true;
-        break;
+        missingGround = true;
+      } else {
+        heights[q] = h;
       }
-      heights[q] = h;
+
+      if (!ensureNature(lng, lat)) {
+        missingNature = true;
+      } else {
+        biomes[q] = biomeAt(lng, lat) ?? "meadow";
+      }
     }
 
-    if (missing) {
+    if (missingGround) {
       void loadGround(points).then(() => map.triggerRepaint());
+    }
+
+    if (missingGround || missingNature) {
       return null;
     }
 
@@ -172,18 +263,25 @@ export function createLandscapeLayer(
     for (let y = 0; y <= GRID; y++) {
       for (let x = 0; x <= GRID; x++, p++) {
         const h = heights[p];
+        const biome = biomes[p];
+
         local[p * 3] = i * CHUNK + x * CELL;
         local[p * 3 + 1] = j * CHUNK + y * CELL;
-        local[p * 3 + 2] = h * k;
+
+        // The terrain remains present below water for depth/shore continuity,
+        // but is lowered slightly so the dedicated water surface always wins.
+        const groundH = biome === "water" ? h - 2.0 : h;
+        local[p * 3 + 2] = groundH * k;
 
         const sx = (at(x + 1, y) - at(x - 1, y)) / (2 * CELL);
         const sy = (at(x, y + 1) - at(x, y - 1)) / (2 * CELL);
         const slope = Math.atan(Math.hypot(sx, sy)) * 180 / Math.PI;
 
-        const rocky = Math.min(1, Math.max(0, (slope - 18) / 24));
+        const rocky = Math.min(1, Math.max(0, (slope - 20) / 26));
         const alpine = Math.min(1, Math.max(0, (h - 1500) / 1200));
-        const c0 = mix3(meadow, rock, rocky * 0.8);
-        const c = mix3(c0, high, alpine * alpine * 0.7);
+        const base = biomeColors[biome];
+        const c0 = biome === "water" ? base : mix3(base, rock, rocky * 0.7);
+        const c = biome === "ice" ? base : mix3(c0, high, alpine * alpine * 0.65);
 
         colors[p * 3] = c[0];
         colors[p * 3 + 1] = c[1];
