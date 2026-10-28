@@ -252,6 +252,15 @@ button.city-name-btn:hover .city-name {
 .warn-chip .icon {
   color: var(--bad);
 }
+button.warn-chip {
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.warn-chip:hover {
+  background: var(--paper-raised);
+}
 
 /* Map controls (zoom, compass, globe) sit under the bar. */
 .maplibregl-ctrl-top-left,
