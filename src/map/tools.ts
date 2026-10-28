@@ -1,6 +1,6 @@
 import { play } from "../ui/sound";
 import type * as maplibregl from "maplibre-gl";
-import { signal } from "@preact/signals";
+import { effect, signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 
@@ -100,6 +100,33 @@ export const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: "traffic", label: "движение" },
 ];
 export const overlay = signal<Overlay>("none");
+
+// Zoning is a separate map layer: hidden during normal play, available manually from the layer menu,
+// and temporarily enabled while a zoning brush is active.
+export const zonesShown = signal(false);
+
+const SERVICE_OVERLAY_TOOLS: readonly ServiceId[] = ["well", "market", "chapel", "school", "healer"];
+export const serviceOverlayForTool = (t: Tool | null): ServiceId | null =>
+  t && (SERVICE_OVERLAY_TOOLS as readonly string[]).includes(t) ? (t as ServiceId) : null;
+
+// Tools may temporarily own a map layer. Only layers enabled by a tool are reset when that mode ends;
+// manually selected layers otherwise stay exactly as the player left them.
+let hadAutomaticLayer = false;
+effect(() => {
+  const t = tool.value;
+  const service = serviceOverlayForTool(t);
+  const zoning = !!t && isBrushTool(t);
+  if (service || zoning) {
+    hadAutomaticLayer = true;
+    zonesShown.value = zoning;
+    overlay.value = service ?? "none";
+  } else if (hadAutomaticLayer) {
+    hadAutomaticLayer = false;
+    zonesShown.value = false;
+    overlay.value = "none";
+  }
+});
+
 // House tints of the overlays: covered / not covered, and the bad-mid-good ramp of the value and mood layers; also the legend keys.
 export const OVERLAY_COLORS = { good: PALETTE.ok, mid: PALETTE.warn, bad: PALETTE.bad, neutral: PALETTE.pencilFaint };
 // Traffic overlay ramp: commuters per road edge per day -> colour and line width (px); also the HUD legend.
