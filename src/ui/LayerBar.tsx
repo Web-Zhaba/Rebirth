@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { OVERLAY_COLORS, OVERLAYS, overlay, TRAFFIC_STOPS, zonesShown, type Overlay } from "../map/tools";
+import { OVERLAY_COLORS, OVERLAYS, overlay, setManualOverlay, TRAFFIC_STOPS, zonesShown, type Overlay } from "../map/tools";
 import { compactScreen } from "../map/motion";
 import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
 import { cloudsOn, toggleClouds } from "../map/clouds/settings";
@@ -103,7 +103,7 @@ export function LayerBar() {
           <div class="layer-group" role="group" aria-label="Слои карты">
             {/* Native title tooltips: a CSS tooltip here overflows the scrolling left column and makes it jump. */}
             {OVERLAYS.map((o) => (
-              <IconButton key={o.id} icon={LAYER_ICON[o.id]} label={o.label} aria-pressed={cur === o.id} onClick={() => (overlay.value = o.id)} />
+              <IconButton key={o.id} icon={LAYER_ICON[o.id]} label={o.label} aria-pressed={cur === o.id} onClick={() => setManualOverlay(o.id)} />
             ))}
             <span class="layer-sep" aria-hidden="true" />
             <IconButton icon="layers" label="Зоны" aria-pressed={zonesShown.value} onClick={() => (zonesShown.value = !zonesShown.value)} />
