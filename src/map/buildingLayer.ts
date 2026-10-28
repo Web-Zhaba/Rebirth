@@ -7,6 +7,7 @@ import { buildings, frame, lifeLights, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import type { ModelItem } from "./modelLayer";
 import { overlay, OVERLAY_COLORS, tool, type Overlay } from "./tools";
 
@@ -120,6 +121,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
       const f = frame.value;
       const k = reliefScale.value;
       terrainRevision.value;
+      terrainSurfaceRevision.value;
       if (!list || !f) return;
 
       const needTerrain =
@@ -145,7 +147,7 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
             ...b.footprint.map(([px, py]) => f.toLngLat(px, py)),
             f.toLngLat(x / b.footprint.length, y / b.footprint.length),
           ];
-          const heights = samples.map(([lng, lat]) => groundAt(lng, lat));
+          const heights = samples.map(([lng, lat]) => terrainSurfaceAt(lng, lat, f));
 
           samples.forEach((point, index) => {
             if (heights[index] === null) missingGround.push(point);
