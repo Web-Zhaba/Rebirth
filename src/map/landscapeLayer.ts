@@ -151,7 +151,7 @@ export function createLandscapeLayer(
 
   const rock = rgb(PALETTE.mapRock);
   const ice = rgb(PALETTE.mapIce);
-  const shore = rgb(PALETTE.mapShore);
+  const sand = rgb(PALETTE.mapSand);
 
   const natureN = 2 ** NATURE_MAXZOOM;
   const natureTiles = new Map<string, LandTile>();
@@ -328,11 +328,18 @@ export function createLandscapeLayer(
             biomeAtGrid(x, y + 1) === "water";
 
           if (touchesWater) {
-            const shoreAmount =
-              biome === "sand" ? 0.7 :
-              biome === "wetland" ? 0.2 :
-              0.42;
-            color = mix3(color, shore, shoreAmount);
+            // Do not reuse the cartographic shore tint here: it is bluish and
+          // belongs to the 2D style. The custom world needs a warm sand/pebble
+          // transition on land, so beaches blend toward sand and exposed gravel.
+          const sandAmount =
+            biome === "sand" ? 0.82 :
+            biome === "wetland" ? 0.16 :
+            0.58;
+          color = mix3(color, sand, sandAmount);
+
+          if (biome !== "sand" && biome !== "wetland") {
+            color = mix3(color, rock, 0.12);
+          }
           }
         }
 
@@ -351,8 +358,8 @@ export function createLandscapeLayer(
         const cy = -half + (y + 0.5) * cell;
         if (
           cutInnerPatch &&
-          Math.abs(cx) < FINE_HALF + cell &&
-          Math.abs(cy) < FINE_HALF + cell
+          Math.abs(cx) < FINE_HALF + cell * 0.5 &&
+          Math.abs(cy) < FINE_HALF + cell * 0.5
         ) {
           continue;
         }
