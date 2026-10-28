@@ -1,7 +1,7 @@
 import { flyOrJump } from "../map/motion";
 import type * as maplibregl from "maplibre-gl";
 import type { ComponentChildren } from "preact";
-import { useEffect } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
 import type { City, Stock } from "../sim/types";
@@ -12,13 +12,14 @@ import type { IconName } from "./icons";
 import { aboutOpen } from "./AboutDialog";
 import { hotkeysOpen } from "./HotkeysDialog";
 import { settingsOpen } from "./SettingsDialog";
-import { rightPanel, togglePanel } from "./panels";
+import { openPanel, rightPanel, togglePanel } from "./panels";
 import { BADGE_TEXT } from "./techModel";
 import { badge } from "./techState";
 import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
 import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
+import { freshWarnings, warningAction } from "./warningModel";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
 const families = (n: number) => {
@@ -285,16 +286,32 @@ export function currentWarnings() {
 }
 
 export function Warnings() {
-  const list = currentWarnings();
+  const current = currentWarnings();
+  const currentKey = current.map((w) => w.id).sort().join("|");
+  const previous = useRef<Set<string>>(new Set(current.map((w) => w.id)));
+  const [list, setList] = useState(current.slice(0, 0));
+
+  useEffect(() => {
+    const fresh = freshWarnings(previous.current, current);
+    previous.current = new Set(current.map((w) => w.id));
+    if (fresh.length === 0) return;
+    setList(fresh);
+    const timer = window.setTimeout(() => setList([]), 8000);
+    return () => window.clearTimeout(timer);
+  }, [currentKey]);
+
   if (list.length === 0) return null;
   return (
-    <ul class="warns" aria-label="Предупреждения">
-      {list.map((w) => (
-        <li key={w.id} class="warn-chip">
-          <Icon name="warning" size={16} />
-          {w.text}
-        </li>
-      ))}
-    </ul>
+    <div class="warns" role="status" aria-label="Новые предупреждения">
+      {list.map((w) => {
+        const action = warningAction(w.id);
+        return (
+          <button key={w.id} type="button" class="warn-chip" onClick={() => action && openPanel(action)}>
+            <Icon name="warning" size={16} />
+            {w.text}
+          </button>
+        );
+      })}
+    </div>
   );
 }
