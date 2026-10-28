@@ -609,28 +609,6 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       }
 
       for (let v = 0; v < c.ribbons; v++) {
-          if (c.piece[v] !== pi) continue;
-          const fx = c.flow[v * 2];
-          const fy = c.flow[v * 2 + 1];
-          if (Math.hypot(fx, fy) > 0.05) {
-            flowing = true;
-            break;
-          }
-        }
-
-        if (!flowing && Math.abs(mid) <= SEA_LEVEL_SNAP) {
-          corners.set(pi, [0, 0, 0, 0]);
-        } else {
-          corners.set(
-            pi,
-            values.map((h) =>
-              Math.max(mid - MAX_WATER_LEVEL_DELTA, Math.min(mid + MAX_WATER_LEVEL_DELTA, h)),
-            ),
-          );
-        }
-      }
-
-      for (let v = 0; v < c.ribbons; v++) {
         const lv = corners.get(c.piece[v]);
         if (!lv) continue;
         const [l00, l10, l01, l11] = lv;
