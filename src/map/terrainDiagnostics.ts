@@ -10,15 +10,18 @@
 const query = typeof window === "undefined" ? "" : window.location.search;
 const requested = new URLSearchParams(query).get("terrainDiag");
 
-export type TerrainDiagnosticMode = "normal" | "layers-off" | "projection-off";
+export type TerrainDiagnosticMode = "normal" | "layers-off" | "projection-off" | "transition-off";
 
 export const terrainDiagnosticMode: TerrainDiagnosticMode =
-  requested === "layers-off" || requested === "projection-off"
+  requested === "layers-off" || requested === "projection-off" || requested === "transition-off"
     ? requested
     : "normal";
 
-export const disableCustomTerrainRenderers = terrainDiagnosticMode === "layers-off";
-export const disableProjectionTransition = terrainDiagnosticMode === "projection-off";
+export const disableTerrainTransition = terrainDiagnosticMode === "transition-off";
+export const disableCustomTerrainRenderers =
+  terrainDiagnosticMode === "layers-off" || disableTerrainTransition;
+export const disableProjectionTransition =
+  terrainDiagnosticMode === "projection-off" || disableTerrainTransition;
 
 if (terrainDiagnosticMode !== "normal") {
   console.info(`[terrain diagnostic] mode=${terrainDiagnosticMode}`);
