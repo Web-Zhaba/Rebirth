@@ -9,7 +9,7 @@ import { buildingSet, frame, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { selectedBuilding } from "./buildingLayer";
 import { PALETTE } from "../ui/palette";
-import { groundAt, loadGround, reliefScale } from "./relief";
+import { loadGround, reliefScale } from "./relief";
 import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { addPatterns, PATTERNS } from "./patterns";
 import { MEADOW_COLOR } from "./style";
