@@ -148,12 +148,23 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
     (map.getSource(SRC_TRIPS) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
   };
 
-  const drawDarkness = (minuteOfDay: number) => {
+const drawDarkness = (minuteOfDay: number) => {
     for (const kind of ["house", "work", "tavern"] as const) {
       const o = lightOpacity(kind, minuteOfDay / 60);
-      if (Math.abs(o - shown[kind]) < 0.01) continue;
+      // Не инвалидируем стили карты ради сотых долей прозрачности
+      if (Math.abs(o - shown[kind]) < 0.05) continue;
       shown[kind] = o;
-      map.setPaintProperty(`life-lights-${kind}`, "circle-opacity", ["interpolate", ["linear"], ["zoom"], 15.5, o, 17.5, o * HALO]);
+      if (map.getLayer(`life-lights-${kind}`)) {
+        map.setPaintProperty(`life-lights-${kind}`, "circle-opacity", [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          15.5,
+          o,
+          17.5,
+          o * HALO,
+        ]);
+      }
     }
   };
 

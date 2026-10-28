@@ -30,10 +30,23 @@ export function togglePlaceLabels(): void {
 }
 
 export function attachPlaceLabels(map: maplibregl.Map): void {
-  const setup = () =>
-    effect(() => {
-      map.setLayoutProperty(PLACE_LABELS_LAYER, "visibility", placeLabelsOn.value ? "visible" : "none");
-    });
+  let lastVisibility: string | null = null;
+
+  const update = () => {
+    if (!map.getLayer(PLACE_LABELS_LAYER)) return;
+    const want = placeLabelsOn.value ? "visible" : "none";
+    // Предотвращаем холостую инвалидацию раскладки карты
+    if (want !== lastVisibility) {
+      lastVisibility = want;
+      map.setLayoutProperty(PLACE_LABELS_LAYER, "visibility", want);
+    }
+  };
+
+  const setup = () => {
+    effect(update);
+    map.on("styledata", update);
+  };
+
   if (map.isStyleLoaded()) setup();
   else map.once("load", setup);
 }
