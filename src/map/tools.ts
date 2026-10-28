@@ -4,6 +4,7 @@ import { effect, signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 import { shouldRepeatTool } from "../ui/inputModel";
+import { storedChoice } from "../ui/preferenceModel";
 
 // Road tools; a tool plus its material (see roadMaterial) picks the sim RoadKind. restore: rebuild a revealed old street as a whole.
 export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
@@ -113,7 +114,27 @@ export const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: "mood", label: "настроение" },
   { id: "traffic", label: "движение" },
 ];
-export const overlay = signal<Overlay>("none");
+const OVERLAY_STORE = "rebirth.layers.overlay";
+const OVERLAY_IDS = OVERLAYS.map((o) => o.id);
+const readOverlay = (): Overlay => {
+  try {
+    return storedChoice(localStorage.getItem(OVERLAY_STORE), OVERLAY_IDS, "none");
+  } catch {
+    return "none";
+  }
+};
+export const manualOverlay = signal<Overlay>(readOverlay());
+export const overlay = signal<Overlay>(manualOverlay.peek());
+
+export function setManualOverlay(id: Overlay): void {
+  manualOverlay.value = id;
+  overlay.value = id;
+  try {
+    localStorage.setItem(OVERLAY_STORE, id);
+  } catch {
+    /* ignore */
+  }
+}
 
 // Zoning is a separate map layer: hidden during normal play, available manually from the layer menu,
 // and temporarily enabled while a zoning brush is active.
@@ -137,7 +158,7 @@ effect(() => {
   } else if (hadAutomaticLayer) {
     hadAutomaticLayer = false;
     zonesShown.value = false;
-    overlay.value = "none";
+    overlay.value = manualOverlay.peek();
   }
 });
 
