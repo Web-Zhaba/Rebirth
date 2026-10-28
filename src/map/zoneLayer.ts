@@ -10,6 +10,7 @@ import type { Frame } from "../world/frame";
 import { selectedBuilding } from "./buildingLayer";
 import { PALETTE } from "../ui/palette";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { addPatterns, PATTERNS } from "./patterns";
 import { MEADOW_COLOR } from "./style";
 import { isBrushTool, MIN_ZONE_ZOOM, tool, ZONE_COLORS } from "./tools";
@@ -169,6 +170,7 @@ export function attachZoneLayer(map: maplibregl.Map): void {
       const preview = paintPreview.value;
       const k = reliefScale.value;
       terrainRevision.value;
+      terrainSurfaceRevision.value;
       buildingSet.value; // re-run when lots change; lots are drawn fainter, as plots
       if (!z || !f) return;
 
@@ -187,7 +189,7 @@ export function attachZoneLayer(map: maplibregl.Map): void {
         // shallow fill by all four cell-corner elevations instead.
         const corners = cellCorners(c);
         const samples = corners.map(([x, y]) => f.toLngLat(x, y));
-        const heights = samples.map(([lng, lat]) => groundAt(lng, lat));
+        const heights = samples.map(([lng, lat]) => terrainSurfaceAt(lng, lat, f));
         samples.forEach((point, index) => {
           if (heights[index] === null) missingGround.push(point);
         });
@@ -277,7 +279,7 @@ export function attachZoneLayer(map: maplibregl.Map): void {
             ...c.pts.map(([x, y]) => f.toLngLat(x, y)),
             [lng, lat] as [number, number],
           ];
-          const heights = samples.map(([a, b]) => groundAt(a, b));
+          const heights = samples.map(([a, b]) => terrainSurfaceAt(a, b, f));
 
           samples.forEach((point, index) => {
             if (heights[index] === null) missingGround.push(point);
