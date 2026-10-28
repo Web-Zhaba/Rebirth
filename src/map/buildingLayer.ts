@@ -6,6 +6,7 @@ import { pointInPolygon } from "../sim/zones";
 import { buildings, frame, lifeLights, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
+import { groundAt, loadGround, reliefScale } from "./relief";
 import type { ModelItem } from "./modelLayer";
 import { overlay, OVERLAY_COLORS, tool, type Overlay } from "./tools";
 
@@ -14,6 +15,8 @@ const OUTLINE_MAX_PITCH = 10; // degrees
 
 // Building shown in the info panel.
 export const selectedBuilding = signal<number | null>(null);
+const terrainRevision = signal(0);
+const CUSTOM_TERRAIN_ZOOM = 12.5;
 
 const ringCache = new Map<number, [number, number][]>();
 
@@ -77,10 +80,16 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
     map.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     map.addLayer({
       id: "buildings-planned-fill",
-      type: "fill",
+      type: "fill-extrusion",
       source: SRC,
       filter: ["==", ["get", "state"], "planned"],
-      paint: { "fill-color": PALETTE.paperRaised, "fill-opacity": 0.4 },
+      paint: {
+        "fill-extrusion-color": PALETTE.paperRaised,
+        "fill-extrusion-opacity": 0.4,
+        "fill-extrusion-base": ["get", "base"],
+        "fill-extrusion-height": ["get", "top"],
+        "fill-extrusion-vertical-gradient": false,
+      },
     });
     map.addLayer({
       id: "buildings-planned",
@@ -109,13 +118,64 @@ export function attachBuildingLayer(map: maplibregl.Map): void {
     effect(() => {
       const list = buildings.value;
       const f = frame.value;
+      const k = reliefScale.value;
+      terrainRevision.value;
       if (!list || !f) return;
-      const features: GeoJSON.Feature[] = Object.values(list).map((b) => ({
-        type: "Feature",
-        properties: { id: b.id, state: b.state, up: !!b.upgrade },
-        geometry: { type: "Polygon", coordinates: [ringOf(b, f)] },
-      }));
-      (map.getSource(SRC) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
+
+      const needTerrain =
+        k > 0 &&
+        map.getZoom() >= CUSTOM_TERRAIN_ZOOM;
+
+      const missingGround: [number, number][] = [];
+
+      const features: GeoJSON.Feature[] = Object.values(list).map((b) => {
+        let base = 0;
+
+        if (needTerrain && b.state === "planned" && b.footprint.length > 0) {
+          let x = 0;
+          let y = 0;
+          for (const p of b.footprint) {
+            x += p[0];
+            y += p[1];
+          }
+
+          const [lng, lat] = f.toLngLat(
+            x / b.footprint.length,
+            y / b.footprint.length,
+          );
+          const h = groundAt(lng, lat);
+
+          if (h === null) {
+            missingGround.push([lng, lat]);
+          } else {
+            base = Math.max(0, h * k);
+          }
+        }
+
+        return {
+          type: "Feature",
+          properties: {
+            id: b.id,
+            state: b.state,
+            up: !!b.upgrade,
+            base,
+            top: base + (needTerrain ? 0.25 : 0.12),
+          },
+          geometry: { type: "Polygon", coordinates: [ringOf(b, f)] },
+        };
+      });
+
+      (map.getSource(SRC) as maplibregl.GeoJSONSource).setData({
+        type: "FeatureCollection",
+        features,
+      });
+
+      if (missingGround.length) {
+        void loadGround(missingGround).then(() => {
+          terrainRevision.value++;
+        });
+      }
+
       if (ringCache.size > features.length * 3 + 100) {
         for (const id of ringCache.keys()) if (!(id in list)) ringCache.delete(id);
       }
