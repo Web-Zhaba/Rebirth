@@ -11,6 +11,7 @@ import { Icon } from "./Icon";
 import { openPanel } from "./panels";
 import { researchStatusView } from "./researchStatusModel";
 import { LANDMARK_LABELS } from "./semanticModel";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 function ResearchStatus() {
   const s = state.value;
@@ -21,7 +22,7 @@ function ResearchStatus() {
   const view = researchStatusView(active?.name ?? null, r.active?.share ?? null, queued);
 
   return (
-    <button type="button" class={`research-status${view.idle ? " research-idle" : ""}`} role="status" title="Открыть «Науку»" onClick={() => openPanel("tech")}>
+    <button type="button" class={`research-status${view.idle ? " research-idle" : ""}`} aria-controls={SEMANTIC_IDS.techPanel} aria-label={`${view.title}${view.next ? `. ${view.next}` : ""}. Открыть науку`} title="Открыть «Науку»" onClick={() => openPanel("tech")}>
       <Icon name="scroll" size={16} />
       <span class="research-status-body">
         <span>{view.title}</span>
