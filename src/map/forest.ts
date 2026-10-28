@@ -104,7 +104,20 @@ function loadTile(f: Frame, tx: number, ty: number, done: () => void): void {
           out.covers.push(poly);
 
           const mix = mixOf(p.cls, p.sub);
-          if (p.cls === "wood") out.wood.push(poly);
+          if (p.cls === "wood") {
+            out.wood.push(poly);
+
+            // Sparse understorey makes the edge read as a habitat transition
+            // instead of a hard wall of trunks.
+            out.details.push({
+              ...poly,
+              mix: {
+                bush: B(0.08, 0.55, 1.35),
+                grass: B(0.12, 0.35, 0.75),
+              },
+            });
+          }
+
           if (mix) out.details.push({ ...poly, mix });
         }
 
