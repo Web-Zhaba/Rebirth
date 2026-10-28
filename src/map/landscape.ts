@@ -23,9 +23,12 @@ export function attachLandscape(
   const syncBaseVisibility = () => {
     const customWorld = map.getZoom() >= LANDSCAPE_FROM_ZOOM;
 
+    const visibility = customWorld ? "none" : "visible";
+
     for (const id of baseLayers) {
       if (!map.getLayer(id)) continue;
-      map.setLayoutProperty(id, "visibility", customWorld ? "none" : "visible");
+      if (map.getLayoutProperty(id, "visibility") === visibility) continue;
+      map.setLayoutProperty(id, "visibility", visibility);
     }
   };
 
