@@ -53,7 +53,11 @@ export function attachLandscape(
   // Mercator DEM mesh. Keep those coordinate systems from being blended while
   // the player is in the 3D world; restore the original globe at overview zooms.
   const originalProjection = map.getProjection() ?? { type: "globe" as const };
-  let switchingProjection = false;
+  // setProjection starts an animated transition. During that transition
+  // getProjection() can continue reporting the previous projection for many
+  // frames, so it must never be used as the guard for repeated setProjection()
+  // calls inside zoom/style events.
+  let requestedProjection = originalProjection.type;
 
   const syncCameraToLandscape = () => {
     if (syncingCamera || !map.isStyleLoaded()) return;
@@ -131,20 +135,16 @@ export function attachLandscape(
       map.getZoom() >= LANDSCAPE_FROM_ZOOM &&
       reliefScale.peek() > 0;
 
-    const currentProjection = map.getProjection();
-    if (!switchingProjection) {
-      if (customWorld && currentProjection?.type !== "mercator") {
-        switchingProjection = true;
+    const wantedProjection = customWorld ? "mercator" : originalProjection.type;
+
+    if (wantedProjection !== requestedProjection) {
+      // Record the target before calling MapLibre: setProjection may emit map
+      // events synchronously, and the getter can lag behind during transition.
+      requestedProjection = wantedProjection;
+      if (wantedProjection === "mercator") {
         map.setProjection({ type: "mercator" });
-        switchingProjection = false;
-      } else if (
-        !customWorld &&
-        originalProjection &&
-        currentProjection?.type !== originalProjection.type
-      ) {
-        switchingProjection = true;
+      } else {
         map.setProjection(originalProjection);
-        switchingProjection = false;
       }
     }
 
