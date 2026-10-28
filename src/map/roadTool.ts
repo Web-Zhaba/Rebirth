@@ -1,6 +1,6 @@
 import { play } from "../ui/sound";
 import type * as maplibregl from "maplibre-gl";
-import { effect } from "@preact/signals";
+import { effect, signal } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
 import { lockReason } from "../sim/tech";
 import { addRoad, cutOffEdges, distToEdge, effectiveSpans, isRoadKind, MIN_SEGMENT, oldStreetKind, ROAD_KINDS, segmentCost, segmentKind, snapPoint, type Snap } from "../sim/roads";
@@ -12,9 +12,12 @@ import type { Street } from "../world/oldworld";
 import { samplePathProfile } from "../world/profile";
 import { PALETTE } from "../ui/palette";
 import { etaText } from "./buildCost";
+import { needsRoadDemolishConfirm } from "../ui/actionModel";
 import { arcPath, snapAngle, type Pt } from "./curve";
 import { flash, isRoadTool, mapMpp, roadKindOf, MIN_ROAD_ZOOM, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
 
+
+export const roadDemolishRequest = signal<number | null>(null);
 const SNAP_PX = 12;
 const PREVIEW_MS = 120;
 const DRAG_PX = 4; // screen pixels: beyond this a press is a drag, not a click
@@ -608,9 +611,14 @@ export function attachRoadTool(map: maplibregl.Map): void {
     if (t === "bulldoze") {
       const id = nearestEdge(x, y, tol);
       if (id === null) return;
+      const edge = g.edges[id];
       hoverEdge = null;
       source("road-hover")?.setData(empty());
       setLabel(null);
+      if (edge && needsRoadDemolishConfirm(edge.kind, edge.done, edge.labor)) {
+        roadDemolishRequest.value = id;
+        return;
+      }
       void sendCmd({ type: "removeRoad", edgeId: id }).then((r) => {
         if (!r.ok) flash(r.reason ?? "Не удалось снести");
         else play("place");
