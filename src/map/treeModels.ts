@@ -14,18 +14,27 @@ export interface TreeModel extends Model {
 
 // How the layer treats each kind: a typical height (m, sets how far it is drawn), what turns its crown with the year
 // (leaves, reeds, nothing) and how much it sways in the wind.
-export const KIND_INFO: Record<TreeKind, { tall: number; season: "leaf" | "reed" | null; sway: number }> = {
+export const KIND_INFO: Record<TreeKind, { tall: number; season: "leaf" | "reed" | "grass" | null; sway: number }> = {
   conifer: { tall: 12, season: null, sway: 1 },
   broadleaf: { tall: 12, season: "leaf", sway: 1 },
   birch: { tall: 12, season: "leaf", sway: 1 },
   bush: { tall: 1.5, season: "leaf", sway: 1.5 },
   reed: { tall: 1.8, season: "reed", sway: 5 },
   boulder: { tall: 1.2, season: null, sway: 0 },
+  grass: { tall: 0.9, season: "grass", sway: 7 },
 };
 
 // The colour a kind's crown is built with (seasonal crowns keep its light and shade when recoloured).
 export const leafOf = (kind: TreeKind): string =>
-  kind === "conifer" ? TREE_COLORS.conifer : kind === "reed" ? TREE_COLORS.reed : kind === "boulder" ? TREE_COLORS.stone : TREE_COLORS.summer;
+  kind === "conifer"
+    ? TREE_COLORS.conifer
+    : kind === "reed"
+      ? TREE_COLORS.reed
+      : kind === "boulder"
+        ? TREE_COLORS.stone
+        : kind === "grass"
+          ? TREE_COLORS.grassSummer
+          : TREE_COLORS.summer;
 
 type Shaped = "conifer" | "broadleaf" | "birch" | "bush";
 // Profiles of revolution: (radius, height) bottom to top, in tree heights.
@@ -91,6 +100,28 @@ function reeds(mesh: Mesh): number {
   return first; // the heads start here
 }
 
+
+
+// A meadow tuft: a cheap cluster of broad grass blades. One instance represents a small patch, not one blade.
+function grassTuft(mesh: Mesh): void {
+  const green = rgb(TREE_COLORS.grassSummer);
+  for (let b = 0; b < 10; b++) {
+    const a = hash1(b + 500) * Math.PI * 2;
+    const r = 0.06 + 0.22 * hash1(b + 550);
+    const h = 0.45 + 0.55 * hash1(b + 600);
+    const lean = 0.05 + 0.18 * hash1(b + 650);
+    const w = 0.055 + 0.035 * hash1(b + 700);
+    const c = Math.cos(a), s = Math.sin(a);
+    const bx = c * r, by = s * r;
+    const tx = bx + c * lean, ty = by + s * lean;
+    const n: [number, number, number] = [c * 0.35, s * 0.35, 0.94];
+    const l = mesh.vert(bx - s * w, by + c * w, 0, n, green);
+    const rgt = mesh.vert(bx + s * w, by - c * w, 0, n, green);
+    const top = mesh.vert(tx, ty, h, n, green);
+    mesh.idx(l, rgt, top);
+  }
+}
+
 // A boulder: a squat faceted lump.
 function boulder(mesh: Mesh): void {
   revolve(mesh, 0, 0, -0.1, [[0.5, 0], [0.62, 0.3], [0.55, 0.65], [0.3, 1.0], [0, 1.1]], rgb(TREE_COLORS.stone), 6);
@@ -114,6 +145,7 @@ const FLAT: Record<TreeKind, { r: number; z: number }> = {
   bush: { r: 0.45, z: 0.7 },
   reed: { r: 0.25, z: 0.6 },
   boulder: { r: 0.55, z: 0.8 },
+  grass: { r: 0.38, z: 0.5 },
 };
 
 export function buildTree(kind: TreeKind, lod: 0 | 2 = 0): TreeModel {
@@ -123,6 +155,7 @@ export function buildTree(kind: TreeKind, lod: 0 | 2 = 0): TreeModel {
   let headsFrom = Infinity; // the reeds' heads: not crown
   if (lod === 0 && kind === "reed") headsFrom = reeds(mesh);
   else if (lod === 0 && kind === "boulder") boulder(mesh);
+  else if (lod === 0 && kind === "grass") grassTuft(mesh);
   else if (lod === 0) {
     const sh = SHAPES[kind as Shaped];
     if (sh.trunk.length) revolve(mesh, 0, 0, 0, sh.trunk, rgb(sh.bark), 5);
@@ -161,4 +194,15 @@ export function crownAt(gameMinutes: number): { a: string; b: string; t: number;
   if (f < 2) return { a: C.summer, b: C.summer, t: 0, bare: 0 };
   if (f < 2.3) return { a: C.summer, b: C.autumn, t: ramp(f, 2, 2.3), bare: 0 };
   return { a: C.autumn, b: C.autumnLate, t: 1, bare: ramp(f, 2.75, 3.1) };
+}
+
+
+export function grassAt(gameMinutes: number): { a: string; b: string; t: number } {
+  const cal = calendar(gameMinutes);
+  const f = cal.season + (cal.dayOfSeason - 1 + cal.hour / 24) / DAYS_PER_SEASON;
+  const ramp = (x: number, a: number, b: number) => Math.min(1, Math.max(0, (x - a) / (b - a)));
+  const C = TREE_COLORS;
+  if (f < 1.1) return { a: C.grassSpring, b: C.grassSummer, t: ramp(f, 0.1, 1.1) };
+  if (f < 2.1) return { a: C.grassSummer, b: C.grassSummer, t: 0 };
+  return { a: C.grassSummer, b: C.grassDry, t: ramp(f, 2.1, 3.0) };
 }
