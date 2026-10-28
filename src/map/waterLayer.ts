@@ -38,6 +38,7 @@ import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale, skyColours } from "./relief";
+import { disableCustomTerrainRenderers } from "./terrainDiagnostics";
 import { eyeOf, frustumPlanes, mercatorToLngLat } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 import {
@@ -787,6 +788,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       scene = null;
     },
     render(_gl, args) {
+    if (disableCustomTerrainRenderers) return;
     const tf = opts.frame.peek();
     const zoom = map.getZoom();
 
