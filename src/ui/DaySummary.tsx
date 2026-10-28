@@ -10,7 +10,7 @@ import { DAY_SUMMARY_MS, daySummaryRemaining } from "./daySummaryTimerModel";
 
 const LINE_ICON: Record<SummaryLine["kind"], IconName> = { built: "craft", arrived: "res", born: "res", made: "gumno", problem: "warning" };
 
-// «Итоги дня»: each new card stays on screen for three real seconds. The countdown is independent
+// «Итоги дня»: each new card stays on screen for five real seconds. The countdown is independent
 // of game speed and pause; the close button can dismiss it earlier.
 export function DaySummary({ map }: { map: maplibregl.Map }) {
   const [closed, setClosed] = useState<number | null>(null);
