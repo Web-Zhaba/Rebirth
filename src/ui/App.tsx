@@ -23,12 +23,14 @@ import { trackLayout } from "./layout";
 import "./layout.css";
 import { TechPanel } from "./TechPanel";
 import { TownPanel } from "./TownPanel";
+import { installScreenshotMode } from "./screenshotMode";
 import { RoadDemolishConfirm } from "./RoadDemolishConfirm";
 
 export function App({ map }: { map: maplibregl.Map }) {
   const c = city.value;
   useEffect(() => (c ? trackLayout() : undefined), [!!c]);
   useEffect(installClickSound, []);
+  useEffect(installScreenshotMode, []);
   useEffect(() => attachWeatherSound(computed(() => state.value?.weather ?? null)), []);
   return (
     <>
