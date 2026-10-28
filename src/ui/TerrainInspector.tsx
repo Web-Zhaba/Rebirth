@@ -78,7 +78,7 @@ export function TerrainInspector({ map }: { map: maplibregl.Map }) {
 
   if (!info) return null;
   return (
-    <div class="cell-panel panel">
+    <aside class="cell-panel panel" aria-label="Участок под курсором">
       <div class="cell-land">{LAND_RU[info.land]}</div>
       <div>Высота: {Math.round(info.elevation)} м</div>
       <div>Уклон: {Math.round(info.slope)}°</div>
@@ -86,6 +86,6 @@ export function TerrainInspector({ map }: { map: maplibregl.Map }) {
       <button class="cell-coords" type="button" title="Скопировать координаты" onClick={copy}>
         {copied ? "Скопировано" : coords}
       </button>
-    </div>
+    </aside>
   );
 }
