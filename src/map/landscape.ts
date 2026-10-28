@@ -123,16 +123,11 @@ export function attachLandscape(
     for (const id of groundOverlays) {
       if (!map.getLayer(id)) continue;
 
-      const isRoad = id.startsWith("roads-");
-      const isField = id.startsWith("fields-");
-      const overlayVisibility =
-        customWorld &&
-        (
-          (!isRoad && !isField) ||
-          map.getZoom() >= 14.5
-        )
-          ? "none"
-          : "visible";
+      // These are all legacy 2D overlays tied to MapLibre's sea-level plane.
+      // Built roads and farm fields have their own terrain-seated 3D renderers;
+      // showing the old GeoJSON lines/fills at town zoom makes them cut through
+      // hills, foundations and the custom surface.
+      const overlayVisibility = customWorld ? "none" : "visible";
 
       if (map.getLayoutProperty(id, "visibility") === overlayVisibility) continue;
       map.setLayoutProperty(id, "visibility", overlayVisibility);
