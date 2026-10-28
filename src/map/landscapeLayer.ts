@@ -357,6 +357,28 @@ export function createLandscapeLayer(
     return out;
   };
 
+  if (import.meta.env.DEV) {
+    Object.assign(window, {
+      landscapeStats: () => ({
+        active: !!mesh,
+        loading,
+        centre: meshCentre ? [...meshCentre] : null,
+        vertices: mesh
+          ? mesh.geometry.getAttribute("aM")?.count ?? 0
+          : 0,
+        triangles: mesh
+          ? (mesh.geometry.index?.count ?? 0) / 3
+          : 0,
+        relief: reliefScale.peek(),
+        zoom: map.getZoom(),
+        snow:
+          weatherMapOn.peek() && opts.weather.peek()
+            ? snowOpacity(opts.weather.peek()!.snowpack) / snowOpacity(1)
+            : 0,
+      }),
+    });
+  }
+
   const requestBuild = (
     tf: TownFrame,
     centre: readonly [number, number],
