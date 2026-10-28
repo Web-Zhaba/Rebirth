@@ -1,6 +1,21 @@
 import type * as maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
-import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, NormalBlending, Scene, ShaderMaterial, Vector2, Vector3, Vector4 } from "three";
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Camera,
+  DoubleSide,
+  LessEqualDepth,
+  Matrix4,
+  Mesh,
+  NoBlending,
+  NormalBlending,
+  Scene,
+  ShaderMaterial,
+  Vector2,
+  Vector3,
+  Vector4,
+} from "three";
 import { calendar } from "../sim/clock";
 import { roads as roadGraph } from "../simClient";
 import type { WeatherState } from "../sim/weather";
@@ -11,6 +26,13 @@ import { lngLatToTile, metersPerPixel } from "../world/mercator";
 import { NATURE_MAXZOOM, WATERWAY_HALF_M, WATERWAY_ZOOM } from "../world/nature";
 import { getLandTile, getWaterwayTile } from "../world/tiles";
 import { chunksInView } from "./chunkView";
+import {
+  motionOn,
+  motionTime,
+  requestMapAnimation,
+  showWhile,
+  water3dOn,
+} from "./graphicsSettings";
 import { roadChains } from "./roadChains";
 import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
@@ -18,10 +40,23 @@ import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale, skyColours } from "./relief";
 import { eyeOf, frustumPlanes, mercatorToLngLat } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
-import { bridgePiers, buildWaterChunk, FLOW_REACH, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Pier, type TileWater, type Waterway } from "./waterMesh";
+import {
+  bridgePiers,
+  buildWaterChunk,
+  FLOW_REACH,
+  nearestPiers,
+  realShores,
+  runsOutside,
+  SHORE_CAP,
+  steamStrength,
+  tileWater,
+  type Box,
+  type Pier,
+  type TileWater,
+  type Waterway,
+} from "./waterMesh";
 import { iceOpacity, snowOpacity, weatherCoverVisibility, WIND_DIR } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
-import { motionOn, motionTime, showWhile, water3dOn } from "./graphicsSettings";
 
 // The 3D water (PLAN-3d-world.ru.md stage 5): the water polygons of the landcover tiles (the same the 2D water fill
 // and the game read) and the streams of the waterway tiles, drawn by three.js over the 2D water, which stays under it
@@ -708,104 +743,361 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       scene = null;
     },
     render(_gl, args) {
-      const tf = opts.frame.peek();
-      const zoom = map.getZoom();
-      if (!host || !scene || !mat || !steamMat || !tf || zoom < WATER_FROM_ZOOM) return;
-      const [lng, lat] = tf.toLngLat(0, 0);
-      if (!origin || origin.lng !== lng || origin.lat !== lat) {
-        origin = { lng, lat };
-        reset();
+    const tf = opts.frame.peek();
+    const zoom = map.getZoom();
+
+    if (
+      !host ||
+      !scene ||
+      !mat ||
+      !steamMat ||
+      !tf ||
+      zoom < WATER_FROM_ZOOM
+    ) {
+      return;
+    }
+
+    const [lng, lat] = tf.toLngLat(0, 0);
+
+    if (!origin || origin.lng !== lng || origin.lat !== lat) {
+      origin = { lng, lat };
+      reset();
+    }
+
+    const M = framer.mercator(args, host, origin);
+    const eye = eyeOf(M);
+
+    if (!eye) return;
+
+    const clock = opts.light?.clock.peek() ?? 0;
+    const cal = calendar(clock);
+    const w = opts.weather.peek();
+
+    const cover = weatherMapOn.peek() && w ? 1 : 0;
+
+    const ice = cover
+      ? Math.min(1, iceOpacity(w!.ice) / 0.55)
+      : 0;
+
+    steamNow =
+      steamForce ??
+      (w
+        ? steamStrength(
+            w.now.temp,
+            cal.hour + cal.minute / 60,
+            w.now.wind,
+            w.now.cloud,
+            w.now.snow ? 0 : w.now.precip,
+            ice,
+          )
+        : 0);
+
+    const steamOn = steamNow > 0.003;
+
+    const merc = mercatorLocal(origin);
+    const [elng, elat] = merc.from(eye[0], eye[1]);
+
+    const k = reliefScale.peek();
+
+    const under =
+      k > 0
+        ? (groundAt(elng, elat) ?? 0) * k
+        : 0;
+
+    const centre = (
+      x: number,
+      y: number,
+      out: [number, number, number],
+    ): void => {
+      const [a, b] = tf.toLngLat(x, y);
+      const g = k > 0 ? groundAt(a, b) : 0;
+      const m = merc.to(a, b);
+
+      out[0] = m[0];
+      out[1] = m[1];
+      out[2] = g === null ? under : g * k;
+    };
+
+    const hereLocal = tf.toLocal(elng, elat);
+
+    const seen = chunksInView({
+      planes: frustumPlanes(M),
+      eye,
+      at: hereLocal,
+      far: FAR_CAP,
+      size: SIZE,
+      rise: 0,
+      slope: SLOPE,
+      centre,
+    });
+
+    seen.sort((a, b) => a.d - b.d);
+
+    // Each chunk at its level, built nearest first within the budget.
+    // Until then any level of it already built is used as a stand-in.
+    frameNo++;
+
+    const t0 = performance.now();
+
+    let missing = false;
+
+    const want = new Set<Mesh>();
+
+    for (const s of seen) {
+      if (
+        Math.hypot(
+          (s.i + 0.5) * SIZE,
+          (s.j + 0.5) * SIZE,
+        ) > RANGE
+      ) {
+        continue;
       }
-      const M = framer.mercator(args, host, origin);
-      const eye = eyeOf(M);
-      if (!eye) return;
-      const clock = opts.light?.clock.peek() ?? 0;
-      const cal = calendar(clock);
-      const w = opts.weather.peek();
-      const cover = weatherMapOn.peek() && w ? 1 : 0;
-      const ice = cover ? Math.min(1, iceOpacity(w!.ice) / 0.55) : 0;
-      steamNow = steamForce ?? (w ? steamStrength(w.now.temp, cal.hour + cal.minute / 60, w.now.wind, w.now.cloud, w.now.snow ? 0 : w.now.precip, ice) : 0);
-      const steamOn = steamNow > 0.003;
-      const merc = mercatorLocal(origin);
-      const [elng, elat] = merc.from(eye[0], eye[1]);
-      const k = reliefScale.peek();
-      const under = k > 0 ? (groundAt(elng, elat) ?? 0) * k : 0;
-      const centre = (x: number, y: number): [number, number, number] => {
-        const [a, b] = tf.toLngLat(x, y);
-        const g = k > 0 ? groundAt(a, b) : 0;
-        return [...merc.to(a, b), g === null ? under : g * k];
-      };
-      const seen = chunksInView({ planes: frustumPlanes(M), eye, at: tf.toLocal(elng, elat), far: FAR_CAP, size: SIZE, rise: 0, slope: SLOPE, centre });
-      seen.sort((a, b) => a.d - b.d);
-      // each chunk at its level, built nearest first within the budget; until then any level of it already built
-      frameNo++;
-      const t0 = performance.now();
-      let missing = false;
-      const want = new Set<Mesh>();
-      for (const s of seen) {
-        if (Math.hypot((s.i + 0.5) * SIZE, (s.j + 0.5) * SIZE) > RANGE) continue;
-        const near = LEVEL_TO.findIndex((d) => s.d < d);
-        const level = near < 0 ? CELLS.length - 1 : near;
-        const key = `${s.i},${s.j},${level}`;
-        let c = chunks.get(key);
-        if (!c || c.stale) {
-          const built = performance.now() - t0 < FRAME_BUDGET ? build(s.i, s.j, level, tf, origin) : null;
-          if (built) {
-            if (c?.mesh) (scene.remove(c.mesh), c.mesh.geometry.dispose(), shown.delete(c.mesh));
-            chunks.set(key, (c = built));
-          } else missing = true;
+
+      const near = LEVEL_TO.findIndex((d) => s.d < d);
+
+      const level =
+        near < 0
+          ? CELLS.length - 1
+          : near;
+
+      const key = `${s.i},${s.j},${level}`;
+
+      let c = chunks.get(key);
+
+      if (!c || c.stale) {
+        const built =
+          performance.now() - t0 < FRAME_BUDGET
+            ? build(
+                s.i,
+                s.j,
+                level,
+                tf,
+                origin,
+              )
+            : null;
+
+        if (built) {
+          if (c?.mesh) {
+            scene.remove(c.mesh);
+            c.mesh.geometry.dispose();
+            shown.delete(c.mesh);
+          }
+
+          chunks.set(
+            key,
+            (c = built),
+          );
+        } else {
+          missing = true;
         }
-        if (!c || c.stale) {
-          // a stand-in: what this chunk showed before, at any level
-          for (let l = 0; l < CELLS.length && !c?.mesh; l++) {
-            const other = chunks.get(`${s.i},${s.j},${l}`);
-            if (other?.mesh) c = other;
+      }
+
+      if (!c || c.stale) {
+        // A stand-in: what this chunk showed before, at any level.
+        for (
+          let l = 0;
+          l < CELLS.length && !c?.mesh;
+          l++
+        ) {
+          const other = chunks.get(
+            `${s.i},${s.j},${l}`,
+          );
+
+          if (other?.mesh) {
+            c = other;
           }
         }
-        if (c) {
-          c.seen = frameNo;
-          if (c.mesh) want.add(c.mesh);
-          if (c.steam) c.steam.visible = steamOn;
+      }
+
+      if (c) {
+        c.seen = frameNo;
+
+        if (c.mesh) {
+          want.add(c.mesh);
+        }
+
+        if (c.steam) {
+          c.steam.visible = steamOn;
         }
       }
-      for (const m of shown) if (!want.has(m)) m.visible = false;
-      for (const c of chunks.values()) if (c.steam && (!c.mesh || !want.has(c.mesh))) c.steam.visible = false;
-      for (const m of want) m.visible = true;
-      shown.clear();
-      for (const m of want) shown.add(m);
-      if (chunks.size > MAX_CHUNKS)
-        for (const [key, c] of chunks)
-          if (frameNo - c.seen > 600) {
-            if (c.mesh) (scene.remove(c.mesh), c.mesh.geometry.dispose());
-            chunks.delete(key);
+    }
+
+    for (const m of shown) {
+      if (!want.has(m)) {
+        m.visible = false;
+      }
+    }
+
+    for (const c of chunks.values()) {
+      if (
+        c.steam &&
+        (!c.mesh || !want.has(c.mesh))
+      ) {
+        c.steam.visible = false;
+      }
+    }
+
+    for (const m of want) {
+      m.visible = true;
+    }
+
+    shown.clear();
+
+    for (const m of want) {
+      shown.add(m);
+    }
+
+    if (chunks.size > MAX_CHUNKS) {
+      for (const [key, c] of chunks) {
+        if (frameNo - c.seen > 600) {
+          if (c.mesh) {
+            scene.remove(c.mesh);
+            c.mesh.geometry.dispose();
           }
-      if (missing) map.triggerRepaint();
-      if (!want.size) return;
-      // uniforms of this frame
-      const u = mat.uniforms;
-      framer.set(u, args, host, origin);
-      (u.uEye.value as Vector3).set(...eye);
-      u.uTime.value = motionTime();
-      const sky = skyColours(cal.hour + cal.minute / 60);
-      (u.uSky.value as Vector3).set(...rgb(sky.sky));
-      (u.uHorizon.value as Vector3).set(...rgb(sky.horizon));
-      u.uWind.value = Math.max(0.12, Math.min(1.2, (w?.now.wind ?? 3) / WIND_FULL));
-      u.uRain.value = w && !w.now.snow ? Math.min(1, w.now.precip / RAIN_FULL) : 0;
-      u.uIce.value = ice;
-      u.uSnow.value = cover ? snowOpacity(w!.snowpack) / snowOpacity(1) : 0;
-      const flat = rgb(PALETTE.mapWater), pale = rgb(PALETTE.mapIce), fi = cover ? iceOpacity(w!.ice) * weatherCoverVisibility(zoom) : 0;
-      (u.uFlat.value as Vector3).set(flat[0] + (pale[0] - flat[0]) * fi, flat[1] + (pale[1] - flat[1]) * fi, flat[2] + (pale[2] - flat[2]) * fi);
-      const t = Math.min(1, (zoom - WATER_FROM_ZOOM) / (WATER_FULL_ZOOM - WATER_FROM_ZOOM));
-      u.uIn.value = t * t * (3 - 2 * t);
-      steamMat.uniforms.uSteam.value = steamNow;
-      // the nearest piers that stand in water
-      const here = tf.toLocal(elng, elat);
-      const list = nearestPiers(piers, here[0], here[1], PIERS * 2, PIER_REACH).filter((q) => waterAt(tf, q.x, q.y)).slice(0, PIERS);
-      list.forEach((q, n) => (u.uPiers.value as Vector3[])[n].set(q.x, q.y, q.r));
-      u.uPierN.value = list.length;
-      host.draw((r) => r.render(scene!, camera));
-      if (motionOn.peek()) map.triggerRepaint(); // the ripples move every frame
-    },
+
+          chunks.delete(key);
+        }
+      }
+    }
+
+    // Chunk building is finite work and should continue immediately
+    // until the visible set is ready.
+    if (missing) {
+      map.triggerRepaint();
+    }
+
+    if (!want.size) return;
+
+    // Uniforms of this frame.
+    const u = mat.uniforms;
+
+    framer.set(
+      u,
+      args,
+      host,
+      origin,
+    );
+
+    (u.uEye.value as Vector3).set(
+      ...eye,
+    );
+
+    u.uTime.value = motionTime();
+
+    const sky = skyColours(
+      cal.hour + cal.minute / 60,
+    );
+
+    (u.uSky.value as Vector3).set(
+      ...rgb(sky.sky),
+    );
+
+    (u.uHorizon.value as Vector3).set(
+      ...rgb(sky.horizon),
+    );
+
+    u.uWind.value = Math.max(
+      0.12,
+      Math.min(
+        1.2,
+        (w?.now.wind ?? 3) / WIND_FULL,
+      ),
+    );
+
+    u.uRain.value =
+      w && !w.now.snow
+        ? Math.min(
+            1,
+            w.now.precip / RAIN_FULL,
+          )
+        : 0;
+
+    u.uIce.value = ice;
+
+    u.uSnow.value = cover
+      ? snowOpacity(w!.snowpack) /
+        snowOpacity(1)
+      : 0;
+
+    const flat = rgb(PALETTE.mapWater);
+    const pale = rgb(PALETTE.mapIce);
+
+    const fi = cover
+      ? iceOpacity(w!.ice) *
+        weatherCoverVisibility(zoom)
+      : 0;
+
+    (u.uFlat.value as Vector3).set(
+      flat[0] +
+        (pale[0] - flat[0]) * fi,
+      flat[1] +
+        (pale[1] - flat[1]) * fi,
+      flat[2] +
+        (pale[2] - flat[2]) * fi,
+    );
+
+    const t = Math.min(
+      1,
+      (zoom - WATER_FROM_ZOOM) /
+        (WATER_FULL_ZOOM - WATER_FROM_ZOOM),
+    );
+
+    u.uIn.value =
+      t * t * (3 - 2 * t);
+
+    steamMat.uniforms.uSteam.value =
+      steamNow;
+
+    // The nearest piers that stand in water.
+    const here = tf.toLocal(
+      elng,
+      elat,
+    );
+
+    const list = nearestPiers(
+      piers,
+      here[0],
+      here[1],
+      PIERS * 2,
+      PIER_REACH,
+    )
+      .filter((q) =>
+        waterAt(
+          tf,
+          q.x,
+          q.y,
+        ),
+      )
+      .slice(
+        0,
+        PIERS,
+      );
+
+    list.forEach((q, n) => {
+      (
+        u.uPiers.value as Vector3[]
+      )[n].set(
+        q.x,
+        q.y,
+        q.r,
+      );
+    });
+
+    u.uPierN.value = list.length;
+
+    host.draw((r) => {
+      r.render(
+        scene!,
+        camera,
+      );
+    });
+
+    // Do not force MapLibre to redraw at display refresh rate.
+    // All decorative map effects share one ~30 FPS scheduler.
+    if (motionOn.peek()) {
+      requestMapAnimation(map);
+    }
+  },
   };
 }
 

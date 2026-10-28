@@ -22,28 +22,55 @@ import {
 import { calendar } from "../sim/clock";
 import type { WeatherState } from "../sim/weather";
 import type { Frame as TownFrame } from "../world/frame";
-import { motionOn, motionTime, showWhile, smoke3dOn } from "./graphicsSettings";
+import {
+  motionOn,
+  motionTime,
+  requestMapAnimation,
+  showWhile,
+  smoke3dOn,
+} from "./graphicsSettings";
 import { projectPoints } from "./modelBuffers";
-import { frameSetter, modelEmitters, type ModelLayerOptions } from "./modelLayer";
-import { smokeKindOf, smokeStrength, type SmokeKind } from "./smokeMath";
+import {
+  frameSetter,
+  modelEmitters,
+  type ModelLayerOptions,
+} from "./modelLayer";
+import {
+  smokeKindOf,
+  smokeStrength,
+  type SmokeKind,
+} from "./smokeMath";
 import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 import { WIND_DIR } from "./weatherMath";
 
 export const SMOKE_LAYER_ID = "chimney-smoke";
 export const SMOKE_FROM_ZOOM = 15.5;
+
 const PUFFS = 12;
 const LIFE = 8;
 const RISE = 12;
+
 const REACH = 650;
 const REACH_SQ = REACH * REACH;
+
 const FAR = 600;
+
 const MAX_EMITTERS = 400;
 const SELECT_STEP = 30;
 const PER = 10;
-const SCALE: Record<SmokeKind, number> = { home: 1, furnace: 1.35, tavern: 1.15 };
-const KIND_INDEX: Record<SmokeKind, number> = { home: 0, furnace: 1, tavern: 2 };
-const SMOKE_REPAINT_MS = 33; // ~30 FPS для анимации дыма при статичной камере
+
+const SCALE: Record<SmokeKind, number> = {
+  home: 1,
+  furnace: 1.35,
+  tavern: 1.15,
+};
+
+const KIND_INDEX: Record<SmokeKind, number> = {
+  home: 0,
+  furnace: 1,
+  tavern: 2,
+};
 
 const VERT = /* glsl */ `
 attribute float aN;
@@ -142,16 +169,33 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
   let mat: ShaderMaterial | null = null;
   let geo: InstancedBufferGeometry | null = null;
   let buf: InstancedInterleavedBuffer | null = null;
+
   const stops: (() => void)[] = [];
   const camera = new Camera();
   const framer = frameSetter(opts.light);
-  let origin: { lng: number; lat: number } | null = null;
+
+  let origin: {
+    lng: number;
+    lat: number;
+  } | null = null;
+
   let all = new Float32Array(0);
+
   let stale = true;
-  let picked: [number, number, number] | null = null;
+
+  let picked:
+    | [number, number, number]
+    | null = null;
+
   let count = 0;
-  let repaintTimer: ReturnType<typeof setTimeout> | null = null;
-  const strength: [number, number, number] = [0, 0, 0];
+
+  const strength:
+    [number, number, number] = [
+      0,
+      0,
+      0,
+    ];
+
   let hourNow = 0;
   let tempNow = 0;
 
@@ -274,64 +318,178 @@ export function createSmokeLayer(map: maplibregl.Map, opts: SmokeLayerOptions): 
       );
     },
     onRemove() {
-      if (repaintTimer) {
-        clearTimeout(repaintTimer);
-        repaintTimer = null;
+      for (const s of stops) {
+        s();
       }
-      for (const s of stops) s();
+
       stops.length = 0;
+
       geo?.dispose();
       mat?.dispose();
+
       host?.release();
+
       host = null;
-      scene = mat = geo = buf = null;
+
+      scene = null;
+      mat = null;
+      geo = null;
+      buf = null;
+
       all = new Float32Array(0);
+
       count = 0;
       stale = true;
       picked = null;
     },
     render(_gl, args) {
       const tf = opts.frame.peek();
-      if (!host || !scene || !mat || !geo || !buf || !tf || map.getZoom() < SMOKE_FROM_ZOOM) return;
-      const [lng, lat] = tf.toLngLat(0, 0);
-      if (!origin || origin.lng !== lng || origin.lat !== lat) {
-        origin = { lng, lat };
+
+      if (
+        !host ||
+        !scene ||
+        !mat ||
+        !geo ||
+        !buf ||
+        !tf ||
+        map.getZoom() < SMOKE_FROM_ZOOM
+      ) {
+        return;
+      }
+
+      const [lng, lat] =
+        tf.toLngLat(
+          0,
+          0,
+        );
+
+      if (
+        !origin ||
+        origin.lng !== lng ||
+        origin.lat !== lat
+      ) {
+        origin = {
+          lng,
+          lat,
+        };
+
         stale = true;
       }
-      if (stale) build(tf, origin);
+
+      if (stale) {
+        build(
+          tf,
+          origin,
+        );
+      }
+
       if (!all.length) return;
 
       const w = opts.weather.peek();
-      const cal = calendar(opts.light?.clock.peek() ?? 0);
-      hourNow = cal.hour + cal.minute / 60;
-      tempNow = w?.now.temp ?? 10;
-      const precip = w?.now.precip ?? 0;
-      (["home", "furnace", "tavern"] as const).forEach((k, i) => (strength[i] = smokeStrength(k, tempNow, hourNow, precip)));
-      count = 0;
-      if (Math.max(...strength) <= 0) return;
 
-      const M = framer.mercator(args, host, origin);
+      const cal = calendar(
+        opts.light?.clock.peek() ?? 0,
+      );
+
+      hourNow =
+        cal.hour +
+        cal.minute / 60;
+
+      tempNow =
+        w?.now.temp ?? 10;
+
+      const precip =
+        w?.now.precip ?? 0;
+
+      (
+        [
+          "home",
+          "furnace",
+          "tavern",
+        ] as const
+      ).forEach((k, i) => {
+        strength[i] =
+          smokeStrength(
+            k,
+            tempNow,
+            hourNow,
+            precip,
+          );
+      });
+
+      count = 0;
+
+      if (
+        Math.max(
+          ...strength,
+        ) <= 0
+      ) {
+        return;
+      }
+
+      const M = framer.mercator(
+        args,
+        host,
+        origin,
+      );
+
       const eye = eyeOf(M);
+
       if (!eye) return;
 
-      if (!picked || Math.hypot(eye[0] - picked[0], eye[1] - picked[1], eye[2] - picked[2]) > SELECT_STEP) select(eye);
-      else count = geo.instanceCount;
+      if (
+        !picked ||
+        Math.hypot(
+          eye[0] - picked[0],
+          eye[1] - picked[1],
+          eye[2] - picked[2],
+        ) > SELECT_STEP
+      ) {
+        select(eye);
+      } else {
+        count =
+          geo.instanceCount;
+      }
+
       if (!count) return;
 
       const u = mat.uniforms;
-      framer.set(u, args, host, origin);
-      u.uTime.value = motionTime();
-      (u.uEye.value as Vector3).set(...eye);
-      (u.uS.value as Vector3).set(...strength);
-      (u.uWind.value as Vector3).set(WIND_DIR[0], WIND_DIR[1], w?.now.wind ?? 2);
-      host.draw((r) => r.render(scene!, camera));
 
-      // Троттлинг анимации дыма при статичной камере (~30 FPS): не спамим перерисовку в текущем кадре
-      if (motionOn.peek() && !repaintTimer) {
-        repaintTimer = setTimeout(() => {
-          repaintTimer = null;
-          map.triggerRepaint();
-        }, SMOKE_REPAINT_MS);
+      framer.set(
+        u,
+        args,
+        host,
+        origin,
+      );
+
+      u.uTime.value =
+        motionTime();
+
+      (
+        u.uEye.value as Vector3
+      ).set(...eye);
+
+      (
+        u.uS.value as Vector3
+      ).set(...strength);
+
+      (
+        u.uWind.value as Vector3
+      ).set(
+        WIND_DIR[0],
+        WIND_DIR[1],
+        w?.now.wind ?? 2,
+      );
+
+      host.draw((r) => {
+        r.render(
+          scene!,
+          camera,
+        );
+      });
+
+      if (motionOn.peek()) {
+        requestMapAnimation(map);
       }
     },
   };

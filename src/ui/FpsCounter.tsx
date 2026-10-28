@@ -1,30 +1,79 @@
-import type * as maplibregl from "maplibre-gl";
 import { useSignal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
 
-// FPS in the bottom-left corner. Counts MapLibre's render events — the frames the map itself redraws
-// (the shared three.js layers draw inside them). When the map is idle it repaints rarely, so the number
-// drops to 0; that is the map being quiet, not a drop in the frame rate.
-export function FpsCounter({ map }: { map: maplibregl.Map }) {
+const SAMPLE_MS = 1000;
+const HISTORY = 120;
+const LONG_FRAME_MS = 50;
+
+export function FpsCounter() {
   const fps = useSignal(0);
+  const frameMs = useSignal(0);
+  const worstMs = useSignal(0);
+
   useEffect(() => {
-    let frames = 0;
-    const tick = () => {
-      fps.value = Math.round((frames * 1000) / 500);
-      frames = 0;
+    let raf = 0;
+    let lastFrame = performance.now();
+    let lastUpdate = lastFrame;
+
+    const samples: number[] = [];
+
+    const frame = (now: number) => {
+      const dt = now - lastFrame;
+      lastFrame = now;
+
+      // Игнорируем огромный первый интервал и паузы,
+      // например после переключения вкладки.
+      if (dt > 0 && dt < 1000) {
+        samples.push(dt);
+
+        if (samples.length > HISTORY) {
+          samples.shift();
+        }
+      }
+
+      if (now - lastUpdate >= SAMPLE_MS && samples.length > 0) {
+        const total = samples.reduce((sum, value) => sum + value, 0);
+        const average = total / samples.length;
+
+        fps.value = Math.round(1000 / average);
+        frameMs.value = Math.round(average * 10) / 10;
+
+        let worst = 0;
+
+        for (const value of samples) {
+          if (value > worst) {
+            worst = value;
+          }
+        }
+
+        worstMs.value = Math.round(worst * 10) / 10;
+
+        lastUpdate = now;
+      }
+
+      raf = requestAnimationFrame(frame);
     };
-    const onRender = () => frames++;
-    map.on("render", onRender);
-    const id = setInterval(tick, 500);
-    tick();
+
+    raf = requestAnimationFrame(frame);
+
     return () => {
-      map.off("render", onRender);
-      clearInterval(id);
+      cancelAnimationFrame(raf);
     };
-  }, [map]);
+  }, []);
+
+  const badFrame = worstMs.value >= LONG_FRAME_MS;
+
   return (
     <div class="fps" aria-hidden="true">
       <span class="fps-num">{fps}</span> fps
+      {" · "}
+      <span>{frameMs}</span> ms
+      {badFrame && (
+        <>
+          {" · max "}
+          <span>{worstMs}</span> ms
+        </>
+      )}
     </div>
   );
 }

@@ -42,7 +42,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <NotebookHost />}
       {c && <BuildBar />}
       {c && <AdminPanel />}
-      <FpsCounter map={map} />
+      <FpsCounter />
       <AwayNotice />
       <AboutDialog />
       <HotkeysDialog />

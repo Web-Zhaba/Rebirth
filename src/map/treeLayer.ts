@@ -25,7 +25,11 @@ import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
 import { WIND_DIR } from "./weatherMath";
-import { forest3dOn, motionOn, motionTime, showWhile } from "./graphicsSettings";
+import {
+  forest3dOn,
+  motionTime,
+  showWhile,
+} from "./graphicsSettings";
 import { bakeImpostor, IMPOSTOR_STEP, IMPOSTOR_VIEWS, impostorQuad, treeGeometry, type Impostor } from "./treeImpostor";
 import { buildTree, crownAt, KIND_INFO, leafOf, reedAt, TREE_LODS } from "./treeModels";
 import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
@@ -411,141 +415,653 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     render(_gl, args) {
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
-      if (!host || !scene || !tf || zoom < TREES_FROM_ZOOM) return;
-      const [lng, lat] = tf.toLngLat(0, 0);
-      if (!origin || origin.lng !== lng || origin.lat !== lat) {
-        origin = { lng, lat };
+
+      if (
+        !host ||
+        !scene ||
+        !tf ||
+        zoom < TREES_FROM_ZOOM
+      ) {
+        return;
+      }
+
+      const [lng, lat] =
+        tf.toLngLat(
+          0,
+          0,
+        );
+
+      if (
+        !origin ||
+        origin.lng !== lng ||
+        origin.lat !== lat
+      ) {
+        origin = {
+          lng,
+          lat,
+        };
+
         reset();
       }
-      const M = framer.mercator(args, host, origin);
-      const eye = eyeOf(M);
-      if (!eye) return;
-      const planes = frustumPlanes(M);
-      const merc = mercatorLocal(origin);
-      const [elng, elat] = merc.from(eye[0], eye[1]);
-      const [ex, ey] = tf.toLocal(elng, elat);
-      const fov = ((map as unknown as { transform?: { fov?: number } }).transform?.fov ?? 36.87) * (Math.PI / 180);
-      const farOf = (tall: number) => (tall * 0.5 * map.getCanvas().clientHeight) / Math.tan(fov / 2) / MIN_PX;
-      const far = Math.min(FAR_CAP, farOf(TALL));
-      const farK = TREE_KINDS.map((kind, k) => (isTree[k] ? far : Math.min(DETAIL_CAP, farOf(KIND_INFO[kind].tall))));
-      farNow = far;
-      const k = reliefScale.peek();
-      const under = k > 0 ? (groundAt(elng, elat) ?? 0) * k : 0;
 
-      const centre = (x: number, y: number, out: [number, number, number]): void => {
-        const key = coordKey(x, y);
-        let pos = centreCache.get(key);
+      const M = framer.mercator(
+        args,
+        host,
+        origin,
+      );
+
+      const eye = eyeOf(M);
+
+      if (!eye) return;
+
+      const planes =
+        frustumPlanes(M);
+
+      const merc =
+        mercatorLocal(origin);
+
+      const [elng, elat] =
+        merc.from(
+          eye[0],
+          eye[1],
+        );
+
+      const [ex, ey] =
+        tf.toLocal(
+          elng,
+          elat,
+        );
+
+      const fov =
+        (
+          (
+            map as unknown as {
+              transform?: {
+                fov?: number;
+              };
+            }
+          ).transform?.fov ??
+          36.87
+        ) *
+        (Math.PI / 180);
+
+      const farOf = (
+        tall: number,
+      ) =>
+        (
+          tall *
+          0.5 *
+          map.getCanvas().clientHeight
+        ) /
+        Math.tan(fov / 2) /
+        MIN_PX;
+
+      const far = Math.min(
+        FAR_CAP,
+        farOf(TALL),
+      );
+
+      const farK =
+        TREE_KINDS.map(
+          (kind, k) =>
+            isTree[k]
+              ? far
+              : Math.min(
+                  DETAIL_CAP,
+                  farOf(
+                    KIND_INFO[kind].tall,
+                  ),
+                ),
+        );
+
+      farNow = far;
+
+      const k =
+        reliefScale.peek();
+
+      const under =
+        k > 0
+          ? (
+              groundAt(
+                elng,
+                elat,
+              ) ?? 0
+            ) * k
+          : 0;
+
+      const centre = (
+        x: number,
+        y: number,
+        out: [
+          number,
+          number,
+          number,
+        ],
+      ): void => {
+        const key =
+          coordKey(
+            x,
+            y,
+          );
+
+        let pos =
+          centreCache.get(key);
+
         if (!pos) {
-          const [clng, clat] = tf.toLngLat(x, y);
-          const g = k > 0 ? groundAt(clng, clat) : 0;
-          const m = merc.to(clng, clat);
-          pos = [m[0], m[1], g === null ? under : g * k];
-          centreCache.set(key, pos);
+          const [clng, clat] =
+            tf.toLngLat(
+              x,
+              y,
+            );
+
+          const g =
+            k > 0
+              ? groundAt(
+                  clng,
+                  clat,
+                )
+              : 0;
+
+          const m =
+            merc.to(
+              clng,
+              clat,
+            );
+
+          pos = [
+            m[0],
+            m[1],
+            g === null
+              ? under
+              : g * k,
+          ];
+
+          centreCache.set(
+            key,
+            pos,
+          );
         }
+
         out[0] = pos[0];
         out[1] = pos[1];
         out[2] = pos[2];
       };
 
-      const seen = chunksInView({ planes, eye, at: [ex, ey], far, size: CHUNK, rise: TALL, slope: SLOPE, centre });
-      const t0 = performance.now();
+      const seen =
+        chunksInView({
+          planes,
+          eye,
+          at: [
+            ex,
+            ey,
+          ],
+          far,
+          size: CHUNK,
+          rise: TALL,
+          slope: SLOPE,
+          centre,
+        });
+
+      const t0 =
+        performance.now();
+
       let missing = false;
+
       for (const s of seen) {
-        const key = chunkKey(s.i, s.j), was = chunks.get(key);
-        if (was && !was.stale) continue;
-        if (performance.now() - t0 > FRAME_BUDGET) {
+        const key =
+          chunkKey(
+            s.i,
+            s.j,
+          );
+
+        const was =
+          chunks.get(key);
+
+        if (
+          was &&
+          !was.stale
+        ) {
+          continue;
+        }
+
+        if (
+          performance.now() -
+            t0 >
+          FRAME_BUDGET
+        ) {
           missing = true;
           break;
         }
-        const c = build(s.i, s.j, tf, origin);
-        if (!c) missing = true;
-        else {
-          if (was) (c.lod = was.lod, rebuilt++);
-          chunks.set(key, c);
+
+        const c = build(
+          s.i,
+          s.j,
+          tf,
+          origin,
+        );
+
+        if (!c) {
+          missing = true;
+        } else {
+          if (was) {
+            c.lod = was.lod;
+            rebuilt++;
+          }
+
+          chunks.set(
+            key,
+            c,
+          );
         }
       }
 
       frameNo++;
-      const flat = map.getPitch() < FLAT_PITCH;
-      const ready: { c: Chunk; lod: number; d: number; n: number }[] = [];
+
+      const flat =
+        map.getPitch() <
+        FLAT_PITCH;
+
+      const ready: {
+        c: Chunk;
+        lod: number;
+        d: number;
+        n: number;
+      }[] = [];
+
       for (const s of seen) {
-        const c = chunks.get(chunkKey(s.i, s.j));
+        const c =
+          chunks.get(
+            chunkKey(
+              s.i,
+              s.j,
+            ),
+          );
+
         if (!c) continue;
-        c.seen = frameNo;
-        const lod = flat ? 2 : c.lod === 0 ? (s.d < NEAR * 1.2 ? 0 : 1) : s.d < NEAR ? 0 : 1;
+
+        c.seen =
+          frameNo;
+
+        const lod = flat
+          ? 2
+          : c.lod === 0
+            ? s.d <
+              NEAR * 1.2
+              ? 0
+              : 1
+            : s.d < NEAR
+              ? 0
+              : 1;
+
         c.lod = lod;
-        ready.push({ c, lod, d: s.d, n: c.n });
-      }
-      const want = thinReach(ready, MAX_TREES, NEAR);
-      const step = (r: number) => REACH_STEP ** Math.floor(Math.log(r) / Math.log(REACH_STEP));
-      if (want < reach) reach = step(want);
-      else if (want >= reach * REACH_STEP * REACH_STEP) reach = want === Infinity ? Infinity : step(want) / REACH_STEP;
-      const detailLod = (d: number) => (flat ? 2 : d < DETAIL_NEAR ? 0 : 1);
-      const chosen = ready.map((r) => ({
-        c: r.c,
-        lods: TREE_KINDS.map((_, k) => (isTree[k] ? r.lod : r.d < farK[k] ? detailLod(r.d) : -1)),
-        keep: r.d < NEAR ? 1 : Math.floor(keepAt(r.d, reach) * 16) / 16,
-      }));
-      if (chunks.size > MAX_CHUNKS) for (const [key, c] of chunks) if (frameNo - c.seen > 600) chunks.delete(key);
 
-      const sig = `${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lods.join(",")}:${q.keep}`).join(";");
-      const now = performance.now();
-      if (sig !== shown) {
-        if (shown === null || now - lastAssemble > ASSEMBLE_EVERY) {
-          assemble(chosen);
-          shown = sig;
-          lastAssemble = now;
-        } else missing = true;
-      }
-
-      // map.triggerRepaint вызывается по приходу данных через source.onTile и loadGround
-      if (!slots.some((s) => s.count > 0)) return;
-
-      if (!impostors) {
-        const baked = host.draw((r) => TREE_KINDS.map((kind) => bakeImpostor(r, buildTree(kind, 0))));
-        if (!baked) return;
-        impostors = baked;
-        baked.forEach((q, kind) => {
-          const u = mats[kind * TREE_LODS + 1].uniforms;
-          u.uColor.value = q.color;
-          u.uData.value = q.data;
-          u.uRadius.value = q.radius;
+        ready.push({
+          c,
+          lod,
+          d: s.d,
+          n: c.n,
         });
       }
 
-      const clock = opts.light?.clock.peek() ?? 0;
-      const crown = crownAt(clock), reed = reedAt(clock);
-      const w = opts.weather.peek();
-      const wind = Math.min(1, (w?.now.wind ?? 2) / WIND_FULL);
-      const snow = Math.min(1, (w?.snowpack ?? 0) / 0.05);
-      const grow = Math.min(1, (zoom - TREES_FROM_ZOOM) / (GROW_TO - TREES_FROM_ZOOM));
-      const leafCols = [rgb(crown.a), rgb(crown.b), crown.t] as const, reedCols = [rgb(reed.a), rgb(reed.b), reed.t] as const;
-      mats.forEach((mat, m) => {
-        const kind = Math.floor(m / TREE_LODS), info = KIND_INFO[TREE_KINDS[kind]];
-        const u = mat.uniforms;
-        framer.set(u, args, host!, origin!);
-        u.uTime.value = motionTime();
-        (u.uEye.value as Vector3).set(...eye);
-        u.uReach.value = isTree[kind] ? Math.min(reach, 1e9) : 1e9;
-        u.uFar.value = farK[kind];
-        u.uGrow.value = grow * grow * (3 - 2 * grow);
-        (u.uWind.value as Vector3).set(WIND_DIR[0], WIND_DIR[1], flat ? 0 : wind * info.sway);
-        const [a, b, t] = info.season === "reed" ? reedCols : leafCols;
-        u.uBare.value = info.season === "leaf" ? crown.bare : 0;
-        (u.uCrownA.value as Vector3).set(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t);
-        (u.uCrownB.value as Vector3).set(...b);
-        u.uSnow.value = info.season === "leaf" ? snow * crown.bare * 0.6 : info.season === "reed" ? snow * 0.4 : snow;
-      });
+      const want =
+        thinReach(
+          ready,
+          MAX_TREES,
+          NEAR,
+        );
+
+      const step = (
+        r: number,
+      ) =>
+        REACH_STEP **
+        Math.floor(
+          Math.log(r) /
+            Math.log(
+              REACH_STEP,
+            ),
+        );
+
+      if (want < reach) {
+        reach =
+          step(want);
+      } else if (
+        want >=
+        reach *
+          REACH_STEP *
+          REACH_STEP
+      ) {
+        reach =
+          want === Infinity
+            ? Infinity
+            : step(want) /
+              REACH_STEP;
+      }
+
+      const detailLod = (
+        d: number,
+      ) =>
+        flat
+          ? 2
+          : d <
+              DETAIL_NEAR
+            ? 0
+            : 1;
+
+      const chosen =
+        ready.map((r) => ({
+          c: r.c,
+
+          lods:
+            TREE_KINDS.map(
+              (_, k) =>
+                isTree[k]
+                  ? r.lod
+                  : r.d <
+                      farK[k]
+                    ? detailLod(
+                        r.d,
+                      )
+                    : -1,
+            ),
+
+          keep:
+            r.d < NEAR
+              ? 1
+              : Math.floor(
+                  keepAt(
+                    r.d,
+                    reach,
+                  ) * 16,
+                ) / 16,
+        }));
+
+      if (
+        chunks.size >
+        MAX_CHUNKS
+      ) {
+        for (
+          const [key, c]
+          of chunks
+        ) {
+          if (
+            frameNo -
+              c.seen >
+            600
+          ) {
+            chunks.delete(key);
+          }
+        }
+      }
+
+      const sig =
+        `${rebuilt}|` +
+        chosen
+          .map(
+            (q) =>
+              `${q.c.i},${q.c.j}:${q.lods.join(",")}:${q.keep}`,
+          )
+          .join(";");
+
+      const now =
+        performance.now();
+
+      if (sig !== shown) {
+        if (
+          shown === null ||
+          now -
+            lastAssemble >
+            ASSEMBLE_EVERY
+        ) {
+          assemble(chosen);
+
+          shown = sig;
+
+          lastAssemble =
+            now;
+        } else {
+          missing = true;
+        }
+      }
+
+      // Unlike decorative animation, this is finite pending work.
+      // Continue immediately until all visible chunks are ready.
+      if (missing) {
+        map.triggerRepaint();
+      }
+
+      if (
+        !slots.some(
+          (s) =>
+            s.count > 0,
+        )
+      ) {
+        return;
+      }
+
+      if (!impostors) {
+        const baked =
+          host.draw((r) =>
+            TREE_KINDS.map(
+              (kind) =>
+                bakeImpostor(
+                  r,
+                  buildTree(
+                    kind,
+                    0,
+                  ),
+                ),
+            ),
+          );
+
+        if (!baked) return;
+
+        impostors = baked;
+
+        baked.forEach(
+          (q, kind) => {
+            const u =
+              mats[
+                kind *
+                  TREE_LODS +
+                  1
+              ].uniforms;
+
+            u.uColor.value =
+              q.color;
+
+            u.uData.value =
+              q.data;
+
+            u.uRadius.value =
+              q.radius;
+          },
+        );
+      }
+
+      const clock =
+        opts.light?.clock.peek() ??
+        0;
+
+      const crown =
+        crownAt(clock);
+
+      const reed =
+        reedAt(clock);
+
+      const w =
+        opts.weather.peek();
+
+      const wind =
+        Math.min(
+          1,
+          (w?.now.wind ?? 2) /
+            WIND_FULL,
+        );
+
+      const snow =
+        Math.min(
+          1,
+          (w?.snowpack ?? 0) /
+            0.05,
+        );
+
+      const grow =
+        Math.min(
+          1,
+          (zoom -
+            TREES_FROM_ZOOM) /
+            (
+              GROW_TO -
+              TREES_FROM_ZOOM
+            ),
+        );
+
+      const leafCols = [
+        rgb(crown.a),
+        rgb(crown.b),
+        crown.t,
+      ] as const;
+
+      const reedCols = [
+        rgb(reed.a),
+        rgb(reed.b),
+        reed.t,
+      ] as const;
+
+      mats.forEach(
+        (mat, m) => {
+          const kind =
+            Math.floor(
+              m / TREE_LODS,
+            );
+
+          const info =
+            KIND_INFO[
+              TREE_KINDS[
+                kind
+              ]
+            ];
+
+          const u =
+            mat.uniforms;
+
+          framer.set(
+            u,
+            args,
+            host!,
+            origin!,
+          );
+
+          u.uTime.value =
+            motionTime();
+
+          (
+            u.uEye.value as Vector3
+          ).set(...eye);
+
+          u.uReach.value =
+            isTree[kind]
+              ? Math.min(
+                  reach,
+                  1e9,
+                )
+              : 1e9;
+
+          u.uFar.value =
+            farK[kind];
+
+          u.uGrow.value =
+            grow *
+            grow *
+            (3 - 2 * grow);
+
+          (
+            u.uWind.value as Vector3
+          ).set(
+            WIND_DIR[0],
+            WIND_DIR[1],
+            flat
+              ? 0
+              : wind *
+                info.sway,
+          );
+
+          const [a, b, t] =
+            info.season ===
+            "reed"
+              ? reedCols
+              : leafCols;
+
+          u.uBare.value =
+            info.season ===
+            "leaf"
+              ? crown.bare
+              : 0;
+
+          (
+            u.uCrownA
+              .value as Vector3
+          ).set(
+            a[0] +
+              (
+                b[0] -
+                a[0]
+              ) *
+                t,
+            a[1] +
+              (
+                b[1] -
+                a[1]
+              ) *
+                t,
+            a[2] +
+              (
+                b[2] -
+                a[2]
+              ) *
+                t,
+          );
+
+          (
+            u.uCrownB
+              .value as Vector3
+          ).set(...b);
+
+          u.uSnow.value =
+            info.season ===
+            "leaf"
+              ? snow *
+                crown.bare *
+                0.6
+              : info.season ===
+                  "reed"
+                ? snow * 0.4
+                : snow;
+        },
+      );
 
       host.draw((r) => {
-        const color = r.state.buffers.color;
-        r.getContext().colorMask(true, true, true, false);
+        const color =
+          r.state.buffers.color;
+
+        r
+          .getContext()
+          .colorMask(
+            true,
+            true,
+            true,
+            false,
+          );
+
         color.setLocked(true);
-        r.render(scene!, camera);
+
+        r.render(
+          scene!,
+          camera,
+        );
+
         color.setLocked(false);
       });
-
-      // if (wind > 0.02 && !flat && motionOn.peek()) map.triggerRepaint();
     },
   };
 }
