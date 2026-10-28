@@ -1,7 +1,7 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
 import { reliefOn, setRelief } from "../map/relief";
-import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setWater3d, water3dOn } from "../map/graphicsSettings";
+import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setSmoke3d, setWater3d, smoke3dOn, water3dOn } from "../map/graphicsSettings";
 import { CLOUD_QUALITIES, cloudQuality, highQualityAvailable, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
 import { Button, Dialog, Segmented, type SegmentOption } from "./kit";
@@ -64,6 +64,10 @@ export function SettingsDialog() {
         <label class="settings-row" title="Борозды, всходы, жнивьё и снег на полях вблизи; без них поля — плоская заливка">
           <input type="checkbox" checked={fields3dOn.value} onChange={(e) => setFields3d((e.target as HTMLInputElement).checked)} />
           <span>Объёмные поля</span>
+        </label>
+        <label class="settings-row" title="Дым из труб жилых домов и мастерских вблизи, в холод и в часы готовки; без него дым не рисуется">
+          <input type="checkbox" checked={smoke3dOn.value} onChange={(e) => setSmoke3d((e.target as HTMLInputElement).checked)} />
+          <span>Дым из труб</span>
         </label>
         <label class="settings-row" title="Деревья качаются на ветру, по воде бежит рябь; без этого карта не перерисовывается каждый кадр">
           <input type="checkbox" checked={motionOn.value} onChange={(e) => setMotion((e.target as HTMLInputElement).checked)} />

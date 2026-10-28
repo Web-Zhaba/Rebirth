@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MODEL_COLORS } from "../ui/palette";
 import { buildHeritageModel, modelFamily, pickVariant, type Variant } from "./heritageModels";
-import { buildScaffold, orientedBox, PATTERN, prepareRing, ringSeed, type Model, type XY } from "./modelGeometry";
+import { buildScaffold, orientedBox, PATTERN, pointInRing, prepareRing, ringSeed, type Model, type XY } from "./modelGeometry";
 
 const rect = (cx: number, cy: number, w: number, d: number, rot = 0): XY[] => {
   const c = Math.cos(rot), s = Math.sin(rot);
@@ -216,5 +216,26 @@ describe("buildScaffold", () => {
   it("stands corner posts at the full height while unfinished", () => {
     expect(zRange(buildScaffold(rect(0, 0, 10, 8), 10, 0.3))[1]).toBeCloseTo(10, 6);
     expect(zRange(buildScaffold(rect(0, 0, 10, 8), 10, 1))[1]).toBeCloseTo(10, 6);
+  });
+});
+
+describe("smoke emitters", () => {
+  it("sit on the chimney tops of pitched roofs, inside the footprint and over the roof", () => {
+    let found = 0;
+    for (const kind of ["house", "school", "monastery", "town_hall", "hospital"])
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        const ring = rect(0, 0, 18, 10);
+        const m = buildHeritageModel(ring, 5, kind, seed);
+        for (const [x, y, z] of m.smoke ?? []) {
+          found++;
+          expect(pointInRing(x, y, ring)).toBe(true);
+          expect(z).toBeGreaterThan(5); // over the eaves
+          expect(z).toBeLessThanOrEqual(zRange(m)[1] + 1e-9);
+        }
+      }
+    expect(found).toBeGreaterThan(5);
+  });
+  it("a building site has none", () => {
+    expect(buildScaffold(rect(0, 0, 18, 10), 5, 1).smoke ?? []).toHaveLength(0);
   });
 });

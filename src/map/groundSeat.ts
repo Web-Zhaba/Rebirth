@@ -31,6 +31,7 @@ export function seatBuilding(model: Model, ring: readonly XY[], ground: Ground, 
   const h = pts.map(([x, y]) => ground(x, y));
   const top = Math.max(...h), low = Math.min(...h);
   const out = shifted(model, (_x, _y, z) => z + top);
+  if (model.smoke) out.smoke = model.smoke.map(([x, y, z]): [number, number, number] => [x, y, z + top]);
   if (top - low < MIN_STEP) return out;
   const r = prepareRing(ring);
   const tris = triangulate(r);
@@ -45,7 +46,8 @@ export function seatBuilding(model: Model, ring: readonly XY[], ground: Ground, 
   }
   // the top is seen in yards and gardens (houses cover it with their floor); concave lots need the real triangulation
   for (const [p, q, s] of tris) mesh.flat([p[0], p[1], top], [q[0], q[1], top], [s[0], s[1], top], col);
-  return merge(out, { ...mesh.m, lift: new Array<number>(mesh.m.positions.length / 3).fill(top) }); // its facade height is below 0: plain stone
+  const seated = merge(out, { ...mesh.m, lift: new Array<number>(mesh.m.positions.length / 3).fill(top) }); // its facade height is below 0: plain stone
+  return out.smoke ? { ...seated, smoke: out.smoke } : seated;
 }
 
 export function drapeRoad(model: Model, ground: Ground): Model {

@@ -181,7 +181,9 @@ export function buildHeritageModel(ringIn: readonly XY[], height: number, kind: 
       const sq = square(cu, cv, side);
       if (!sq.every(([a, b]) => inside(a, b))) continue;
       const base = h + Math.min(...sq.map(([a, b]) => roof.rise(a, b))) - 0.2;
-      prism(mesh, sq, base, Math.max(base + 1, h + riseMax + 0.5), v.accent, shade(v.accent, 0.6));
+      const top = Math.max(base + 1, h + riseMax + 0.5);
+      prism(mesh, sq, base, top, v.accent, shade(v.accent, 0.6));
+      mesh.emit(cu, cv, top);
     }
   }
 

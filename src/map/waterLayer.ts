@@ -1,21 +1,24 @@
 import type maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
-import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, Scene, ShaderMaterial, Vector2, Vector3, Vector4 } from "three";
+import { BufferAttribute, BufferGeometry, Camera, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, NormalBlending, Scene, ShaderMaterial, Vector2, Vector3, Vector4 } from "three";
 import { calendar } from "../sim/clock";
+import { roads as roadGraph } from "../simClient";
 import type { WeatherState } from "../sim/weather";
 import { mixHex, PALETTE } from "../ui/palette";
 import type { Frame as TownFrame } from "../world/frame";
-import { lngLatToTile } from "../world/mercator";
+import { pointInRings } from "../world/landcover";
+import { lngLatToTile, metersPerPixel } from "../world/mercator";
 import { NATURE_MAXZOOM, WATERWAY_HALF_M, WATERWAY_ZOOM } from "../world/nature";
 import { getLandTile, getWaterwayTile } from "../world/tiles";
 import { chunksInView } from "./chunkView";
+import { roadChains } from "./roadChains";
 import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale, skyColours } from "./relief";
 import { eyeOf, frustumPlanes, mercatorToLngLat } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
-import { buildWaterChunk, FLOW_REACH, realShores, runsOutside, SHORE_CAP, tileWater, type Box, type TileWater, type Waterway } from "./waterMesh";
+import { bridgePiers, buildWaterChunk, FLOW_REACH, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Pier, type TileWater, type Waterway } from "./waterMesh";
 import { iceOpacity, snowOpacity, weatherCoverVisibility, WIND_DIR } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
 import { motionOn, motionTime, showWhile, water3dOn } from "./graphicsSettings";
@@ -34,6 +37,12 @@ import { motionOn, motionTime, showWhile, water3dOn } from "./graphicsSettings";
 // reflects the sky with the angle (Fresnel), glints with the sun and the moon, lightens the shallows and edges the
 // shore, rings with the rain, freezes and takes the snow with the weather, and fades into the flat water of the map at
 // its far edge and as it comes in with the zoom.
+//
+// Two small extras: foam and a wake around the piers of built bridges (bridgePiers: the nearest PIERS of them to the
+// camera go to the shader as a uniform array; the foam ring hugs the pier and a streaky wake runs downstream along the
+// local flow), and a cheap stand-in for the reflection of the shore: the shore's tone (forest or ground, a vertex
+// attribute read from the landcover behind the shore) as a streak in the sky's reflection, fading with the distance
+// from the shore, wobbling with the ripples, strongest in calm water, off under rain, wind and ice.
 
 export const WATER_LAYER_ID = "water-3d";
 export const WATER_FROM_ZOOM = 13; // closer than this the water is 3D
@@ -52,8 +61,43 @@ const MAX_CHUNKS = 1500; // cached; beyond it chunks unseen for a while are drop
 const RIVER: Record<string, { half: number; speed: number }> = { river: { half: WATERWAY_HALF_M, speed: 1 }, stream: { half: 2.5, speed: 0.6 } };
 const WIND_FULL = 10; // m/s: full ripples
 const RAIN_FULL = 4; // mm/h: rings everywhere
+const PIERS = 32; // piers the shader takes at most (the nearest to the camera)
+const PIER_REACH = 500; // m from the camera: farther the foam is faded out anyway
+const TONES: Record<string, number> = { wood: 1, wetland: 0.6, rock: 0.3 }; // landcover class -> tone of the shore reflection
+const TONE_PROBE_M = 25; // m: how far from a shore segment its land is looked at
 
 const VERT = /* glsl */ `
+attribute vec3 aG;
+attribute vec3 aM;
+attribute float aShore;
+attribute vec2 aFlow;
+attribute float aTone;
+uniform mat4 uG;
+uniform mat4 uM;
+uniform float uT;
+uniform vec3 uEye;
+varying vec3 vM;
+varying float vShore;
+varying vec2 vFlow;
+varying float vTone;
+void main() {
+  // pulled a little toward the camera along its ray: drawn over the ground it lies on, at the same place on the screen
+  vec3 toEye = uEye - aM;
+  float d = max(length(toEye), 1.0);
+  vec3 lift = toEye * (min(d * 0.002, 25.0) / d);
+  vec4 m = uM * vec4(aM + lift, 1.0);
+  vec4 g = uG * vec4(aG + lift, 1.0);
+  gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
+  vM = aM;
+  vShore = aShore;
+  vFlow = aFlow;
+  vTone = aTone;
+}`;
+
+const STEAM_LIFT = 0.8; // m above the water: the sheet of steam
+
+// Steam: the same chunk geometry as a sheet lifted above the water and toward the camera the same way.
+const STEAM_VERT = /* glsl */ `
 attribute vec3 aG;
 attribute vec3 aM;
 attribute float aShore;
@@ -66,16 +110,78 @@ varying vec3 vM;
 varying float vShore;
 varying vec2 vFlow;
 void main() {
-  // pulled a little toward the camera along its ray: drawn over the ground it lies on, at the same place on the screen
+  vec3 up = vec3(0.0, 0.0, ${STEAM_LIFT.toFixed(2)});
   vec3 toEye = uEye - aM;
   float d = max(length(toEye), 1.0);
   vec3 lift = toEye * (min(d * 0.002, 25.0) / d);
-  vec4 m = uM * vec4(aM + lift, 1.0);
+  vec4 m = uM * vec4(aM + up + lift, 1.0);
   vec4 g = uG * vec4(aG + lift, 1.0);
   gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
-  vM = aM;
+  vM = aM + up;
   vShore = aShore;
   vFlow = aFlow;
+}`;
+
+// Wisps: domain-warped fbm in world metres, stretched along the wind and carried by it (and by a river's flow),
+// thicker at the shore, thin looking straight down (it is a 2D sheet), fewer octaves with distance.
+const STEAM_FRAG = /* glsl */ `
+uniform float uTime;
+uniform vec3 uEye;
+uniform vec3 uSunDir;
+uniform float uSun;
+uniform vec4 uTint;
+uniform vec2 uWindDir;
+uniform float uWind;
+uniform float uFar;
+uniform float uIn;
+uniform vec3 uHorizon;
+uniform float uSteam;
+varying vec3 vM;
+varying float vShore;
+varying vec2 vFlow;
+float hash(vec2 p) {
+  return fract(sin(dot(mod(p, 1024.0), vec2(127.1, 311.7))) * 43758.5453);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p, int oct) {
+  float s = 0.0, a = 0.5, tot = 0.0;
+  for (int k = 0; k < 3; k++) {
+    if (k >= oct) break;
+    s += a * noise(p);
+    tot += a;
+    p = p * 2.03 + vec2(17.1, 9.3);
+    a *= 0.5;
+  }
+  return s / tot;
+}
+void main() {
+  float dist = length(uEye - vM);
+  float reach = min(uFar * 0.6, 9000.0);
+  float fadeFar = 1.0 - smoothstep(reach * 0.5, reach, dist);
+  float fadeNear = smoothstep(2.0, 25.0, dist);
+  float vz = abs(uEye.z - vM.z) / max(dist, 1.0);
+  float looking = mix(0.3, 1.0, pow(1.0 - vz, 1.5)); // thicker along the surface than straight down
+  bool river = dot(vFlow, vFlow) > 1e-4;
+  vec2 vel = uWindDir * (0.3 + uWind * 1.5) + vFlow * 0.5; // m/s
+  vec2 p = vM.xy - vel * uTime;
+  vec2 q = vec2(dot(p, uWindDir) * 0.5, dot(p, vec2(-uWindDir.y, uWindDir.x))) / 14.0; // stretched along the wind
+  int oct = dist < 350.0 ? 3 : (dist < 2500.0 ? 2 : 1);
+  vec2 w = vec2(fbm(q * 0.8 + vec2(0.0, uTime * 0.02), oct), fbm(q * 0.8 + vec2(5.2, 1.3) - uTime * 0.015, oct));
+  float n = fbm(q + (w - 0.5) * 2.2, oct); // curling
+  float wisp = smoothstep(0.34, 0.68, n);
+  float clumps = mix(0.4, 1.0, smoothstep(0.25, 0.7, noise(vM.xy * 0.004 + 3.0))); // bare stretches between banks of steam
+  float shoreK = river ? 1.0 : mix(0.55, 1.0, 1.0 - smoothstep(0.0, 50.0, vShore));
+  float lip = 0.5 + 0.5 * smoothstep(0.0, 3.0, vShore);
+  float a = (0.2 + 0.8 * wisp) * wisp * clumps * shoreK * lip * looking * uSteam * fadeFar * fadeNear * uIn * 0.85;
+  a *= mix(0.35, 1.0, uSun); // by night it is barely there
+  vec3 col = mix(vec3(0.86, 0.9, 0.95), uHorizon * 1.15, 0.45);
+  float warm = (1.0 - smoothstep(0.02, 0.4, uSunDir.z)) * uSun; // lit from the side at sunrise
+  col = mix(col, vec3(1.0, 0.8, 0.62), warm * 0.55) * mix(0.4, 1.0, uSun) * (0.9 + 0.2 * wisp);
+  col = mix(col, uTint.rgb, uTint.a);
+  gl_FragColor = vec4(col * a, a); // premultiplied
 }`;
 
 const FRAG = /* glsl */ `
@@ -100,9 +206,14 @@ uniform vec3 uSnowCol;
 uniform vec3 uFlat;
 uniform vec3 uSky;
 uniform vec3 uHorizon;
+uniform vec3 uGroundTone;
+uniform vec3 uForestTone;
+uniform vec3 uPiers[${PIERS}];
+uniform int uPierN;
 varying vec3 vM;
 varying float vShore;
 varying vec2 vFlow;
+varying float vTone;
 float hash(vec2 p) {
   return fract(sin(dot(mod(p, 1024.0), vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -165,6 +276,17 @@ void main() {
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
   vec3 r = reflect(-v, n);
   vec3 sky = mix(uHorizon, uSky, smoothstep(0.0, 0.5, r.z));
+  // the shore in the reflection: its tone as a streak that fades out from the shore, longer at a low view, shaken by
+  // the ripples, only on calm open water (vTone < 0: no shore data, as on the ribbons of streams)
+  float calm = (1.0 - smoothstep(0.2, 0.75, uWind)) * (1.0 - uRain) * open * step(-0.01, vTone);
+  if (calm > 0.0) {
+    float reach = 5.0 + 28.0 * pow(1.0 - clamp(v.z, 0.0, 1.0), 2.0);
+    float sd = max(vShore + dot(g, vec2(1.0, 0.6)) * 30.0, 0.0);
+    float streak = exp(-sd / reach) * (1.0 - smoothstep(30.0, 60.0, vShore)) * (0.7 + 0.3 * noise(vec2(vM.x + vM.y, vM.x - vM.y) * 0.9 + g * 20.0));
+    vec3 shoreCol = mix(uGroundTone, uForestTone, clamp(vTone, 0.0, 1.0));
+    shoreCol = mix(shoreCol, uSnowCol * 0.8, uSnow * 0.7) * mix(0.25, 1.0, uSun);
+    sky = mix(sky, shoreCol, streak * calm * 0.5);
+  }
   // the body of the water: light in the shallows, deep away from the shore, a little lit by the sun
   vec3 body = mix(uShallow, uDeep, smoothstep(0.0, ${SHORE_CAP}.0, vShore)) * mix(0.9, 1.04, max(dot(n, uLight), 0.0)) * mix(0.9, 1.0, uSun);
   vec3 col = mix(body, sky, fres * (1.0 - 0.35 * uRain)); // rain roughens the water: a duller reflection
@@ -175,6 +297,30 @@ void main() {
   // a light rim along the shore, broken up
   float rim = 1.0 - smoothstep(0.3, 2.5, vShore + noise(vM.xy * 0.35 + uTime * 0.15) * 1.6);
   col = mix(col, uFoam, rim * 0.65 * open);
+  // foam around the piers of bridges: a ring hugging each, and a streaky wake downstream along the flow
+  float pf = 0.0;
+  for (int q = 0; q < ${PIERS}; q++) {
+    if (q >= uPierN) break;
+    vec3 pier = uPiers[q];
+    vec2 dv = vM.xy - pier.xy;
+    float pr = pier.z, reachw = pr * 7.0 + 6.0, d2 = dot(dv, dv);
+    if (d2 > reachw * reachw) continue;
+    float jag = noise(vM.xy * 0.9 + uTime * 0.6) * 0.8;
+    float rr = sqrt(d2);
+    // an annulus about the pier (the pier itself stands in the middle of it), broken into flecks
+    float ringf = smoothstep(pr * 0.45, pr * 0.95, rr) * (1.0 - smoothstep(pr + 0.2, pr + 1.2 + jag, rr)) * smoothstep(0.25, 0.6, noise(vM.xy * 2.3 + uTime * 0.4) + 0.35);
+    float wake = 0.0, sp = length(vFlow);
+    if (sp > 0.05) {
+      vec2 fd = vFlow / sp;
+      float along = dot(dv, fd), across = dot(dv, vec2(-fd.y, fd.x));
+      float wd = pr * (0.9 + along * 0.12);
+      float body = step(0.0, along) * exp(-across * across / (wd * wd)) * exp(-along / (pr * 4.0 + 2.0));
+      float streaks = noise(vec2(across * 1.6, along * 0.5 - uTime * (0.8 + sp * 1.5)));
+      wake = body * smoothstep(0.35, 0.75, streaks + body * 0.35);
+    }
+    pf = max(pf, max(ringf * 0.8, wake * 0.7));
+  }
+  col = mix(col, uFoam, pf * (1.0 - smoothstep(150.0, 450.0, dist)) * open);
   // ice: pale, cracked, under patches of snow
   vec3 ice = uIceCol * mix(0.86, 1.0, noise(vM.xy * 0.04)) * (1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.04, abs(noise(vM.xy * 0.06) - 0.5))) * clamp(1.5 - fw * 2.0, 0.0, 1.0));
   ice = mix(ice, uSnowCol, uSnow * smoothstep(0.25, 0.75, noise(vM.xy * 0.12) + uSnow * 0.6));
@@ -193,6 +339,7 @@ export interface WaterLayerOptions {
 
 interface Chunk {
   mesh: Mesh | null; // null: no water in it
+  steam?: Mesh; // the sheet of steam over it: shares its geometry
   seen: number;
   stale: boolean;
 }
@@ -203,6 +350,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
   let host: ThreeHost | null = null;
   let scene: Scene | null = null;
   let mat: ShaderMaterial | null = null;
+  let steamMat: ShaderMaterial | null = null;
+  let steamNow = 0; // strength of the steam this frame
+  let steamForce: number | null = null; // devtools override
   let origin: { lng: number; lat: number } | null = null;
   let tilesFor: TownFrame | null = null;
   let frameNo = 0;
@@ -214,11 +364,13 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
   const ways = new Map<string, Waterway[] | null>();
   const levels = new Map<string, number>(); // water level (DEM metres) of a polygon at a grid corner
   const camera = new Camera();
+  let piers: Pier[] = []; // the piers of all built bridges, town metres (rebuilt when the roads change)
   const framer = frameSetter(opts.light);
 
   const reset = () => {
     for (const c of chunks.values()) c.mesh?.geometry.dispose();
     for (const c of chunks.values()) if (c.mesh) scene?.remove(c.mesh);
+    for (const c of chunks.values()) if (c.steam) scene?.remove(c.steam);
     chunks.clear();
     shown.clear();
   };
@@ -235,7 +387,13 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
               const ll = mercatorToLngLat((x + tx / t.extent) / N12, (y + ty / t.extent) / N12);
               return tf.toLocal(ll.lng, ll.lat);
             };
-            const w = tileWater(t.water, t.extent, toLocal);
+            // what the land is behind a shore: the landcover polygon under a probe point
+            const tone = (px: number, py: number): number => {
+              for (const q of t.land) if (px >= q.bbox[0] && px <= q.bbox[2] && py >= q.bbox[1] && py <= q.bbox[3] && pointInRings(px, py, q.rings)) return TONES[q.cls] ?? 0;
+              return 0;
+            };
+            const probe = TONE_PROBE_M / ((metersPerPixel(tf.toLngLat(0, 0)[1], NATURE_MAXZOOM) * 256) / t.extent);
+            const w = tileWater(t.water, t.extent, toLocal, tone, probe);
             const boxes = w.pieces.map((p): Box => {
               let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
               for (const [a, b] of p) (x0 = Math.min(x0, a)), (y0 = Math.min(y0, b)), (x1 = Math.max(x1, a)), (y1 = Math.max(y1, b));
@@ -243,7 +401,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
             });
             return { ...w, boxes };
           },
-          () => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], boxes: [] }),
+          () => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], tones: [], boxes: [] }),
         )
         .then((w) => {
           if (tilesFor !== tf) return;
@@ -367,12 +525,14 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       }),
     );
     const shores = lt.flatMap((t) => t!.shores);
+    const allTones = lt.flatMap((t) => t!.tones);
     const rivers = wt.flatMap((t) => t!);
     if (!pieces.length && !rivers.length) return { mesh: null, seen: 0, stale: false };
     const inside = (x: number, y: number) => pieces.some((p, q) => x >= boxes[q][0] && x <= boxes[q][2] && y >= boxes[q][1] && y <= boxes[q][3] && inConvex(p, x, y));
     const ribbons = rivers.flatMap((w) => runsOutside(w, inside));
-    const near = realShores(shores, grow(SHORE_CAP), inside);
-    const c = buildWaterChunk(pieces, near, rivers, ribbons, box, CELLS[level]);
+    const nearTones: number[] = [];
+    const near = realShores(shores, grow(SHORE_CAP), inside, allTones, nearTones);
+    const c = buildWaterChunk(pieces, near, rivers, ribbons, box, CELLS[level], nearTones);
     const n = c.xy.length / 2;
     if (!n) return { mesh: null, seen: 0, stale: false };
     // heights: the polygons level with their shores, the ribbons on the ground under their line
@@ -416,14 +576,41 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     geo.setAttribute("aM", new BufferAttribute(m, 3));
     geo.setAttribute("aShore", new BufferAttribute(Float32Array.from(c.shore), 1));
     geo.setAttribute("aFlow", new BufferAttribute(Float32Array.from(c.flow), 2));
+    geo.setAttribute("aTone", new BufferAttribute(Float32Array.from(c.tone), 1));
     geo.setIndex(new BufferAttribute(n > 65535 ? Uint32Array.from(c.index) : Uint16Array.from(c.index), 1));
     const mesh = Object.assign(new Mesh(geo, mat!), { frustumCulled: false, visible: false });
     scene!.add(mesh);
-    return { mesh, seen: 0, stale: false };
+    const steam = Object.assign(new Mesh(geo, steamMat!), { frustumCulled: false, visible: false, renderOrder: 1 });
+    scene!.add(steam);
+    return { mesh, steam, seen: 0, stale: false };
   };
 
   // devtools: what is drawn now
   if (import.meta.env.DEV) Object.assign(window, { waterMat: () => mat, waterStats: () => ({ shown: shown.size, chunks: chunks.size, tiles: land.size + ways.size, tris: [...shown].reduce((a, q) => a + (q.geometry.index?.count ?? 0) / 3, 0) }) });
+
+  // devtools: the steam strength now; waterSteamForce(v) sets it for a look, null gives it back to the weather
+  if (import.meta.env.DEV) Object.assign(window, { waterSteam: () => steamNow, waterSteamForce: (v: number | null) => ((steamForce = v), map.triggerRepaint()) });
+
+  // Is there water at a town point, as far as the loaded tiles know (an unloaded tile counts as water)?
+  const waterAt = (tf: TownFrame, x: number, y: number): boolean => {
+    const [tx, ty] = tilesUnder(tf, [x, y, x, y], NATURE_MAXZOOM)[0];
+    const t = land.get(`${tx}/${ty}`);
+    if (!t) return true;
+    return t.pieces.some((p, k) => x >= t.boxes[k][0] && x <= t.boxes[k][2] && y >= t.boxes[k][1] && y <= t.boxes[k][3] && inConvex(p, x, y));
+  };
+  // the built bridges of the road graph -> their piers
+  const setPiers = (g: NonNullable<typeof roadGraph.value> | null) => {
+    piers = [];
+    if (!g) return;
+    for (const ch of roadChains(g, (e) => (e.done >= e.labor ? "built" : "waiting"))) {
+      if (ch.state !== "built" || (ch.kind !== "bridge" && ch.kind !== "stonebridge")) continue;
+      const pts = ch.nodes.flatMap((n) => (g.nodes[n] ? [[g.nodes[n].x, g.nodes[n].y] as XY] : []));
+      if (pts.length > 1) piers.push(...bridgePiers(pts, ch.kind));
+    }
+  };
+
+  // devtools: waterPiers([{ x, y, r }]) puts test piers (town metres) in place of the roads' until the roads change
+  if (import.meta.env.DEV) Object.assign(window, { waterPiers: (list: Pier[]) => ((piers = list), map.triggerRepaint(), piers.length) });
 
   const colour = (hex: string, k = 1) => new Vector3(...rgb(hex).map((v) => Math.min(1, v * k)));
 
@@ -460,6 +647,10 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
           uFlat: { value: colour(PALETTE.mapWater) },
           uSky: { value: new Vector3() },
           uHorizon: { value: new Vector3() },
+          uGroundTone: { value: colour(PALETTE.mapGrass, 0.55) },
+          uForestTone: { value: colour(PALETTE.mapForestDeep, 0.3) },
+          uPiers: { value: Array.from({ length: PIERS }, () => new Vector3()) },
+          uPierN: { value: 0 },
         },
         vertexShader: VERT,
         fragmentShader: FRAG,
@@ -467,6 +658,19 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         blending: NoBlending,
         depthTest: true,
         depthWrite: true,
+        depthFunc: LessEqualDepth,
+      });
+      const share = ["uG", "uM", "uT", "uSunDir", "uSun", "uTint", "uTime", "uEye", "uWindDir", "uWind", "uFar", "uIn", "uHorizon"];
+      steamMat = new ShaderMaterial({
+        uniforms: { ...Object.fromEntries(share.map((k) => [k, mat!.uniforms[k]])), uSteam: { value: 0 } }, // the water's own uniform objects: set once a frame
+        vertexShader: STEAM_VERT,
+        fragmentShader: STEAM_FRAG,
+        side: DoubleSide,
+        transparent: true,
+        blending: NormalBlending,
+        premultipliedAlpha: true, // (ONE, ONE_MINUS_SRC_ALPHA)
+        depthTest: true,
+        depthWrite: false,
         depthFunc: LessEqualDepth,
       });
       stops.push(
@@ -477,6 +681,10 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
           ways.clear();
           levels.clear();
           tilesFor = opts.frame.peek();
+          map.triggerRepaint();
+        }),
+        effect(() => {
+          setPiers(roadGraph.value);
           map.triggerRepaint();
         }),
         // new ground: the old water stays until its chunk is built again
@@ -492,7 +700,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       stops.length = 0;
       reset();
       mat?.dispose();
+      steamMat?.dispose();
       mat = null;
+      steamMat = null;
       host?.release();
       host = null;
       scene = null;
@@ -500,7 +710,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     render(_gl, args) {
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
-      if (!host || !scene || !mat || !tf || zoom < WATER_FROM_ZOOM) return;
+      if (!host || !scene || !mat || !steamMat || !tf || zoom < WATER_FROM_ZOOM) return;
       const [lng, lat] = tf.toLngLat(0, 0);
       if (!origin || origin.lng !== lng || origin.lat !== lat) {
         origin = { lng, lat };
@@ -509,6 +719,13 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       const M = framer.mercator(args, host, origin);
       const eye = eyeOf(M);
       if (!eye) return;
+      const clock = opts.light?.clock.peek() ?? 0;
+      const cal = calendar(clock);
+      const w = opts.weather.peek();
+      const cover = weatherMapOn.peek() && w ? 1 : 0;
+      const ice = cover ? Math.min(1, iceOpacity(w!.ice) / 0.55) : 0;
+      steamNow = steamForce ?? (w ? steamStrength(w.now.temp, cal.hour + cal.minute / 60, w.now.wind, w.now.cloud, w.now.snow ? 0 : w.now.precip, ice) : 0);
+      const steamOn = steamNow > 0.003;
       const merc = mercatorLocal(origin);
       const [elng, elat] = merc.from(eye[0], eye[1]);
       const k = reliefScale.peek();
@@ -548,9 +765,11 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         if (c) {
           c.seen = frameNo;
           if (c.mesh) want.add(c.mesh);
+          if (c.steam) c.steam.visible = steamOn;
         }
       }
       for (const m of shown) if (!want.has(m)) m.visible = false;
+      for (const c of chunks.values()) if (c.steam && (!c.mesh || !want.has(c.mesh))) c.steam.visible = false;
       for (const m of want) m.visible = true;
       shown.clear();
       for (const m of want) shown.add(m);
@@ -567,14 +786,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       framer.set(u, args, host, origin);
       (u.uEye.value as Vector3).set(...eye);
       u.uTime.value = motionTime();
-      const clock = opts.light?.clock.peek() ?? 0;
-      const cal = calendar(clock);
       const sky = skyColours(cal.hour + cal.minute / 60);
       (u.uSky.value as Vector3).set(...rgb(sky.sky));
       (u.uHorizon.value as Vector3).set(...rgb(sky.horizon));
-      const w = opts.weather.peek();
-      const cover = weatherMapOn.peek() && w ? 1 : 0;
-      const ice = cover ? Math.min(1, iceOpacity(w!.ice) / 0.55) : 0;
       u.uWind.value = Math.max(0.12, Math.min(1.2, (w?.now.wind ?? 3) / WIND_FULL));
       u.uRain.value = w && !w.now.snow ? Math.min(1, w.now.precip / RAIN_FULL) : 0;
       u.uIce.value = ice;
@@ -583,6 +797,12 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       (u.uFlat.value as Vector3).set(flat[0] + (pale[0] - flat[0]) * fi, flat[1] + (pale[1] - flat[1]) * fi, flat[2] + (pale[2] - flat[2]) * fi);
       const t = Math.min(1, (zoom - WATER_FROM_ZOOM) / (WATER_FULL_ZOOM - WATER_FROM_ZOOM));
       u.uIn.value = t * t * (3 - 2 * t);
+      steamMat.uniforms.uSteam.value = steamNow;
+      // the nearest piers that stand in water
+      const here = tf.toLocal(elng, elat);
+      const list = nearestPiers(piers, here[0], here[1], PIERS * 2, PIER_REACH).filter((q) => waterAt(tf, q.x, q.y)).slice(0, PIERS);
+      list.forEach((q, n) => (u.uPiers.value as Vector3[])[n].set(q.x, q.y, q.r));
+      u.uPierN.value = list.length;
       host.draw((r) => r.render(scene!, camera));
       if (motionOn.peek()) map.triggerRepaint(); // the ripples move every frame
     },

@@ -3,9 +3,9 @@ import type { ReadonlySignal } from "@preact/signals";
 import { effect, signal } from "@preact/signals";
 import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, LessEqualDepth, Matrix4, Mesh, NoBlending, OneFactor, Scene, ShaderMaterial, Vector3, Vector4 } from "three";
 import { calendar, START_MINUTE_OF_DAY } from "../sim/clock";
-import { sunDirection } from "../sim/weather";
+import { sunDirection, type WeatherState } from "../sim/weather";
 import { BUILDINGS } from "../sim/buildings";
-import { TOWN_COLORS } from "../ui/palette";
+import { TOWN_COLORS, TREE_COLORS } from "../ui/palette";
 import { isRoadKind } from "../sim/roads";
 import type { Frame as TownFrame } from "../world/frame";
 import { sunLocal, sunStrength } from "./clouds/shadowMath";
@@ -20,6 +20,8 @@ import { buildRoadModel } from "./roadModels";
 import { buildTownModel } from "./townModels";
 import { EARTH_RADIUS_M, localFrame, lngLatToMercator, mercatorLocalMatrix, metresPerMercator, weatherToSphere } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
+import { snowOpacity } from "./weatherMath";
+import { weatherMapOn } from "./weatherSettings";
 
 // Every building and built road of the town drawn by three.js inside the MapLibre map: the town's own buildings
 // (townModels.ts), restored old ones (heritageModels.ts), finished or under construction, and built roads and bridges
@@ -86,6 +88,8 @@ export interface ModelLayerOptions {
   frame: ReadonlySignal<TownFrame | null>;
   // Sun for the lighting: game minutes and the climate phase of the weather site. Omitted: fixed light.
   light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null> };
+  // Weather for the snow on up-facing surfaces (roofs, ledges, flat tops); omitted: no snow.
+  weather?: ReadonlySignal<WeatherState | null>;
   // Layer to insert before (default "buildings-outline", else "night-tint").
   beforeId?: string;
 }
@@ -172,7 +176,20 @@ const FRAG = /* glsl */ `
 uniform vec3 uLight;
 uniform float uSun;
 uniform vec4 uTint; // the night tint (nightLayer.ts) where it cannot reach us: on the relief it is draped on the ground
+uniform float uSnow; // snow cover 0..1: the snowpack of the weather, same signal as the 2D fill and the trees
+uniform vec3 uSnowCol;
 ${COMMON}
+
+float hash2(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// Smooth value noise 0..1, for the patches the snow lies in.
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 
 // Dark seams every "period" metres of x (log courses and shingle rows along the height, boards along the wall), gone
 // once they get thinner than a pixel.
@@ -244,6 +261,15 @@ void main() {
     col = mix(col, wood, leaf);
   }
   vec3 n = normalize(vN);
+  if (uSnow > 0.0) {
+    // snow lies on what faces up (walls stay clean, and with them the windows); a thin snowpack is patchy, a thick one
+    // closes up. Roads keep less of it (trodden).
+    float up = smoothstep(0.12, 0.45, n.z);
+    float blotch = 0.55 * vnoise(vXY * 0.9) + 0.3 * vnoise(vXY * 2.7 + 7.0) + 0.15 * hash2(floor(vXY * 5.0));
+    float lim = 1.0 - uSnow * 1.3;
+    float a = up * smoothstep(lim, lim + 0.25, blotch) * mix(0.35, 0.95, uSnow);
+    col = mix(col, uSnowCol, a * (code >= 30 ? 0.5 : 1.0));
+  }
   float d = max(dot(n, uLight), 0.0);
   float k = mix(0.55, 1.0, d) * mix(0.88, 1.0, uSun);
   if (abs(n.z) < 0.5) k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z)); // walls darken towards the ground
@@ -328,6 +354,20 @@ export function modelOf(it: ModelItem): Model {
   if (it.style === "heritage") return buildHeritageModel(it.ring, it.height, it.kind);
   return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading });
 }
+
+// A chimney top of a finished building (Model.smoke), town-local metres with the ground under it: what smokeLayer.ts
+// draws smoke over. lamp: the building is lived in or worked in (the item's lamp).
+export interface Emitter {
+  id: string | number;
+  kind: string;
+  style: ModelItem["style"];
+  lamp?: Light["kind"];
+  x: number;
+  y: number;
+  z: number;
+}
+export const modelEmitters = signal<Emitter[]>([]);
+if (import.meta.env.DEV) Object.assign(window, { modelEmitters }); // devtools: modelEmitters.value = [...] to try the smoke
 
 const LAMP_CODE: Record<Light["kind"], number> = { house: 1, work: 2, tavern: 3 };
 // Lamp attribute of an item: its kind plus a seed from its id in 0..1 (which of its windows are lit).
@@ -474,6 +514,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     }
     const used = new Set<string>();
     const packs: Packed[] = [], roadPacks: Packed[] = [];
+    const smoke: Emitter[] = [];
     for (const it of items) {
       const p = it.style === "road" ? 1 : quantise(it.progress);
       const key = keyOf(it, p, k);
@@ -481,10 +522,12 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       let pack = cache.get(key);
       if (!pack) cache.set(key, (pack = projectModel(seatedModelOf({ ...it, progress: p }, ground), tf.toLngLat, origin, p >= 1 ? lampOf(it) : 0)));
       (it.style === "road" ? roadPacks : packs).push(pack);
+      for (const [x, y, z] of pack.smoke ?? []) smoke.push({ id: it.id, kind: it.kind, style: it.style, lamp: it.lamp, x, y, z });
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
     fill(mesh, mergePacked(packs));
     fill(roadMesh!, mergePacked(roadPacks));
+    modelEmitters.value = smoke;
     dirty = false;
   };
 
@@ -501,7 +544,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     onAdd(_m, gl) {
       host = acquireHost(map, gl as WebGL2RenderingContext);
       mat = new ShaderMaterial({
-        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uTint: { value: new Vector4() } },
+        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uTint: { value: new Vector4() }, uSnow: { value: 0 }, uSnowCol: { value: new Vector3(...rgb(TREE_COLORS.snow)) } },
         vertexShader: VERT,
         fragmentShader: FRAG,
         side: DoubleSide,
@@ -514,7 +557,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       scene = new Scene();
       scene.add(mesh);
       roadMat = new ShaderMaterial({
-        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uTint: { value: new Vector4() } },
+        uniforms: { uG: { value: new Matrix4() }, uM: { value: new Matrix4() }, uT: { value: 0 }, uLight: { value: light }, uSun: { value: 0 }, uTint: { value: new Vector4() }, uSnow: { value: 0 }, uSnowCol: { value: new Vector3(...rgb(TREE_COLORS.snow)) } },
         vertexShader: VERT,
         fragmentShader: FRAG,
         side: DoubleSide,
@@ -549,6 +592,8 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
         void opts.items.value;
         void opts.frame.value;
         void reliefScale.value;
+        void opts.weather?.value;
+        void weatherMapOn.value;
         dirty = true;
         map.triggerRepaint();
       });
@@ -574,6 +619,8 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       if (!origin || (!mesh.visible && !roadMesh.visible)) return;
       setFrame(mat.uniforms, args);
       setFrame(roadMat.uniforms, args);
+      const w = opts.weather?.peek();
+      mat.uniforms.uSnow.value = roadMat.uniforms.uSnow.value = weatherMapOn.peek() && w ? snowOpacity(w.snowpack) / snowOpacity(1) : 0;
       host.draw((r) => {
         r.render(roadScene!, camera);
         r.render(scene!, camera);
@@ -682,8 +729,8 @@ function demoItems(): ModelItem[] {
   return out;
 }
 
-export function attachModelDebug(map: maplibregl.Map, deps: { frame: ReadonlySignal<TownFrame | null>; light?: ModelLayerOptions["light"] }): void {
+export function attachModelDebug(map: maplibregl.Map, deps: { frame: ReadonlySignal<TownFrame | null>; light?: ModelLayerOptions["light"]; weather?: ModelLayerOptions["weather"] }): void {
   const items = signal<ModelItem[]>(demoItems());
-  attachModelLayer(map, { items, frame: deps.frame, light: deps.light });
+  attachModelLayer(map, { items, frame: deps.frame, light: deps.light, weather: deps.weather });
   if (import.meta.env.DEV) Object.assign(window, { modelItems: items });
 }

@@ -19,6 +19,7 @@ export interface Packed {
   z: Float32Array; // height above the model's own ground per vertex (what facades are laid out by; Model.lift)
   l: Float32Array; // lamp per vertex: kind (0 none, 1 house, 2 work, 3 tavern) + a building seed in 0..1
   i: Uint32Array; // triangle indices, from 0 within the pack
+  smoke?: [number, number, number][]; // chimney tops, town-local x, y, z (Model.smoke)
 }
 
 // Town-local points (x, y, z metres, flat) into the globe tangent and mercator frames about `origin`; `toLngLat` is the
@@ -62,7 +63,7 @@ export function projectModel(model: Model, toLngLat: (x: number, y: number) => [
   const n = model.positions.length / 3;
   const z = new Float32Array(n);
   for (let k = 0; k < n; k++) z[k] = model.positions[k * 3 + 2] - (model.lift?.[k] ?? 0);
-  return { g, m, n: Float32Array.from(model.normals), c: Float32Array.from(model.colors), f: Float32Array.from(model.facade), z, l: new Float32Array(n).fill(lamp), i: Uint32Array.from(model.indices) };
+  return { g, m, n: Float32Array.from(model.normals), c: Float32Array.from(model.colors), f: Float32Array.from(model.facade), z, l: new Float32Array(n).fill(lamp), i: Uint32Array.from(model.indices), smoke: model.smoke };
 }
 
 // One pack of many, indices offset.

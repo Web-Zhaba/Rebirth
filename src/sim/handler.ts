@@ -23,6 +23,7 @@ import { addRoad, effectiveSpans, emptyRoads, removeEdge, ROAD_KINDS, spanReason
 import { migrateLegacy, parseSave } from "./save";
 import { dayOf } from "./time";
 import { startWeather, type WeatherState } from "./weather";
+import { fieldProgress } from "./fields";
 import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
@@ -52,7 +53,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.

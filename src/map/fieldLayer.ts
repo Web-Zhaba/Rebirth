@@ -4,7 +4,7 @@ import { BufferAttribute, BufferGeometry, Camera, CustomBlending, DoubleSide, Le
 import { calendar, DAYS_PER_SEASON } from "../sim/clock";
 import { assignFields } from "../sim/fields";
 import type { WeatherState } from "../sim/weather";
-import { buildings, zones } from "../simClient";
+import { buildings, state, zones } from "../simClient";
 import { FIELD_COLORS } from "../ui/palette";
 import type { Frame as TownFrame } from "../world/frame";
 import { buildFieldMesh } from "./fieldMesh";
@@ -26,12 +26,13 @@ import { weatherMapOn } from "./weatherSettings";
 // above the ground (fieldMesh.ts), pulled a little toward the camera like the water so the terrain does not show
 // through. Everything else is the fragment shader, procedural, in metres along and across the furrows (the longest edge
 // of the field): ridges every 0.7 m with a fake normal lit by the sun, faded out before they get finer than a pixel.
-// The stage of the year follows the game calendar (the admin season preview too), in seasons S = DAYS_PER_SEASON, with a
-// per-field shift of a day or two so neighbours differ: winter, the ploughed soil under the snow (the weather's snowpack,
-// the ridges poking through); early spring, dark fresh soil; from the field's sowing day (spring into early summer) green
-// shoot rows that thicken to a dense green by midsummer and turn gold by the end of it; in the harvest window (the first
-// half of autumn) a share proportional to the progress is cut, as a sharp band sweeping along the furrows: pale straw
-// stubble in short rows against the standing gold; late autumn, ploughed again. A field no farm works (no active gumno
+// The season follows the game calendar (the admin season preview too), in seasons S = DAYS_PER_SEASON, with a per-field
+// shift of a day or two: winter, the ploughed soil under the snow (the weather's snowpack, the ridges poking through);
+// early spring, dark fresh soil. What the farm has really done comes from the sim (state.fieldProgress, the share of the
+// field sown and harvested, per-vertex aWork): the sown share is a band sweeping along the furrows with green shoot rows
+// that thicken to a dense green by midsummer and turn gold by the end of it, the rest stays ploughed soil (weedy by
+// midsummer); the harvested share is cut, a sharp band along the furrows: pale straw stubble in short rows against the
+// standing gold; grain left standing when the window closes lodges, dark and flattened; late autumn, ploughed again. A field no farm works (no active gumno
 // within reach, sim/fields.ts assignFields) is fallow grass and weeds with no rows. A 2-4 m headland of grass rims every
 // field, with patches of colour; rain darkens it all, the night tint and the sun come through the shared frame setter.
 // Nothing moves, so it asks for no frames of its own.
@@ -53,6 +54,7 @@ attribute vec2 aLoc;
 attribute vec2 aDir;
 attribute vec4 aInfo;
 attribute float aEdge;
+attribute vec2 aWork;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
@@ -62,6 +64,7 @@ varying vec2 vLoc;
 varying vec2 vDir;
 varying vec4 vInfo;
 varying float vEdge;
+varying vec2 vWork;
 void main() {
   // pulled a little toward the camera along its ray: drawn over the ground it lies on, at the same place on the screen
   vec3 toEye = uEye - aM;
@@ -75,6 +78,7 @@ void main() {
   vDir = aDir;
   vInfo = aInfo;
   vEdge = aEdge;
+  vWork = aWork;
 }`;
 
 const FRAG = /* glsl */ `
@@ -102,6 +106,7 @@ varying vec2 vLoc;
 varying vec2 vDir;
 varying vec4 vInfo; // worked (0/1), the field's hash, its extent along the furrows (min, max) from its own origin
 varying float vEdge;
+varying vec2 vWork; // the farm's real work this year: the share of the field sown, the share of it harvested
 float hash(vec2 p) {
   return fract(sin(dot(mod(p, 1024.0), vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -121,7 +126,7 @@ void main() {
   float fade = 1.0 - smoothstep(0.2, 0.5, fw / ${ROW}); // the rows fade before they get finer than a pixel
   float ridge = 0.5 + 0.5 * sin(ph); // 0 in the furrow .. 1 on the ridge
   vec2 pp = vLoc + hsh * 97.0;
-  float patch = noise(pp * 0.06) * 0.6 + noise(pp * 0.23) * 0.4;
+  float blotch = noise(pp * 0.06) * 0.6 + noise(pp * 0.23) * 0.4;
   float fine = noise(pp * 1.7);
   // the calendar, in seasons, shifted a little for this field
   float u = (uDay + (hsh - 0.5) * ${JITTER}) / ${SEASON};
@@ -130,42 +135,51 @@ void main() {
   float edge = vEdge + (noise(vLoc * 0.4 + hsh * 31.0) - 0.5) * 1.2;
   float hw = 2.0 + 2.0 * fract(hsh * 7.3);
   float headland = 1.0 - smoothstep(hw - 0.5, hw + 0.5, edge);
-  vec3 grass = mix(uGrass, uFallowDry, dryYear * 0.7) * (0.86 + 0.28 * fine) * (0.92 + 0.16 * patch);
+  vec3 grass = mix(uGrass, uFallowDry, dryYear * 0.7) * (0.86 + 0.28 * fine) * (0.92 + 0.16 * blotch);
   vec3 col;
   float amp = 0.0; // how high the ridges stand
   if (vInfo.x > 0.5) {
     // ---- a field a farm works ----
-    float sowT = 0.3 + 0.9 * fract(hsh * 13.7);
-    float g = smoothstep(sowT + 0.05, 1.7, u); // the crop's growth
+    // the real work sweeps along the furrows from one end: sown, then (in autumn) cut
+    float span = max(vInfo.w - vInfo.z, 1.0);
+    float uh = (along - vInfo.z) / span;
+    if (hsh > 0.5) uh = 1.0 - uh;
+    uh += (hash(vec2(floor(a), hsh * 53.0)) - 0.5) * 0.012; // each furrow a little ahead or behind
+    float aa = fw / span;
+    float sown = vWork.x, harv = vWork.y;
+    float sownM = sown >= 0.999 ? 1.0 : (1.0 - smoothstep(sown - aa, sown + aa, uh)) * step(0.001, sown);
+    float cut = harv >= 0.999 ? 1.0 : (1.0 - smoothstep(harv - aa, harv + aa, uh)) * step(0.001, harv);
+    cut *= sownM;
+    // the crop grows from the day its part was sown: later parts of the field start later
+    float g = smoothstep(0.05 + 0.5 * uh, 1.7, u) * sownM; // the crop's growth
     float cov = clamp(mix(g * 0.55, 1.0, smoothstep(0.55, 1.0, g)), 0.0, 1.0);
     float ripe = smoothstep(1.7, 2.0, u);
-    float prog = clamp((u - 2.0) / 0.5, 0.0, 1.0); // the share harvested
+    float lost = smoothstep(2.5, 2.62, u) * (1.0 - cut) * sownM; // the window closed on grain still standing: it lodges and rots
     float plough = clamp(smoothstep(2.7, 2.8, u) + smoothstep(3.0, 3.01, u) + (1.0 - smoothstep(-0.1, 0.0, u)), 0.0, 1.0);
-    // soil: ridges dried, a little different in patches
-    vec3 soil = mix(uSoil, uSoilDry, ridge * 0.6 * fade + 0.2 * patch) * (0.9 + 0.2 * patch);
+    // soil: ridges dried, a little different in patches; ground not sown by midsummer greens with weeds
+    vec3 soil = mix(uSoil, uSoilDry, ridge * 0.6 * fade + 0.2 * blotch) * (0.9 + 0.2 * blotch);
+    soil = mix(soil, grass * 0.9, smoothstep(1.15, 1.9, u) * (1.0 - sownM) * (0.35 + 0.3 * blotch));
     // the crop in rows on the ridges, or covering all of it when dense
     float t = ridge + 0.15 * (fine - 0.5);
     float rows = smoothstep(1.0 - cov * 1.15 - 0.08, 1.0 - cov * 1.15 + 0.08, t) * smoothstep(0.0, 0.05, g);
     float mask = mix(cov * 0.8 * smoothstep(0.0, 0.05, g), rows, fade);
     vec3 crop = mix(uShoot, uCrop, smoothstep(0.1, 0.7, g));
-    crop = mix(crop, uRipe, ripe) * (0.88 + 0.24 * patch) * (0.94 + 0.12 * fine);
+    crop = mix(crop, uRipe, ripe) * (0.88 + 0.24 * blotch) * (0.94 + 0.12 * fine);
+    // lost grain: dull dark brown, flattened (the rows blur into a mat)
+    crop = mix(crop, uStubble * 0.7 * (0.85 + 0.3 * blotch), lost * 0.85);
+    mask = mix(mask, max(mask, 0.9), lost);
     vec3 standing = mix(soil, crop, mask);
-    // the cut part: a band that sweeps along the furrows
-    float span = max(vInfo.w - vInfo.z, 1.0);
-    float uh = (along - vInfo.z) / span;
-    if (hsh > 0.5) uh = 1.0 - uh;
-    float aa = fw / span;
-    float cut = prog >= 0.999 ? 1.0 : (1.0 - smoothstep(prog - aa, prog + aa, uh)) * step(0.001, prog);
+    // the cut part
     float dash = smoothstep(0.35, 0.65, noise(vec2(along * 1.4, floor(a) * 7.0)));
-    vec3 stubble = mix(uStraw * (0.92 + 0.14 * fine), uStubble, ridge * 0.55 * dash * fade + 0.1 * (1.0 - fade)) * (0.9 + 0.16 * patch);
+    vec3 stubble = mix(uStraw * (0.92 + 0.14 * fine), uStubble, ridge * 0.55 * dash * fade + 0.1 * (1.0 - fade)) * (0.9 + 0.16 * blotch);
     col = mix(standing, stubble, cut);
     col = mix(col, soil, plough);
-    amp = mix(1.0, 0.45, cov * (1.0 - cut) * (1.0 - plough)) * mix(1.0, 0.5, cut * (1.0 - plough));
+    amp = mix(1.0, 0.45, cov * (1.0 - cut) * (1.0 - plough)) * mix(1.0, 0.5, cut * (1.0 - plough)) * mix(1.0, 0.3, lost * (1.0 - plough));
     col = mix(col, grass, headland);
     amp *= 1.0 - headland;
   } else {
     // ---- fallow: grass and weeds, no rows ----
-    col = mix(uFallow, uFallowDry, dryYear) * (0.84 + 0.32 * patch) * (0.92 + 0.16 * fine);
+    col = mix(uFallow, uFallowDry, dryYear) * (0.84 + 0.32 * blotch) * (0.92 + 0.16 * fine);
     col = mix(col, grass, headland * 0.5);
     col = mix(col, uFallowDry * 1.05, smoothstep(0.62, 0.8, noise(pp * 0.3 + 11.0)) * 0.35);
   }
@@ -176,7 +190,7 @@ void main() {
   col *= shade * (1.0 - 0.22 * (1.0 - ridge) * amp * fade) * mix(0.86, 1.0, uSun);
   // snow settles in the furrows first and leaves the ridges standing out
   float thr = 0.5 + 0.5 * sin(ph) * amp * fade;
-  float cover = smoothstep(thr * 0.7 - 0.05 + (patch - 0.5) * 0.25, thr * 0.7 + 0.2 + (patch - 0.5) * 0.25, uSnow * 1.1);
+  float cover = smoothstep(thr * 0.7 - 0.05 + (blotch - 0.5) * 0.25, thr * 0.7 + 0.2 + (blotch - 0.5) * 0.25, uSnow * 1.1);
   col = mix(col, uSnowCol * mix(0.9, 1.0, shade * 0.5) * mix(0.86, 1.0, uSun), cover);
   col *= 1.0 - 0.3 * uRain * (1.0 - cover); // rain darkens the soil and the crop
   float alpha = uIn * (1.0 - smoothstep(${FAR}.0 * 0.75, ${FAR}.0, dist)) * smoothstep(0.0, 0.8, vEdge + (noise(vLoc * 0.7) - 0.5) * 0.5 + 0.15);
@@ -200,6 +214,11 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
   let want = ""; // what the mesh should show: the fields' revision, the farms, the frame and the relief
   let have = "";
   let working = new Set<number>();
+  let ranges: { id: number; at: number; cnt: number }[] = []; // each field's vertices in the mesh
+  let progress: Record<number, { sown: number; harv: number }> = {}; // the sim's real work, by field id
+  const fake = new Map<number, { sown: number; harv: number }>(); // devtools: overrides of the real work
+  let progKey = ""; // what the work attribute shows
+  let progWant = "";
   let counts = { fields: 0, worked: 0, verts: 0, tris: 0 };
   const stops: (() => void)[] = [];
   const shapes = new Map<string, ReturnType<typeof buildFieldMesh>>(); // by field id and outline
@@ -243,6 +262,8 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
     const base = new Float64Array(n * 3);
     const loc = new Float32Array(n * 2), dir = new Float32Array(n * 2), info = new Float32Array(n * 4), edge = new Float32Array(n);
     const index: number[] = [];
+    const work = new Float32Array(n * 2);
+    const rs: typeof ranges = [];
     let at = 0;
     for (const { f, m } of parts) {
       const cnt = m.xy.length / 2;
@@ -253,6 +274,7 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
       const shift = cx * m.dir[0] + cy * m.dir[1];
       const hsh = ((Math.imul(f.id + 1, 2654435761) >>> 0) % 100000) / 100000;
       const worked = working.has(f.id) ? 1 : 0;
+      rs.push({ id: f.id, at, cnt });
       for (let v = 0; v < cnt; v++, at++) {
         base[at * 3] = m.xy[v * 2];
         base[at * 3 + 1] = m.xy[v * 2 + 1];
@@ -278,14 +300,41 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
     geo.setAttribute("aDir", new BufferAttribute(dir, 2));
     geo.setAttribute("aInfo", new BufferAttribute(info, 4));
     geo.setAttribute("aEdge", new BufferAttribute(edge, 1));
+    geo.setAttribute("aWork", new BufferAttribute(work, 2));
+    ranges = rs;
+    progKey = "";
     geo.setIndex(new BufferAttribute(n > 65535 ? Uint32Array.from(index) : Uint16Array.from(index), 1));
     mesh = Object.assign(new Mesh(geo, mat!), { frustumCulled: false });
     scene!.add(mesh);
     return true;
   };
 
-  // devtools: what is drawn now
-  if (import.meta.env.DEV) Object.assign(window, { fieldMat: () => mat, fieldStats: () => ({ ...counts, drawn: !!mesh, day: mat?.uniforms.uDay.value }) });
+  const workOf = (id: number) => fake.get(id) ?? progress[id] ?? { sown: 0, harv: 0 };
+  const workKey = () => ranges.map((r) => { const w = workOf(r.id); return `${w.sown},${w.harv}`; }).join("|");
+  // Writes the real progress into the vertices; only when it has changed (the sim sends it in steps of 2%).
+  const syncWork = () => {
+    const attr = mesh?.geometry.getAttribute("aWork") as BufferAttribute | undefined;
+    if (!attr) return;
+    const key = workKey();
+    if (key === progKey) return;
+    progKey = key;
+    const arr = attr.array as Float32Array;
+    for (const r of ranges) {
+      const w = workOf(r.id);
+      for (let v = r.at; v < r.at + r.cnt; v++) (arr[v * 2] = w.sown), (arr[v * 2 + 1] = Math.min(w.harv, w.sown));
+    }
+    attr.needsUpdate = true;
+  };
+
+  // devtools: what is drawn now; fieldFake(id | "all", sown, harv) overrides a field's work (0..1 of its area; harv <= sown),
+  // fieldFake() clears it. Set the stage with the admin season preview (calendar) or wait for the real date.
+  if (import.meta.env.DEV) Object.assign(window, { fieldMat: () => mat, fieldStats: () => ({ ...counts, drawn: !!mesh, day: mat?.uniforms.uDay.value, progress, fake: Object.fromEntries(fake) }),
+      fieldFake: (id?: number | "all", sown = 1, harv = 0) => {
+        if (id === undefined) fake.clear();
+        else for (const r of id === "all" ? ranges : ranges.filter((q) => q.id === id)) fake.set(r.id, { sown, harv });
+        map.triggerRepaint();
+      },
+    });
 
   return {
     id: FIELD_LAYER_ID,
@@ -342,6 +391,15 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
           want = `${opts.frame.value ? 1 : 0}|${z?.rev ?? 0}|${fs.length}|${[...assign].join(",")}|${reliefScale.value}`;
           if (want !== have) map.triggerRepaint();
         }),
+        // the farms' real work: the key changes only when some field moves by a step, then the attribute is rewritten
+        effect(() => {
+          const p = state.value?.fieldProgress ?? {};
+          const key = Object.entries(p).map(([id, w]) => `${id}:${w.sown},${w.harv}`).join(";");
+          if (key === progWant) return;
+          progWant = key;
+          progress = p;
+          map.triggerRepaint();
+        }),
         effect(() => {
           void opts.frame.value;
           reset();
@@ -371,6 +429,7 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
       }
       if (want !== have && !build(tf, origin)) return;
       if (!mesh) return;
+      syncWork();
       const M = framer.mercator(args, host, origin);
       const eye = eyeOf(M);
       if (!eye) return;

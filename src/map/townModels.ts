@@ -177,7 +177,9 @@ function chimney(c: Ctx, roof: Roof, eaves: number, top: number, cu: number, cv:
   const sq = square(cu, cv, side);
   if (!sq.every(([a, b]) => inside(c, a, b))) return;
   const base = eaves + Math.min(...sq.map(([a, b]) => roof.rise(a, b))) - 0.2;
-  prism(c.mesh, sq, base, Math.max(base + 1, top), col, shade(col, 0.55));
+  const z = Math.max(base + 1, top);
+  prism(c.mesh, sq, base, z, col, shade(col, 0.55));
+  c.mesh.emit(cu, cv, z);
 }
 
 // Steps and a small canopy on two posts in front of the door.
@@ -453,6 +455,7 @@ function workshop(c: Ctx): void {
     const clay = pick(c, TOWN_COLORS.clay);
     revolve(c.mesh, k[0], k[1], 0, [[kr, 0], [kr, 0.4], [kr * 0.9, kr * 0.9], [kr * 0.5, kr * 1.35], [0, kr * 1.5]], clay, 12);
     prism(c.mesh, square(k[0], k[1], 0.35), kr * 1.3, kr * 1.5 + 0.5, shade(clay, 0.8), shade(clay, 0.5));
+    c.mesh.emit(k[0], k[1], kr * 1.5 + 0.5);
     const a = inRect(yard, 0.62, 0.3), b = inRect(yard, 0.62, 0.7);
     const wood = pick(c, TOWN_COLORS.planks);
     beam(c, a, b, 0.7, 0.78, 0.4, wood);

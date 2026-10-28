@@ -339,7 +339,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   };
 
   // devtools: what is drawn now
-  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), reach, far: farNow, chunks: chunks.size, rebuilt }) });
+  if (import.meta.env.DEV) Object.assign(window, { treeStats: () => ({ drawn: slots.reduce((a, q) => a + q.count, 0), byKind: Object.fromEntries(TREE_KINDS.map((k, i) => [k, slots.slice(i * TREE_LODS, (i + 1) * TREE_LODS).reduce((a, q) => a + q.count, 0)])), byLod: [0, 1, 2].map((l) => slots.filter((_, k) => k % TREE_LODS === l).reduce((a, q) => a + q.count, 0)), reach, far: farNow, chunks: chunks.size, rebuilt }) });
 
   return {
     id: TREE_LAYER_ID,
