@@ -7,6 +7,7 @@ import { Icon } from "./Icon";
 import { Button, Panel } from "./kit";
 import { hoursLeft } from "./toastModel";
 import { useGameMinutes } from "./useGameMinutes";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 const AUTOPAUSE_KEY = "rebirth.events.autopause";
 const readAutopause = (): boolean => {
@@ -71,11 +72,11 @@ export function EventCard({ map }: { map: maplibregl.Map }) {
   };
 
   return (
-    <Panel class="event-card" role="dialog" aria-label={c.title} tabIndex={0} onKeyDown={onKey}>
+    <Panel class="event-card" role="dialog" aria-labelledby={SEMANTIC_IDS.eventCardTitle} tabIndex={0} onKeyDown={onKey}>
       <div class="event-card-head">
-        <div class="event-card-title">
+        <h2 class="event-card-title" id={SEMANTIC_IDS.eventCardTitle}>
           <Icon name="scroll" size={18} /> {c.title}
-        </div>
+        </h2>
         <div class="event-card-actions">
           <button
             class="event-card-pause-btn"
