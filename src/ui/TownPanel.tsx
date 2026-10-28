@@ -18,6 +18,7 @@ import { Button, Confirm, IconButton, ProgressBar, Segmented, Tabs, type TabItem
 import { closePanel, rightPanel } from "./panels";
 import { amount, pad, roadQueue } from "./topbarModel";
 import { effectLines, weatherReason } from "./weatherModel";
+import { tabId, tabPanelId } from "./tabSemantics";
 
 type Tab = "people" | "work" | "services" | "events" | "orders";
 
@@ -354,8 +355,8 @@ export function TownPanel({ city, map }: { city: City; map: maplibregl.Map }) {
         </div>
         <IconButton icon="close" size={16} label="Закрыть" onClick={closePanel} />
       </div>
-      <Tabs tabs={TABS} active={tab.value} onChange={(id) => (tab.value = id)} label="Разделы города" />
-      <div class="rs-body">
+      <Tabs tabs={TABS} active={tab.value} onChange={(id) => (tab.value = id)} label="Разделы города" idPrefix="town" />
+      <div class="rs-body" role="tabpanel" id={tabPanelId("town", tab.value)} aria-labelledby={tabId("town", tab.value)}>
         {tab.value === "people" && <PeopleTab />}
         {tab.value === "work" && <WorkTab city={city} map={map} />}
         {tab.value === "services" && <ServicesTab />}
