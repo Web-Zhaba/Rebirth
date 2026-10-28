@@ -50,10 +50,15 @@ const CHUNK_TICKS = 144; // one game day per chunk
 export function toSnapshot(sim: SimState): SimSnapshot {
   const { zones: _z, chronicle: _c, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, finds: _f, articles: _a, ...rest } = sim;
   const houseMood: Record<number, number> = {};
-  for (const h of Object.values(sim.households)) if (h.home !== null) houseMood[h.home] = Math.round(h.mood);
+  const houseResidents: Record<number, number> = {};
+  for (const h of Object.values(sim.households)) {
+    if (h.home === null) continue;
+    houseMood[h.home] = Math.round(h.mood);
+    houseResidents[h.home] = (houseResidents[h.home] ?? 0) + h.members.length;
+  }
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.
