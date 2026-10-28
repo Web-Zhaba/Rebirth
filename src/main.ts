@@ -3,6 +3,7 @@ import { render, h } from "preact";
 import { computed, effect } from "@preact/signals";
 import { createMap } from "./map/mapView";
 import { attachContextLayer } from "./map/contextLayer";
+import { attachTrackpadGestures } from "./map/trackpadGestures";
 import { attachArticles } from "./map/articles";
 import { attachBadgeLayer } from "./map/badgeLayer";
 import { attachBuildingLayer } from "./map/buildingLayer";
@@ -39,6 +40,7 @@ import { App } from "./ui/App";
 // Read it before creating the map, which writes its own hash on construction.
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 const map = createMap("map");
+attachTrackpadGestures(map);
 attachPlaceLabels(map);
 attachContextLayer(map);
 attachZoneLayer(map); // zones beneath everything else we add
