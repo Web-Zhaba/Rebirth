@@ -1,6 +1,7 @@
 import { ROAD_KINDS } from "../sim/roads";
 import { roads, sendCmd } from "../simClient";
-import { flash, roadDemolishRequest } from "../map/roadTool";
+import { roadDemolishRequest } from "../map/roadTool";
+import { flash } from "../map/tools";
 import { play } from "./sound";
 import { Confirm } from "./kit";
 
