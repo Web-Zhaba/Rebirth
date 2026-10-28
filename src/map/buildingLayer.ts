@@ -6,7 +6,7 @@ import { pointInPolygon } from "../sim/zones";
 import { buildings, frame, lifeLights, state } from "../simClient";
 import type { Frame } from "../world/frame";
 import { mixHex, PALETTE } from "../ui/palette";
-import { groundAt, loadGround, reliefScale } from "./relief";
+import { loadGround, reliefScale } from "./relief";
 import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import type { ModelItem } from "./modelLayer";
 import { overlay, OVERLAY_COLORS, tool, type Overlay } from "./tools";
