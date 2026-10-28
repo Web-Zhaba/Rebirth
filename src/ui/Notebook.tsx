@@ -7,6 +7,7 @@ import { formatDate, newestFirst, unseenCount, type Article, type ChronicleEntry
 import { articleDomId, notebookTabForArticle } from "./notebookFocusModel";
 import { notebookArticleFocus } from "./notebookFocus";
 import { tabId, tabPanelId } from "./tabSemantics";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 export type { Article, ChronicleEntry, Find } from "./notebookLogic";
 
@@ -57,22 +58,23 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
   }, [open, total, seen, onSeen]);
 
   return (
-    <div class="notebook">
+    <aside class="notebook" aria-label="Записная книжка">
       <button
         class="notebook-toggle panel"
         title="Записная книжка"
         aria-label="Записная книжка"
         aria-expanded={open}
+        aria-controls={SEMANTIC_IDS.notebookPanel}
         onClick={() => onOpenChange(!open)}
       >
         <Icon name="notebook" size={22} />
         {unseen > 0 && !open && <span class="notebook-badge">{unseen > 99 ? "99+" : unseen}</span>}
       </button>
       {open && (
-        <div class="notebook-panel panel">
+        <section class="notebook-panel panel" id={SEMANTIC_IDS.notebookPanel} aria-labelledby={SEMANTIC_IDS.notebookTitle}>
           <div class="notebook-head">
             <Icon name="notebook" size={20} />
-            <h2 class="notebook-title">Записная книжка</h2>
+            <h2 class="notebook-title" id={SEMANTIC_IDS.notebookTitle}>Записная книжка</h2>
             <IconButton icon="close" size={16} label="Закрыть записную книжку" onClick={() => onOpenChange(false)} />
           </div>
           <div class="notebook-tabs" role="tablist" aria-label="Разделы записной книжки">
@@ -150,8 +152,8 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
                 ))
               ))}
           </div>
-        </div>
+        </section>
       )}
-    </div>
+    </aside>
   );
 }
