@@ -7,7 +7,7 @@ import type { ModelLayerOptions } from "./modelLayer";
 // Main-chunk side of the 3D farm fields (fieldLayer.ts, PLAN-3d-world.ru.md stage 6): loads the layer, and three.js with
 // it, with the first close view of a founded town.
 
-const FIELDS_FROM_ZOOM = 14.5; // fieldLayer.ts FIELD_FROM_ZOOM (not imported: that would pull three.js into this chunk)
+const FIELDS_FROM_ZOOM = 12.5; // match custom terrain: legacy 2D field fills must switch to the terrain-seated 3D layer together
 
 export function attachFields3d(map: maplibregl.Map, opts: { light?: ModelLayerOptions["light"]; weather: ReadonlySignal<WeatherState | null> }): void {
   let started = false;
