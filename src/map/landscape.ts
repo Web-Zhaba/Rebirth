@@ -50,6 +50,11 @@ export function attachLandscape(
   let waitingForCameraGround = false;
   let cameraLift = 0;
   const originalMaxZoom = map.getMaxZoom();
+  // The globe is useful for world overview, but the custom local terrain is a
+  // Mercator DEM mesh. Keep those coordinate systems from being blended while
+  // the player is in the 3D world; restore the original globe at overview zooms.
+  const originalProjection = map.getProjection();
+  let switchingProjection = false;
 
   const CAMERA_CLEARANCE_M = 45;
   const CAMERA_HYSTERESIS_M = 180;
@@ -160,6 +165,23 @@ export function attachLandscape(
     const customWorld =
       map.getZoom() >= LANDSCAPE_FROM_ZOOM &&
       reliefScale.peek() > 0;
+
+    const currentProjection = map.getProjection();
+    if (!switchingProjection) {
+      if (customWorld && currentProjection?.type !== "mercator") {
+        switchingProjection = true;
+        map.setProjection({ type: "mercator" });
+        switchingProjection = false;
+      } else if (
+        !customWorld &&
+        originalProjection &&
+        currentProjection?.type !== originalProjection.type
+      ) {
+        switchingProjection = true;
+        map.setProjection(originalProjection);
+        switchingProjection = false;
+      }
+    }
 
     const visibility = customWorld ? "none" : "visible";
 
