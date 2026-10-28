@@ -93,6 +93,7 @@ const LIFT = 0.06; // m above the computed water plane: only enough to avoid z-f
 const LEVEL_REACH = [1200, 3000, 8000]; // m around a grid corner to find the shore that sets its water level, nearest first
 const LEVEL_SAMPLES = 400; // shore points per corner at most
 const MAX_WATER_LEVEL_DELTA = 18; // m: reject pathological DEM/shore outliers that would create spikes
+const SEA_LEVEL_SNAP = 60; // m: calm coastal water near sea level is snapped to 0 to prevent terrain/water wedges
 const FRAME_BUDGET = 4; // ms of chunk building per frame
 const MAX_CHUNKS = 1500; // cached; beyond it chunks unseen for a while are dropped
 const RIVER: Record<string, { half: number; speed: number }> = { river: { half: WATERWAY_HALF_M, speed: 1 }, stream: { half: 2.5, speed: 0.6 } };
@@ -591,12 +592,32 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         const values = raw as number[];
         const sorted = [...values].sort((a, b) => a - b);
         const mid = (sorted[1] + sorted[2]) * 0.5;
-        corners.set(
-          pi,
-          values.map((h) =>
-            Math.max(mid - MAX_WATER_LEVEL_DELTA, Math.min(mid + MAX_WATER_LEVEL_DELTA, h)),
-          ),
-        );
+
+        // Polygon water with no meaningful flow and a shoreline close to sea level is
+        // almost certainly coast/open water. A DEM shoreline is often several metres
+        // above the real waterline; using those heights produces huge wedges when the
+        // flat surface intersects MapLibre terrain. Snap those surfaces to true sea level.
+        let flowing = false;
+        for (let v = 0; v < c.ribbons; v++) {
+          if (c.piece[v] !== pi) continue;
+          const fx = c.flow[v * 2];
+          const fy = c.flow[v * 2 + 1];
+          if (Math.hypot(fx, fy) > 0.05) {
+            flowing = true;
+            break;
+          }
+        }
+
+        if (!flowing && Math.abs(mid) <= SEA_LEVEL_SNAP) {
+          corners.set(pi, [0, 0, 0, 0]);
+        } else {
+          corners.set(
+            pi,
+            values.map((h) =>
+              Math.max(mid - MAX_WATER_LEVEL_DELTA, Math.min(mid + MAX_WATER_LEVEL_DELTA, h)),
+            ),
+          );
+        }
       }
 
       for (let v = 0; v < c.ribbons; v++) {
