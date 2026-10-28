@@ -5,6 +5,7 @@ import { cancelTech, queueTech, selectedTech, startTech, techView } from "./tech
 import { eraLabel, formatDays, type TechLane, type TechNode, type TechView } from "./techModel";
 import { MAX_QUEUE } from "../sim/tech";
 import "./tech.css";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 const speedText = (v: number): string => `×${v.toFixed(2).replace(/0$/, "").replace(".", ",")}`;
 const select = (id: string): void => {
@@ -185,7 +186,7 @@ export function TechPanel() {
   if (rightPanel.value !== "tech" || !v) return null;
   const sel = selectedTech.value ? v.nodes.get(selectedTech.value) : undefined;
   return (
-    <div class="rs-panel tech-panel panel" role="region" aria-label="Наука">
+    <aside class="rs-panel tech-panel panel" id={SEMANTIC_IDS.techPanel} aria-label="Наука">
       <Header v={v} />
       <Queue v={v} />
       {sel && <Card n={sel} />}
@@ -194,6 +195,6 @@ export function TechPanel() {
           <Lane key={l.era} lane={l} />
         ))}
       </div>
-    </div>
+    </aside>
   );
 }
