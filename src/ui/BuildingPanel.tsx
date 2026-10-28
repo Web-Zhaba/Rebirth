@@ -22,6 +22,7 @@ import { Button, Confirm, IconButton, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
 import { duplicateTemplate } from "./actionModel";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 const REFRESH_MS = 4000;
 
@@ -214,8 +215,8 @@ export function BuildingPanel() {
   const output = info?.kind === "workplace" && info.production?.good ? { ...OUTPUT[info.production.good], made: info.production.yesterday } : null;
   const residents = info?.kind === "house" ? info.households.reduce((a, h) => a + h.people.length, 0) : 0;
   return (
-    <div class="rs-panel inspector panel" role="region" aria-label={`Здание: ${t.name}`}>
-      <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} onClose={closePanel} />
+    <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
+      <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
       <div class="insp-sub">
         {site ? `${Math.round(site.area)} м², высота ${b.height} м` : `${t.along} × ${t.deep} м, высота ${b.height} м`}
         {b.zone === "res" && b.state === "active" ? ` · уровень ${b.level}` : ""}
@@ -353,6 +354,6 @@ export function BuildingPanel() {
           {b.state !== "planned" && b.paid ? " Потраченные материалы не вернутся." : ""}
         </Confirm>
       )}
-    </div>
+    </aside>
   );
 }
