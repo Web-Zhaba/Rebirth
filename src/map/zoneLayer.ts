@@ -181,13 +181,23 @@ export function attachZoneLayer(map: maplibregl.Map): void {
         const zone = preview?.get(c.key) ?? c.zone;
         if (zone === "none") continue;
 
-        const [lng, lat] = f.toLngLat(c.cx, c.cy);
-        const h = groundAt(lng, lat);
+        // The cell is small but the terrain can slope across it. A single
+        // centroid height puts the flat extrusion below the DEM on one side,
+        // which makes zones disappear through the custom terrain. Bound the
+        // shallow fill by all four cell-corner elevations instead.
+        const corners = cellCorners(c);
+        const samples = corners.map(([x, y]) => f.toLngLat(x, y));
+        const heights = samples.map(([lng, lat]) => groundAt(lng, lat));
+        samples.forEach((point, index) => {
+          if (heights[index] === null) missingGround.push(point);
+        });
 
-        if (h === null) missingGround.push([lng, lat]);
+        const scaled = heights
+          .filter((h): h is number => h !== null)
+          .map((h) => h * k);
 
-        const base = h === null ? 0 : Math.max(0, h * k);
-        const top = base + (k > 0 ? 0.28 : 0.12);
+        const base = scaled.length ? Math.min(...scaled) - 0.12 : 0;
+        const top = (scaled.length ? Math.max(...scaled) : base) + (k > 0 ? 0.22 : 0.12);
 
         features.push(
           polygon(ringOf(c, f), {
