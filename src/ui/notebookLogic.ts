@@ -14,6 +14,8 @@ export interface Article {
   extract: string;
   url: string;
   lang: "ru" | "en";
+  lat: number;
+  lng: number;
   at: number;
 }
 export interface ChronicleEntry {
