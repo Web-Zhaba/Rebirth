@@ -38,6 +38,7 @@ import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale, skyColours } from "./relief";
+import { disableCustomTerrainRenderers } from "./terrainDiagnostics";
 import { eyeOf, frustumPlanes, mercatorToLngLat } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 import {
@@ -62,12 +63,13 @@ import { weatherMapOn } from "./weatherSettings";
 // and the game read) and the streams of the waterway tiles, drawn by three.js over the 2D water, which stays under it
 // and beyond its reach. Import only with a dynamic `import()` (it pulls in three.js).
 //
-// The surface lies in square chunks built one by one on a grid of cells, finer near the camera (waterMesh.ts), lifted a
-// little toward the camera so the terrain does not show through. On the relief a lake or a river polygon is level at
+// The surface lies in square chunks built one by one on a grid of cells, finer near the camera (waterMesh.ts). Large
+// water polygons stay on their own smooth water plane and share MapLibre's 3D depth buffer with terrain. On relief a
+// lake or river polygon is level at
 // its shores: the DEM holds the bed of the large ones (a reservoir shows its drowned river channel), so the surface
 // takes the median height of its own shore around each corner of the chunk grid, between them bilinear (no steps
 // between chunks, a gentle slope along a river; a pond above a reservoir keeps its own level), and never below the
-// ground (where the DEM has land inside the water, a shallow bay, the water lies on it). Streams lie on the ground
+// ground geometry; terrain above the computed water surface simply occludes it. Streams follow the rendered terrain
 // along their line. The shader ripples it with the wind (calm water is a mirror), lets the rivers flow along their lines,
 // reflects the sky with the angle (Fresnel), glints with the sun and the moon, lightens the shallows and edges the
 // shore, rings with the rain, freezes and takes the snow with the weather, and fades into the flat water of the map at
@@ -88,9 +90,10 @@ const LEVEL_TO = [1200, 4000, 12_000]; // m from the camera: the farthest each l
 const FAR_CAP = 30_000; // m: no 3D water beyond
 const RANGE = 150_000; // m from the founding point, as the forest (float32 offsets from the town stay at about a centimetre)
 const SLOPE = 120; // m: the relief within a chunk or under an unknown chunk (exaggerated)
-const LIFT = 0.3; // m above the ground
+const LIFT = 0.06; // m above the computed water plane: only enough to avoid z-fighting
 const LEVEL_REACH = [1200, 3000, 8000]; // m around a grid corner to find the shore that sets its water level, nearest first
 const LEVEL_SAMPLES = 400; // shore points per corner at most
+const MAX_WATER_LEVEL_DELTA = 18; // m: reject pathological DEM/shore outliers that would create spikes
 const FRAME_BUDGET = 4; // ms of chunk building per frame
 const MAX_CHUNKS = 1500; // cached; beyond it chunks unseen for a while are dropped
 const RIVER: Record<string, { half: number; speed: number }> = { river: { half: WATERWAY_HALF_M, speed: 1 }, stream: { half: 2.5, speed: 0.6 } };
@@ -110,18 +113,13 @@ attribute float aTone;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
-uniform vec3 uEye;
 varying vec3 vM;
 varying float vShore;
 varying vec2 vFlow;
 varying float vTone;
 void main() {
-  // pulled a little toward the camera along its ray: drawn over the ground it lies on, at the same place on the screen
-  vec3 toEye = uEye - aM;
-  float d = max(length(toEye), 1.0);
-  vec3 lift = toEye * (min(d * 0.002, 25.0) / d);
-  vec4 m = uM * vec4(aM + lift, 1.0);
-  vec4 g = uG * vec4(aG + lift, 1.0);
+  vec4 m = uM * vec4(aM, 1.0);
+  vec4 g = uG * vec4(aG, 1.0);
   gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
   vM = aM;
   vShore = aShore;
@@ -140,17 +138,13 @@ attribute vec2 aFlow;
 uniform mat4 uG;
 uniform mat4 uM;
 uniform float uT;
-uniform vec3 uEye;
 varying vec3 vM;
 varying float vShore;
 varying vec2 vFlow;
 void main() {
   vec3 up = vec3(0.0, 0.0, ${STEAM_LIFT.toFixed(2)});
-  vec3 toEye = uEye - aM;
-  float d = max(length(toEye), 1.0);
-  vec3 lift = toEye * (min(d * 0.002, 25.0) / d);
-  vec4 m = uM * vec4(aM + up + lift, 1.0);
-  vec4 g = uG * vec4(aG + lift, 1.0);
+  vec4 m = uM * vec4(aM + up, 1.0);
+  vec4 g = uG * vec4(aG + up, 1.0);
   gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
   vM = aM + up;
   vShore = aShore;
@@ -277,9 +271,10 @@ vec2 ripples(vec2 p, float t, float fw) {
 }
 // Long, slow swells and gusts of wind on the water (tens of metres): seen from afar, the sky's light shifts on them.
 vec2 swells(vec2 p, float t) {
-  vec2 q = p * 0.012 + uWindDir * t * 0.01;
-  float n0 = noise(q), n1 = noise(q * 2.3 + 5.1);
-  return vec2(noise(q + vec2(0.05, 0.0)) - n0 + (noise(q * 2.3 + 5.1 + vec2(0.05, 0.0)) - n1) * 0.5, noise(q + vec2(0.0, 0.05)) - n0 + (noise(q * 2.3 + 5.1 + vec2(0.0, 0.05)) - n1) * 0.5) * 0.9;
+  vec2 side = vec2(-uWindDir.y, uWindDir.x);
+  float a = sin(dot(p, uWindDir) * 0.035 - t * 0.34);
+  float b = sin(dot(p, normalize(uWindDir + side * 0.55)) * 0.022 - t * 0.21 + 1.7);
+  return (uWindDir * a + side * b * 0.45) * 0.022;
 }
 // Rings of raindrops (a little larger than life, to be seen from above): one a cell at a time, spreading and fading.
 vec2 rain(vec2 p, float t, float fw) {
@@ -305,12 +300,15 @@ void main() {
     float ph = fract(uTime * 0.15), w = abs(2.0 * ph - 1.0);
     g = mix(ripples(vM.xy - vFlow * ph * 5.0, uTime, fw), ripples(vM.xy - vFlow * fract(ph + 0.5) * 5.0 + 3.7, uTime, fw), w);
   } else g = ripples(vM.xy, uTime, fw);
-  g = (g * uWind + swells(vM.xy, uTime) * (0.4 + uWind) + rain(vM.xy, uTime, fw) * uRain) * open;
+  vec2 smallWaves = g * uWind;
+  vec2 longWaves = swells(vM.xy, uTime) * (0.25 + uWind * 0.35);
+  vec2 rainWaves = rain(vM.xy, uTime, fw) * uRain;
+  g = (smallWaves + longWaves + rainWaves) * open;
   vec3 n = normalize(vec3(-g, 1.0));
   vec3 v = normalize(uEye - vM);
-  float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+  float fres = 0.03 + 0.30 * pow(1.0 - max(dot(n, v), 0.0), 4.0);
   vec3 r = reflect(-v, n);
-  vec3 sky = mix(uHorizon, uSky, smoothstep(0.0, 0.5, r.z));
+  vec3 sky = mix(uHorizon, uSky, smoothstep(0.0, 0.5, r.z)) * 0.92;
   // the shore in the reflection: its tone as a streak that fades out from the shore, longer at a low view, shaken by
   // the ripples, only on calm open water (vTone < 0: no shore data, as on the ribbons of streams)
   float calm = (1.0 - smoothstep(0.2, 0.75, uWind)) * (1.0 - uRain) * open * step(-0.01, vTone);
@@ -320,11 +318,11 @@ void main() {
     float streak = exp(-sd / reach) * (1.0 - smoothstep(30.0, 60.0, vShore)) * (0.7 + 0.3 * noise(vec2(vM.x + vM.y, vM.x - vM.y) * 0.9 + g * 20.0));
     vec3 shoreCol = mix(uGroundTone, uForestTone, clamp(vTone, 0.0, 1.0));
     shoreCol = mix(shoreCol, uSnowCol * 0.8, uSnow * 0.7) * mix(0.25, 1.0, uSun);
-    sky = mix(sky, shoreCol, streak * calm * 0.5);
+    sky = mix(sky, shoreCol, streak * calm * 0.18);
   }
   // the body of the water: light in the shallows, deep away from the shore, a little lit by the sun
   vec3 body = mix(uShallow, uDeep, smoothstep(0.0, ${SHORE_CAP}.0, vShore)) * mix(0.9, 1.04, max(dot(n, uLight), 0.0)) * mix(0.9, 1.0, uSun);
-  vec3 col = mix(body, sky, fres * (1.0 - 0.35 * uRain)); // rain roughens the water: a duller reflection
+  vec3 col = mix(body, sky, fres * (1.0 - 0.55 * uRain)); // restrained stylised reflection
   // glints: the sun, and by night the moon (opposite it)
   float s = max(dot(r, uSunDir), 0.0);
   col += vec3(1.0, 0.95, 0.85) * (pow(s, 400.0) * 3.0 + pow(s, 40.0) * 0.12) * uSun * smoothstep(-0.02, 0.1, uSunDir.z) * open;
@@ -395,7 +393,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
   const chunks = new Map<string, Chunk>(); // "i,j,level"
   const shown = new Set<Mesh>();
   // tiles in town metres
-  const land = new Map<string, (TileWater & { boxes: Box[] }) | null>(); // null while loading
+  const land = new Map<string, (TileWater & { boxes: Box[]; classes: string[] }) | null>(); // null while loading
   const ways = new Map<string, Waterway[] | null>();
   const levels = new Map<string, number>(); // water level (DEM metres) of a polygon at a grid corner
   const camera = new Camera();
@@ -434,9 +432,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
               for (const [a, b] of p) (x0 = Math.min(x0, a)), (y0 = Math.min(y0, b)), (x1 = Math.max(x1, a)), (y1 = Math.max(y1, b));
               return [x0, y0, x1, y1];
             });
-            return { ...w, boxes };
+            return { ...w, boxes, classes: t.water.map((p) => p.cls) };
           },
-          () => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], tones: [], boxes: [] }),
+          () => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], tones: [], boxes: [], classes: [] }),
         )
         .then((w) => {
           if (tilesFor !== tf) return;
@@ -507,37 +505,63 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     (hs as number[]).sort((a, b) => a - b);
     return hs[hs.length >> 1]!;
   };
-  // The water level of a polygon (tile key, index in the tile) at a corner of the chunk grid: the median ground height
-  // of its own shore near the corner, the nearest reach that has any, else of all its shore; a polygon with no shore in
-  // its tile (the middle of a large lake) takes any shore near the corner, else the ground there. null while tiles or
-  // ground load.
-  const levelAt = (tf: TownFrame, tile: string, poly: number, ci: number, cj: number): number | null => {
-    const key = `${tile}:${poly}:${ci},${cj}`;
+  // One stable level per water polygon. Water is a surface, not a terrain decal:
+  // lakes do not tilt independently in every render chunk. Prefer the polygon's
+  // own shoreline elevations; for tile-interior pieces with no shore, use the
+  // DEM at the polygon centroid (Terrarium normally stores the water-surface height).
+  const levelOfPolygon = (
+    tf: TownFrame,
+    tile: string,
+    poly: number,
+  ): number | null => {
+    const key = `${tile}:${poly}`;
     const had = levels.get(key);
     if (had !== undefined) return had;
-    const x = ci * SIZE, y = cj * SIZE;
+
     const own = land.get(tile)!;
-    const ends = (t: TileWater, keep: (k: number) => boolean, r: number): XY[] => {
-      const out: XY[] = [];
-      for (let k = 0; k < t.shores.length; k += 4) if (keep(k / 4) && Math.hypot(t.shores[k] - x, t.shores[k + 1] - y) <= r) out.push([t.shores[k], t.shores[k + 1]]);
-      return out;
-    };
-    let pts: XY[] = [];
-    for (const r of [...LEVEL_REACH, Infinity]) if (!pts.length) pts = ends(own, (s) => own.shoreOf[s] === poly, r);
-    for (const r of LEVEL_REACH) {
-      if (pts.length) break;
-      const ts = tilesUnder(tf, [x - r, y - r, x + r, y + r], NATURE_MAXZOOM).map(([a, b]) => landTile(tf, a, b));
-      if (ts.some((t) => !t)) return null;
-      for (const t of ts) pts.push(...ends(t!, () => true, r));
+    const pts: XY[] = [];
+
+    for (let k = 0; k < own.shores.length; k += 4) {
+      if (own.shoreOf[k / 4] === poly) {
+        pts.push([own.shores[k], own.shores[k + 1]]);
+      }
     }
-    let level: number | null;
-    if (pts.length) level = median(tf, pts);
-    else {
-      const at = tf.toLngLat(x, y);
-      level = groundAt(at[0], at[1]);
-      if (level === null) void loadGround([at]).then(() => map.triggerRepaint());
+
+    let level: number | null = null;
+
+    if (pts.length) {
+      level = median(tf, pts);
+    } else {
+      const pieces = own.pieces.filter((_, i) => own.pieceOf[i] === poly);
+      let sx = 0;
+      let sy = 0;
+      let n = 0;
+
+      for (const piece of pieces) {
+        for (const [x, y] of piece) {
+          sx += x;
+          sy += y;
+          n++;
+        }
+      }
+
+      if (n > 0) {
+        const [lng, lat] = tf.toLngLat(sx / n, sy / n);
+        level = groundAt(lng, lat);
+
+        if (level === null) {
+          void loadGround([[lng, lat]]).then(() => map.triggerRepaint());
+        }
+      }
     }
-    if (level !== null) levels.set(key, level);
+
+    if (level !== null) {
+      // Small DEM noise between neighbouring vector-tile fragments should not
+      // become a visible step in an otherwise calm lake.
+      level = Math.round(level * 2) / 2;
+      levels.set(key, level);
+    }
+
     return level;
   };
 
@@ -548,7 +572,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     const lt = tilesUnder(tf, grow(FLOW_REACH), NATURE_MAXZOOM).map(([x, y]) => landTile(tf, x, y));
     const wt = tilesUnder(tf, grow(FLOW_REACH), WATERWAY_ZOOM).map(([x, y]) => wayTile(tf, x, y));
     if (lt.some((t) => !t) || wt.some((t) => !t)) return null;
-    const pieces: XY[][] = [], boxes: Box[] = [], owners: { tile: string; poly: number }[] = [];
+    const pieces: XY[][] = [], boxes: Box[] = [], owners: { tile: string; poly: number; cls: string }[] = [];
     const lk = tilesUnder(tf, grow(FLOW_REACH), NATURE_MAXZOOM).map(([x, y]) => `${x}/${y}`);
     lt.forEach((t, q) =>
       t!.pieces.forEach((p, k) => {
@@ -556,7 +580,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         if (b[2] < box[0] - FLOW_REACH || b[0] > box[2] + FLOW_REACH || b[3] < box[1] - FLOW_REACH || b[1] > box[3] + FLOW_REACH) return;
         pieces.push(p);
         boxes.push(b);
-        owners.push({ tile: lk[q], poly: t!.pieceOf[k] });
+        owners.push({ tile: lk[q], poly: t!.pieceOf[k], cls: t!.classes[t!.pieceOf[k]] ?? "" });
       }),
     );
     const shores = lt.flatMap((t) => t!.shores);
@@ -575,34 +599,55 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     const base = new Float64Array(n * 3);
     for (let v = 0; v < n; v++) (base[v * 3] = c.xy[v * 2]), (base[v * 3 + 1] = c.xy[v * 2 + 1]), (base[v * 3 + 2] = LIFT);
     if (k > 0) {
-      const corners = new Map<number, number[]>(); // piece -> its levels at the four corners
-      for (const pi of new Set(c.piece)) {
-        const { tile, poly } = owners[pi];
-        const lv = [levelAt(tf, tile, poly, i, j), levelAt(tf, tile, poly, i + 1, j), levelAt(tf, tile, poly, i, j + 1), levelAt(tf, tile, poly, i + 1, j + 1)];
-        if (lv.some((h) => h === null)) return null;
-        corners.set(pi, lv as number[]);
+      // Large water polygons are water surfaces, not terrain decals.
+      // Their height comes only from surrounding shore levels; terrain above the
+      // surface hides the water through the shared 3D depth buffer.
+      const polygonLevels = new Map<number, number>();
+
+      for (const pi of new Set(c.piece.slice(0, c.ribbons))) {
+        const owner = owners[pi];
+        if (!owner) continue;
+
+        const { tile, poly, cls } = owner;
+
+        if (cls === "ocean") {
+          polygonLevels.set(pi, 0);
+          continue;
+        }
+
+        const waterLevel = levelOfPolygon(tf, tile, poly);
+        if (waterLevel === null) return null;
+
+        polygonLevels.set(pi, waterLevel);
       }
-      const at: [number, number][] = [];
-      for (let v = 0; v < c.ribbons; v++) at.push(tf.toLngLat(c.xy[v * 2], c.xy[v * 2 + 1]));
-      const under = at.map(([a, b]) => groundAt(a, b));
-      if (under.some((h) => h === null)) {
-        void loadGround(at).then(() => map.triggerRepaint());
-        return null;
-      }
+
       for (let v = 0; v < c.ribbons; v++) {
-        const [l00, l10, l01, l11] = corners.get(c.piece[v])!;
-        const fx = Math.min(1, Math.max(0, (c.xy[v * 2] - box[0]) / SIZE)), fy = Math.min(1, Math.max(0, (c.xy[v * 2 + 1] - box[1]) / SIZE));
-        base[v * 3 + 2] += Math.max(under[v]!, l00 * (1 - fx) * (1 - fy) + l10 * fx * (1 - fy) + l01 * (1 - fx) * fy + l11 * fx * fy) * k;
+        const waterLevel = polygonLevels.get(c.piece[v]);
+        if (waterLevel === undefined) continue;
+        base[v * 3 + 2] += waterLevel * k;
       }
+
+      // Line-only rivers and streams follow the same Terrarium DEM as our
+      // landscape mesh. There is deliberately no MapLibre terrain height path.
       const centres: [number, number][] = [];
-      for (let v = c.ribbons + 1; v < n; v += 3) centres.push(tf.toLngLat(c.xy[v * 2], c.xy[v * 2 + 1]));
-      const gs = centres.map(([a, b]) => groundAt(a, b));
-      if (gs.some((h) => h === null)) {
+      for (let v = c.ribbons + 1; v < n; v += 3) {
+        centres.push(tf.toLngLat(c.xy[v * 2], c.xy[v * 2 + 1]));
+      }
+
+      const riverHeights = centres.map(([lng, lat]) => {
+        const raw = groundAt(lng, lat);
+        return raw === null ? null : raw * k;
+      });
+
+      if (riverHeights.some((h) => h === null)) {
         void loadGround(centres).then(() => map.triggerRepaint());
         return null;
       }
-      gs.forEach((h, q) => {
-        for (let r = 0; r < 3; r++) base[(c.ribbons + q * 3 + r) * 3 + 2] += h! * k;
+
+      riverHeights.forEach((h, q) => {
+        for (let r = 0; r < 3; r++) {
+          base[(c.ribbons + q * 3 + r) * 3 + 2] += h!;
+        }
       });
     }
     const { g, m } = projectPoints(base, tf.toLngLat, o);
@@ -743,6 +788,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       scene = null;
     },
     render(_gl, args) {
+    if (disableCustomTerrainRenderers) return;
     const tf = opts.frame.peek();
     const zoom = map.getZoom();
 

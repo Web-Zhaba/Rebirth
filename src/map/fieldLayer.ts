@@ -12,7 +12,9 @@ import { fields3dOn, showWhile } from "./graphicsSettings";
 import { projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
-import { groundAt, loadGround, reliefScale } from "./relief";
+import { loadGround, reliefScale } from "./relief";
+import { disableCustomTerrainRenderers } from "./terrainDiagnostics";
+import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 import { snowOpacity } from "./weatherMath";
@@ -23,8 +25,8 @@ import { weatherMapOn } from "./weatherSettings";
 // crop up close. Import only with a dynamic `import()` (it pulls in three.js).
 //
 // One mesh holds every field (they are few): each polygon cut into 4 m cells draped on the relief a few centimetres
-// above the ground (fieldMesh.ts), pulled a little toward the camera like the water so the terrain does not show
-// through. Everything else is the fragment shader, procedural, in metres along and across the furrows (the longest edge
+// above the ground (fieldMesh.ts). It shares MapLibre's terrain depth buffer instead of being pulled toward the camera.
+// Everything else is the fragment shader, procedural, in metres along and across the furrows (the longest edge
 // of the field): ridges every 0.7 m with a fake normal lit by the sun, faded out before they get finer than a pixel.
 // The season follows the game calendar (the admin season preview too), in seasons S = DAYS_PER_SEASON, with a per-field
 // shift of a day or two: winter, the ploughed soil under the snow (the weather's snowpack, the ridges poking through);
@@ -38,7 +40,7 @@ import { weatherMapOn } from "./weatherSettings";
 // Nothing moves, so it asks for no frames of its own.
 
 export const FIELD_LAYER_ID = "fields-3d";
-export const FIELD_FROM_ZOOM = 14.5; // closer than this the fields are 3D
+export const FIELD_FROM_ZOOM = 12.5; // switch to terrain-seated 3D fields as soon as the custom terrain becomes active
 const FIELD_FULL_ZOOM = 15.2; // from here it no longer fades into the flat fill
 const FAR = 2500; // m: the fields fade out toward here
 const LIFT = 0.03; // m above the ground
@@ -66,12 +68,8 @@ varying vec4 vInfo;
 varying float vEdge;
 varying vec2 vWork;
 void main() {
-  // pulled a little toward the camera along its ray: drawn over the ground it lies on, at the same place on the screen
-  vec3 toEye = uEye - aM;
-  float d = max(length(toEye), 1.0);
-  vec3 lift = toEye * (min(d * 0.002, 25.0) / d);
-  vec4 m = uM * vec4(aM + lift, 1.0);
-  vec4 g = uG * vec4(aG + lift, 1.0);
+  vec4 m = uM * vec4(aM, 1.0);
+  vec4 g = uG * vec4(aG, 1.0);
   gl_Position = uT > 0.999 ? g : (uT <= 0.0 ? m : mix(m, g, uT));
   vM = aM;
   vLoc = aLoc;
@@ -222,91 +220,234 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
   let counts = { fields: 0, worked: 0, verts: 0, tris: 0 };
   const stops: (() => void)[] = [];
   const shapes = new Map<string, ReturnType<typeof buildFieldMesh>>(); // by field id and outline
+  let building = false;
+  let buildGeneration = 0;
+  const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
   const camera = new Camera();
   const framer = frameSetter(opts.light);
 
   const colour = (hex: string) => new Vector3(...rgb(hex));
 
-  const reset = () => {
+  const disposeCurrentMesh = () => {
     if (mesh) (scene?.remove(mesh), mesh.geometry.dispose());
     mesh = null;
+  };
+
+  const reset = () => {
+    // Cancel any in-flight mesh build; its next batch boundary will exit.
+    buildGeneration++;
+    building = false;
+    disposeCurrentMesh();
     have = "";
   };
 
-  // Builds the one mesh of all the fields; false while the ground under them loads.
-  const build = (tf: TownFrame, o: { lng: number; lat: number }): boolean => {
-    const fields = zones.peek()?.fields ?? [];
-    const k = reliefScale.peek();
-    const parts = fields.map((f) => {
-      const key = shapeKey(f);
-      let m = shapes.get(key);
-      if (!m) shapes.set(key, (m = buildFieldMesh(f.pts as XY[])));
-      return { f, m };
-    });
-    if (shapes.size > fields.length * 2 + 8) {
-      const live = new Set(fields.map(shapeKey));
-      for (const key of shapes.keys()) if (!live.has(key)) shapes.delete(key);
-    }
-    let n = 0, tris = 0;
-    for (const { m } of parts) (n += m.xy.length / 2), (tris += m.index.length / 3);
-    const lngLat: [number, number][] = [];
-    for (const { m } of parts) for (let v = 0; v < m.xy.length / 2; v++) lngLat.push(tf.toLngLat(m.xy[v * 2], m.xy[v * 2 + 1]));
-    let ground: (number | null)[] = [];
-    if (k > 0) {
-      ground = lngLat.map(([a, b]) => groundAt(a, b));
-      if (ground.some((h) => h === null)) {
-        void loadGround(lngLat.filter((_, q) => ground[q] === null)).then(() => map.triggerRepaint());
-        return false;
+  // Build the field mesh in short batches so the first terrain zoom never
+  // monopolises the main thread. Ground tiles load in batches too; loadGround
+  // performs synchronous coordinate conversion for every point it receives.
+  const build = async (tf: TownFrame, o: { lng: number; lat: number }): Promise<boolean> => {
+    if (building) return false;
+
+    const run = ++buildGeneration;
+    const targetWant = want;
+    const current = () =>
+      run === buildGeneration &&
+      targetWant === want &&
+      !!scene &&
+      !!mat;
+    const batchSize = 2048;
+    building = true;
+
+    try {
+      const fields = zones.peek()?.fields ?? [];
+      const k = reliefScale.peek();
+      const parts: { f: NonNullable<typeof fields>[number]; m: ReturnType<typeof buildFieldMesh> }[] = [];
+
+      for (let i = 0; i < fields.length; i++) {
+        const f = fields[i];
+        const key = shapeKey(f);
+        let m = shapes.get(key);
+        if (!m) {
+          m = buildFieldMesh(f.pts as XY[]);
+          shapes.set(key, m);
+        }
+        parts.push({ f, m });
+
+        if ((i + 1) % 32 === 0 && i + 1 < fields.length) {
+          await yieldToBrowser();
+          if (!current()) return false;
+        }
+      }
+
+      if (shapes.size > fields.length * 2 + 8) {
+        const live = new Set<string>();
+        for (let i = 0; i < fields.length; i++) {
+          live.add(shapeKey(fields[i]));
+          if ((i + 1) % 256 === 0 && i + 1 < fields.length) {
+            await yieldToBrowser();
+            if (!current()) return false;
+          }
+        }
+        for (const key of shapes.keys()) if (!live.has(key)) shapes.delete(key);
+      }
+
+      let n = 0, tris = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const m = parts[i].m;
+        n += m.xy.length / 2;
+        tris += m.index.length / 3;
+        if ((i + 1) % 256 === 0 && i + 1 < parts.length) {
+          await yieldToBrowser();
+          if (!current()) return false;
+        }
+      }
+
+      const lngLat: [number, number][] = new Array(n);
+      let vertex = 0;
+      for (const { m } of parts) {
+        for (let v = 0; v < m.xy.length / 2; v++, vertex++) {
+          lngLat[vertex] = tf.toLngLat(m.xy[v * 2], m.xy[v * 2 + 1]);
+          if ((vertex + 1) % batchSize === 0) {
+            await yieldToBrowser();
+            if (!current()) return false;
+          }
+        }
+      }
+
+      const ground: (number | null)[] = k > 0 ? new Array(n).fill(null) : [];
+      if (k > 0) {
+        for (let start = 0; start < lngLat.length; start += batchSize) {
+          const end = Math.min(lngLat.length, start + batchSize);
+          for (let v = start; v < end; v++) {
+            ground[v] = terrainSurfaceAt(lngLat[v][0], lngLat[v][1], tf);
+          }
+          if (end < lngLat.length) {
+            await yieldToBrowser();
+            if (!current()) return false;
+          }
+        }
+
+        const missing: number[] = [];
+        for (let v = 0; v < ground.length; v++) {
+          if (ground[v] === null) missing.push(v);
+        }
+
+        // Avoid sending every field vertex to loadGround in a single call.
+        for (let start = 0; start < missing.length; start += batchSize) {
+          const batch = missing.slice(start, start + batchSize).map((v) => lngLat[v]);
+          await loadGround(batch);
+          await yieldToBrowser();
+          if (!current()) return false;
+        }
+
+        for (let start = 0; start < missing.length; start += batchSize) {
+          const end = Math.min(missing.length, start + batchSize);
+          for (let i = start; i < end; i++) {
+            const v = missing[i];
+            ground[v] = terrainSurfaceAt(lngLat[v][0], lngLat[v][1], tf);
+          }
+          if (end < missing.length) {
+            await yieldToBrowser();
+            if (!current()) return false;
+          }
+        }
+
+        if (ground.some((h) => h === null)) return false;
+      }
+
+      const base = new Float64Array(n * 3);
+      const loc = new Float32Array(n * 2);
+      const dir = new Float32Array(n * 2);
+      const info = new Float32Array(n * 4);
+      const edge = new Float32Array(n);
+      const index: number[] = [];
+      const work = new Float32Array(n * 2);
+      const rs: typeof ranges = [];
+      let at = 0;
+
+      for (let p = 0; p < parts.length; p++) {
+        const { f, m } = parts[p];
+        const cnt = m.xy.length / 2;
+        if (!cnt) continue;
+
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const [x, y] of f.pts) {
+          x0 = Math.min(x0, x);
+          y0 = Math.min(y0, y);
+          x1 = Math.max(x1, x);
+          y1 = Math.max(y1, y);
+        }
+        const cx = Math.round((x0 + x1) / 2), cy = Math.round((y0 + y1) / 2);
+        const shift = cx * m.dir[0] + cy * m.dir[1];
+        const hsh = ((Math.imul(f.id + 1, 2654435761) >>> 0) % 100000) / 100000;
+        const worked = working.has(f.id) ? 1 : 0;
+        rs.push({ id: f.id, at, cnt });
+
+        for (let v = 0; v < cnt; v++, at++) {
+          base[at * 3] = m.xy[v * 2];
+          base[at * 3 + 1] = m.xy[v * 2 + 1];
+          base[at * 3 + 2] = LIFT + (k > 0 ? ground[at]! * k : 0);
+          loc[at * 2] = m.xy[v * 2] - cx;
+          loc[at * 2 + 1] = m.xy[v * 2 + 1] - cy;
+          dir[at * 2] = m.dir[0];
+          dir[at * 2 + 1] = m.dir[1];
+          info.set([worked, hsh, m.along[0] - shift, m.along[1] - shift], at * 4);
+          edge[at] = m.edge[v];
+
+          if ((at + 1) % batchSize === 0) {
+            await yieldToBrowser();
+            if (!current()) return false;
+          }
+        }
+        for (const i of m.index) index.push(i + at - cnt);
+
+        if ((p + 1) % 32 === 0 && p + 1 < parts.length) {
+          await yieldToBrowser();
+          if (!current()) return false;
+        }
+      }
+
+      // projectPoints is synchronous, so project in bounded chunks as well.
+      const g = new Float32Array(n * 3);
+      const merc = new Float32Array(n * 3);
+      for (let start = 0; start < n; start += batchSize) {
+        const end = Math.min(n, start + batchSize);
+        const projected = projectPoints(base.subarray(start * 3, end * 3), tf.toLngLat, o);
+        g.set(projected.g, start * 3);
+        merc.set(projected.m, start * 3);
+        if (end < n) {
+          await yieldToBrowser();
+          if (!current()) return false;
+        }
+      }
+
+      if (!current()) return false;
+
+      disposeCurrentMesh();
+      counts = { fields: fields.length, worked: working.size, verts: n, tris };
+      have = targetWant;
+      ranges = rs;
+      progKey = "";
+
+      if (!n) return true;
+
+      const geo = new BufferGeometry();
+      geo.setAttribute("aG", new BufferAttribute(g, 3));
+      geo.setAttribute("aM", new BufferAttribute(merc, 3));
+      geo.setAttribute("aLoc", new BufferAttribute(loc, 2));
+      geo.setAttribute("aDir", new BufferAttribute(dir, 2));
+      geo.setAttribute("aInfo", new BufferAttribute(info, 4));
+      geo.setAttribute("aEdge", new BufferAttribute(edge, 1));
+      geo.setAttribute("aWork", new BufferAttribute(work, 2));
+      geo.setIndex(new BufferAttribute(n > 65535 ? Uint32Array.from(index) : Uint16Array.from(index), 1));
+      mesh = Object.assign(new Mesh(geo, mat!), { frustumCulled: false });
+      scene!.add(mesh);
+      return true;
+    } finally {
+      if (run === buildGeneration) {
+        building = false;
+        map.triggerRepaint();
       }
     }
-    const base = new Float64Array(n * 3);
-    const loc = new Float32Array(n * 2), dir = new Float32Array(n * 2), info = new Float32Array(n * 4), edge = new Float32Array(n);
-    const index: number[] = [];
-    const work = new Float32Array(n * 2);
-    const rs: typeof ranges = [];
-    let at = 0;
-    for (const { f, m } of parts) {
-      const cnt = m.xy.length / 2;
-      if (!cnt) continue;
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const [x, y] of f.pts) (x0 = Math.min(x0, x)), (y0 = Math.min(y0, y)), (x1 = Math.max(x1, x)), (y1 = Math.max(y1, y));
-      const cx = Math.round((x0 + x1) / 2), cy = Math.round((y0 + y1) / 2); // the origin of the field's own coordinates
-      const shift = cx * m.dir[0] + cy * m.dir[1];
-      const hsh = ((Math.imul(f.id + 1, 2654435761) >>> 0) % 100000) / 100000;
-      const worked = working.has(f.id) ? 1 : 0;
-      rs.push({ id: f.id, at, cnt });
-      for (let v = 0; v < cnt; v++, at++) {
-        base[at * 3] = m.xy[v * 2];
-        base[at * 3 + 1] = m.xy[v * 2 + 1];
-        base[at * 3 + 2] = LIFT + (k > 0 ? ground[at]! * k : 0);
-        loc[at * 2] = m.xy[v * 2] - cx;
-        loc[at * 2 + 1] = m.xy[v * 2 + 1] - cy;
-        dir[at * 2] = m.dir[0];
-        dir[at * 2 + 1] = m.dir[1];
-        info.set([worked, hsh, m.along[0] - shift, m.along[1] - shift], at * 4);
-        edge[at] = m.edge[v];
-      }
-      for (const i of m.index) index.push(i + at - cnt);
-    }
-    reset();
-    counts = { fields: fields.length, worked: working.size, verts: n, tris };
-    have = want;
-    if (!n) return true;
-    const { g, m } = projectPoints(base, tf.toLngLat, o);
-    const geo = new BufferGeometry();
-    geo.setAttribute("aG", new BufferAttribute(g, 3));
-    geo.setAttribute("aM", new BufferAttribute(m, 3));
-    geo.setAttribute("aLoc", new BufferAttribute(loc, 2));
-    geo.setAttribute("aDir", new BufferAttribute(dir, 2));
-    geo.setAttribute("aInfo", new BufferAttribute(info, 4));
-    geo.setAttribute("aEdge", new BufferAttribute(edge, 1));
-    geo.setAttribute("aWork", new BufferAttribute(work, 2));
-    ranges = rs;
-    progKey = "";
-    geo.setIndex(new BufferAttribute(n > 65535 ? Uint32Array.from(index) : Uint16Array.from(index), 1));
-    mesh = Object.assign(new Mesh(geo, mat!), { frustumCulled: false });
-    scene!.add(mesh);
-    return true;
   };
 
   const workOf = (id: number) => fake.get(id) ?? progress[id] ?? { sown: 0, harv: 0 };
@@ -388,7 +529,12 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
           const fs = z?.fields ?? [];
           const assign = assignFields(fs, buildings.value ?? {});
           working = new Set(assign.keys());
-          want = `${opts.frame.value ? 1 : 0}|${z?.rev ?? 0}|${fs.length}|${[...assign].join(",")}|${reliefScale.value}`;
+          const nextWant = `${opts.frame.value ? 1 : 0}|${z?.rev ?? 0}|${fs.length}|${[...assign].join(",")}|${reliefScale.value}|${terrainSurfaceRevision.value}`;
+          if (nextWant !== want) {
+            want = nextWant;
+            buildGeneration++;
+            building = false;
+          }
           if (want !== have) map.triggerRepaint();
         }),
         // the farms' real work: the key changes only when some field moves by a step, then the attribute is rewritten
@@ -419,6 +565,7 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
       scene = null;
     },
     render(_gl, args) {
+      if (disableCustomTerrainRenderers) return;
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
       if (!host || !scene || !mat || !tf || zoom < FIELD_FROM_ZOOM) return;
@@ -427,7 +574,10 @@ export function createFieldLayer(map: maplibregl.Map, opts: FieldLayerOptions): 
         origin = { lng, lat };
         reset();
       }
-      if (want !== have && !build(tf, origin)) return;
+      if (want !== have) {
+        if (!building) void build(tf, origin);
+        return;
+      }
       if (!mesh) return;
       syncWork();
       const M = framer.mercator(args, host, origin);

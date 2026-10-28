@@ -12,7 +12,7 @@ import { NATURE_MAXZOOM } from "../world/nature";
 import { getLandTile } from "../world/tiles";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { XY } from "./modelGeometry";
-import { CHUNK, scatterDetails, scatterTrees, TREE_STRIDE, TREES_FROM_ZOOM, type DetailMix, type DetailPoly, type ForestPoly } from "./treeScatter";
+import { CHUNK, insideRings, scatterDetails, scatterTrees, TREE_STRIDE, TREES_FROM_ZOOM, type DetailMix, type DetailPoly, type ForestPoly } from "./treeScatter";
 import { mercatorToLngLat } from "./three/frame";
 
 export const FOREST_RANGE = 150_000;
@@ -33,20 +33,20 @@ const B = (share: number, a: number, b: number) => ({ share, size: [a, b] as [nu
 const MIXES: Record<string, Record<string, DetailMix>> = {
   wood: { "": { bush: B(0.04, 0.6, 1.6) } },
   grass: {
-    scrub: { bush: B(0.5, 0.8, 2.4), boulder: B(0.02, 0.4, 1) },
-    heath: { bush: B(0.3, 0.4, 1.1), boulder: B(0.04, 0.4, 1.2) },
-    fell: { bush: B(0.08, 0.3, 0.7), boulder: B(0.12, 0.4, 1.5) },
-    tundra: { bush: B(0.1, 0.3, 0.8), boulder: B(0.06, 0.4, 1.2) },
-    wet_meadow: { reed: B(0.15, 0.9, 1.6), bush: B(0.02, 0.6, 1.4) },
-    "": { bush: B(0.025, 0.6, 1.8) },
+    scrub: { grass: B(0.42, 0.45, 1.0), bush: B(0.5, 0.8, 2.4), boulder: B(0.02, 0.4, 1) },
+    heath: { grass: B(0.36, 0.35, 0.8), bush: B(0.3, 0.4, 1.1), boulder: B(0.04, 0.4, 1.2) },
+    fell: { grass: B(0.18, 0.25, 0.55), bush: B(0.08, 0.3, 0.7), boulder: B(0.12, 0.4, 1.5) },
+    tundra: { grass: B(0.16, 0.2, 0.5), bush: B(0.1, 0.3, 0.8), boulder: B(0.06, 0.4, 1.2) },
+    wet_meadow: { grass: B(0.5, 0.65, 1.25), reed: B(0.15, 0.9, 1.6), bush: B(0.02, 0.6, 1.4) },
+    "": { grass: B(0.48, 0.45, 1.05), bush: B(0.025, 0.6, 1.8) },
   },
   wetland: {
-    marsh: { reed: B(0.7, 1.2, 2.3) },
+    marsh: { grass: B(0.25, 0.5, 1.0), reed: B(0.7, 1.2, 2.3) },
     reedbed: { reed: B(0.85, 1.4, 2.5) },
     saltmarsh: { reed: B(0.4, 0.6, 1.2) },
     swamp: { reed: B(0.3, 1, 2), bush: B(0.15, 0.8, 2) },
     bog: { bush: B(0.12, 0.3, 0.9), reed: B(0.1, 0.6, 1.2) },
-    "": { reed: B(0.4, 1, 2), bush: B(0.05, 0.6, 1.5) },
+    "": { grass: B(0.18, 0.4, 0.9), reed: B(0.4, 1, 2), bush: B(0.05, 0.6, 1.5) },
   },
   rock: { scree: { boulder: B(0.5, 0.3, 1.2) }, "": { boulder: B(0.35, 0.5, 2.6) } },
   sand: { "": { bush: B(0.02, 0.4, 1), boulder: B(0.01, 0.3, 0.8) } },
@@ -55,7 +55,7 @@ const mixOf = (cls: string, sub: string): DetailMix | null => MIXES[cls]?.[sub] 
 const RUIN_MIX: DetailMix = { bush: B(0.3, 0.6, 2.2), boulder: B(0.35, 0.15, 0.55) };
 
 const N = 2 ** NATURE_MAXZOOM;
-const tiles = new Map<string, { wood: ForestPoly[]; details: DetailPoly[] }>();
+const tiles = new Map<string, { wood: ForestPoly[]; details: DetailPoly[]; covers: ForestPoly[] }>();
 const pending = new Set<string>();
 let tilesFor: Frame | null = null;
 
@@ -66,27 +66,67 @@ function loadTile(f: Frame, tx: number, ty: number, done: () => void): void {
   void getLandTile(((tx % N) + N) % N, ty)
     .then(
       (tile) => {
-        const out = { wood: [] as ForestPoly[], details: [] as DetailPoly[] };
-        for (const p of tile.land) {
-          const mix = mixOf(p.cls, p.sub);
-          if (p.cls !== "wood" && !mix) continue;
+        const out = {
+          wood: [] as ForestPoly[],
+          details: [] as DetailPoly[],
+          covers: [] as ForestPoly[],
+        };
+
+        const localPoly = (p: { rings: number[][] }): ForestPoly => {
           const rings = p.rings.map((r) => {
             const ring: XY[] = [];
             for (let i = 0; i + 1 < r.length; i += 2) {
-              const ll = mercatorToLngLat((tx + r[i] / tile.extent) / N, (ty + r[i + 1] / tile.extent) / N);
+              const ll = mercatorToLngLat(
+                (tx + r[i] / tile.extent) / N,
+                (ty + r[i + 1] / tile.extent) / N,
+              );
               ring.push(f.toLocal(ll.lng, ll.lat));
             }
             return ring;
           });
+
           let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-          for (const r of rings) for (const [x, y] of r) (x0 = Math.min(x0, x)), (y0 = Math.min(y0, y)), (x1 = Math.max(x1, x)), (y1 = Math.max(y1, y));
-          const poly: ForestPoly = { bbox: [x0, y0, x1, y1], rings };
-          if (p.cls === "wood") out.wood.push(poly);
+          for (const r of rings)
+            for (const [x, y] of r) {
+              x0 = Math.min(x0, x);
+              y0 = Math.min(y0, y);
+              x1 = Math.max(x1, x);
+              y1 = Math.max(y1, y);
+            }
+
+          return { bbox: [x0, y0, x1, y1], rings };
+        };
+
+        // Explicit landcover owns its area. It either gets its specialised
+        // details below or suppresses the fallback meadow.
+        for (const p of tile.land) {
+          const poly = localPoly(p);
+          out.covers.push(poly);
+
+          const mix = mixOf(p.cls, p.sub);
+          if (p.cls === "wood") {
+            out.wood.push(poly);
+
+            // Sparse understorey makes the edge read as a habitat transition
+            // instead of a hard wall of trunks.
+            out.details.push({
+              ...poly,
+              mix: {
+                bush: B(0.08, 0.55, 1.35),
+                grass: B(0.12, 0.35, 0.75),
+              },
+            });
+          }
+
           if (mix) out.details.push({ ...poly, mix });
         }
+
+        // Water also suppresses fallback meadow.
+        for (const p of tile.water) out.covers.push(localPoly(p));
+
         return out;
       },
-      () => ({ wood: [], details: [] }),
+      () => ({ wood: [], details: [], covers: [] }),
     )
     .then((list) => {
       if (tilesFor !== f) return;
@@ -197,12 +237,12 @@ function createSource(f: Frame, lat: number, ruins: ReadonlySignal<readonly Foun
 
       const [la, pa] = f.toLngLat(x0, y1), [lb, pb] = f.toLngLat(x1, y0);
       const a = lngLatToTile(la, pa, NATURE_MAXZOOM), b = lngLatToTile(lb, pb, NATURE_MAXZOOM);
-      const polys: ForestPoly[] = [], details: DetailPoly[] = ruined.filter((p) => p.bbox[2] >= x0 && p.bbox[0] <= x1 && p.bbox[3] >= y0 && p.bbox[1] <= y1);
+      const polys: ForestPoly[] = [], details: DetailPoly[] = ruined.filter((p) => p.bbox[2] >= x0 && p.bbox[0] <= x1 && p.bbox[3] >= y0 && p.bbox[1] <= y1), covers: ForestPoly[] = [];
       let ready = true;
       for (let tx = Math.floor(a.x); tx <= Math.floor(b.x); tx++)
         for (let ty = Math.floor(a.y); ty <= Math.floor(b.y); ty++) {
           const list = tiles.get(`${tx}/${ty}`);
-          if (list) polys.push(...list.wood), details.push(...list.details);
+          if (list) polys.push(...list.wood), details.push(...list.details), covers.push(...list.covers);
           else {
             ready = false;
             loadTile(f, tx, ty, () => src.onTile?.());
@@ -223,10 +263,54 @@ function createSource(f: Frame, lat: number, ruins: ReadonlySignal<readonly Foun
 
       const trees = scatterTrees({ forests: polys, rect, spacing: SPACING, lat, blocked: isBlocked });
       const small = scatterDetails({ polys: details, rect, blocked: isBlocked });
-      if (!small.length) return trees;
-      const out = new Float32Array(trees.length + small.length);
+
+      // OpenMapTiles only emits a grass polygon where OSM explicitly has one.
+      // Unclassified natural ground is still visually a meadow in this game, so
+      // fill the remainder of the chunk with sparse grass while excluding every
+      // explicit landcover/water polygon and town-made blockers.
+      const meadow: DetailPoly = {
+        bbox: rect,
+        rings: [[
+          [x0, y0],
+          [x1, y0],
+          [x1, y1],
+          [x0, y1],
+        ]],
+        mix: {
+          grass: B(0.42, 0.4, 0.95),
+        },
+      };
+
+      const ambientBlocked = (x: number, y: number, h: number): boolean => {
+        if (isBlocked(x, y, h)) return true;
+
+        for (const p of covers) {
+          if (
+            x >= p.bbox[0] &&
+            x <= p.bbox[2] &&
+            y >= p.bbox[1] &&
+            y <= p.bbox[3] &&
+            insideRings(x, y, p.rings)
+          ) {
+            return true;
+          }
+        }
+
+        return false;
+      };
+
+      const ambient = scatterDetails({
+        polys: [meadow],
+        rect,
+        blocked: ambientBlocked,
+      });
+
+      if (!small.length && !ambient.length) return trees;
+
+      const out = new Float32Array(trees.length + small.length + ambient.length);
       out.set(trees);
       out.set(small, trees.length);
+      out.set(ambient, trees.length + small.length);
       return out;
     },
   };

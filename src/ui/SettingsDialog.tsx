@@ -53,9 +53,9 @@ export function SettingsDialog() {
           <input type="checkbox" checked={reliefOn.value} onChange={(e) => setRelief((e.target as HTMLInputElement).checked)} />
           <span>Рельеф</span>
         </label>
-        <label class="settings-row" title="Деревья в объёме вблизи; без них лес — плоская заливка">
+        <label class="settings-row" title="Деревья, трава, кусты, камыш и камни вблизи; без них природные зоны остаются плоской картой">
           <input type="checkbox" checked={forest3dOn.value} onChange={(e) => setForest3d((e.target as HTMLInputElement).checked)} />
-          <span>Объёмный лес</span>
+          <span>Объёмная природа</span>
         </label>
         <label class="settings-row" title="Рябь, отражения неба, блики и лёд вблизи; без неё вода — плоская заливка">
           <input type="checkbox" checked={water3dOn.value} onChange={(e) => setWater3d((e.target as HTMLInputElement).checked)} />

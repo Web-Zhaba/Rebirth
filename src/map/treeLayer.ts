@@ -24,6 +24,8 @@ import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { disableCustomTerrainRenderers } from "./terrainDiagnostics";
+import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { WIND_DIR } from "./weatherMath";
 import {
   forest3dOn,
@@ -31,7 +33,7 @@ import {
   showWhile,
 } from "./graphicsSettings";
 import { bakeImpostor, IMPOSTOR_STEP, IMPOSTOR_VIEWS, impostorQuad, treeGeometry, type Impostor } from "./treeImpostor";
-import { buildTree, crownAt, KIND_INFO, leafOf, reedAt, TREE_LODS } from "./treeModels";
+import { buildTree, crownAt, grassAt, KIND_INFO, leafOf, reedAt, TREE_LODS } from "./treeModels";
 import { CHUNK, keepAt, MIN_KEEP, thinReach, TREE_KINDS, TREE_STRIDE, TREES_FROM_ZOOM } from "./treeScatter";
 import { chunksInView } from "./chunkView";
 import { eyeOf, frustumPlanes } from "./three/frame";
@@ -244,7 +246,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     const k = reliefScale.peek();
     if (k > 0 && trees.length) {
       const cover: [number, number][] = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => tf.toLngLat((i + a) * CHUNK, (j + b) * CHUNK));
-      if (cover.some(([a, b]) => groundAt(a, b) === null)) {
+      if (cover.some(([a, b]) => terrainSurfaceAt(a, b, tf) === null)) {
         void loadGround(cover).then(() => map.triggerRepaint());
         return null;
       }
@@ -257,7 +259,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       for (const t of order) {
         const x = trees[t], y = trees[t + 1];
         const [a, b] = tf.toLngLat(x, y);
-        base.push(x, y, k > 0 ? (groundAt(a, b) ?? 0) * k - SINK : -SINK);
+        base.push(x, y, k > 0 ? (terrainSurfaceAt(a, b, tf) ?? groundAt(a, b) ?? 0) * k - SINK : -SINK);
         par.push(trees[t + 2], trees[t + 4], trees[t + 5], 0.85 + 0.3 * ((trees[t + 5] * 13.7) % 1));
       }
       const { g, m } = projectPoints(base, tf.toLngLat, o);
@@ -269,7 +271,15 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       }
       return out;
     });
-    return { i, j, kinds, n: kinds.reduce((a, q, kind) => a + (isTree[kind] ? q.length / PER : 0), 0), lod: -1, seen: 0, stale: false };
+    return {
+      i,
+      j,
+      kinds,
+      n: kinds.reduce((a, q, kind) => a + (isTree[kind] ? q.length / PER : 0), 0),
+      lod: -1,
+      seen: 0,
+      stale: false,
+    };
   };
 
   const taken = (a: Float32Array, keep: number) => Math.round((a.length / PER) * keep);
@@ -386,6 +396,13 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         effect(() => {
           void reliefScale.value;
           for (const c of chunks.values()) c.stale = true;
+          centreCache.clear();
+          map.triggerRepaint();
+        }),
+        effect(() => {
+          void terrainSurfaceRevision.value;
+          for (const c of chunks.values()) c.stale = true;
+          centreCache.clear();
           map.triggerRepaint();
         }),
         effect(() => {
@@ -413,6 +430,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       reset();
     },
     render(_gl, args) {
+      if (disableCustomTerrainRenderers) return;
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
 
@@ -522,10 +540,11 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const under =
         k > 0
           ? (
-              groundAt(
+              terrainSurfaceAt(
                 elng,
                 elat,
-              ) ?? 0
+                tf,
+              ) ?? groundAt(elng, elat) ?? 0
             ) * k
           : 0;
 
@@ -556,10 +575,11 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
 
           const g =
             k > 0
-              ? groundAt(
+              ? terrainSurfaceAt(
                   clng,
                   clat,
-                )
+                  tf,
+                ) ?? groundAt(clng, clat)
               : 0;
 
           const m =
@@ -888,6 +908,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const reed =
         reedAt(clock);
 
+      const grass =
+        grassAt(clock);
+
       const w =
         opts.weather.peek();
 
@@ -926,6 +949,12 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         rgb(reed.a),
         rgb(reed.b),
         reed.t,
+      ] as const;
+
+      const grassCols = [
+        rgb(grass.a),
+        rgb(grass.b),
+        grass.t,
       ] as const;
 
       mats.forEach(
@@ -990,7 +1019,10 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
             info.season ===
             "reed"
               ? reedCols
-              : leafCols;
+              : info.season ===
+                  "grass"
+                ? grassCols
+                : leafCols;
 
           u.uBare.value =
             info.season ===
