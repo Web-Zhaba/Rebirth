@@ -9,6 +9,7 @@ import { Button } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { areaText } from "./inspectorModel";
 import "./heritage.css";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 function Option({ o, picked, onPick }: { o: ModeOption; picked: boolean; onPick: () => void }) {
   return (
@@ -90,9 +91,9 @@ export function HeritagePanel() {
   if (!site) return null;
   const v = buildHeritageView({ site, sim: st, mul: st.heritageMul, articles: articles.value });
   return (
-    <div class="rs-panel inspector panel her-panel" role="region" aria-label={`Старая постройка: ${v.title}`}>
-      <InspectorHead icon="foundations" title={v.title} chip={v.stateText ? { label: v.stateText, tone: v.state === "lost" ? "bad" : v.state === "restored" ? "ok" : "build" } : undefined} onClose={closePanel} />
+    <aside class="rs-panel inspector panel her-panel" aria-labelledby={SEMANTIC_IDS.heritageInspectorTitle}>
+      <InspectorHead icon="foundations" title={v.title} chip={v.stateText ? { label: v.stateText, tone: v.state === "lost" ? "bad" : v.state === "restored" ? "ok" : "build" } : undefined} onClose={closePanel} headingId={SEMANTIC_IDS.heritageInspectorTitle} />
       <Body v={v} />
-    </div>
+    </aside>
   );
 }
