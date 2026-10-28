@@ -7,6 +7,7 @@ import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { IconButton, Panel } from "./kit";
 import { DAY_SUMMARY_MS, daySummaryRemaining } from "./daySummaryTimerModel";
+import { SEMANTIC_IDS } from "./semanticIds";
 
 const LINE_ICON: Record<SummaryLine["kind"], IconName> = { built: "craft", arrived: "res", born: "res", made: "gumno", problem: "warning" };
 
@@ -44,9 +45,9 @@ export function DaySummary({ map }: { map: maplibregl.Map }) {
   if (!summary || closed === summary.at) return null;
   const fl = frame.value;
   return (
-    <Panel class="day-summary" role="dialog" aria-label="Итоги дня">
+    <Panel class="day-summary" role="region" aria-labelledby={SEMANTIC_IDS.daySummaryTitle}>
       <div class="day-summary-head">
-        <strong>
+        <strong id={SEMANTIC_IDS.daySummaryTitle}>
           <Icon name="night" size={18} /> Итоги дня
         </strong>
         <IconButton icon="close" label="Закрыть" size={16} onClick={() => setClosed(summary.at)} />
@@ -58,6 +59,7 @@ export function DaySummary({ map }: { map: maplibregl.Map }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(remaining * 100)}
+        aria-valuetext={`Осталось ${(remaining * DAY_SUMMARY_MS / 1000).toFixed(1)} с`}
       >
         <span style={{ width: `${remaining * 100}%` }} />
       </div>
