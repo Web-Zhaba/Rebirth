@@ -51,9 +51,13 @@ function getGrid(tx: number, ty: number): Float32Array | null {
   const normY = Math.max(0, Math.min(N - 1, ty));
   const key = `${normX}/${normY}`;
   const g = grids.get(key) ?? null;
-  lastTx = tx;
-  lastTy = ty;
-  lastGrid = g;
+  // Do not cache misses: loadGround may populate this tile after this lookup.
+  // Caching null leaves groundAt() stuck on a stale miss and can cause endless retries.
+  if (g) {
+    lastTx = tx;
+    lastTy = ty;
+    lastGrid = g;
+  }
   return g;
 }
 
