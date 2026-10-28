@@ -17,7 +17,7 @@ import { BADGE_TEXT } from "./techModel";
 import { badge } from "./techState";
 import { IconButton, Stat, Tooltip } from "./kit";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
-import { weatherChip, weatherWarning } from "./weatherModel";
+import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
@@ -281,8 +281,7 @@ export function currentWarnings() {
   const { queue } = roadQueue(roads.value);
   const b = buildings.value;
   const building = b ? Object.values(b).filter((x) => x.state === "building").length : 0;
-  const weather = weatherWarning(state.value?.weather, eco);
-  return warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building, weather });
+  return warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building });
 }
 
 export function Warnings() {
