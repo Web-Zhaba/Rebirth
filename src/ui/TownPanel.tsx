@@ -49,7 +49,7 @@ function JobRow({ k, text, hint }: { k: JobKey; text: string; hint?: string }) {
       </div>
       <Segmented options={PRIORITY_OPTIONS} value={value} label={`Приоритет: ${JOB_NAMES[k].toLowerCase()}`} onChange={(priority) => act({ type: "setJobPriority", group: k, priority })} />
       {hint && <div class="people-note">{hint}</div>}
-    </aside>
+    </div>
   );
 }
 
