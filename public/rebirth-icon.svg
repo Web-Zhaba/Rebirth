@@ -1,16 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
-  <title id="title">Rebirth</title>
-  <desc id="desc">Abstract Rebirth mark combining a broken terrain layer, a rising form and the letter R.</desc>
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Rebirth geometric terrain mark</title>
+  <desc id="desc">A minimal green geometric terrain emblem with three elevated wavy contour lines inside a hexagonal frame.</desc>
   <defs>
-    <mask id="cut">
-      <rect width="96" height="96" fill="white"/>
-      <path d="M34 30h20c8.8 0 15 5.5 15 13.2 0 4.7-2.3 8.5-6.2 10.8L34 69V30Z" fill="black"/>
-      <path d="M34 54 61 38l8 10-35 20V54Z" fill="white"/>
-    </mask>
+    <clipPath id="tile">
+      <path d="M64 8 110 34v60L64 120 18 94V34Z"/>
+    </clipPath>
   </defs>
-  <path
-    fill="#63E072"
-    mask="url(#cut)"
-    d="M14 14h41c18.1 0 31 11.7 31 28.6 0 11.7-6.1 20.8-16.8 25.5L88 86H63.3L47.8 70.8H34V86H14V14Z"
-  />
+  <path d="M64 8 110 34v60L64 120 18 94V34Z" fill="none" stroke="#55D66B" stroke-width="8" stroke-linejoin="round"/>
+  <g clip-path="url(#tile)" fill="none" stroke="#55D66B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 18 40.812 C 31.366 31.172 47.265 32.398 58 40.362 C 69.694 49.037 82 53.362 96 54.362 C 102 54.362 106 53.362 110 51.362"/>
+    <path d="M 17.045 57.83 C 30.411 48.19 46.31 49.416 57.045 57.38 C 68.739 66.055 81.045 70.38 95.045 71.38 C 101.045 71.38 105.045 70.38 109.045 68.38" style="stroke-width: 7;"/>
+    <path d="M 15.681 74.83 C 29.047 65.19 44.946 66.416 55.681 74.38 C 67.375 83.055 79.681 87.38 93.681 88.38 C 99.681 88.38 103.681 87.38 107.681 85.38" style="stroke-width: 7;"/>
+    <path d="M 32.123 -6.383 C 45.489 -16.023 61.388 -14.797 72.123 -6.833 C 83.817 1.842 96.123 6.167 110.123 7.167 C 116.123 7.167 120.123 6.167 124.123 4.167" style="stroke-width: 7; fill-opacity: 0.04; fill-rule: nonzero;"/>
+    <path d="M 23.527 23.83 C 36.893 14.19 52.792 15.416 63.527 23.38 C 75.221 32.055 87.527 36.38 101.527 37.38 C 107.527 37.38 111.527 36.38 115.527 34.38" style="stroke-width: 7; fill-opacity: 0.04; fill-rule: nonzero;"/>
+    <path d="M 12.745 91.83 C 26.111 82.19 42.01 83.416 52.745 91.38 C 64.439 100.055 76.745 104.38 90.745 105.38 C 96.745 105.38 100.745 104.38 104.745 102.38" style="stroke-width: 7;"/>
+    <path d="M 10.426 130.664 C 23.792 121.024 39.691 122.25 50.426 130.214 C 62.12 138.889 74.426 143.214 88.426 144.214 C 94.426 144.214 98.426 143.214 102.426 141.214" style="stroke-width: 7;"/>
+  </g>
 </svg>
