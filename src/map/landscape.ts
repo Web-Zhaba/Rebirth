@@ -4,7 +4,7 @@ import { frame } from "../simClient";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { WeatherState } from "../sim/weather";
 import { groundAt, loadGround, reliefScale } from "./relief";
-import { disableBaseLayerVisibilityTransition, disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainCameraSync, disableTerrainCenterElevation, disableTerrainTransition } from "./terrainDiagnostics";
+import { disableBaseLayerVisibilityTransition, disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainCameraSync, disableTerrainCenterElevation, disableTerrainCenterSet, disableTerrainTransition } from "./terrainDiagnostics";
 
 const LANDSCAPE_FROM_ZOOM = 12.5;
 
@@ -113,6 +113,10 @@ export function attachLandscape(
       }
       return;
     }
+
+    // Diagnostic isolation: keep DEM sampling and any missing-tile load,
+    // but skip reading/writing MapLibre center elevation.
+    if (disableTerrainCenterSet) return;
 
     // Keep MapLibre's orbit pivot on the custom DEM, not on its old
     // sea-level globe. The map API does not expose a mutable camera position
