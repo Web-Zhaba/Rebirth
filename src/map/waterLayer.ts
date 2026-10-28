@@ -93,7 +93,6 @@ const LIFT = 0.06; // m above the computed water plane: only enough to avoid z-f
 const LEVEL_REACH = [1200, 3000, 8000]; // m around a grid corner to find the shore that sets its water level, nearest first
 const LEVEL_SAMPLES = 400; // shore points per corner at most
 const MAX_WATER_LEVEL_DELTA = 18; // m: reject pathological DEM/shore outliers that would create spikes
-const SEA_LEVEL_SNAP = 60; // m: calm coastal water near sea level is snapped to 0 to prevent terrain/water wedges
 const FRAME_BUDGET = 4; // ms of chunk building per frame
 const MAX_CHUNKS = 1500; // cached; beyond it chunks unseen for a while are dropped
 const RIVER: Record<string, { half: number; speed: number }> = { river: { half: WATERWAY_HALF_M, speed: 1 }, stream: { half: 2.5, speed: 0.6 } };
@@ -393,7 +392,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
   const chunks = new Map<string, Chunk>(); // "i,j,level"
   const shown = new Set<Mesh>();
   // tiles in town metres
-  const land = new Map<string, (TileWater & { boxes: Box[] }) | null>(); // null while loading
+  const land = new Map<string, (TileWater & { boxes: Box[]; classes: string[] }) | null>(); // null while loading
   const ways = new Map<string, Waterway[] | null>();
   const levels = new Map<string, number>(); // water level (DEM metres) of a polygon at a grid corner
   const camera = new Camera();
@@ -432,9 +431,9 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
               for (const [a, b] of p) (x0 = Math.min(x0, a)), (y0 = Math.min(y0, b)), (x1 = Math.max(x1, a)), (y1 = Math.max(y1, b));
               return [x0, y0, x1, y1];
             });
-            return { ...w, boxes };
+            return { ...w, boxes, classes: t.water.map((p) => p.cls) };
           },
-          () => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], tones: [], boxes: [] }),
+          () => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], tones: [], boxes: [], classes: [] }),
         )
         .then((w) => {
           if (tilesFor !== tf) return;
@@ -546,7 +545,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
     const lt = tilesUnder(tf, grow(FLOW_REACH), NATURE_MAXZOOM).map(([x, y]) => landTile(tf, x, y));
     const wt = tilesUnder(tf, grow(FLOW_REACH), WATERWAY_ZOOM).map(([x, y]) => wayTile(tf, x, y));
     if (lt.some((t) => !t) || wt.some((t) => !t)) return null;
-    const pieces: XY[][] = [], boxes: Box[] = [], owners: { tile: string; poly: number }[] = [];
+    const pieces: XY[][] = [], boxes: Box[] = [], owners: { tile: string; poly: number; cls: string }[] = [];
     const lk = tilesUnder(tf, grow(FLOW_REACH), NATURE_MAXZOOM).map(([x, y]) => `${x}/${y}`);
     lt.forEach((t, q) =>
       t!.pieces.forEach((p, k) => {
@@ -554,7 +553,7 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         if (b[2] < box[0] - FLOW_REACH || b[0] > box[2] + FLOW_REACH || b[3] < box[1] - FLOW_REACH || b[1] > box[3] + FLOW_REACH) return;
         pieces.push(p);
         boxes.push(b);
-        owners.push({ tile: lk[q], poly: t!.pieceOf[k] });
+        owners.push({ tile: lk[q], poly: t!.pieceOf[k], cls: t!.classes[t!.pieceOf[k]] ?? "" });
       }),
     );
     const shores = lt.flatMap((t) => t!.shores);
@@ -580,7 +579,16 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
       for (const pi of new Set(c.piece.slice(0, c.ribbons))) {
         const owner = owners[pi];
         if (!owner) continue;
-        const { tile, poly } = owner;
+        const { tile, poly, cls } = owner;
+
+        // OpenMapTiles explicitly marks open sea as class "ocean".
+        // Never infer its level from DEM samples on the neighbouring shore:
+        // coastal DEM pixels are often several metres above the actual waterline.
+        if (cls === "ocean") {
+          corners.set(pi, [0, 0, 0, 0]);
+          continue;
+        }
+
         const raw = [
           levelAt(tf, tile, poly, i, j),
           levelAt(tf, tile, poly, i + 1, j),
@@ -590,15 +598,17 @@ export function createWaterLayer(map: maplibregl.Map, opts: WaterLayerOptions): 
         if (raw.some((h) => h === null)) return null;
 
         const values = raw as number[];
-        const sorted = [...values].sort((a, b) => a - b);
+        const sorted = [...values].sort((x, y) => x - y);
         const mid = (sorted[1] + sorted[2]) * 0.5;
+        corners.set(
+          pi,
+          values.map((h) =>
+            Math.max(mid - MAX_WATER_LEVEL_DELTA, Math.min(mid + MAX_WATER_LEVEL_DELTA, h)),
+          ),
+        );
+      }
 
-        // Polygon water with no meaningful flow and a shoreline close to sea level is
-        // almost certainly coast/open water. A DEM shoreline is often several metres
-        // above the real waterline; using those heights produces huge wedges when the
-        // flat surface intersects MapLibre terrain. Snap those surfaces to true sea level.
-        let flowing = false;
-        for (let v = 0; v < c.ribbons; v++) {
+      for (let v = 0; v < c.ribbons; v++) {
           if (c.piece[v] !== pi) continue;
           const fx = c.flow[v * 2];
           const fy = c.flow[v * 2 + 1];
