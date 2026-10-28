@@ -174,6 +174,67 @@ export function skyAt(hour: number): maplibregl.SkySpecification {
 }
 
 
+// Layer-order helpers are kept as a public/tested utility because other map code and tests import them.
+// The custom landscape no longer needs to call them from attachRelief(), but removing the API would break callers.
+const DRAPED = new Set(["background", "fill", "line", "raster", "hillshade", "color-relief"]);
+
+export interface Anchor {
+  before: string | null;
+  seq: number;
+}
+
+export function reliefOrder(
+  order: readonly { id: string; type: string }[],
+  anchors: Map<string, Anchor>,
+): string[] | null {
+  noteAnchors(order, anchors);
+  const draped = order.filter((l) => DRAPED.has(l.type)).map((l) => l.id);
+  const rank = (id: string) => {
+    const a = anchors.get(id)!;
+    const k = a.before === null ? -1 : draped.indexOf(a.before);
+    return k < 0 ? draped.length : k;
+  };
+  const others = order.filter((l) => !DRAPED.has(l.type)).map((l) => l.id);
+  others.sort((a, b) => rank(a) - rank(b) || anchors.get(a)!.seq - anchors.get(b)!.seq);
+  const want = [...draped, ...others];
+  return want.every((id, i) => order[i].id === id) ? null : want;
+}
+
+function noteAnchors(
+  order: readonly { id: string; type: string }[],
+  anchors: Map<string, Anchor>,
+): void {
+  order.forEach((l, i) => {
+    if (DRAPED.has(l.type) || anchors.has(l.id)) return;
+    const next = order.slice(i + 1).find((n) => DRAPED.has(n.type) || anchors.has(n.id));
+    const known = next && anchors.get(next.id);
+    anchors.set(
+      l.id,
+      known
+        ? { before: known.before, seq: known.seq - 1 / (anchors.size + 2) }
+        : { before: next?.id ?? null, seq: anchors.size },
+    );
+  });
+}
+
+const compatibilityAnchors = new Map<string, Anchor>();
+const layersOf = (map: maplibregl.Map) =>
+  map.getLayersOrder().map((id) => ({ id, type: map.getLayer(id)!.type }));
+
+export function keepUnder(map: maplibregl.Map, id: string, before: string): void {
+  const order = layersOf(map);
+  let target: string | undefined = map.getLayer(before) ? before : undefined;
+  if (reliefScale.peek() > 0 && target) {
+    noteAnchors(order, compatibilityAnchors);
+    target =
+      compatibilityAnchors.get(before)?.before ??
+      order.find((l) => !DRAPED.has(l.type))?.id;
+  }
+  const at = order.findIndex((l) => l.id === id);
+  const next = order.slice(at + 1).find((l) => l.id !== id)?.id;
+  if (next !== target && target !== id) map.moveLayer(id, target);
+}
+
 // ---- Sky + our own terrain switch ----
 //
 // MapLibre's built-in terrain is intentionally not used anymore. The visible terrain is rendered by
