@@ -4,7 +4,7 @@ import { frame } from "../simClient";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { WeatherState } from "../sim/weather";
 import { groundAt, loadGround, reliefScale } from "./relief";
-import { disableBaseLayerVisibilityTransition, disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainCameraSync, disableTerrainCenterElevation, disableTerrainCenterSet, disableDemLoading, disableTerrainTransition } from "./terrainDiagnostics";
+import { disableBaseLayerVisibilityTransition, disableCustomTerrainRenderers, disableProjectionTransition, disableTerrainCameraSync, disableTerrainCenterElevation, disableTerrainCenterSet, disableDemLoading, disableDemRetrySync, disableTerrainTransition } from "./terrainDiagnostics";
 
 const LANDSCAPE_FROM_ZOOM = 12.5;
 
@@ -109,7 +109,7 @@ export function attachLandscape(
         waitingForGround = true;
         void loadGround([[center.lng, center.lat]]).finally(() => {
           waitingForGround = false;
-          syncCameraToLandscape();
+          if (!disableDemRetrySync) syncCameraToLandscape();
         });
       }
       return;
