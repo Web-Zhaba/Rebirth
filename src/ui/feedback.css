@@ -368,14 +368,27 @@ button.toast-main:hover .toast-text {
   pointer-events: none;
 }
 
-.research-line {
-  align-self: center;
-  padding: 2px 10px;
-  font-size: 12px;
-  color: var(--ink-soft, inherit);
-  pointer-events: none;
+.research-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw-hair) solid var(--rule);
+  border-left: 4px solid var(--info);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
 }
-.research-line button {
-  pointer-events: auto;
-  color: inherit;
+.research-status:hover {
+  background: var(--paper);
+}
+.research-status .icon {
+  flex: none;
 }
