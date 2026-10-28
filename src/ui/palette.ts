@@ -185,6 +185,9 @@ export const TREE_COLORS = {
   reed: "#6f8a45",
   reedDry: "#c2a755",
   cattail: "#5e4430",
+  grassSpring: "#9ebd62",
+  grassSummer: "#7f9c52",
+  grassDry: "#b4a66a",
   stone: "#8e8b82",
 } as const;
 
