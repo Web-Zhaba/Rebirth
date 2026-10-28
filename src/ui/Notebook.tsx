@@ -6,6 +6,7 @@ import type { IconName } from "./icons";
 import { formatDate, newestFirst, unseenCount, type Article, type ChronicleEntry, type Find } from "./notebookLogic";
 import { articleDomId, notebookTabForArticle } from "./notebookFocusModel";
 import { notebookArticleFocus } from "./notebookFocus";
+import { tabId, tabPanelId } from "./tabSemantics";
 
 export type { Article, ChronicleEntry, Find } from "./notebookLogic";
 
@@ -74,12 +75,15 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
             <h2 class="notebook-title">Записная книжка</h2>
             <IconButton icon="close" size={16} label="Закрыть записную книжку" onClick={() => onOpenChange(false)} />
           </div>
-          <div class="notebook-tabs" role="tablist">
+          <div class="notebook-tabs" role="tablist" aria-label="Разделы записной книжки">
             {TABS.map(([id, label]) => (
               <button
                 key={id}
                 role="tab"
+                id={tabId("notebook", id)}
+                aria-controls={tabPanelId("notebook", id)}
                 aria-selected={tab === id}
+                tabIndex={tab === id ? 0 : -1}
                 class={tab === id ? "notebook-tab active" : "notebook-tab"}
                 onClick={() => setTab(id)}
               >
@@ -87,7 +91,7 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
               </button>
             ))}
           </div>
-          <div class="notebook-body">
+          <div class="notebook-body" role="tabpanel" id={tabPanelId("notebook", tab)} aria-labelledby={tabId("notebook", tab)}>
             {tab === "finds" &&
               (finds.length === 0 ? (
                 <div class="notebook-empty">Пока ничего не найдено. Осмотрите землю вокруг лагеря.</div>
