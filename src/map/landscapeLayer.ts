@@ -28,21 +28,29 @@ import { groundAt, loadGround, reliefScale } from "./relief";
 import { snowOpacity } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
 import { acquireHost, type ThreeHost } from "./three/host";
+import {
+  clearTerrainSurfaceWindow,
+  setTerrainSurfaceWindow,
+  TERRAIN_CENTER_STEP,
+  TERRAIN_FINE_CELL,
+  TERRAIN_FINE_HALF,
+  TERRAIN_OUTER_CELL,
+  TERRAIN_OUTER_HALF,
+} from "./terrainSurface";
 
 export const LANDSCAPE_LAYER_ID = "landscape-terrain";
 export const LANDSCAPE_FROM_ZOOM = 12.5;
 
-const HALF = 12_000;
-const CELL = 120;
+const HALF = TERRAIN_OUTER_HALF;
+const CELL = TERRAIN_OUTER_CELL;
 const GRID = Math.ceil((HALF * 2) / CELL);
 
-// High-resolution inner patch: the outer mesh supplies broad terrain, while
-// this patch matches DEM elevation closely enough for roads/buildings and
-// prevents the 120 m triangles from cutting through their foundations.
-const FINE_HALF = 2_400;
-const FINE_CELL = 20;
+// The fine patch, coarse patch and terrainSurfaceAt share these exact
+// dimensions and globally aligned grid origins.
+const FINE_HALF = TERRAIN_FINE_HALF;
+const FINE_CELL = TERRAIN_FINE_CELL;
 const FINE_GRID = Math.ceil((FINE_HALF * 2) / FINE_CELL);
-const CENTER_STEP = 4_000;
+const CENTER_STEP = TERRAIN_CENTER_STEP;
 
 interface LandscapeOptions {
   frame: ReadonlySignal<TownFrame | null>;
@@ -228,6 +236,7 @@ export function createLandscapeLayer(
     meshes = [];
 
     meshCentre = null;
+    clearTerrainSurfaceWindow();
   };
 
   const gridPoints = (
@@ -484,6 +493,7 @@ export function createLandscapeLayer(
         meshes = [outer, fine];
         meshCentre = buildCentre;
         scene.add(outer, fine);
+        setTerrainSurfaceWindow(tf, buildCentre);
       })
       .finally(() => {
         if (buildGeneration === generation) {
