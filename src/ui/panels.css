@@ -312,3 +312,20 @@
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
+
+
+.cell-coords {
+  margin-top: var(--sp-1);
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--info);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  text-align: left;
+}
+.cell-coords:hover {
+  text-decoration: underline;
+}
