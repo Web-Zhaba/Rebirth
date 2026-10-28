@@ -268,7 +268,7 @@ export function createLandscapeLayer(
     return points;
   };
 
-  const buildMesh = (
+  const buildMesh = async (
     tf: TownFrame,
     o: { lng: number; lat: number },
     points: readonly [number, number][],
