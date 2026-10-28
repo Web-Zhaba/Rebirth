@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="public/rebirth-icon.svg" width="88" alt="Rebirth icon" />
+
 # REBIRTH
 
 ### Цивилизация исчезла. Координаты остались.
