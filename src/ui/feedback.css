@@ -21,6 +21,22 @@
 }
 
 
+
+.day-summary-timer {
+  width: 100%;
+  height: 3px;
+  margin: var(--sp-1) 0 var(--sp-2);
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--rule-soft);
+}
+.day-summary-timer > span {
+  display: block;
+  height: 100%;
+  background: var(--info);
+  transition: width 60ms linear;
+}
+
 .event-card-head {
   display: flex;
   align-items: center;
