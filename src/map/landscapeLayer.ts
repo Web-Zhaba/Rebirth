@@ -22,12 +22,11 @@ import { lngLatToTile } from "../world/mercator";
 import { NATURE_MAXZOOM } from "../world/nature";
 import { getLandTile, type LandTile } from "../world/tiles";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
-import { mercatorLocal, projectPoints } from "./modelBuffers";
+import { projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { groundAt, loadGround, reliefScale } from "./relief";
 import { snowOpacity } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
-import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
 export const LANDSCAPE_LAYER_ID = "landscape-terrain";
@@ -140,7 +139,10 @@ export function createLandscapeLayer(
   const stops: (() => void)[] = [];
 
   const biomeColor: Record<Land, readonly number[]> = {
-    water: rgb(PALETTE.mapWater),
+    // The terrain under a water polygon is only the seabed; the actual water surface
+    // is drawn by waterLayer. Use a warm seabed colour so tiny vector-tile seams
+    // cannot leak the blue 2D-style fill through the shoreline.
+    water: rgb(PALETTE.mapSand),
     forest: rgb(PALETTE.mapForest),
     meadow: rgb(PALETTE.mapGrass),
     wetland: rgb(PALETTE.mapWetland),
@@ -298,9 +300,11 @@ export function createLandscapeLayer(
         local[q * 3] = centre[0] - half + x * cell;
         local[q * 3 + 1] = centre[1] - half + y * cell;
 
-        // Water gets its own dedicated surface. Keep terrain underneath it,
-        // but slightly lower so the two opaque surfaces can never z-fight.
-        local[q * 3 + 2] = (biome === "water" ? h - 2 : h) * scale;
+        // Keep only the terrain's seabed underneath a water polygon. DEM pixels
+        // close to the coast often contain land elevation, so h - 2m can leave
+        // blue-tinted raised shelves above sea level. A fixed negative seabed
+        // keeps the water surface authoritative for oceans, seas and lakes.
+        local[q * 3 + 2] = (biome === "water" ? -3 : h) * scale;
 
         const sx = (at(x + 1, y) - at(x - 1, y)) / (2 * cell);
         const sy = (at(x, y + 1) - at(x, y - 1)) / (2 * cell);
@@ -581,18 +585,16 @@ export function createLandscapeLayer(
         clearMesh();
       }
 
-      const mercatorMatrix = framer.mercator(args, host, origin);
-      const eye = eyeOf(mercatorMatrix);
-
-      if (!eye) return;
-
-      const merc = mercatorLocal(origin);
-      const [eyeLng, eyeLat] = merc.from(eye[0], eye[1]);
-      const [eyeX, eyeY] = tf.toLocal(eyeLng, eyeLat);
+      // The custom terrain window must follow MapLibre's orbit target, not
+      // the camera eye. Following the eye shifted the detailed inner patch away
+      // from the town whenever the camera was pitched, which made buildings,
+      // roads and the ground disagree at precisely the point the player sees.
+      const mapCenter = map.getCenter();
+      const [targetX, targetY] = tf.toLocal(mapCenter.lng, mapCenter.lat);
 
       const centre: [number, number] = [
-        Math.round(eyeX / CENTER_STEP) * CENTER_STEP,
-        Math.round(eyeY / CENTER_STEP) * CENTER_STEP,
+        Math.round(targetX / CENTER_STEP) * CENTER_STEP,
+        Math.round(targetY / CENTER_STEP) * CENTER_STEP,
       ];
 
       if (
