@@ -95,7 +95,7 @@ export function LayerBar() {
       <button class="layer-head" type="button" aria-expanded={!collapsed} onClick={toggle}>
         <Icon name="layers" size={16} />
         <span>Слои</span>
-        <b class="layer-name">{active?.label}</b>
+        <b class="layer-name">{zonesShown.value ? "зоны" : active?.label}</b>
         <Icon name={collapsed ? "caretDown" : "caretUp"} size={14} />
       </button>
       {!collapsed && (
