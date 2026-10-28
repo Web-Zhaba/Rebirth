@@ -29,73 +29,6 @@ export interface ForestSource {
   dispose(): void;
 }
 
-// Profiling structures
-interface ChunkSourceSample {
-  tilePrep: number;
-  scatterTrees: number;
-  scatterDetails: number;
-  blockedTreesTime: number;
-  blockedTreesCalls: number;
-  blockedDetailsTime: number;
-  blockedDetailsCalls: number;
-  merge: number;
-  total: number;
-  woodPolys: number;
-  detailPolys: number;
-  treesCount: number;
-  detailsCount: number;
-}
-
-const MAX_SOURCE_SAMPLES = 400;
-const sourceSamples: ChunkSourceSample[] = [];
-
-function recordSourceSample(sample: ChunkSourceSample) {
-  if (sourceSamples.length >= MAX_SOURCE_SAMPLES) sourceSamples.shift();
-  sourceSamples.push(sample);
-}
-
-function summarizeStat(values: number[]) {
-  if (values.length === 0) return { avg: 0, p95: 0, p99: 0, max: 0 };
-  const sorted = values.slice().sort((a, b) => a - b);
-  const sum = sorted.reduce((a, b) => a + b, 0);
-  return {
-    avg: Number((sum / sorted.length).toFixed(3)),
-    p95: Number((sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(3)),
-    p99: Number((sorted[Math.floor(sorted.length * 0.99)] ?? 0).toFixed(3)),
-    max: Number((sorted[sorted.length - 1] ?? 0).toFixed(3)),
-  };
-}
-
-if (typeof window !== "undefined" && import.meta.env.DEV) {
-  Object.assign(window, {
-    forestProfile: () => {
-      console.group(`🌲 Forest Source Profiling (${sourceSamples.length} chunks)`);
-      console.table({
-        "1. tilePrep (lookup & collect)": summarizeStat(sourceSamples.map((s) => s.tilePrep)),
-        "2. scatterTrees (pure)": summarizeStat(sourceSamples.map((s) => s.scatterTrees)),
-        "3. scatterDetails (pure)": summarizeStat(sourceSamples.map((s) => s.scatterDetails)),
-        "4. blocker (trees)": summarizeStat(sourceSamples.map((s) => s.blockedTreesTime)),
-        "5. blocker (details)": summarizeStat(sourceSamples.map((s) => s.blockedDetailsTime)),
-        "6. arrayMerge (Float32Array)": summarizeStat(sourceSamples.map((s) => s.merge)),
-        "TOTAL source.chunk()": summarizeStat(sourceSamples.map((s) => s.total)),
-      });
-
-      const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0).toFixed(1);
-      console.log("ℹ️ Chunk contents per build:");
-      console.log(`   - Wood polys: ${avg(sourceSamples.map((s) => s.woodPolys))}, Detail polys: ${avg(sourceSamples.map((s) => s.detailPolys))}`);
-      console.log(`   - Output counts: trees = ${avg(sourceSamples.map((s) => s.treesCount))}, details = ${avg(sourceSamples.map((s) => s.detailsCount))}`);
-      console.log(`   - Blocker calls: in trees = ${avg(sourceSamples.map((s) => s.blockedTreesCalls))}, in details = ${avg(sourceSamples.map((s) => s.blockedDetailsCalls))}`);
-      console.groupEnd();
-    },
-    resetForestProfile: () => {
-      sourceSamples.length = 0;
-      console.log("Forest source profile reset.");
-    },
-  });
-}
-
-// ---- Forest and detail polygons per landcover tile ----
-
 const B = (share: number, a: number, b: number) => ({ share, size: [a, b] as [number, number] });
 const MIXES: Record<string, Record<string, DetailMix>> = {
   wood: { "": { bush: B(0.04, 0.6, 1.6) } },
@@ -162,8 +95,6 @@ function loadTile(f: Frame, tx: number, ty: number, done: () => void): void {
       done();
     });
 }
-
-// ---- What stands in the way of trees near the town ----
 
 const clearings = computed(() => state.value?.clearings ?? []);
 const blockSig = computed(() => {
@@ -260,13 +191,10 @@ function createSource(f: Frame, lat: number, ruins: ReadonlySignal<readonly Foun
     onTile: null,
     changed,
     dispose: () => (stop(), stopRuins()),
-chunk(i, j) {
-      const tChunk0 = performance.now();
+    chunk(i, j) {
       const x0 = i * CHUNK, y0 = j * CHUNK, x1 = x0 + CHUNK, y1 = y0 + CHUNK;
       if (Math.hypot((x0 + x1) / 2, (y0 + y1) / 2) > FOREST_RANGE) return new Float32Array(0);
 
-      // 1. tilePrep
-      const tPrep0 = performance.now();
       const [la, pa] = f.toLngLat(x0, y1), [lb, pb] = f.toLngLat(x1, y0);
       const a = lngLatToTile(la, pa, NATURE_MAXZOOM), b = lngLatToTile(lb, pb, NATURE_MAXZOOM);
       const polys: ForestPoly[] = [], details: DetailPoly[] = ruined.filter((p) => p.bbox[2] >= x0 && p.bbox[0] <= x1 && p.bbox[3] >= y0 && p.bbox[1] <= y1);
@@ -280,12 +208,10 @@ chunk(i, j) {
             loadTile(f, tx, ty, () => src.onTile?.());
           }
         }
-      const dtPrep = performance.now() - tPrep0;
       if (!ready) return null;
 
       const rect: Box = [x0, y0, x1, y1];
 
-      // Проверка наложения чанка на зону города/построек/дорог
       const overlapsTown =
         blocker.box !== null &&
         x1 >= blocker.box[0] &&
@@ -293,67 +219,14 @@ chunk(i, j) {
         y1 >= blocker.box[1] &&
         y0 <= blocker.box[3];
 
-      // 2. scatterTrees with blocker timing
-      let bTreesTime = 0, bTreesCalls = 0;
-      const blockedForTrees = (x: number, y: number, h: number) => {
-        if (!overlapsTown) return false;
-        bTreesCalls++;
-        const tb0 = performance.now();
-        const res = blocker.test(x, y, h);
-        bTreesTime += performance.now() - tb0;
-        return res;
-      };
+      const isBlocked = overlapsTown ? blocker.test : () => false;
 
-      const tTrees0 = performance.now();
-      const trees = scatterTrees({ forests: polys, rect, spacing: SPACING, lat, blocked: blockedForTrees });
-      const dtTreesTotal = performance.now() - tTrees0;
-      const dtTreesPure = Math.max(0, dtTreesTotal - bTreesTime);
-
-      // 3. scatterDetails with blocker timing
-      let bDetailsTime = 0, bDetailsCalls = 0;
-      const blockedForDetails = (x: number, y: number, h: number) => {
-        if (!overlapsTown) return false;
-        bDetailsCalls++;
-        const tb0 = performance.now();
-        const res = blocker.test(x, y, h);
-        bDetailsTime += performance.now() - tb0;
-        return res;
-      };
-
-      const tDetails0 = performance.now();
-      const small = scatterDetails({ polys: details, rect, blocked: blockedForDetails });
-      const dtDetailsTotal = performance.now() - tDetails0;
-      const dtDetailsPure = Math.max(0, dtDetailsTotal - bDetailsTime);
-
-      // 4. merge Float32Array
-      const tMerge0 = performance.now();
-      let out: Float32Array;
-      if (!small.length) {
-        out = trees;
-      } else {
-        out = new Float32Array(trees.length + small.length);
-        out.set(trees);
-        out.set(small, trees.length);
-      }
-      const dtMerge = performance.now() - tMerge0;
-      const dtTotal = performance.now() - tChunk0;
-
-      recordSourceSample({
-        tilePrep: dtPrep,
-        scatterTrees: dtTreesPure,
-        scatterDetails: dtDetailsPure,
-        blockedTreesTime: bTreesTime,
-        blockedTreesCalls: bTreesCalls,
-        blockedDetailsTime: bDetailsTime,
-        blockedDetailsCalls: bDetailsCalls,
-        merge: dtMerge,
-        total: dtTotal,
-        woodPolys: polys.length,
-        detailPolys: details.length,
-        treesCount: trees.length / TREE_STRIDE,
-        detailsCount: small.length / TREE_STRIDE,
-      });
-
+      const trees = scatterTrees({ forests: polys, rect, spacing: SPACING, lat, blocked: isBlocked });
+      const small = scatterDetails({ polys: details, rect, blocked: isBlocked });
+      if (!small.length) return trees;
+      const out = new Float32Array(trees.length + small.length);
+      out.set(trees);
+      out.set(small, trees.length);
       return out;
     },
   };

@@ -203,40 +203,8 @@ interface Slot {
   count: number;
 }
 
-interface FrameSample {
-  total: number;
-  chunksTotal: number;
-  chunksCulling: number;
-  chunksCentreTime: number;
-  centreCalls: number;
-  seenCount: number;
-  buildChunks: number;
-  thinReach: number;
-  sig: number;
-  assemble: number;
-  uniforms: number;
-  draw: number;
-}
-
-interface ChunkBuildSample {
-  trees: number;
-  sourceChunk: number;
-  reliefCheck: number;
-  filterSort: number;
-  coordsGround: number;
-  projectPoints: number;
-  packArrays: number;
-  total: number;
-}
-
-interface StatSummary {
-  avg: number;
-  p95: number;
-  p99: number;
-  max: number;
-}
-
 const chunkKey = (i: number, j: number) => `${i},${j}`;
+const coordKey = (x: number, y: number) => ((Math.round(x) & 0xffff) << 16) | (Math.round(y) & 0xffff);
 const isTree = TREE_KINDS.map((kind) => KIND_INFO[kind].tall > 5);
 const overlaps = (c: Chunk, b: Box) => (c.i + 1) * CHUNK >= b[0] && c.i * CHUNK <= b[2] && (c.j + 1) * CHUNK >= b[1] && c.j * CHUNK <= b[3];
 
@@ -247,6 +215,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   const mats: ShaderMaterial[] = [];
   const stops: (() => void)[] = [];
   const chunks = new Map<string, Chunk>();
+  const centreCache = new Map<number, [number, number, number]>();
   let origin: { lng: number; lat: number } | null = null;
   let shown: string | null = null;
   let lastAssemble = 0;
@@ -257,33 +226,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   const camera = new Camera();
   const framer = frameSetter(opts.light);
   let impostors: Impostor[] | null = null;
-
-  // Profiler buffers
-  const MAX_FRAME_SAMPLES = 600;
-  const MAX_BUILD_SAMPLES = 400;
-  const frameSamples: FrameSample[] = [];
-  const buildSamples: ChunkBuildSample[] = [];
-
-  const summarize = (values: number[]): StatSummary => {
-    if (values.length === 0) return { avg: 0, p95: 0, p99: 0, max: 0 };
-    const sorted = values.slice().sort((a, b) => a - b);
-    const sum = sorted.reduce((a, b) => a + b, 0);
-    const avg = sum / sorted.length;
-    const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
-    const p99 = sorted[Math.floor(sorted.length * 0.99)] ?? 0;
-    const max = sorted[sorted.length - 1] ?? 0;
-    return {
-      avg: Number(avg.toFixed(3)),
-      p95: Number(p95.toFixed(3)),
-      p99: Number(p99.toFixed(3)),
-      max: Number(max.toFixed(3)),
-    };
-  };
-
   let unRestore: (() => void) | null = null;
-
-  // Кэш вычисленных мировых координат центров чанков и блоков: key -> [mx, my, mz]
-  const centreCache = new Map<number, [number, number, number]>();
 
   const reset = () => {
     chunks.clear();
@@ -291,16 +234,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     shown = null;
   };
 
-  // Detailed build profiling
   const build = (i: number, j: number, tf: TownFrame, o: { lng: number; lat: number }): Chunk | null => {
-    const tB0 = performance.now();
-
-    const tSource0 = performance.now();
     const trees = opts.source.chunk(i, j);
-    const dtSource = performance.now() - tSource0;
     if (!trees) return null;
-
-    const tRelief0 = performance.now();
     const k = reliefScale.peek();
     if (k > 0 && trees.length) {
       const cover: [number, number][] = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => tf.toLngLat((i + a) * CHUNK, (j + b) * CHUNK));
@@ -309,61 +245,26 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         return null;
       }
     }
-    const dtRelief = performance.now() - tRelief0;
-
-    let dtFilterSort = 0;
-    let dtCoordsGround = 0;
-    let dtProject = 0;
-    let dtPack = 0;
-
     const kinds = TREE_KINDS.map((_, kind) => {
       const base: number[] = [], par: number[] = [];
       const order: number[] = [];
-
-      const tFS0 = performance.now();
       for (let t = 0; t < trees.length; t += TREE_STRIDE) if (trees[t + 3] === kind) order.push(t);
       order.sort((a, b) => trees[a + 5] - trees[b + 5]);
-      dtFilterSort += performance.now() - tFS0;
-
-      const tCG0 = performance.now();
       for (const t of order) {
         const x = trees[t], y = trees[t + 1];
         const [a, b] = tf.toLngLat(x, y);
         base.push(x, y, k > 0 ? (groundAt(a, b) ?? 0) * k - SINK : -SINK);
         par.push(trees[t + 2], trees[t + 4], trees[t + 5], 0.85 + 0.3 * ((trees[t + 5] * 13.7) % 1));
       }
-      dtCoordsGround += performance.now() - tCG0;
-
-      const tProj0 = performance.now();
       const { g, m } = projectPoints(base, tf.toLngLat, o);
-      dtProject += performance.now() - tProj0;
-
-      const tPack0 = performance.now();
       const n = base.length / 3, out = new Float32Array(n * PER);
       for (let q = 0; q < n; q++) {
         out.set(g.subarray(q * 3, q * 3 + 3), q * PER);
         out.set(m.subarray(q * 3, q * 3 + 3), q * PER + 3);
         for (let r = 0; r < 4; r++) out[q * PER + 6 + r] = par[q * 4 + r];
       }
-      dtPack += performance.now() - tPack0;
-
       return out;
     });
-
-    const dtBuildTotal = performance.now() - tB0;
-    const chunkSample: ChunkBuildSample = {
-      trees: trees.length / TREE_STRIDE,
-      sourceChunk: dtSource,
-      reliefCheck: dtRelief,
-      filterSort: dtFilterSort,
-      coordsGround: dtCoordsGround,
-      projectPoints: dtProject,
-      packArrays: dtPack,
-      total: dtBuildTotal,
-    };
-    if (buildSamples.length >= MAX_BUILD_SAMPLES) buildSamples.shift();
-    buildSamples.push(chunkSample);
-
     return { i, j, kinds, n: kinds.reduce((a, q, kind) => a + (isTree[kind] ? q.length / PER : 0), 0), lod: -1, seen: 0, stale: false };
   };
 
@@ -401,7 +302,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     }
   };
 
-  // DevTools inspection
   if (import.meta.env.DEV) {
     Object.assign(window, {
       treeStats: () => ({
@@ -413,49 +313,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         chunks: chunks.size,
         rebuilt,
       }),
-      treeProfile: () => {
-        console.group("🌲 Tree Layer Profiling");
-
-        console.log(`%c1. Per-Frame Pipeline (${frameSamples.length} samples)`, "font-weight: bold; color: #4CAF50;");
-        console.table({
-          "1. chunksInView (total)": summarize(frameSamples.map((s) => s.chunksTotal)),
-          "   ↳ culling logic only": summarize(frameSamples.map((s) => s.chunksCulling)),
-          "   ↳ centre() callbacks": summarize(frameSamples.map((s) => s.chunksCentreTime)),
-          "2. buildChunks": summarize(frameSamples.map((s) => s.buildChunks)),
-          "3. thinReach": summarize(frameSamples.map((s) => s.thinReach)),
-          "4. signature": summarize(frameSamples.map((s) => s.sig)),
-          "5. assemble": summarize(frameSamples.map((s) => s.assemble)),
-          "6. uniforms": summarize(frameSamples.map((s) => s.uniforms)),
-          "7. host.draw": summarize(frameSamples.map((s) => s.draw)),
-          "TOTAL (frame)": summarize(frameSamples.map((s) => s.total)),
-        });
-
-        const avgCalls = frameSamples.length ? (frameSamples.reduce((a, b) => a + b.centreCalls, 0) / frameSamples.length).toFixed(1) : 0;
-        const avgSeen = frameSamples.length ? (frameSamples.reduce((a, b) => a + b.seenCount, 0) / frameSamples.length).toFixed(1) : 0;
-        console.log(`ℹ️ chunksInView stats: avg chunks seen = ${avgSeen}, avg centre() calls/frame = ${avgCalls}`);
-
-        console.log(`%c2. Single Chunk Build Breakdown (${buildSamples.length} chunks built)`, "font-weight: bold; color: #2196F3;");
-        if (buildSamples.length > 0) {
-          console.table({
-            "a. source.chunk()": summarize(buildSamples.map((s) => s.sourceChunk)),
-            "b. reliefCheck": summarize(buildSamples.map((s) => s.reliefCheck)),
-            "c. filter & sort (order.sort)": summarize(buildSamples.map((s) => s.filterSort)),
-            "d. coords & groundAt": summarize(buildSamples.map((s) => s.coordsGround)),
-            "e. projectPoints": summarize(buildSamples.map((s) => s.projectPoints)),
-            "f. pack Float32Array": summarize(buildSamples.map((s) => s.packArrays)),
-            "TOTAL (single chunk)": summarize(buildSamples.map((s) => s.total)),
-            "Trees per chunk (count)": summarize(buildSamples.map((s) => s.trees)),
-          });
-        } else {
-          console.log("No chunks built yet. Move the camera to trigger new chunk generation.");
-        }
-        console.groupEnd();
-      },
-      resetTreeProfile: () => {
-        frameSamples.length = 0;
-        buildSamples.length = 0;
-        console.log("Tree profiling samples reset.");
-      },
     });
   }
 
@@ -552,7 +409,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       reset();
     },
     render(_gl, args) {
-      const tRender0 = performance.now();
       const tf = opts.frame.peek();
       const zoom = map.getZoom();
       if (!host || !scene || !tf || zoom < TREES_FROM_ZOOM) return;
@@ -576,12 +432,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
       const k = reliefScale.peek();
       const under = k > 0 ? (groundAt(elng, elat) ?? 0) * k : 0;
 
-      // centre profiling: count calls & cumulative time
-      let centreCalls = 0;
-      let centreTime = 0;
-      // Быстрый упаковщик двух 16-битных целых в один 32-битный ключ
-      const coordKey = (x: number, y: number) => ((Math.round(x) & 0xffff) << 16) | (Math.round(y) & 0xffff);
-
       const centre = (x: number, y: number, out: [number, number, number]): void => {
         const key = coordKey(x, y);
         let pos = centreCache.get(key);
@@ -597,19 +447,13 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         out[2] = pos[2];
       };
 
-      // 1. chunksInView
-      const tChunks0 = performance.now();
       const seen = chunksInView({ planes, eye, at: [ex, ey], far, size: CHUNK, rise: TALL, slope: SLOPE, centre });
-      const dtChunksTotal = performance.now() - tChunks0;
-      const dtChunksCulling = Math.max(0, dtChunksTotal - centreTime);
-
-      // 2. buildChunks
-      const tBuild0 = performance.now();
+      const t0 = performance.now();
       let missing = false;
       for (const s of seen) {
         const key = chunkKey(s.i, s.j), was = chunks.get(key);
         if (was && !was.stale) continue;
-        if (performance.now() - tBuild0 > FRAME_BUDGET) {
+        if (performance.now() - t0 > FRAME_BUDGET) {
           missing = true;
           break;
         }
@@ -620,10 +464,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
           chunks.set(key, c);
         }
       }
-      const dtBuildChunks = performance.now() - tBuild0;
 
-      // 3. thinReach & LOD selection
-      const tThin0 = performance.now();
       frameNo++;
       const flat = map.getPitch() < FLAT_PITCH;
       const ready: { c: Chunk; lod: number; d: number; n: number }[] = [];
@@ -646,15 +487,8 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         keep: r.d < NEAR ? 1 : Math.floor(keepAt(r.d, reach) * 16) / 16,
       }));
       if (chunks.size > MAX_CHUNKS) for (const [key, c] of chunks) if (frameNo - c.seen > 600) chunks.delete(key);
-      const dtThinReach = performance.now() - tThin0;
 
-      // 4. signature
-      const tSig0 = performance.now();
       const sig = `${rebuilt}|` + chosen.map((q) => `${q.c.i},${q.c.j}:${q.lods.join(",")}:${q.keep}`).join(";");
-      const dtSig = performance.now() - tSig0;
-
-      // 5. assemble
-      const tAssemble0 = performance.now();
       const now = performance.now();
       if (sig !== shown) {
         if (shown === null || now - lastAssemble > ASSEMBLE_EVERY) {
@@ -663,27 +497,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
           lastAssemble = now;
         } else missing = true;
       }
-      const dtAssemble = performance.now() - tAssemble0;
 
       if (missing) map.triggerRepaint();
-      if (!slots.some((s) => s.count > 0)) {
-        if (frameSamples.length >= MAX_FRAME_SAMPLES) frameSamples.shift();
-        frameSamples.push({
-          total: performance.now() - tRender0,
-          chunksTotal: dtChunksTotal,
-          chunksCulling: dtChunksCulling,
-          chunksCentreTime: centreTime,
-          centreCalls,
-          seenCount: seen.length,
-          buildChunks: dtBuildChunks,
-          thinReach: dtThinReach,
-          sig: dtSig,
-          assemble: dtAssemble,
-          uniforms: 0,
-          draw: 0,
-        });
-        return;
-      }
+      if (!slots.some((s) => s.count > 0)) return;
 
       if (!impostors) {
         const baked = host.draw((r) => TREE_KINDS.map((kind) => bakeImpostor(r, buildTree(kind, 0))));
@@ -697,8 +513,6 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         });
       }
 
-      // 6. uniforms
-      const tUniforms0 = performance.now();
       const clock = opts.light?.clock.peek() ?? 0;
       const crown = crownAt(clock), reed = reedAt(clock);
       const w = opts.weather.peek();
@@ -722,34 +536,13 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         (u.uCrownB.value as Vector3).set(...b);
         u.uSnow.value = info.season === "leaf" ? snow * crown.bare * 0.6 : info.season === "reed" ? snow * 0.4 : snow;
       });
-      const dtUniforms = performance.now() - tUniforms0;
 
-      // 7. host.draw
-      const tDraw0 = performance.now();
       host.draw((r) => {
         const color = r.state.buffers.color;
         r.getContext().colorMask(true, true, true, false);
         color.setLocked(true);
         r.render(scene!, camera);
         color.setLocked(false);
-      });
-      const dtDraw = performance.now() - tDraw0;
-
-      const dtTotal = performance.now() - tRender0;
-      if (frameSamples.length >= MAX_FRAME_SAMPLES) frameSamples.shift();
-      frameSamples.push({
-        total: dtTotal,
-        chunksTotal: dtChunksTotal,
-        chunksCulling: dtChunksCulling,
-        chunksCentreTime: centreTime,
-        centreCalls,
-        seenCount: seen.length,
-        buildChunks: dtBuildChunks,
-        thinReach: dtThinReach,
-        sig: dtSig,
-        assemble: dtAssemble,
-        uniforms: dtUniforms,
-        draw: dtDraw,
       });
 
       if (wind > 0.02 && !flat && motionOn.peek()) map.triggerRepaint();
