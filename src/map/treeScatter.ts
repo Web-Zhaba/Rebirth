@@ -3,8 +3,8 @@ import type { XY } from "./modelGeometry";
 export const CHUNK = 200;
 export const TREES_FROM_ZOOM = 13.6;
 export const TREE_STRIDE = 6;
-export const TREE_KINDS = ["conifer", "broadleaf", "birch", "bush", "reed", "boulder"] as const;
-export const DETAIL_KINDS = ["bush", "reed", "boulder"] as const;
+export const TREE_KINDS = ["conifer", "broadleaf", "birch", "bush", "reed", "boulder", "grass"] as const;
+export const DETAIL_KINDS = ["bush", "reed", "boulder", "grass"] as const;
 export type DetailKind = (typeof DETAIL_KINDS)[number];
 const FIRST_DETAIL = TREE_KINDS.indexOf(DETAIL_KINDS[0]);
 export type TreeKind = (typeof TREE_KINDS)[number];
@@ -50,7 +50,7 @@ export type DetailMix = Partial<Record<DetailKind, { share: number; size: [numbe
 export interface DetailPoly extends ForestPoly {
   mix: DetailMix;
 }
-export const DETAIL_SPACING: Record<DetailKind, number> = { bush: 5, reed: 2.5, boulder: 7 };
+export const DETAIL_SPACING: Record<DetailKind, number> = { bush: 5, reed: 2.5, boulder: 7, grass: 3.5 };
 
 export interface DetailInput {
   polys: readonly DetailPoly[];
