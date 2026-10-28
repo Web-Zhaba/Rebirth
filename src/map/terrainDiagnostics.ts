@@ -16,7 +16,8 @@ export type TerrainDiagnosticMode =
   | "visibility-off"
   | "projection-off-base"
   | "center-off"
-  | "center-set-off";
+  | "center-set-off"
+  | "dem-load-off";
 
 export const terrainDiagnosticMode: TerrainDiagnosticMode =
   requested === "layers-off" ||
@@ -26,7 +27,8 @@ export const terrainDiagnosticMode: TerrainDiagnosticMode =
   requested === "visibility-off" ||
   requested === "projection-off-base" ||
   requested === "center-off" ||
-  requested === "center-set-off"
+  requested === "center-set-off" ||
+  requested === "dem-load-off"
     ? requested
     : "normal";
 
@@ -39,7 +41,8 @@ export const disableCustomTerrainRenderers =
   terrainDiagnosticMode === "visibility-off" ||
   terrainDiagnosticMode === "projection-off-base" ||
   terrainDiagnosticMode === "center-off" ||
-  terrainDiagnosticMode === "center-set-off";
+  terrainDiagnosticMode === "center-set-off" ||
+  terrainDiagnosticMode === "dem-load-off";
 
 export const disableProjectionTransition =
   terrainDiagnosticMode === "projection-off" ||
@@ -49,7 +52,8 @@ export const disableProjectionTransition =
 export const disableTerrainCameraSync =
   disableTerrainTransition || terrainDiagnosticMode === "camera-off";
 export const disableTerrainCenterElevation = terrainDiagnosticMode === "center-off";
-export const disableTerrainCenterSet = terrainDiagnosticMode === "center-set-off";
+export const disableTerrainCenterSet = terrainDiagnosticMode === "center-set-off" || terrainDiagnosticMode === "dem-load-off";
+export const disableDemLoading = terrainDiagnosticMode === "dem-load-off";
 
 export const disableBaseLayerVisibilityTransition =
   disableTerrainTransition || terrainDiagnosticMode === "visibility-off";
