@@ -16,6 +16,8 @@ import {
 } from "three";
 import { PALETTE } from "../ui/palette";
 import type { WeatherState } from "../sim/weather";
+import { buildings } from "../simClient";
+import { pointInPolygon } from "../sim/zones";
 import type { Frame as TownFrame } from "../world/frame";
 import { pointInRings, type Land } from "../world/landcover";
 import { lngLatToTile } from "../world/mercator";
@@ -29,6 +31,7 @@ import { snowOpacity } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
 import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
+import { treeObstacleTopAt } from "./natureCollision";
 import {
   clearTerrainSurfaceWindow,
   setTerrainSurfaceWindow,
@@ -617,14 +620,73 @@ export function createLandscapeLayer(
           const scale = reliefScale.peek();
           const currentLift = opts.getCameraLift();
           const unliftedEyeAltitude = eye[2] - currentLift;
-          const minAltitude = cameraGround * scale + 35;
+          const [cameraX, cameraY] = tf.toLocal(eyeLng, eyeLat);
 
-          // Compute the lift that this camera position would need with zero
-          // extra lift applied. The target elevation moves the eye vertically
-          // by the same delta, so this converges without pitch/bearing jumps.
+          // Terrain clearance is checked at the actual camera eye, not the
+          // map target. This prevents the camera from entering the hillside
+          // while rotating around a steep slope.
+          let requiredAltitude = cameraGround * scale + 35;
+
+          const treeTop = treeObstacleTopAt(
+            cameraX,
+            cameraY,
+            unliftedEyeAltitude,
+          );
+          if (treeTop !== null) {
+            requiredAltitude = Math.max(requiredAltitude, treeTop);
+          }
+
+          // Active/in-progress town buildings are real obstacles as well.
+          // Only do expensive polygon/DEM work if the eye's XY lies inside a
+          // footprint's bounding box; this is rare and usually exits quickly.
+          for (const building of Object.values(buildings.peek() ?? {})) {
+            if (building.state === "planned" || building.footprint.length < 3) continue;
+
+            let minX = Infinity;
+            let minY = Infinity;
+            let maxX = -Infinity;
+            let maxY = -Infinity;
+
+            for (const [x, y] of building.footprint) {
+              minX = Math.min(minX, x);
+              minY = Math.min(minY, y);
+              maxX = Math.max(maxX, x);
+              maxY = Math.max(maxY, y);
+            }
+
+            if (
+              cameraX < minX - 1 ||
+              cameraX > maxX + 1 ||
+              cameraY < minY - 1 ||
+              cameraY > maxY + 1 ||
+              !pointInPolygon(cameraX, cameraY, building.footprint)
+            ) {
+              continue;
+            }
+
+            let roofBase = cameraGround * scale;
+
+            for (const [x, y] of building.footprint) {
+              const [lng, lat] = tf.toLngLat(x, y);
+              const h = terrainSurfaceAt(lng, lat, tf);
+              if (h !== null) roofBase = Math.max(roofBase, h * scale);
+            }
+
+            const progress =
+              building.state === "active"
+                ? 1
+                : Math.max(0.15, Math.min(1, building.done / Math.max(building.labor, 1)));
+
+            const roof = roofBase + building.height * progress + 7;
+            requiredAltitude = Math.max(requiredAltitude, roof);
+          }
+
+          // Compute required lift relative to the camera pose with the previous
+          // correction removed. Raising the pivot moves the camera together with
+          // it, preserving pitch and bearing instead of snapping the view.
           const desiredLift = Math.max(
             0,
-            minAltitude - unliftedEyeAltitude,
+            requiredAltitude - unliftedEyeAltitude,
           );
 
           if (Math.abs(desiredLift - currentLift) > 2.0) {
