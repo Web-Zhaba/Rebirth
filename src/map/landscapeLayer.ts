@@ -22,11 +22,12 @@ import { lngLatToTile } from "../world/mercator";
 import { NATURE_MAXZOOM } from "../world/nature";
 import { getLandTile, type LandTile } from "../world/tiles";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
-import { projectPoints } from "./modelBuffers";
+import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { groundAt, loadGround, reliefScale } from "./relief";
 import { snowOpacity } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
+import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 import {
   clearTerrainSurfaceWindow,
@@ -56,6 +57,8 @@ interface LandscapeOptions {
   frame: ReadonlySignal<TownFrame | null>;
   light?: ModelLayerOptions["light"];
   weather: ReadonlySignal<WeatherState | null>;
+  getCameraLift: () => number;
+  setCameraLift: (lift: number) => void;
 }
 
 const VERT = /* glsl */ `
@@ -593,6 +596,40 @@ export function createLandscapeLayer(
       if (!origin || origin.lng !== lng || origin.lat !== lat) {
         origin = { lng, lat };
         clearMesh();
+      }
+
+      // Use MapLibre's actual frame matrix to recover the camera eye in the
+      // same local Mercator metres as this terrain. MapLibre 6.16 does not
+      // expose getFreeCameraOptions(), but its render matrix is the authoritative
+      // camera pose and is already available to every custom layer.
+      const cameraMatrix = framer.mercator(args, host, origin);
+      const eye = eyeOf(cameraMatrix);
+
+      if (eye) {
+        const merc = mercatorLocal(origin);
+        const [eyeLng, eyeLat] = merc.from(eye[0], eye[1]);
+        const cameraGround = terrainSurfaceAt(eyeLng, eyeLat, tf);
+
+        if (cameraGround === null) {
+          void loadGround([[eyeLng, eyeLat]]).then(() => map.triggerRepaint());
+        } else {
+          const scale = reliefScale.peek();
+          const currentLift = opts.getCameraLift();
+          const unliftedEyeAltitude = eye[2] - currentLift;
+          const minAltitude = cameraGround * scale + 35;
+
+          // Compute the lift that this camera position would need with zero
+          // extra lift applied. The target elevation moves the eye vertically
+          // by the same delta, so this converges without pitch/bearing jumps.
+          const desiredLift = Math.max(
+            0,
+            minAltitude - unliftedEyeAltitude,
+          );
+
+          if (Math.abs(desiredLift - currentLift) > 2.0) {
+            opts.setCameraLift(desiredLift);
+          }
+        }
       }
 
       // The custom terrain window must follow MapLibre's orbit target, not
