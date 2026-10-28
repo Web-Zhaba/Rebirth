@@ -23,6 +23,7 @@ import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
 import { signedDaily } from "./resourceModel";
 import { freshWarnings, serviceWarningText, warningAction } from "./warningModel";
+import { screenshotMode } from "./screenshotMode";
 
 const SEASON_RU = ["Весна", "Лето", "Осень", "Зима"];
 const families = (n: number) => {
@@ -258,6 +259,7 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
       <span class="tb-end">
         <TechButton />
         <IconButton icon="town" size={20} label="Город" aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")} />
+        <IconButton icon="camera" size={16} label="Скрыть HUD (F10)" onClick={() => (screenshotMode.value = true)} />
         <IconButton icon="help" size={16} label="Горячие клавиши (?)" onClick={() => (hotkeysOpen.value = true)} />
         <IconButton icon="settings" size={16} label="Настройки" onClick={() => (settingsOpen.value = true)} />
         <IconButton icon="info" size={16} label="Об игре" onClick={() => (aboutOpen.value = true)} />
