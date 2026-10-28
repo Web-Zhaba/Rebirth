@@ -2,6 +2,7 @@ import type * as maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { frame, lifeTraffic, roads } from "../simClient";
 import { overlay, TRAFFIC_STOPS } from "./tools";
+import { trafficDataActive } from "./trafficModel";
 
 const SRC = "road-traffic";
 const LAYER = "road-traffic-line";
@@ -23,9 +24,12 @@ export function attachTrafficLayer(map: maplibregl.Map): void {
       },
     });
     effect(() => {
-      map.setLayoutProperty(LAYER, "visibility", overlay.value === "traffic" ? "visible" : "none");
+      map.setLayoutProperty(LAYER, "visibility", trafficDataActive(overlay.value) ? "visible" : "none");
     });
     effect(() => {
+      // Dependency tracking is dynamic: while hidden this effect only watches overlay,
+      // so life/road/frame updates do not rebuild an invisible GeoJSON source.
+      if (!trafficDataActive(overlay.value)) return;
       const f = frame.value;
       const g = roads.value;
       const traffic = lifeTraffic.value;
