@@ -12,7 +12,7 @@ import { fields3dOn, showWhile } from "./graphicsSettings";
 import { projectPoints } from "./modelBuffers";
 import { rgb, type XY } from "./modelGeometry";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
-import { groundAt, loadGround, reliefScale } from "./relief";
+import { loadGround, reliefScale } from "./relief";
 import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
