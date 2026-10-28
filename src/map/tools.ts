@@ -3,6 +3,7 @@ import type * as maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
+import { shouldRepeatTool } from "../ui/inputModel";
 
 // Road tools; a tool plus its material (see roadMaterial) picks the sim RoadKind. restore: rebuild a revealed old street as a whole.
 export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
@@ -20,6 +21,19 @@ export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
 export const tool = signal<Tool | null>(null);
+export const lastTool = signal<Tool | null>(null);
+effect(() => {
+  const current = tool.value;
+  if (current) lastTool.value = current;
+});
+
+export function attachToolRepeat(map: maplibregl.Map): void {
+  map.getCanvas().addEventListener("mousedown", (e) => {
+    if (!shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
+    e.preventDefault();
+    tool.value = lastTool.peek();
+  });
+}
 // Road drawing mode, shared by every road kind; kept between tools.
 export const roadMode = signal<RoadMode>("straight");
 export const ROAD_MODES: { id: RoadMode; label: string; title: string }[] = [
