@@ -47,6 +47,7 @@ export function attachLandscape(
 
   let syncingCamera = false;
   let waitingForGround = false;
+  const originalMaxZoom = map.getMaxZoom();
 
   const syncCameraToLandscape = () => {
     if (syncingCamera || !map.isStyleLoaded()) return;
@@ -59,6 +60,14 @@ export function attachLandscape(
     const maxPitch = !active ? 75 : zoom >= 18 ? 30 : zoom >= 16.5 ? 42 : 58;
     if (Math.abs(map.getMaxPitch() - maxPitch) > 0.1) {
       map.setMaxPitch(maxPitch);
+    }
+
+    // At extreme zooms the MapLibre orbit camera can enter tall buildings and
+    // tree crowns. The game models are designed for a town-scale view, so cap
+    // close terrain mode before the camera becomes an interior/FPS camera.
+    const maxZoom = active ? Math.min(originalMaxZoom, 18.5) : originalMaxZoom;
+    if (Math.abs(map.getMaxZoom() - maxZoom) > 0.01) {
+      map.setMaxZoom(maxZoom);
     }
 
     if (!active) {
