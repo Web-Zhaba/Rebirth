@@ -148,6 +148,7 @@ export function createLandscapeLayer(
   let meshCentre: [number, number] | null = null;
   let requestedCentre: [number, number] | null = null;
 
+  const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
   const camera = new Camera();
   const framer = frameSetter(opts.light);
   const stops: (() => void)[] = [];
@@ -276,23 +277,46 @@ export function createLandscapeLayer(
     cell: number,
     grid: number,
     cutInnerPatch: boolean,
-  ): Mesh | null => {
+    shouldCancel: () => boolean,
+  ): Promise<Mesh | null> => {
     if (!scene || !mat) return null;
 
     const side = grid + 1;
     const heights = new Float64Array(points.length);
 
-    for (let q = 0; q < points.length; q++) {
-      const [lng, lat] = points[q];
-      const h = groundAt(lng, lat);
-      if (h === null) return null;
-      heights[q] = h;
+    // Keep each batch short enough that the browser can service input and paint
+    // while terrain is first generated. The close-up threshold used to run all
+    // height and polygon classification work in one uninterrupted task.
+    const batchSize = 4096;
+    for (let start = 0; start < points.length; start += batchSize) {
+      const end = Math.min(points.length, start + batchSize);
+      for (let q = start; q < end; q++) {
+        const [lng, lat] = points[q];
+        const h = groundAt(lng, lat);
+        if (h === null) return null;
+        heights[q] = h;
+      }
+      if (end < points.length) {
+        await yieldToBrowser();
+        if (shouldCancel()) return null;
+      }
     }
 
     const scale = reliefScale.peek();
     const local = new Float64Array(points.length * 3);
     const colors = new Float32Array(points.length * 3);
-    const biomes = points.map(([lng, lat]) => biomeAt(lng, lat));
+    const biomes = new Array<Land>(points.length);
+    for (let start = 0; start < points.length; start += batchSize) {
+      const end = Math.min(points.length, start + batchSize);
+      for (let q = start; q < end; q++) {
+        const [lng, lat] = points[q];
+        biomes[q] = biomeAt(lng, lat);
+      }
+      if (end < points.length) {
+        await yieldToBrowser();
+        if (shouldCancel()) return null;
+      }
+    }
 
     const at = (x: number, y: number): number => {
       const cx = Math.max(0, Math.min(grid, x));
@@ -365,6 +389,11 @@ export function createLandscapeLayer(
         colors[q * 3] = color[0];
         colors[q * 3 + 1] = color[1];
         colors[q * 3 + 2] = color[2];
+
+        if ((q & 4095) === 4095) {
+          await yieldToBrowser();
+          if (shouldCancel()) return null;
+        }
       }
     }
 
@@ -449,11 +478,9 @@ export function createLandscapeLayer(
     const outerPoints = gridPoints(tf, buildCentre, HALF, CELL, GRID);
     const finePoints = gridPoints(tf, buildCentre, FINE_HALF, FINE_CELL, FINE_GRID);
 
-    // Loading DEM/vector tiles does not require every mesh vertex. Walking all
-    // ~100k points through lngLatToTile/tilesAround synchronously blocked the
-    // main thread on the first close zoom. A 240m coverage lattice still hits
-    // every source tile (including neighbouring tiles near boundaries) while
-    // the full-resolution points remain available for mesh construction.
+    // Loading DEM/vector tiles does not require every mesh vertex. A sparse
+    // 480m coverage lattice finds the same source tiles without converting every
+    // vertex before the mesh is built. Mesh construction itself yields in batches.
     const coveragePoints: [number, number][] = [];
     const side = GRID + 1;
     const coverageStride = 2;
@@ -464,7 +491,7 @@ export function createLandscapeLayer(
     }
 
     void Promise.all([loadGround(coveragePoints), loadNature(coveragePoints)])
-      .then(() => {
+      .then(async () => {
         if (
           buildGeneration !== generation ||
           !scene ||
@@ -476,7 +503,15 @@ export function createLandscapeLayer(
           return;
         }
 
-        const outer = buildMesh(
+        const isCurrentBuild = () =>
+          buildGeneration === generation &&
+          !!scene &&
+          !!mat &&
+          !!origin &&
+          origin.lng === buildOrigin.lng &&
+          origin.lat === buildOrigin.lat;
+
+        const outer = await buildMesh(
           tf,
           buildOrigin,
           outerPoints,
@@ -485,9 +520,15 @@ export function createLandscapeLayer(
           CELL,
           GRID,
           true,
+          isCurrentBuild,
         );
 
-        const fine = buildMesh(
+        if (!outer || !isCurrentBuild()) {
+          outer?.geometry.dispose();
+          return;
+        }
+
+        const fine = await buildMesh(
           tf,
           buildOrigin,
           finePoints,
@@ -496,10 +537,11 @@ export function createLandscapeLayer(
           FINE_CELL,
           FINE_GRID,
           false,
+          isCurrentBuild,
         );
 
-        if (!outer || !fine) {
-          outer?.geometry.dispose();
+        if (!fine || !isCurrentBuild()) {
+          outer.geometry.dispose();
           fine?.geometry.dispose();
           return;
         }
