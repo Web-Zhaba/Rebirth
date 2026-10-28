@@ -41,6 +41,7 @@ function readShown(): boolean {
 }
 
 export const ruinsShown = signal(readShown());
+export const ruinsAutoShown = signal(false);
 
 export function toggleRuins(): void {
   ruinsShown.value = !ruinsShown.value;
@@ -197,7 +198,7 @@ export function attachRuinsLayer(
   let sc: typeof import("../simClient") | null = null; // loaded lazily: the pure parts of this file are tested without the worker
 
   const applyShown = () => {
-    for (const id of RUIN_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", ruinsShown.peek() ? "visible" : "none");
+    for (const id of RUIN_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", ruinsShown.peek() || ruinsAutoShown.peek() ? "visible" : "none");
   };
 
   const setup = (lat: number) => {
@@ -418,6 +419,7 @@ export function attachRuinsLayer(
     disposeEffect = effect(apply);
     disposeShown = effect(() => {
       void ruinsShown.value;
+      void ruinsAutoShown.value;
       applyShown();
     });
   };
