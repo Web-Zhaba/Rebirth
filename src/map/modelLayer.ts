@@ -16,6 +16,7 @@ import { mergePacked, projectModel, type Packed } from "./modelBuffers";
 import { buildScaffold, rgb, type Model, type XY } from "./modelGeometry";
 import { seatBridge, seatBuilding, drapeRoad, type Ground } from "./groundSeat";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { terrainSurfaceAt, terrainSurfaceRevision } from "./terrainSurface";
 import { buildRoadModel } from "./roadModels";
 import { buildTownModel } from "./townModels";
 import { EARTH_RADIUS_M, localFrame, lngLatToMercator, mercatorLocalMatrix, metresPerMercator, weatherToSphere } from "./three/frame";
@@ -499,7 +500,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     let ground: Ground | null = null;
     if (k > 0) {
       const pts = coverOf(items).map(([x, y]) => tf.toLngLat(x, y));
-      if (pts.some(([a, b]) => groundAt(a, b) === null)) {
+      if (pts.some(([a, b]) => terrainSurfaceAt(a, b, tf) === null)) {
         void loadGround(pts).then(() => {
           dirty = true;
           map.triggerRepaint();
@@ -509,7 +510,7 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       }
       ground = (x, y) => {
         const [a, b] = tf.toLngLat(x, y);
-        return (groundAt(a, b) ?? 0) * k;
+        return (terrainSurfaceAt(a, b, tf) ?? groundAt(a, b) ?? 0) * k;
       };
     }
     const used = new Set<string>();
@@ -588,10 +589,17 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
       lampScene = new Scene();
       lampScene.add(lampMesh);
       dirty = true;
+      let lastTerrainRevision = terrainSurfaceRevision.peek();
+
       stop = effect(() => {
         void opts.items.value;
         void opts.frame.value;
         void reliefScale.value;
+        const revision = terrainSurfaceRevision.value;
+        if (revision !== lastTerrainRevision) {
+          lastTerrainRevision = revision;
+          cache.clear();
+        }
         void opts.weather?.value;
         void weatherMapOn.value;
         dirty = true;
