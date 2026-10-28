@@ -168,7 +168,7 @@ function CostLine({ t }: { t: Tool }) {
           {m.text}
         </span>
       ))}
-    </section>
+    </div>
   );
 }
 
@@ -276,6 +276,6 @@ export function BuildBar() {
           })}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
