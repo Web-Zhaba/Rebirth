@@ -32,6 +32,7 @@ import { acquireHost, type ThreeHost } from "./three/host";
 import {
   clearTerrainSurfaceWindow,
   setTerrainSurfaceWindow,
+  terrainSurfaceAt,
   TERRAIN_CENTER_STEP,
   TERRAIN_FINE_CELL,
   TERRAIN_FINE_HALF,
