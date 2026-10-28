@@ -47,17 +47,12 @@ export function attachLandscape(
 
   let syncingCamera = false;
   let waitingForGround = false;
-  let waitingForCameraGround = false;
-  let cameraLift = 0;
   const originalMaxZoom = map.getMaxZoom();
   // The globe is useful for world overview, but the custom local terrain is a
   // Mercator DEM mesh. Keep those coordinate systems from being blended while
   // the player is in the 3D world; restore the original globe at overview zooms.
   const originalProjection = map.getProjection();
   let switchingProjection = false;
-
-  const CAMERA_CLEARANCE_M = 45;
-  const CAMERA_HYSTERESIS_M = 180;
 
   const syncCameraToLandscape = () => {
     if (syncingCamera || !map.isStyleLoaded()) return;
@@ -81,8 +76,6 @@ export function attachLandscape(
     }
 
     if (!active) {
-      cameraLift = 0;
-
       if (!map.getCenterClampedToGround()) {
         syncingCamera = true;
         map.setCenterClampedToGround(true);
@@ -109,51 +102,11 @@ export function attachLandscape(
       return;
     }
 
-    const scale = reliefScale.peek();
-
-    // Keep MapLibre's orbit pivot on the custom DEM, not on the old sea-level
-    // sphere. In addition, guard the *actual camera position* against terrain:
-    // raising only the pitch limit cannot stop the free camera entering a hill.
-    const basePivot = Math.max(0, elevation * scale) + 0.8;
-    const free = map.getFreeCameraOptions();
-    const cameraPosition = free.position;
-
-    if (cameraPosition) {
-      const cameraLngLat = cameraPosition.toLngLat();
-      const cameraGround = groundAt(cameraLngLat.lng, cameraLngLat.lat);
-
-      if (cameraGround === null) {
-        if (!waitingForCameraGround) {
-          waitingForCameraGround = true;
-          void loadGround([[cameraLngLat.lng, cameraLngLat.lat]]).finally(() => {
-            waitingForCameraGround = false;
-            syncCameraToLandscape();
-          });
-        }
-      } else {
-        const cameraAltitude = cameraPosition.toAltitude();
-        const minimumAltitude = Math.max(0, cameraGround * scale) + CAMERA_CLEARANCE_M;
-
-        if (cameraAltitude < minimumAltitude) {
-          // MapLibre's center elevation moves the orbit target and camera
-          // together, preserving the user's bearing/pitch while pulling the
-          // camera out of terrain.
-          cameraLift = Math.max(
-            cameraLift,
-            minimumAltitude - cameraAltitude + 12,
-          );
-        } else if (cameraAltitude > minimumAltitude + CAMERA_HYSTERESIS_M && cameraLift > 0) {
-          // Release the lift gradually after leaving a mountain so the camera
-          // doesn't snap down when the terrain becomes lower.
-          cameraLift = Math.max(
-            0,
-            cameraLift - Math.min(35, (cameraAltitude - minimumAltitude - CAMERA_HYSTERESIS_M) * 0.2),
-          );
-        }
-      }
-    }
-
-    const wanted = basePivot + cameraLift;
+    // Keep MapLibre's orbit pivot on the custom DEM, not on its old
+    // sea-level globe. The map API does not expose a mutable camera position
+    // in this version, so we prevent most terrain collisions by anchoring the
+    // target elevation and reducing pitch/zoom in custom-world mode.
+    const wanted = Math.max(0, elevation * reliefScale.peek()) + 0.8;
     if (Math.abs(map.getCenterElevation() - wanted) < 1.0) return;
 
     syncingCamera = true;
