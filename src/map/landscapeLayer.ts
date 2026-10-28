@@ -20,9 +20,10 @@ import { lngLatToTile } from "../world/mercator";
 import { NATURE_MAXZOOM } from "../world/nature";
 import { getLandTile, type LandTile } from "../world/tiles";
 import { frameSetter, type ModelLayerOptions } from "./modelLayer";
-import { projectPoints } from "./modelBuffers";
+import { mercatorLocal, projectPoints } from "./modelBuffers";
 import { rgb } from "./modelGeometry";
 import { groundAt, loadGround, reliefScale } from "./relief";
+import { eyeOf } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
 
 export const LANDSCAPE_LAYER_ID = "landscape-terrain";
@@ -31,6 +32,7 @@ export const LANDSCAPE_FROM_ZOOM = 12.5;
 const HALF = 12_000;
 const CELL = 160;
 const GRID = Math.ceil((HALF * 2) / CELL);
+const CENTER_STEP = 4_000;
 
 interface LandscapeOptions {
   frame: ReadonlySignal<TownFrame | null>;
@@ -103,6 +105,8 @@ export function createLandscapeLayer(
   let origin: { lng: number; lat: number } | null = null;
   let loading = false;
   let generation = 0;
+  let meshCentre: [number, number] | null = null;
+  let requestedCentre: [number, number] | null = null;
 
   const camera = new Camera();
   const framer = frameSetter(opts.light);
@@ -192,17 +196,22 @@ export function createLandscapeLayer(
       mesh.geometry.dispose();
       mesh = null;
     }
+
+    meshCentre = null;
   };
 
-  const gridPoints = (tf: TownFrame): [number, number][] => {
+  const gridPoints = (
+    tf: TownFrame,
+    centre: readonly [number, number],
+  ): [number, number][] => {
     const side = GRID + 1;
     const points = new Array<[number, number]>(side * side);
     let q = 0;
 
     for (let y = 0; y <= GRID; y++) {
       for (let x = 0; x <= GRID; x++, q++) {
-        const lx = -HALF + x * CELL;
-        const ly = -HALF + y * CELL;
+        const lx = centre[0] - HALF + x * CELL;
+        const ly = centre[1] - HALF + y * CELL;
         points[q] = tf.toLngLat(lx, ly);
       }
     }
@@ -214,6 +223,7 @@ export function createLandscapeLayer(
     tf: TownFrame,
     o: { lng: number; lat: number },
     points: readonly [number, number][],
+    centre: readonly [number, number],
   ): Mesh | null => {
     if (!scene || !mat) return null;
 
@@ -244,8 +254,8 @@ export function createLandscapeLayer(
         const [lng, lat] = points[q];
         const biome = biomeAt(lng, lat);
 
-        local[q * 3] = -HALF + x * CELL;
-        local[q * 3 + 1] = -HALF + y * CELL;
+        local[q * 3] = centre[0] - HALF + x * CELL;
+        local[q * 3 + 1] = centre[1] - HALF + y * CELL;
 
         // Water gets its own dedicated surface. Keep terrain underneath it,
         // but slightly lower so the two opaque surfaces can never z-fight.
@@ -303,13 +313,27 @@ export function createLandscapeLayer(
     return out;
   };
 
-  const requestBuild = (tf: TownFrame) => {
-    if (loading || mesh || !origin) return;
+  const requestBuild = (
+    tf: TownFrame,
+    centre: readonly [number, number],
+  ) => {
+    if (loading || !origin) return;
+
+    if (
+      mesh &&
+      meshCentre?.[0] === centre[0] &&
+      meshCentre?.[1] === centre[1]
+    ) {
+      return;
+    }
 
     loading = true;
+    requestedCentre = [centre[0], centre[1]];
+
     const buildGeneration = generation;
     const buildOrigin = origin;
-    const points = gridPoints(tf);
+    const buildCentre: [number, number] = [centre[0], centre[1]];
+    const points = gridPoints(tf, buildCentre);
 
     void Promise.all([loadGround(points), loadNature(points)])
       .then(() => {
@@ -324,16 +348,36 @@ export function createLandscapeLayer(
           return;
         }
 
-        const made = buildMesh(tf, buildOrigin, points);
+        const made = buildMesh(tf, buildOrigin, points, buildCentre);
         if (!made) return;
 
+        if (mesh) {
+          scene.remove(mesh);
+          mesh.geometry.dispose();
+        }
+
         mesh = made;
+        meshCentre = buildCentre;
         scene.add(made);
       })
       .finally(() => {
         if (buildGeneration === generation) {
           loading = false;
-          map.triggerRepaint();
+
+          // The camera may have crossed another snap boundary while this
+          // terrain window was loading. Render this one, then schedule the next.
+          if (
+            requestedCentre &&
+            (
+              requestedCentre[0] !== meshCentre?.[0] ||
+              requestedCentre[1] !== meshCentre?.[1]
+            )
+          ) {
+            map.triggerRepaint();
+          } else {
+            requestedCentre = null;
+            map.triggerRepaint();
+          }
         }
       });
   };
@@ -414,10 +458,30 @@ export function createLandscapeLayer(
         clearMesh();
       }
 
-      if (!mesh) {
-        requestBuild(tf);
-        return;
+      const mercatorMatrix = framer.mercator(args, host, origin);
+      const eye = eyeOf(mercatorMatrix);
+
+      if (!eye) return;
+
+      const merc = mercatorLocal(origin);
+      const [eyeLng, eyeLat] = merc.from(eye[0], eye[1]);
+      const [eyeX, eyeY] = tf.toLocal(eyeLng, eyeLat);
+
+      const centre: [number, number] = [
+        Math.round(eyeX / CENTER_STEP) * CENTER_STEP,
+        Math.round(eyeY / CENTER_STEP) * CENTER_STEP,
+      ];
+
+      if (
+        !mesh ||
+        meshCentre?.[0] !== centre[0] ||
+        meshCentre?.[1] !== centre[1]
+      ) {
+        requestedCentre = centre;
+        requestBuild(tf, centre);
       }
+
+      if (!mesh) return;
 
       framer.set(mat.uniforms, args, host, origin);
 
