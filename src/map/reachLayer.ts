@@ -7,7 +7,7 @@ import { frame, state } from "../simClient";
 import { selectedBuilding } from "./buildingLayer";
 import { PALETTE } from "../ui/palette";
 import { relationRadius } from "./coveragePreviewModel";
-import { overlay, placeReach, tool } from "./tools";
+import { manualOverlay, overlay, placeReach, tool } from "./tools";
 
 const SRC = "service-reach";
 
@@ -44,7 +44,7 @@ export function attachReachLayer(map: maplibregl.Map): void {
         selectedServiceOverlay = selectedService;
         overlay.value = selectedService as typeof overlay.value;
       } else if (selectedServiceOverlay) {
-        if (!active && overlay.peek() === selectedServiceOverlay) overlay.value = "none";
+        if (!active && overlay.peek() === selectedServiceOverlay) overlay.value = manualOverlay.peek();
         selectedServiceOverlay = null;
       }
       const features: GeoJSON.Feature[] = [];
