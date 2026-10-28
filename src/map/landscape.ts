@@ -29,7 +29,9 @@ export function attachLandscape(
   const groundOverlays = [
     "roads-casing",
     "roads-built",
-    "clearings-fill",
+    "roads-planned",
+    "roads-cut",
+    "clearings-line",
     "fields-fill",
     "fields-furrows",
     "fields-line",
@@ -39,7 +41,6 @@ export function attachLandscape(
     "field-draft-fill",
     "field-draft-line",
     "field-draft-pts",
-    "buildings-planned-fill",
     "buildings-planned",
     "buildings-outline",
   ];
@@ -98,7 +99,9 @@ export function attachLandscape(
   };
 
   const syncBaseVisibility = () => {
-    const customWorld = map.getZoom() >= LANDSCAPE_FROM_ZOOM;
+    const customWorld =
+      map.getZoom() >= LANDSCAPE_FROM_ZOOM &&
+      reliefScale.peek() > 0;
 
     const visibility = customWorld ? "none" : "visible";
 
@@ -110,8 +113,18 @@ export function attachLandscape(
 
     for (const id of groundOverlays) {
       if (!map.getLayer(id)) continue;
+
+      const isRoad = id.startsWith("roads-");
+      const isField = id.startsWith("fields-");
       const overlayVisibility =
-        customWorld && id !== "buildings-outline" ? "none" : "visible";
+        customWorld &&
+        (
+          (!isRoad && !isField) ||
+          map.getZoom() >= 14.5
+        )
+          ? "none"
+          : "visible";
+
       if (map.getLayoutProperty(id, "visibility") === overlayVisibility) continue;
       map.setLayoutProperty(id, "visibility", overlayVisibility);
     }
