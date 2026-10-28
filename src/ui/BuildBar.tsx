@@ -12,6 +12,7 @@ import { Icon } from "./Icon";
 import { Segmented, Tabs, Tooltip } from "./kit";
 import { storedChoice } from "./preferenceModel";
 import { LANDMARK_LABELS } from "./semanticModel";
+import { tabId, tabPanelId } from "./tabSemantics";
 
 const CATEGORY_STORE = "rebirth.build.category";
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
@@ -241,6 +242,7 @@ export function BuildBar() {
         <Tabs
           class="bb-tabs"
           label="Разделы стройки"
+          idPrefix="build"
           active={cat.id}
           onChange={(id) => (category.value = id)}
           tabs={CATEGORIES.map((c, i) => ({
@@ -253,7 +255,7 @@ export function BuildBar() {
             ),
           }))}
         />
-        <div class="bb-items" role="group" aria-label={cat.label}>
+        <div class="bb-items" role="tabpanel" id={tabPanelId("build", cat.id)} aria-labelledby={tabId("build", cat.id)}>
           {cat.tools.map((t, i) => {
             const lock = progress ? lockReason({ progress }, t) : null;
             return (
