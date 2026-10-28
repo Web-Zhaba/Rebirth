@@ -40,23 +40,23 @@ describe("dig site", () => {
     expect(t.materials).toEqual({ logs: 2, planks: 0.5, stone: 0 });
     expect(dig().radius).toBe(DIG.startRadius);
   });
-  it("starts at 15 m and grows by 40 m2 × PACE per digger-hour", () => {
+  it("starts at 0 m and grows by 40 m2 × PACE per digger-hour", () => {
     expect(DIG.areaPerHour).toBe(40 * PACE);
-    expect(radiusOf(dig())).toBe(15);
+    expect(radiusOf(dig())).toBe(0);
     const s = produceStep(town([dig()], 3), 1);
     const r = radiusOf(s.buildings[1]);
-    expect(revealedArea(r) - revealedArea(15)).toBeCloseTo(3 * DIG.areaPerHour);
+    expect(revealedArea(r) - revealedArea(0)).toBeCloseTo(3 * DIG.areaPerHour);
     expect(growDig(15, 1)).toBeCloseTo(Math.sqrt(225 + DIG.areaPerHour / Math.PI));
   });
   it("does not grow without diggers or before it is finished", () => {
     const s = town([dig()], 0);
-    expect(produceStep(s, 1).buildings[1].radius).toBe(15);
+    expect(produceStep(s, 1).buildings[1].radius).toBe(0);
     const w = town([dig(1, "building")], 3);
-    expect(produceStep(w, 1).buildings[1].radius).toBe(15);
+    expect(produceStep(w, 1).buildings[1].radius).toBe(0);
   });
   it("scales with the artel draft (scale argument) and stops at 120 m", () => {
     const half = produceStep(town([dig()], 3), 1, 0.5);
-    expect(revealedArea(radiusOf(half.buildings[1])) - revealedArea(15)).toBeCloseTo(3 * DIG.areaPerHour * 0.5);
+    expect(revealedArea(radiusOf(half.buildings[1])) - revealedArea(0)).toBeCloseTo(3 * DIG.areaPerHour * 0.5);
     const s = produceStep(town([dig()], 3), 1e6);
     expect(s.buildings[1].radius).toBe(DIG.maxRadius);
     expect(digDone(s.buildings[1])).toBe(true);
@@ -89,7 +89,7 @@ describe("dig site", () => {
     s = r.sim;
     const d = digInfos(s);
     expect(d).toHaveLength(1);
-    expect(d[0]).toMatchObject({ id: 1, x: s.buildings[1].lot.cx, y: s.buildings[1].lot.cy, r: 15, foundations: 1, pois: 1, streets: 0 });
+    expect(d[0]).toMatchObject({ id: 1, x: s.buildings[1].lot.cx, y: s.buildings[1].lot.cy, r: 0, foundations: 1, pois: 1, streets: 0 });
   });
 });
 
@@ -99,14 +99,14 @@ describe("recordFinds", () => {
     if (!r.ok) throw new Error(r.reason);
     return r.sim;
   };
-  it("stores finds, salvages min(20 t, 0.05 t per m2) and ignores recorded ids", () => {
+  it("stores finds, salvages min(1 t, 0.001 t per m2) and ignores recorded ids", () => {
     const s0 = town([dig()]);
     const s1 = rec(s0, cmd({ foundations: [found("a", 100), found("b", 1000)] }));
     expect(s1.finds.foundations.map((f) => f.id)).toEqual(["a", "b"]);
-    expect(s1.stock.stone - s0.stock.stone).toBeCloseTo(5 + 20);
+    expect(s1.stock.stone - s0.stock.stone).toBeCloseTo(0.1 + 1);
     const s2 = rec(s1, cmd({ foundations: [found("a", 100), found("c", 40)] }));
     expect(s2.finds.foundations.map((f) => f.id)).toEqual(["a", "b", "c"]);
-    expect(s2.stock.stone - s1.stock.stone).toBeCloseTo(2);
+    expect(s2.stock.stone - s1.stock.stone).toBeCloseTo(0.04);
     expect(recordFinds(s2, cmd({ foundations: [found("a")] }))).toEqual({ ok: true, sim: s2 });
     expect(s1.finds.foundations[0]).toMatchObject({ digId: 1, area: 100 });
   });
@@ -122,13 +122,13 @@ describe("recordFinds", () => {
     expect(s.chronicle.map((e) => e.text)).toEqual([
       "Раскоп: найдено место «Часовня Николая»",
       "Раскоп: найдена старая улица — Милютина",
-      "Раскоп: открыто 12 фундаментов, +18 т камня",
+      "Раскоп: открыто 12 фундаментов, +0,4 т камня",
     ]);
     expect(s.finds.streets).toHaveLength(1);
     const again = rec(s, cmd({ streets: [{ id: "s3", name: "Милютина" }] }));
     expect(again).toBe(s);
     const one = rec(town([dig()]), cmd({ foundations: [found("x", 90)] }));
-    expect(one.chronicle[0].text).toBe("Раскоп: открыт 1 фундамент, +4,5 т камня");
+    expect(one.chronicle[0].text).toBe("Раскоп: открыт 1 фундамент, +0,1 т камня");
   });
   it("rejects malformed commands without touching the state", () => {
     const s = town([dig()]);
@@ -188,7 +188,7 @@ describe("saves", () => {
     delete raw.sim.finds;
     const p = parseSave(raw, NOW)!;
     expect(p.sim.finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [] });
-    expect(p.sim.buildings[1].radius).toBe(15);
+    expect(p.sim.buildings[1].radius).toBe(0);
   });
   it("finds, the radius and the ruins mark survive a round trip", () => {
     let s = town([{ ...dig(), radius: 42.5 }]);

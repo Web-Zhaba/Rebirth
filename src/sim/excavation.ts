@@ -4,11 +4,11 @@ import type { Building, DigInfo, FoundFoundation, FoundPlace, Finds, SimState } 
 // Excavation (PLAN.md section 12): dig sites reveal a growing disc of the buried old city.
 export const DIG = {
   template: "dig",
-  startRadius: 15, // m, when the site is finished
+  startRadius: 0, // m, when the site is finished
   maxRadius: 120, // m
   areaPerHour: 160, // m2 of revealed area per digger-hour: 40 m2 × PACE (4), like other construction work
-  stonePerM2: 0.05, // t of salvaged stone per m2 of foundation
-  stoneCap: 20, // t per foundation
+  stonePerM2: 0.001, // t of salvaged stone per m2 of foundation
+  stoneCap: 1, // t per foundation
   laborCut: 0.25, // share of labor saved when building on an old foundation
   batch: 200, // foundations per recordFinds command
 };
