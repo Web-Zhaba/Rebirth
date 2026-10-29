@@ -63,7 +63,9 @@ let sharedBuffer = new Float32Array(16384);
 
 function ensureBufferCapacity(needed: number) {
   if (needed > sharedBuffer.length) {
-    sharedBuffer = new Float32Array(Math.max(needed, sharedBuffer.length * 2));
+    const next = new Float32Array(Math.max(needed, sharedBuffer.length * 2));
+    next.set(sharedBuffer);
+    sharedBuffer = next;
   }
 }
 

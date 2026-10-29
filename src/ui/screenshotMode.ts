@@ -4,7 +4,9 @@ import { screenshotKey } from "./screenshotModel";
 export const screenshotMode = signal(false);
 
 export function installScreenshotMode(): () => void {
-  const sync = effect(() => document.documentElement.classList.toggle("screenshot-mode", screenshotMode.value));
+  const sync = effect(() => {
+    document.documentElement.classList.toggle("screenshot-mode", screenshotMode.value);
+  });
   const onKey = (e: KeyboardEvent) => {
     const next = screenshotKey(screenshotMode.peek(), e.key);
     if (next === null) return;

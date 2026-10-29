@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 // Allowed in .ts/.tsx/.css sources: ASCII, Cyrillic, and this typographic set (all plain text, not pictographs):
 //   U+00A0 no-break space, U+00AB/U+00BB guillemets, U+00B0 degree, U+00B2/U+00B3 superscripts,
 //   U+00B7 middle dot, U+00D7 multiplication sign (speed labels "1x", dimensions), U+2013/U+2014 dashes,
-//   U+2018/U+2019/U+201C/U+201D quotes, U+2026 ellipsis, U+2116 numero sign, U+2212 minus sign.
+//   U+2018/U+2019/U+201C/U+201D quotes, U+2026 ellipsis, U+2116 numero sign, U+2197 external-link arrow, U+2212 minus sign.
 // Everything else (arrows, geometric shapes, dingbats, emoji, variation selectors, ZWJ) fails.
-const ALLOWED = new Set([0xa0, 0xab, 0xbb, 0xb0, 0xb2, 0xb3, 0xb7, 0xd7, 0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2026, 0x2116, 0x2212]);
+const ALLOWED = new Set([0xa0, 0xab, 0xbb, 0xb0, 0xb2, 0xb3, 0xb7, 0xd7, 0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2026, 0x2116, 0x2197, 0x2212]);
 
 const isAllowed = (cp: number) => cp < 0x80 || (cp >= 0x400 && cp <= 0x4ff) || ALLOWED.has(cp);
 
