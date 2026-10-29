@@ -233,6 +233,12 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
   const framer = frameSetter(opts.light);
   let impostors: Impostor[] | null = null;
   let unRestore: (() => void) | null = null;
+  const perfCpu:number[]=[];
+  const perfGpu:number[]=[];
+  let gpuExt: { TIME_ELAPSED_EXT:number; GPU_DISJOINT_EXT:number } | null = null;
+  const gpuPending: WebGLQuery[] = [];
+  const addPerf=(a:number[],v:number)=>{a.push(v);if(a.length>240)a.shift();};
+  const perfSummary=(a:number[])=>{if(!a.length)return null;const s=[...a].sort((x,y)=>x-y);const mean=s.reduce((x,y)=>x+y,0)/s.length;return{n:s.length,mean:+mean.toFixed(3),p95:+s[Math.floor((s.length-1)*.95)].toFixed(3),max:+s[s.length-1].toFixed(3)};};
 
   const reset = () => {
     chunks.clear();
@@ -326,6 +332,8 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         far: farNow,
         chunks: chunks.size,
         rebuilt,
+        cpuMs: perfSummary(perfCpu),
+        gpuMs: perfSummary(perfGpu),
       }),
     });
   }
@@ -335,7 +343,9 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
     type: "custom",
     renderingMode: "3d",
     onAdd(_m, gl) {
-      host = acquireHost(map, gl as WebGL2RenderingContext);
+      const g=gl as WebGL2RenderingContext;
+      host = acquireHost(map, g);
+      gpuExt = g.getExtension("EXT_disjoint_timer_query_webgl2") as typeof gpuExt;
       scene = new Scene();
       TREE_KINDS.forEach((kind) => {
         for (let lod = 0; lod < TREE_LODS; lod++) {
@@ -1050,6 +1060,20 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         },
       );
 
+      const cpuStart=performance.now();
+      const gl=host.gl as WebGL2RenderingContext;
+      if(gpuExt && gpuPending.length){
+        for(let i=gpuPending.length-1;i>=0;i--){
+          const q=gpuPending[i];
+          if(gl.getQueryParameter(q,gl.QUERY_RESULT_AVAILABLE)){
+            const disjoint=gl.getParameter(gpuExt.GPU_DISJOINT_EXT);
+            if(!disjoint) addPerf(perfGpu,gl.getQueryParameter(q,gl.QUERY_RESULT)/1e6);
+            gl.deleteQuery(q);gpuPending.splice(i,1);
+          }
+        }
+      }
+      let q:WebGLQuery|null=null;
+      if(gpuExt && gpuPending.length<20){q=gl.createQuery();if(q)gl.beginQuery(gpuExt.TIME_ELAPSED_EXT,q);}
       host.draw((r) => {
         const color =
           r.state.buffers.color;
@@ -1072,6 +1096,8 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
 
         color.setLocked(false);
       });
+      if(q&&gpuExt){gl.endQuery(gpuExt.TIME_ELAPSED_EXT);gpuPending.push(q);}
+      addPerf(perfCpu,performance.now()-cpuStart);
     },
   };
 }
