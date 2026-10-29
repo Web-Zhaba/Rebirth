@@ -4,6 +4,7 @@
     ".": {
       "release-type": "node",
       "package-name": "rebirth",
+      "release-as": "0.1.0",
       "changelog-path": "CHANGELOG.md",
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
