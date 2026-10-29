@@ -80,15 +80,14 @@ export async function runTerrainFocus(
   const originalForest=forest3dOn.peek();
   const hillshadeVisible=!map.getLayer("hillshade") || map.getLayoutProperty("hillshade","visibility")!=="none";
   const source=terrainSource(map);
-  const normal=()=>{reliefOn.value=true;forest3dOn.value=originalForest;if(map.getLayer("hillshade"))map.setLayoutProperty("hillshade","visibility",hillshadeVisible?"visible":"none");map.setTerrain({source,exaggeration:1.6});};
   const hideHillshade=()=>{if(map.getLayer("hillshade"))map.setLayoutProperty("hillshade","visibility","none");};
+  const showHillshade=()=>{if(map.getLayer("hillshade"))map.setLayoutProperty("hillshade","visibility","visible");};
+  // Optimized production baseline on this branch: terrain on, hillshade hidden.
+  const normal=()=>{reliefOn.value=true;forest3dOn.value=originalForest;map.setTerrain({source,exaggeration:1.6});hideHillshade();};
   const variants=[
-    {id:"relief-off",label:"Relief off",apply:()=>{reliefOn.value=false;forest3dOn.value=originalForest;}},
-    {id:"hillshade-off",label:"Hillshade off",apply:()=>{normal();hideHillshade();}},
-    {id:"forest-off",label:"3D forest off",apply:()=>{normal();forest3dOn.value=false;}},
-    {id:"hillshade-forest-off",label:"Hillshade + 3D forest off",apply:()=>{normal();hideHillshade();forest3dOn.value=false;}},
-    {id:"relief-forest-off",label:"Relief + 3D forest off",apply:()=>{reliefOn.value=false;forest3dOn.value=false;}},
-    {id:"relief-hillshade-off",label:"Relief + hillshade off",apply:()=>{reliefOn.value=false;forest3dOn.value=originalForest;hideHillshade();}},
+    {id:"legacy-hillshade-on",label:"Legacy: hillshade + 3D relief",apply:()=>{normal();showHillshade();}},
+    {id:"relief-off",label:"Relief off (performance ceiling)",apply:()=>{reliefOn.value=false;forest3dOn.value=originalForest;showHillshade();}},
+    {id:"forest-off",label:"Optimized relief + 3D forest off",apply:()=>{normal();forest3dOn.value=false;}},
   ] as const;
   const runs:FocusRun[]=[];
   try{
