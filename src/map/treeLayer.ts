@@ -316,6 +316,10 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
 
   if (import.meta.env.DEV) {
     Object.assign(window, {
+      treePerfReset: () => {
+        perfCpu.length = 0;
+        perfGpu.length = 0;
+      },
       treePerfTune: (opts?: { farScale?: number; densityScale?: number }) => {
         if (!opts) return { farScale: perfFarScale, densityScale: perfDensityScale };
         if (opts.farScale !== undefined) perfFarScale = Math.max(0.25, Math.min(1, opts.farScale));
