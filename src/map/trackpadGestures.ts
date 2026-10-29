@@ -1,17 +1,25 @@
 import type * as maplibregl from "maplibre-gl";
-import { trackpadPanDelta, wheelIntent } from "./trackpadModel";
+import { trackpadCameraDelta, wheelIntent } from "./trackpadModel";
 
-// Browsers report two-finger trackpad scrolling as small pixel-based wheel deltas.
-// MapLibre treats wheel primarily as zoom, so intercept only gestures that look like trackpad scrolling.
-// Ctrl/Meta+wheel is left untouched because browsers use it for trackpad pinch-to-zoom.
+const MAX_PITCH = 75;
+const clampPitch = (pitch: number): number => Math.max(0, Math.min(MAX_PITCH, pitch));
+
+// Two-finger trackpad movement rotates the camera horizontally and tilts it vertically.
+// Pinch-to-zoom and all mouse camera controls are left to MapLibre unchanged.
 export function attachTrackpadGestures(map: maplibregl.Map): () => void {
   const canvas = map.getCanvas();
+
   const onWheel = (e: WheelEvent) => {
-    if (wheelIntent(e) !== "pan") return;
+    if (wheelIntent(e) !== "camera") return;
     e.preventDefault();
     e.stopPropagation();
-    map.panBy(trackpadPanDelta(e), { duration: 0 });
+    const d = trackpadCameraDelta(e);
+    map.jumpTo({
+      bearing: map.getBearing() + d.bearing,
+      pitch: clampPitch(map.getPitch() + d.pitch),
+    });
   };
+
   canvas.addEventListener("wheel", onWheel, { passive: false, capture: true });
   return () => canvas.removeEventListener("wheel", onWheel, { capture: true } as EventListenerOptions);
 }
