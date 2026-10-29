@@ -167,8 +167,8 @@ export function insetRing(ring: XY[], d: number): XY[] | null {
 const PIECE = 2.5; // m
 export function brokenWalls(ring: XY[], key: string, height = 6): { quad: XY[]; h: number }[] | null {
   const p = cleanRing(ring);
-  const inner = p && insetRing(p, WALL_THICKNESS);
-  if (!p || !inner) return null;
+  if (!p) return null;
+
   let seed = 0;
   for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) | 0;
   const rnd = (a: number, b: number) => {
@@ -176,27 +176,51 @@ export function brokenWalls(ring: XY[], key: string, height = 6): { quad: XY[]; 
     h ^= h >>> 15;
     return (h >>> 0) / 4294967296;
   };
+
   const top = Math.min(3, Math.max(1.2, height * 0.3)); // m, the best kept piece of this building
   const out: { quad: XY[]; h: number }[] = [];
   const lerp = (a: XY, b: XY, t: number): XY => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+
+  // Build every wall piece directly from its outer edge. For a counter-clockwise
+  // footprint the left-hand normal always points into the building. This avoids the
+  // old outer↔inset vertex correspondence entirely: on concave footprints that
+  // correspondence could create a diagonal polygon spanning the building interior.
   for (let i = 0; i < p.length; i++) {
     const j = (i + 1) % p.length;
-    const len = Math.hypot(p[j][0] - p[i][0], p[j][1] - p[i][1]);
+    const ex = p[j][0] - p[i][0];
+    const ey = p[j][1] - p[i][1];
+    const len = Math.hypot(ex, ey);
+    if (len < 1e-6) continue;
+
+    const nx = (-ey / len) * WALL_THICKNESS;
+    const ny = (ex / len) * WALL_THICKNESS;
     const n = Math.max(1, Math.round(len / PIECE));
+
     for (let k = 0; k < n; k++) {
-      const t0 = k / n, t1 = (k + 1) / n;
-      const corner = Math.max(0, 1 - Math.min(k, n - 1 - k) * 0.6); // 1 at an end of the side
+      const t0 = k / n;
+      const t1 = (k + 1) / n;
+      const a = lerp(p[i], p[j], t0);
+      const b = lerp(p[i], p[j], t1);
+      const ai: XY = [a[0] + nx, a[1] + ny];
+      const bi: XY = [b[0] + nx, b[1] + ny];
+
+      // If the footprint is locally thinner than the wall itself, drawing this piece
+      // would put its inner edge outside the foundation. Skip only that piece instead
+      // of turning the whole building into an outline.
+      const mid: XY = [(a[0] + b[0]) / 2 + nx * 0.5, (a[1] + b[1]) / 2 + ny * 0.5];
+      if (!pointInRing(ai, p) || !pointInRing(bi, p) || !pointInRing(mid, p)) continue;
+
+      const corner = Math.max(0, 1 - Math.min(k, n - 1 - k) * 0.6);
       const r = rnd(i, k);
       const h = r < 0.16 ? 0.1 : WALL_HEIGHT * 0.5 + (top - WALL_HEIGHT * 0.5) * Math.min(1, rnd(i, k + 1000) ** 2 * 0.8 + corner * 0.5 * r);
-      const quad = [lerp(p[i], p[j], t0), lerp(p[i], p[j], t1), lerp(inner[i], inner[j], t1), lerp(inner[i], inner[j], t0)] as XY[];
-      // Never hand an invalid wall polygon to fill-extrusion. One corrupt quad is enough
-      // for earcut to create a diagonal/internal face, so the whole foundation falls back
-      // to its safe 2D outline instead.
-      if (Math.abs(area2(quad)) < 1e-7 || selfIntersects(quad) || quad.some((q) => !pointInRing(q, p))) return null;
-      out.push({ quad, h });
+
+      // Always a convex rectangle; MapLibre/earcut therefore cannot invent an
+      // interior diagonal face while triangulating the extrusion cap.
+      out.push({ quad: [a, b, bi, ai], h });
     }
   }
-  return out;
+
+  return out.length ? out : null;
 }
 
 // ---------- layer ----------
