@@ -47,12 +47,7 @@ export interface TerrainFocusResult {
   capturedAt:string;
   startCamera:Cam;
   runs:FocusRun[];
-  paired:[
-    {id:"relief-off"; fpsGain:number; p95GainMs:number},
-    {id:"hillshade-off"; fpsGain:number; p95GainMs:number},
-    {id:"terrain-flat"; fpsGain:number; p95GainMs:number},
-    {id:"forest-off"; fpsGain:number; p95GainMs:number},
-  ];
+  paired:Array<{id:string; fpsGain:number; p95GainMs:number}>;
 }
 
 const percentile=(a:number[],p:number)=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[Math.min(s.length-1,Math.floor((s.length-1)*p))]:0;};
@@ -86,11 +81,14 @@ export async function runTerrainFocus(
   const hillshadeVisible=!map.getLayer("hillshade") || map.getLayoutProperty("hillshade","visibility")!=="none";
   const source=terrainSource(map);
   const normal=()=>{reliefOn.value=true;forest3dOn.value=originalForest;if(map.getLayer("hillshade"))map.setLayoutProperty("hillshade","visibility",hillshadeVisible?"visible":"none");map.setTerrain({source,exaggeration:1.6});};
+  const hideHillshade=()=>{if(map.getLayer("hillshade"))map.setLayoutProperty("hillshade","visibility","none");};
   const variants=[
     {id:"relief-off",label:"Relief off",apply:()=>{reliefOn.value=false;forest3dOn.value=originalForest;}},
-    {id:"hillshade-off",label:"Hillshade off",apply:()=>{normal();if(map.getLayer("hillshade"))map.setLayoutProperty("hillshade","visibility","none");}},
-    {id:"terrain-flat",label:"Terrain pipeline, near-zero exaggeration",apply:()=>{normal();map.setTerrain({source,exaggeration:0.001});}},
+    {id:"hillshade-off",label:"Hillshade off",apply:()=>{normal();hideHillshade();}},
     {id:"forest-off",label:"3D forest off",apply:()=>{normal();forest3dOn.value=false;}},
+    {id:"hillshade-forest-off",label:"Hillshade + 3D forest off",apply:()=>{normal();hideHillshade();forest3dOn.value=false;}},
+    {id:"relief-forest-off",label:"Relief + 3D forest off",apply:()=>{reliefOn.value=false;forest3dOn.value=false;}},
+    {id:"relief-hillshade-off",label:"Relief + hillshade off",apply:()=>{reliefOn.value=false;forest3dOn.value=originalForest;hideHillshade();}},
   ] as const;
   const runs:FocusRun[]=[];
   try{
@@ -116,6 +114,6 @@ export async function runTerrainFocus(
   const paired=variants.map((v,i)=>{
     const b=runs[i*2], x=runs[i*2+1];
     return {id:v.id,fpsGain:round(x.mapFps-b.mapFps),p95GainMs:round(b.p95Ms-x.p95Ms)};
-  }) as TerrainFocusResult["paired"];
+  });
   return {capturedAt:new Date().toISOString(),startCamera:start,runs,paired};
 }
