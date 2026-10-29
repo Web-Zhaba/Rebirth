@@ -1,0 +1,34 @@
+import type maplibregl from "maplibre-gl";
+import { perfProfiler, type PerfSummary } from "./profiler";
+
+const fmt = (n:number) => Number.isFinite(n) ? n.toFixed(1) : "-";
+
+export function attachPerfLab(map: maplibregl.Map): void {
+  if (!import.meta.env.DEV) return;
+  const el = document.createElement("aside");
+  el.id = "perf-lab";
+  Object.assign(el.style, { position:"fixed", right:"10px", bottom:"10px", zIndex:"10000", width:"300px", maxHeight:"70vh", overflow:"auto", padding:"10px", background:"rgba(20,20,20,.88)", color:"#eee", font:"12px/1.35 monospace", borderRadius:"6px", boxShadow:"0 2px 12px #0008" });
+  el.innerHTML = '<b>Rebirth Performance Lab</b><div data-live>idle</div><button data-start>Start 15s</button> <button data-stop>Stop</button> <button data-copy>Copy JSON</button><pre data-out></pre>';
+  document.body.appendChild(el);
+  const live=el.querySelector("[data-live]") as HTMLElement, out=el.querySelector("[data-out]") as HTMLElement;
+  let timer=0, last:PerfSummary|null=null;
+  const render=(s:PerfSummary) => {
+    const c=map.getCenter();
+    live.textContent = `z ${map.getZoom().toFixed(2)} | ${c.lat.toFixed(3)}, ${c.lng.toFixed(3)} | FPS ${fmt(s.fps)} | p95 ${fmt(s.frameMs.p95)} ms`;
+  };
+  const interval=window.setInterval(()=>render(perfProfiler.summary()),500);
+  const stop=()=>{
+    if(timer) clearTimeout(timer);
+    timer=0;
+    last=perfProfiler.stopCapture();
+    const c=map.getCenter();
+    const report={ capturedAt:new Date().toISOString(), userAgent:navigator.userAgent, location:{lat:c.lat,lng:c.lng,zoom:map.getZoom(),pitch:map.getPitch()}, metrics:last, measures:performance.getEntriesByType("measure").map(e=>({name:e.name,durationMs:Math.round(e.duration*100)/100})) };
+    out.textContent=JSON.stringify(report,null,2);
+    return report;
+  };
+  (el.querySelector("[data-start]") as HTMLButtonElement).onclick=()=>{ performance.clearMeasures(); perfProfiler.reset(); perfProfiler.startCapture(); out.textContent="capturing 15 seconds…"; timer=window.setTimeout(stop,15000); };
+  (el.querySelector("[data-stop]") as HTMLButtonElement).onclick=()=>{ stop(); };
+  (el.querySelector("[data-copy]") as HTMLButtonElement).onclick=async()=>{ const r=out.textContent; if(r) await navigator.clipboard.writeText(r); };
+  addEventListener("beforeunload",()=>clearInterval(interval),{once:true});
+  Object.assign(window,{ perfLab:{ start:()=>perfProfiler.startCapture(), stop, summary:()=>perfProfiler.summary(), clear:()=>{performance.clearMeasures();perfProfiler.reset();} } });
+}
