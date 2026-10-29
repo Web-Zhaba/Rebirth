@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { perfProfiler, type PerfSummary } from "./profiler";
 import { runBenchmarkSuite } from "./benchmark";
+import { runCameraStressSuite } from "./cameraStress";
 
 const fmt = (n:number) => Number.isFinite(n) ? n.toFixed(1) : "-";
 
@@ -9,7 +10,7 @@ export function attachPerfLab(map: maplibregl.Map): void {
   const el = document.createElement("aside");
   el.id = "perf-lab";
   Object.assign(el.style, { position:"fixed", right:"10px", bottom:"10px", zIndex:"10000", width:"300px", maxHeight:"70vh", overflow:"auto", padding:"10px", background:"rgba(20,20,20,.88)", color:"#eee", font:"12px/1.35 monospace", borderRadius:"6px", boxShadow:"0 2px 12px #0008" });
-  el.innerHTML = '<b>Rebirth Performance Lab</b><div data-live>idle</div><button data-start>Start 15s</button> <button data-suite>Auto benchmark</button> <button data-stop>Stop</button> <button data-copy>Copy JSON</button><pre data-out></pre>';
+  el.innerHTML = '<b>Rebirth Performance Lab</b><div data-live>idle</div><button data-start>Start 15s</button> <button data-suite>Auto benchmark</button> <button data-stress>Camera stress</button> <button data-stop>Stop</button> <button data-copy>Copy JSON</button><pre data-out></pre>';
   document.body.appendChild(el);
   const live=el.querySelector("[data-live]") as HTMLElement, out=el.querySelector("[data-out]") as HTMLElement;
   let timer=0, last:PerfSummary|null=null;
@@ -59,7 +60,33 @@ export function attachPerfLab(map: maplibregl.Map): void {
       btn.disabled=false;
     }
   };
+  (el.querySelector("[data-stress]") as HTMLButtonElement).onclick=async()=>{
+    const btn=el.querySelector("[data-stress]") as HTMLButtonElement;
+    btn.disabled=true;
+    out.textContent="Starting camera stress benchmark…";
+    try {
+      const report=await runCameraStressSuite(map,(message,index,total)=>{
+        live.textContent=`${message} [${index+1}/${total}]`;
+      });
+      console.table(report.aggregates.map(a=>({
+        case:a.label,
+        runs:a.runs,
+        mapFps:a.median.mapFps,
+        mapP95:a.median.p95Ms,
+        mapP99:a.median.p99Ms,
+        fpsGain:a.versusBaseline.mapFpsGain,
+        p95Gain:a.versusBaseline.p95GainMs,
+        p99Gain:a.versusBaseline.p99GainMs,
+      })));
+      out.textContent=JSON.stringify(report,null,2);
+      live.textContent=`Stress complete — best p95 gain: ${report.ranking[0]?.label ?? "n/a"}`;
+    } catch(e) {
+      out.textContent=`camera stress failed: ${String(e)}`;
+    } finally {
+      btn.disabled=false;
+    }
+  };
   (el.querySelector("[data-copy]") as HTMLButtonElement).onclick=async()=>{ const r=out.textContent; if(r) await navigator.clipboard.writeText(r); };
   addEventListener("beforeunload",()=>clearInterval(interval),{once:true});
-  Object.assign(window,{ perfLab:{ start:()=>perfProfiler.startCapture(), stop, summary:()=>perfProfiler.summary(), clear:()=>{performance.clearMeasures();perfProfiler.reset();}, suite:()=>runBenchmarkSuite(map) } });
+  Object.assign(window,{ perfLab:{ start:()=>perfProfiler.startCapture(), stop, summary:()=>perfProfiler.summary(), clear:()=>{performance.clearMeasures();perfProfiler.reset();}, suite:()=>runBenchmarkSuite(map), stress:()=>runCameraStressSuite(map) } });
 }
