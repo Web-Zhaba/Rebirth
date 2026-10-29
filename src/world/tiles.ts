@@ -1,3 +1,4 @@
+import { measure } from "../perf/profiler";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import {
@@ -50,7 +51,7 @@ function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
 }
 
 export function getDemTile(x: number, y: number): Promise<Float32Array> {
-  return cached(`dem/${x}/${y}`, async () => {
+  return cached(`dem/${x}/${y}`, async () => measure("terrain.dem.tile", async () => {
     const url = TERRAIN_URL.replace("{z}", String(TERRAIN_ZOOM)).replace("{x}", String(x)).replace("{y}", String(y));
     const res = await fetch(url);
     if (!res.ok) throw new Error(`${res.status} ${url}`);
@@ -61,7 +62,7 @@ export function getDemTile(x: number, y: number): Promise<Float32Array> {
     ctx.drawImage(bmp, 0, 0);
     bmp.close();
     return decodeTerrariumPixels(ctx.getImageData(0, 0, TERRARIUM_SIZE, TERRARIUM_SIZE).data);
-  });
+    }));
 }
 
 // The tile URL is versioned: read it from TileJSON once.
@@ -84,11 +85,13 @@ function tileTemplate(): Promise<string> {
 
 // A missing tile (404/204) means no features there, e.g. open ocean.
 export async function loadVector(z: number, x: number, y: number): Promise<VectorTile | null> {
+  return measure("vector.tile.load", async () => {
   const url = (await tileTemplate()).replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
   const res = await fetch(url);
   if (res.status === 404 || res.status === 204) return null;
   if (!res.ok) throw new Error(`${res.status} ${url}`);
   return new VectorTile(new PbfReader(await res.arrayBuffer()));
+  });
 }
 
 type Pt = { x: number; y: number };
