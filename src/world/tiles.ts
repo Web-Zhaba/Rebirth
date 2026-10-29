@@ -53,15 +53,16 @@ function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
 export function getDemTile(x: number, y: number): Promise<Float32Array> {
   return cached(`dem/${x}/${y}`, async () => measure("terrain.dem.tile", async () => {
     const url = TERRAIN_URL.replace("{z}", String(TERRAIN_ZOOM)).replace("{x}", String(x)).replace("{y}", String(y));
-    const res = await fetch(url);
+    const res = await measure("terrain.dem.fetch", () => fetch(url));
     if (!res.ok) throw new Error(`${res.status} ${url}`);
     // No color management or alpha premultiplication: the RGB bytes encode meters.
-    const bmp = await createImageBitmap(await res.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
+    const blob = await res.blob();
+    const bmp = await measure("terrain.dem.bitmap", () => createImageBitmap(blob, { colorSpaceConversion: "none", premultiplyAlpha: "none" }));
     const ctx = new OffscreenCanvas(TERRARIUM_SIZE, TERRARIUM_SIZE).getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("2d context unavailable");
     ctx.drawImage(bmp, 0, 0);
     bmp.close();
-    return decodeTerrariumPixels(ctx.getImageData(0, 0, TERRARIUM_SIZE, TERRARIUM_SIZE).data);
+    return measure("terrain.dem.decode", () => decodeTerrariumPixels(ctx.getImageData(0, 0, TERRARIUM_SIZE, TERRARIUM_SIZE).data));
     }));
 }
 
@@ -87,10 +88,11 @@ function tileTemplate(): Promise<string> {
 export async function loadVector(z: number, x: number, y: number): Promise<VectorTile | null> {
   return measure("vector.tile.load", async () => {
   const url = (await tileTemplate()).replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
-  const res = await fetch(url);
+  const res = await measure("vector.tile.fetch", () => fetch(url));
   if (res.status === 404 || res.status === 204) return null;
   if (!res.ok) throw new Error(`${res.status} ${url}`);
-  return new VectorTile(new PbfReader(await res.arrayBuffer()));
+  const bytes = await res.arrayBuffer();
+  return measure("vector.tile.parse", () => new VectorTile(new PbfReader(bytes)));
   });
 }
 

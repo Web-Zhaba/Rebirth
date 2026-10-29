@@ -30,9 +30,9 @@ export class PerfProfiler {
     if ("PerformanceObserver" in window) {
       try {
         this.observer = new PerformanceObserver((list) => {
-          for (const e of list.getEntries()) this.longTasks.push(e.duration);
+          for (const e of list.getEntries()) if (e.startTime >= this.start) this.longTasks.push(e.duration);
         });
-        this.observer.observe({ type: "longtask", buffered: true });
+        this.observer.observe({ type: "longtask" });
       } catch { /* unsupported browser */ }
     }
     const tick = (t: number) => {
