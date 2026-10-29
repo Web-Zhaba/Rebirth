@@ -2,13 +2,15 @@ import type maplibregl from "maplibre-gl";
 
 type Tune = { farScale?: number; densityScale?: number };
 type Cam = { center:[number,number]; zoom:number; pitch:number; bearing:number };
-interface Run { id:string; label:string; mapFps:number; p95Ms:number; p99Ms:number; maxMs:number; count:number; tuning:Tune; }
+interface Run { id:string; label:string; mapFps:number; p95Ms:number; p99Ms:number; maxMs:number; count:number; tuning:Tune; treeStats?:unknown; }
 
 const sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
 const round=(n:number)=>Math.round(n*100)/100;
 const percentile=(a:number[],p:number)=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[Math.min(s.length-1,Math.floor((s.length-1)*p))]:0;};
 const cam=(map:maplibregl.Map):Cam=>{const c=map.getCenter();return{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()};};
 const tune=(opts:Tune)=>{const fn=(window as unknown as {treePerfTune?:(o?:Tune)=>unknown}).treePerfTune;if(fn)fn(opts);};
+const resetTreePerf=()=>{const fn=(window as unknown as {treePerfReset?:()=>void}).treePerfReset;if(fn)fn();};
+const readTreeStats=()=>{const fn=(window as unknown as {treeStats?:()=>unknown}).treeStats;return fn?fn():undefined;};
 
 function ease(map:maplibregl.Map,c:Cam,d:number):Promise<void>{
   return new Promise(resolve=>{
@@ -51,7 +53,9 @@ export async function runForestFocus(map:maplibregl.Map,onProgress?:(text:string
       const v=variants[i]; onProgress?.(v.label,i,variants.length);
       map.stop();map.jumpTo({center:start.center,zoom:start.zoom,pitch:start.pitch,bearing:start.bearing});
       tune(v.tuning);map.triggerRepaint();await sleep(settleMs);
-      runs.push({id:v.id,label:v.label,tuning:v.tuning,...await capture(map,start,routeMs)});
+      resetTreePerf();
+      const data=await capture(map,start,routeMs);
+      runs.push({id:v.id,label:v.label,tuning:v.tuning,...data,treeStats:readTreeStats()});
     }
   }finally{
     tune({farScale:1,densityScale:1});map.stop();map.jumpTo({center:start.center,zoom:start.zoom,pitch:start.pitch,bearing:start.bearing});map.triggerRepaint();
