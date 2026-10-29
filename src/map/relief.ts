@@ -17,6 +17,7 @@ export const RELIEF_EXAGGERATION = 1.6;
 const RELIEF_MAX_PITCH = 75;
 const FLAT_MAX_PITCH = 60;
 const TERRAIN_3D_SOURCE = "terrain-dem"; // отдельный источник для 3D mesh во избежание конфликта с hillshade
+const HILLSHADE_LAYER_ID = "hillshade";
 
 const KEY = "rebirth.relief";
 function read(): boolean {
@@ -261,10 +262,14 @@ export function attachRelief(map: maplibregl.Map, gameMinutes: ReadonlySignal<nu
     moving(() => back.forEach(([id, a]) => map.moveLayer(id, a.before && map.getLayer(a.before) ? a.before : undefined)));
   };
   const onStyleData = () => {
-    if (reliefScale.peek() > 0) {
-      ensureTerrainSource(map);
-    }
+    const relief = reliefScale.peek() > 0;
+    if (relief) ensureTerrainSource(map);
+    setHillshadeForRelief(relief);
     group();
+  };
+  const setHillshadeForRelief = (relief: boolean) => {
+    if (!map.getLayer(HILLSHADE_LAYER_ID)) return;
+    map.setLayoutProperty(HILLSHADE_LAYER_ID, "visibility", relief ? "none" : "visible");
   };
   const setup = () => {
     map.on("styledata", onStyleData);
@@ -274,10 +279,12 @@ export function attachRelief(map: maplibregl.Map, gameMinutes: ReadonlySignal<nu
         if (k > 0) {
           const src = ensureTerrainSource(map);
           map.setTerrain({ source: src, exaggeration: k });
+          setHillshadeForRelief(true);
           map.setMaxPitch(RELIEF_MAX_PITCH);
           group();
         } else {
           map.setTerrain(null);
+          setHillshadeForRelief(false);
           map.setMaxPitch(FLAT_MAX_PITCH);
           ungroup();
         }
@@ -293,6 +300,7 @@ export function attachRelief(map: maplibregl.Map, gameMinutes: ReadonlySignal<nu
   else map.once("load", setup);
   return () => {
     stops.forEach((s) => s());
+    setHillshadeForRelief(false);
     if (map.getSource(TERRAIN_3D_SOURCE)) {
       try {
         map.setTerrain(null);
