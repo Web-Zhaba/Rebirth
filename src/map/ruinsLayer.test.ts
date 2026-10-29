@@ -52,9 +52,19 @@ describe("insetRing", () => {
     expect(insetRing([[0, 0], [10, 0], [10, 0.6], [0, 0.6]], 0.5)).toBeNull();
     expect(insetRing([[0, 0], [0.8, 0], [0.8, 0.8], [0, 0.8]], 0.5)).toBeNull();
   });
-  it("returns null for degenerate input", () => {
+  it("returns null for degenerate or self-intersecting input", () => {
     expect(insetRing([[0, 0], [1, 1]], 0.5)).toBeNull();
     expect(insetRing([[0, 0], [1, 1], [2, 2]], 0.5)).toBeNull();
+    expect(insetRing([[0, 0], [4, 4], [0, 4], [4, 0]], 0.5)).toBeNull();
+  });
+
+  it("keeps a valid narrow concavity well-formed", () => {
+    const notch: XY[] = [[0, 0], [8, 0], [8, 8], [4.3, 8], [4.3, 1], [3.7, 1], [3.7, 8], [0, 8]];
+    const r = insetRing(notch, 0.5);
+    expect(r).not.toBeNull();
+    expect(r!.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y))).toBe(true);
+    expect(area(r!)).toBeGreaterThan(0);
+    expect(area(r!)).toBeLessThan(area(notch));
   });
 });
 
@@ -85,9 +95,10 @@ describe("brokenWalls", () => {
     expect(brokenWalls(house, "way/1", 9)).toEqual(a);
     expect(brokenWalls(house, "way/2", 9)!.map((q) => q.h)).not.toEqual(hs);
   });
-  it("covers the band of the wall and nothing for a ring too thin", () => {
+  it("covers the band of the wall and rejects unsafe geometry", () => {
     const sum = brokenWalls(house, "x")!.reduce((s, q) => s + Math.abs(area(q.quad)), 0);
     expect(sum).toBeCloseTo(12 * 8 - 11 * 7, 6);
     expect(brokenWalls([[0, 0], [10, 0], [10, 0.6], [0, 0.6]], "x")).toBeNull();
+    expect(brokenWalls([[0, 0], [4, 4], [0, 4], [4, 0]], "x")).toBeNull();
   });
 });

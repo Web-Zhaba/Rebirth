@@ -93,12 +93,30 @@ function selfIntersects(r: XY[]): boolean {
 // order, or null when the inset degenerates (too thin, spiky, self-intersecting, flipped).
 // The ring without repeated or closing points, counter-clockwise; null when it encloses nothing.
 function cleanRing(ring: XY[]): XY[] | null {
-  let p: XY[] = ring.filter((q, i) => i === 0 || q[0] !== ring[i - 1][0] || q[1] !== ring[i - 1][1]);
-  if (p.length > 1 && p[0][0] === p[p.length - 1][0] && p[0][1] === p[p.length - 1][1]) p = p.slice(0, -1);
-  if (p.length < 3) return null;
-  const a0 = area2(p);
+  const EPS = 0.01; // 1 cm: removes zero-ish vector-tile edges that create huge mitres
+  const p0: XY[] = [];
+  for (const q of ring) {
+    const last = p0[p0.length - 1];
+    if (!last || Math.hypot(q[0] - last[0], q[1] - last[1]) > EPS) p0.push(q);
+  }
+  if (p0.length > 1 && Math.hypot(p0[0][0] - p0[p0.length - 1][0], p0[0][1] - p0[p0.length - 1][1]) <= EPS) p0.pop();
+  if (p0.length < 3 || selfIntersects(p0)) return null;
+  const a0 = area2(p0);
   if (Math.abs(a0) < 1e-9) return null;
-  return a0 < 0 ? p.slice().reverse() : p; // counter-clockwise: the inside is on the left of every edge
+  return a0 < 0 ? p0.slice().reverse() : p0; // counter-clockwise: the inside is on the left of every edge
+}
+
+function pointInRing(q: XY, ring: XY[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[j], b = ring[i];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const l2 = dx * dx + dy * dy;
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l2));
+    if (Math.hypot(q[0] - (a[0] + dx * t), q[1] - (a[1] + dy * t)) < 1e-7) return true;
+    if ((b[1] > q[1]) !== (a[1] > q[1]) && q[0] < ((a[0] - b[0]) * (q[1] - b[1])) / (a[1] - b[1]) + b[0]) inside = !inside;
+  }
+  return inside;
 }
 
 export function insetRing(ring: XY[], d: number): XY[] | null {
@@ -136,6 +154,10 @@ export function insetRing(ring: XY[], d: number): XY[] | null {
   const a1 = area2(out);
   if (a1 <= 0 || a1 >= area2(p)) return null;
   if (selfIntersects(out)) return null;
+  // A mathematically valid mitre can still jump across a deep concavity. In that case
+  // MapLibre triangulates the wall band through the building interior, producing the
+  // characteristic "inside face". Prefer a flat outline to broken 3D geometry.
+  if (out.some((q) => !pointInRing(q, p))) return null;
   return out;
 }
 
@@ -166,7 +188,12 @@ export function brokenWalls(ring: XY[], key: string, height = 6): { quad: XY[]; 
       const corner = Math.max(0, 1 - Math.min(k, n - 1 - k) * 0.6); // 1 at an end of the side
       const r = rnd(i, k);
       const h = r < 0.16 ? 0.1 : WALL_HEIGHT * 0.5 + (top - WALL_HEIGHT * 0.5) * Math.min(1, rnd(i, k + 1000) ** 2 * 0.8 + corner * 0.5 * r);
-      out.push({ quad: [lerp(p[i], p[j], t0), lerp(p[i], p[j], t1), lerp(inner[i], inner[j], t1), lerp(inner[i], inner[j], t0)], h });
+      const quad = [lerp(p[i], p[j], t0), lerp(p[i], p[j], t1), lerp(inner[i], inner[j], t1), lerp(inner[i], inner[j], t0)] as XY[];
+      // Never hand an invalid wall polygon to fill-extrusion. One corrupt quad is enough
+      // for earcut to create a diagonal/internal face, so the whole foundation falls back
+      // to its safe 2D outline instead.
+      if (Math.abs(area2(quad)) < 1e-7 || selfIntersects(quad) || quad.some((q) => !pointInRing(q, p))) return null;
+      out.push({ quad, h });
     }
   }
   return out;
