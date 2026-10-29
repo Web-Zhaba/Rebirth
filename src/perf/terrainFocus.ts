@@ -1,5 +1,4 @@
 import type maplibregl from "maplibre-gl";
-import { runCameraStressSuite, type CameraStressResult } from "./cameraStress";
 import { reliefOn } from "../map/relief";
 import { forest3dOn } from "../map/graphicsSettings";
 
