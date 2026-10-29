@@ -185,3 +185,27 @@ await perfLab.stress()
 ```
 
 Do not touch the camera while the stress suite is running. The starting camera is restored at the end.
+
+
+## Terrain focus (compact)
+
+After the broader camera stress suite points at terrain, use **Terrain focus** instead of repeating the full matrix.
+
+It runs only 8 routes: four paired comparisons, each immediately preceded by its own baseline:
+
+- baseline -> relief off;
+- baseline -> hillshade off;
+- baseline -> terrain pipeline kept active with near-zero exaggeration;
+- baseline -> 3D forest off.
+
+This distinguishes:
+- native MapLibre terrain cost;
+- hillshade cost;
+- cost caused by displaced terrain versus the terrain pipeline itself;
+- interaction with the 3D forest.
+
+Use this compact suite for iterative terrain diagnosis. Console API:
+
+```js
+await perfLab.terrain()
+```
