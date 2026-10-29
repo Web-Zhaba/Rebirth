@@ -36,6 +36,7 @@ import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
 import { App } from "./ui/App";
+import { attachPerfLab } from "./perf/perfLab";
 
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
 // Read it before creating the map, which writes its own hash on construction.
@@ -98,6 +99,7 @@ effect(() => {
 
 render(h(App, { map }), document.getElementById("ui")!);
 load();
+if (import.meta.env.DEV) attachPerfLab(map);
 
 // Handles for poking at the map and the sim from devtools during development. Use these instead of importing
 // simClient again: a second module instance would start a second worker writing the same save.
