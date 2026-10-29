@@ -108,24 +108,28 @@ export function AwayNotice() {
         </>
       )}
       {a.choices.length > 0 && (
-        <>
-          <h3 class="away-sub">События без вашего ответа</h3>
+        <details class="away-events">
+          <summary>
+            События без вашего ответа <span class="away-events-count">{a.choices.length}</span>
+          </summary>
           <ul class="away-chronicle">
             {a.choices.map((t, i) => (
               <li key={i}>{t}</li>
             ))}
           </ul>
-        </>
+        </details>
       )}
       {a.chronicle.length > 0 && (
-        <>
-          <h3 class="away-sub">Хроника</h3>
+        <details class="away-events">
+          <summary>
+            Хроника <span class="away-events-count">{a.chronicle.length}</span>
+          </summary>
           <ul class="away-chronicle">
             {a.chronicle.map((e, i) => (
               <li key={i}>{e.text}</li>
             ))}
           </ul>
-        </>
+        </details>
       )}
       <Button variant="primary" onClick={() => (away.value = null)}>
         Продолжить

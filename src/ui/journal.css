@@ -215,6 +215,57 @@
   padding: 2px 0;
 }
 
+.away-events {
+  border-top: var(--bw-hair) solid var(--rule-dotted);
+  border-bottom: var(--bw-hair) solid var(--rule-dotted);
+}
+
+.away-events + .away-events {
+  border-top: 0;
+}
+
+.away-events > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  list-style: none;
+}
+
+.away-events > summary::-webkit-details-marker {
+  display: none;
+}
+
+.away-events > summary::after {
+  content: "▾";
+  margin-left: auto;
+  color: var(--pencil);
+  transition: transform 120ms ease;
+}
+
+.away-events[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.away-events-count {
+  min-width: 1.6em;
+  padding: 1px 6px;
+  border: var(--bw-hair) solid var(--rule-dotted);
+  border-radius: 999px;
+  color: var(--pencil);
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+  text-align: center;
+}
+
+.away-events .away-chronicle {
+  margin: 0 0 var(--sp-2);
+}
+
 /* «Об игре» */
 .about {
   max-width: min(520px, calc(100vw - 32px));
