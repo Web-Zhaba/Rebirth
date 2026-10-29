@@ -12,6 +12,7 @@ export interface BenchmarkCaseResult {
   delta: { fps: number; p95Ms: number; p99Ms: number; slow33: number };
   measures: Record<string, { count: number; avgMs: number; p95Ms: number; maxMs: number; totalMs: number }>;
   diagnostics: Record<string, unknown>;
+  mapRender: { count: number; avgIntervalMs: number; p95IntervalMs: number; maxIntervalMs: number };
 }
 
 export interface BenchmarkSuiteResult {
@@ -19,6 +20,7 @@ export interface BenchmarkSuiteResult {
   userAgent: string;
   location: { lat: number; lng: number; zoom: number; pitch: number; bearing: number };
   config: { warmupMs: number; settleMs: number; captureMs: number };
+  environment: { hardwareConcurrency: number; deviceMemoryGB?: number; devicePixelRatio: number; viewport: [number, number]; screen: [number, number] };
   cases: BenchmarkCaseResult[];
   ranking: { id: string; label: string; fpsGain: number; p95GainMs: number }[];
 }
@@ -134,10 +136,21 @@ export async function runBenchmarkSuite(
       performance.clearMeasures();
       performance.clearMarks();
       perfProfiler.reset();
+      const renderTimes:number[] = [];
+      let lastRender = 0;
+      const onRender = () => {
+        const t = performance.now();
+        if (lastRender) renderTimes.push(t - lastRender);
+        lastRender = t;
+      };
+      map.on("render", onRender);
       perfProfiler.startCapture();
       onProgress?.(`Capturing: ${c.label}`,i,cases.length);
       await sleep(captureMs);
       const metrics = perfProfiler.stopCapture();
+      map.off("render", onRender);
+      const renderSorted=[...renderTimes].sort((a,b)=>a-b);
+      const renderTotal=renderSorted.reduce((a,b)=>a+b,0);
       const baseline = results[0]?.metrics ?? metrics;
       results.push({
         id:c.id,
@@ -152,6 +165,12 @@ export async function runBenchmarkSuite(
         },
         measures:summarizeMeasures(),
         diagnostics:diagnostics(),
+        mapRender:{
+          count:renderTimes.length + (lastRender ? 1 : 0),
+          avgIntervalMs:round(renderSorted.length ? renderTotal/renderSorted.length : 0),
+          p95IntervalMs:round(pct(renderSorted,.95)),
+          maxIntervalMs:round(renderSorted.at(-1) ?? 0),
+        },
       });
     }
   } finally {
@@ -172,6 +191,13 @@ export async function runBenchmarkSuite(
     userAgent:navigator.userAgent,
     location:{lat:center.lat,lng:center.lng,zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()},
     config:{warmupMs,settleMs,captureMs},
+    environment:{
+      hardwareConcurrency:navigator.hardwareConcurrency || 0,
+      ...(("deviceMemory" in navigator) ? { deviceMemoryGB:(navigator as Navigator & {deviceMemory:number}).deviceMemory } : {}),
+      devicePixelRatio:window.devicePixelRatio,
+      viewport:[window.innerWidth,window.innerHeight],
+      screen:[window.screen.width,window.screen.height],
+    },
     cases:results,
     ranking:results.slice(1).map(r=>({id:r.id,label:r.label,fpsGain:r.delta.fps,p95GainMs:r.delta.p95Ms})).sort((a,b)=>b.p95GainMs-a.p95GainMs || b.fpsGain-a.fpsGain),
   };
