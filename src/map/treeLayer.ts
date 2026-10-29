@@ -44,6 +44,8 @@ const MAX_CHUNKS = 3000;
 const TALL = 12;
 const MIN_PX = 1.5;
 const FAR_CAP = 12_000;
+let perfFarScale = 1;
+let perfDensityScale = 1;
 const FADE_FROM = 0.85;
 const REACH_STEP = 1.15;
 const SLOPE = 120;
@@ -308,6 +310,14 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
 
   if (import.meta.env.DEV) {
     Object.assign(window, {
+      treePerfTune: (opts?: { farScale?: number; densityScale?: number }) => {
+        if (!opts) return { farScale: perfFarScale, densityScale: perfDensityScale };
+        if (opts.farScale !== undefined) perfFarScale = Math.max(0.25, Math.min(1, opts.farScale));
+        if (opts.densityScale !== undefined) perfDensityScale = Math.max(0.25, Math.min(1, opts.densityScale));
+        shown = null;
+        map.triggerRepaint();
+        return { farScale: perfFarScale, densityScale: perfDensityScale };
+      },
       treeStats: () => ({
         drawn: slots.reduce((a, q) => a + q.count, 0),
         byKind: Object.fromEntries(TREE_KINDS.map((k, i) => [k, slots.slice(i * TREE_LODS, (i + 1) * TREE_LODS).reduce((a, q) => a + q.count, 0)])),
@@ -497,7 +507,7 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
         MIN_PX;
 
       const far = Math.min(
-        FAR_CAP,
+        FAR_CAP * perfFarScale,
         farOf(TALL),
       );
 
@@ -765,14 +775,14 @@ export function createTreeLayer(map: maplibregl.Map, opts: TreeLayerOptions): ma
             ),
 
           keep:
-            r.d < NEAR
+            (r.d < NEAR
               ? 1
               : Math.floor(
                   keepAt(
                     r.d,
                     reach,
                   ) * 16,
-                ) / 16,
+                ) / 16) * perfDensityScale,
         }));
 
       if (
