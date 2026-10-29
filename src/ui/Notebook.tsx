@@ -127,7 +127,7 @@ export function Notebook({ finds, articles, chronicle, seen, onSeen, open, onOpe
                       <div class="notebook-text">
                         {a.extract}
                         <a class="wiki-full-link" href={a.url} target="_blank" rel="noopener" lang={a.lang} title="Открыть полную статью" aria-label={`Открыть полную статью «${a.title}»`}>
-                          ↗
+                          ^
                         </a>
                       </div>
                       <div class="notebook-date">{formatDate(a.at)} · Википедия, CC BY-SA 4.0</div>
