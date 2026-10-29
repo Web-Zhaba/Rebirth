@@ -4,6 +4,7 @@ import { runBenchmarkSuite } from "./benchmark";
 import { runCameraStressSuite } from "./cameraStress";
 import { runTerrainFocus } from "./terrainFocus";
 import { runForestFocus } from "./forestFocus";
+import { runTerrainDemFocus } from "./terrainDemFocus";
 
 const fmt = (n:number) => Number.isFinite(n) ? n.toFixed(1) : "-";
 
@@ -12,7 +13,7 @@ export function attachPerfLab(map: maplibregl.Map): void {
   const el = document.createElement("aside");
   el.id = "perf-lab";
   Object.assign(el.style, { position:"fixed", right:"10px", bottom:"10px", zIndex:"10000", width:"300px", maxHeight:"70vh", overflow:"auto", padding:"10px", background:"rgba(20,20,20,.88)", color:"#eee", font:"12px/1.35 monospace", borderRadius:"6px", boxShadow:"0 2px 12px #0008" });
-  el.innerHTML = '<b>Rebirth Performance Lab</b><div data-live>idle</div><button data-start>Start 15s</button> <button data-suite>Auto benchmark</button> <button data-stress>Camera stress</button> <button data-terrain>Terrain focus</button> <button data-forest>Forest focus</button> <button data-stop>Stop</button> <button data-copy>Copy JSON</button><pre data-out></pre>';
+  el.innerHTML = '<b>Rebirth Performance Lab</b><div data-live>idle</div><button data-start>Start 15s</button> <button data-suite>Auto benchmark</button> <button data-stress>Camera stress</button> <button data-terrain>Terrain focus</button> <button data-forest>Forest focus</button> <button data-dem>Terrain DEM</button> <button data-stop>Stop</button> <button data-copy>Copy JSON</button><pre data-out></pre>';
   document.body.appendChild(el);
   const live=el.querySelector("[data-live]") as HTMLElement, out=el.querySelector("[data-out]") as HTMLElement;
   let timer=0, last:PerfSummary|null=null;
@@ -124,7 +125,25 @@ export function attachPerfLab(map: maplibregl.Map): void {
       btn.disabled=false;
     }
   };
+  (el.querySelector("[data-dem]") as HTMLButtonElement).onclick=async()=>{
+    const btn=el.querySelector("[data-dem]") as HTMLButtonElement;
+    btn.disabled=true;
+    out.textContent="Starting terrain DEM benchmark…";
+    try{
+      const report=await runTerrainDemFocus(map,(message,index,total)=>{
+        live.textContent=`${message} [${index+1}/${total}]`;
+      });
+      console.table(report.runs.map(r=>({case:r.label,mapFps:r.mapFps,p95:r.p95Ms,p99:r.p99Ms,max:r.maxMs})));
+      console.table(report.delta);
+      out.textContent=JSON.stringify(report,null,2);
+      live.textContent="Terrain DEM benchmark complete";
+    }catch(e){
+      out.textContent=`terrain DEM failed: ${String(e)}`;
+    }finally{
+      btn.disabled=false;
+    }
+  };
   (el.querySelector("[data-copy]") as HTMLButtonElement).onclick=async()=>{ const r=out.textContent; if(r) await navigator.clipboard.writeText(r); };
   addEventListener("beforeunload",()=>clearInterval(interval),{once:true});
-  Object.assign(window,{ perfLab:{ start:()=>perfProfiler.startCapture(), stop, summary:()=>perfProfiler.summary(), clear:()=>{performance.clearMeasures();perfProfiler.reset();}, suite:()=>runBenchmarkSuite(map), stress:()=>runCameraStressSuite(map), terrain:()=>runTerrainFocus(map), forest:()=>runForestFocus(map) } });
+  Object.assign(window,{ perfLab:{ start:()=>perfProfiler.startCapture(), stop, summary:()=>perfProfiler.summary(), clear:()=>{performance.clearMeasures();perfProfiler.reset();}, suite:()=>runBenchmarkSuite(map), stress:()=>runCameraStressSuite(map), terrain:()=>runTerrainFocus(map), forest:()=>runForestFocus(map), dem:()=>runTerrainDemFocus(map) } });
 }
