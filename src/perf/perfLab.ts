@@ -47,6 +47,8 @@ export function attachPerfLab(map: maplibregl.Map): void {
         longTasks:r.metrics.longTasks.count,
         fpsDelta:r.delta.fps,
         p95Gain:r.delta.p95Ms,
+        mapRenders:r.mapRender.count,
+        mapP95:r.mapRender.p95IntervalMs,
       }));
       console.table(rows);
       out.textContent=JSON.stringify(report,null,2);
