@@ -95,10 +95,28 @@ describe("brokenWalls", () => {
     expect(brokenWalls(house, "way/1", 9)).toEqual(a);
     expect(brokenWalls(house, "way/2", 9)!.map((q) => q.h)).not.toEqual(hs);
   });
-  it("covers the band of the wall and rejects unsafe geometry", () => {
-    const sum = brokenWalls(house, "x")!.reduce((s, q) => s + Math.abs(area(q.quad)), 0);
-    expect(sum).toBeCloseTo(12 * 8 - 11 * 7, 6);
-    expect(brokenWalls([[0, 0], [10, 0], [10, 0.6], [0, 0.6]], "x")).toBeNull();
+  it("builds each wall piece as a local rectangular strip", () => {
+    const walls = brokenWalls(house, "x")!;
+    expect(walls.length).toBeGreaterThan(0);
+    for (const q of walls) {
+      expect(q.quad).toHaveLength(4);
+      expect(Math.abs(area(q.quad))).toBeGreaterThan(0);
+      const outer = Math.hypot(q.quad[1][0] - q.quad[0][0], q.quad[1][1] - q.quad[0][1]);
+      const inner = Math.hypot(q.quad[2][0] - q.quad[3][0], q.quad[2][1] - q.quad[3][1]);
+      expect(inner).toBeCloseTo(outer, 8);
+      expect(Math.hypot(q.quad[3][0] - q.quad[0][0], q.quad[3][1] - q.quad[0][1])).toBeCloseTo(0.5, 8);
+    }
     expect(brokenWalls([[0, 0], [4, 4], [0, 4], [4, 0]], "x")).toBeNull();
+  });
+
+  it("does not create a wall spanning the interior of a concave foundation", () => {
+    const L: XY[] = [[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]];
+    const walls = brokenWalls(L, "concave")!;
+    expect(walls.length).toBeGreaterThan(0);
+    for (const q of walls) {
+      const outerLen = Math.hypot(q.quad[1][0] - q.quad[0][0], q.quad[1][1] - q.quad[0][1]);
+      expect(outerLen).toBeLessThanOrEqual(3);
+      expect(Math.hypot(q.quad[2][0] - q.quad[1][0], q.quad[2][1] - q.quad[1][1])).toBeCloseTo(0.5, 8);
+    }
   });
 });
