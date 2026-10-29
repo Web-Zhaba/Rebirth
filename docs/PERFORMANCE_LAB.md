@@ -132,3 +132,56 @@ await perfLab.suite()
 ```
 
 returns the complete suite object. Use this when you want to save or process results directly in DevTools.
+
+
+## Camera stress benchmark
+
+Use **Camera stress** when the static benchmark is already near the display's refresh-rate ceiling.
+
+It repeatedly runs the same deterministic camera route from the exact starting camera:
+
+- rotate/bearing sweep;
+- pitch up/down;
+- small pan;
+- zoom in/out;
+- return to the exact starting camera.
+
+The suite alternates a fresh baseline before every modified case:
+
+```text
+baseline
+relief off
+baseline
+forest off
+baseline
+water off
+...
+```
+
+This reduces bias from shader warm-up, caches, garbage collection and thermal drift.
+
+Default configuration:
+
+- 3 repeats per variant;
+- 1.4 s settle before every route;
+- about 6 s of camera motion per route.
+
+The report contains every raw run plus a median aggregate for each variant. Ranking uses the median MapLibre render cadence rather than browser requestAnimationFrame cadence.
+
+Per run it also records DEV diagnostics both before and after the route and computes numeric deltas. This is useful for counters such as rebuilt forest chunks: absolute cumulative counters are much less useful than the work performed during that exact route.
+
+The important fields are:
+
+- `aggregates[].median.mapFps`;
+- `aggregates[].median.p95Ms`;
+- `aggregates[].median.p99Ms`;
+- `aggregates[].versusBaseline`;
+- `runs[].diagnosticDelta`.
+
+Console API:
+
+```js
+await perfLab.stress()
+```
+
+Do not touch the camera while the stress suite is running. The starting camera is restored at the end.
