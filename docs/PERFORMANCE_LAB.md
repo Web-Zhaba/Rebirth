@@ -109,6 +109,8 @@ Each case contains:
 - JS heap counters when available;
 - grouped Performance API measures with count/avg/p95/max/total;
 - optional layer diagnostics already exposed by the build (tree/model/water/field/cloud/shadow/landscape stats);
+- actual MapLibre render-event cadence: render count, average interval, p95 interval and worst interval;
+- device context: logical CPU count, browser-reported memory when available, DPR, viewport and screen size;
 - delta from baseline for FPS, p95, p99 and >33 ms frames.
 
 The final `ranking` orders variants by p95 improvement and then FPS gain. Treat a large improvement from one isolated "off" case as a strong lead, then reproduce that case with a manual 15 s run before changing production code.
