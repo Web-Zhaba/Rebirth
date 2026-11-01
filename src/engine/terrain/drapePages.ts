@@ -6,7 +6,8 @@ import { keyToTile, lngLatToTile, tileKey } from "../geo/mercator";
 // edge the sample clamps, which at one texel is invisible next to the next page's own edge.
 //
 // Each page also fills the same layer of `cover`, an r8uint array of vegetation class ids (bake/drape.ts rasterCover)
-// read by the tree scatter, and keeps the share of each class on the CPU (the scatter's budget and empty-tile skip).
+// read by the tree scatter, and keeps what grows over 16 x 16 blocks of it on the CPU (the scatter's budget and
+// empty-tile skip).
 
 const PINNED_ZOOM = 2; // z0-z2 never evicted: the fallback of last resort
 const CPU_COPIES = 64; // water masks kept on the CPU for isWaterAt
@@ -15,7 +16,7 @@ export interface DrapePage {
   key: number;
   rgba: Uint8Array<ArrayBuffer>;
   cover: Uint8Array<ArrayBuffer>;
-  shares: Float32Array; // per class id, index 0 no cover
+  blocks: Float32Array; // bake/drape.ts coverBlocks
 }
 
 export interface Resident {
@@ -26,7 +27,7 @@ export interface Resident {
   layer: number;
   lastUsed: number;
   water: Uint8Array | null; // alpha channel, for CPU queries
-  shares: Float32Array;
+  blocks: Float32Array;
 }
 
 export class DrapePages {
@@ -93,7 +94,7 @@ export class DrapePages {
       if (layer < 0) return list.slice(n);
       const water = new Uint8Array(DRAPE_SIZE * DRAPE_SIZE);
       for (let i = 0; i < water.length; i++) water[i] = d.rgba[i * 4 + 3];
-      this.pages.set(d.key, { key: d.key, ...keyToTile(d.key), layer, lastUsed: this.frame, water, shares: d.shares });
+      this.pages.set(d.key, { key: d.key, ...keyToTile(d.key), layer, lastUsed: this.frame, water, blocks: d.blocks });
       this.cpu.push(d.key);
       while (this.cpu.length > CPU_COPIES) {
         const p = this.pages.get(this.cpu.shift()!);

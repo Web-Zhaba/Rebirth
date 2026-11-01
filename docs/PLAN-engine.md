@@ -366,13 +366,14 @@ Done for the forest (2026-11-01):
 
 - Cover pages: the drape bake also rasterises the vegetation class of every texel (`bake/drape.ts rasterCover`: a
   scanline even-odd fill, no antialiasing, the tile's first feature wins, nothing under water) into an r8uint array
-  beside the drape layers, and reports each page's class shares. One table of what grows where
+  beside the drape layers, and reports what grows over 16 x 16 blocks of each page (`coverBlocks`). One table of what grows where
   (`world/forestMix.ts COVER_TABLE`, the old `MIXES`) feeds both this and the old CPU scatter.
 - Scatter on the GPU (`engine/scene/forest.ts`, `forestScatter.wgsl`): candidates on a jittered grid of z15 mercator
   tiles (9 m for trees; 5 / 2.5 / 7 m for bushes, reeds, boulders), one thread each, every frame. The CPU only picks
   the tiles around the eye that are in view and in reach, skips those whose cover page holds nothing of a kind, sets
   the full-density reach so the expected count fits the budget (80k trees, 60k details; the old `thinReach`, now fed by
-  the class shares) and writes a job table (`forestTiles.ts`). Far tiles run every 2nd or 4th row and column; each
+  the cover blocks under each tile, so a coarse page standing in while finer ones stream still gives the local mix) and
+  writes a job table (`forestTiles.ts`). Far tiles run every 2nd or 4th row and column; each
   candidate is then kept with its distance's share against what the stride took, so thinning is continuous and
   nested (trees drop out with distance, never move). Per candidate: cover class, game mask, height page, distance,
   frustum sphere, then an atomic append into its (kind, level of detail) slot; a finalize pass writes the instance
@@ -388,6 +389,29 @@ Done for the forest (2026-11-01):
   at a town's size); smoke waits for N7. Trees are not yet hidden behind hills (N6).
 
 **N6. Occlusion culling.** two-phase Hi-Z (terrain ridges and buildings as occluders), stats overlay for culled counts.
+
+Done (2026-11-01):
+
+- The frame is two passes on one MSAA colour and depth: the occluders (terrain, the town's buildings and roads:
+  `Drawable.occluder`), then the Hi-Z of their depth (`engine/frame/hiz.ts`: the farthest reversed-Z depth, level 0 at
+  half resolution over every sample, a min chain where the last texel of a row also takes the odd one left over), the
+  GPU culling passes, and everything else plus the sky. One phase is exact here: what is culled (trees) never occludes,
+  and the occluders are this frame's, so there is no reprojection and no pop-in.
+- The forest's scatter tests every candidate's sphere that passed the frustum against the Hi-Z (the level where its
+  screen box spans 2 x 2 texels, its nearest depth against their farthest). The frustum and occlusion counts are
+  aggregated per workgroup and read back a few times a second.
+- Labels (place names, game labels) are hidden behind hills: `Engine.behindTerrain` marches the ray to the label over
+  the drawn ground (`pickGround`), re-checked per label every 200 ms.
+- Stats overlay: `?stats=1` (remembered, `?stats=0` hides it), `src/view/engine/statsHud.ts`: frame/CPU/GPU, terrain
+  nodes and pages, forest candidates, drawn, culled by frustum and by occlusion, scatter GPU time, reach.
+- Measured: in the Black Forest at 800 m and 86°, of 35k trees in view 20k are behind hills and not drawn; Innsbruck
+  valley 4k of 34k; flat Białowieża almost none. The whole GPU frame (both passes, Hi-Z, scatter) at 1280 x 800 with
+  forest in view: ~0.5-0.6 ms on RDNA4 (the Hi-Z build was not timed on its own).
+- Fixed on the way: the scatter's uniform had lost its alignment after the detail sizes (reeds' and stones' size
+  ranges and the occlusion fields were read shifted); the forest now checks its uniform's length against the shader.
+- Not done: terrain nodes and the town's models are not themselves culled by occlusion (terrain is the occluder;
+  per-node GPU selection would be a rewrite of the CPU quadtree for little gain); trees do not occlude trees (a second
+  phase would be needed, impostors are poor occluders).
 
 **N7. Sky and weather.** clouds ray-march + composite (port `clouds/`), cloud shadows in the shading model,
 precipitation, snow/wet materials on all surfaces, night lights, smoke.

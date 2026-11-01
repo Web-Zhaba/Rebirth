@@ -1,6 +1,6 @@
 import type { VectorTile } from "@mapbox/vector-tile";
 import { biomeColor, C, isDrawnLandcover } from "../../world/biome";
-import { coverIdOf } from "../../world/forestMix";
+import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
 import { isNatureWater, isNatureWaterway } from "../../world/nature";
 
 // Drape pages: the land's colour and water coverage over one quadtree tile, rasterised from the OpenMapTiles tile of
@@ -211,12 +211,26 @@ export function rasterCover(src: DrapeSource, z: number, x: number, y: number, w
   return out;
 }
 
-// Share of a page's texels in each class id (index 0: no cover), for the scatter's budget and to skip empty tiles.
-export function coverShares(cover: Uint8Array, classes: number): Float32Array<ArrayBuffer> {
-  const counts = new Float32Array(classes + 1);
-  for (let i = 0; i < cover.length; i++) counts[cover[i]]++;
-  for (let c = 0; c <= classes; c++) counts[c] /= cover.length;
-  return counts;
+// What grows over each of COVER_BLOCKS x COVER_BLOCKS squares of a page: the mean tree, bush, reed and boulder share of
+// its texels (world/forestMix.ts COVER_TABLE), 4 floats per block, row by row. The scatter's budget reads the blocks
+// under a tile, so a coarse page standing in for a finer one still gives the local mix, not the whole page's.
+export const COVER_BLOCKS = 16;
+export function coverBlocks(cover: Uint8Array): Float32Array<ArrayBuffer> {
+  const B = COVER_BLOCKS;
+  const side = DRAPE_SIZE / B;
+  const out = new Float32Array(B * B * 4);
+  for (let j = 0; j < DRAPE_SIZE; j++)
+    for (let i = 0; i < DRAPE_SIZE; i++) {
+      const c = COVER_TABLE[cover[j * DRAPE_SIZE + i] - 1];
+      if (!c) continue;
+      const o = (Math.floor(j / side) * B + Math.floor(i / side)) * 4;
+      out[o] += c.tree ? 1 : 0;
+      out[o + 1] += c.bush;
+      out[o + 2] += c.reed;
+      out[o + 3] += c.boulder;
+    }
+  for (let k = 0; k < out.length; k++) out[k] /= side * side;
+  return out;
 }
 
 // Interleave the colour canvas's RGB with the mask's red channel as alpha.

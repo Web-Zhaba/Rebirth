@@ -6,6 +6,7 @@ import { ruinPois, ruinStreets, ruinTypedNames } from "../layers/ruins";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { mppAtZoom } from "../view";
 import { lineLabelAnchor, pickLabels, rotatedExtent, wrapExtent, type LabelBox } from "./labelLayout";
+import { labelSight } from "./labelSight";
 
 // The game's own map text on the engine, DOM over the canvas like the place names (placeLabels.ts), in the look and
 // gates of the old MapLibre symbol layers: the percent done of unfinished clearings (map/zoneLayer.ts) and, while the
@@ -108,6 +109,7 @@ export function attachGameLabels(engine: Engine, container: HTMLElement): void {
     return engine.project(l.pts[i][1], l.pts[i][0], g);
   };
 
+  const hidden = labelSight(engine);
   engine.onFrame(() => {
     if (!engine.view) return;
     const s = engine.state;
@@ -139,6 +141,7 @@ export function attachGameLabels(engine: Engine, container: HTMLElement): void {
         }
         const p = screen(l, 0);
         if (!onScreen(p)) continue;
+        if (hidden(l.key, l.pts[0][1], l.pts[0][0], l.ground[0])) continue;
         const wrap = st.maxWidthEm ? wrapExtent(tw, st.maxWidthEm * st.px) : { lines: 1, w: tw };
         const bh = wrap.lines * st.px * LINE_H;
         if (l.kind === "poi") {

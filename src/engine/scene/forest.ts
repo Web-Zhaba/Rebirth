@@ -3,12 +3,14 @@ import type { Drawable, Engine } from "../engine";
 import { ecefToGeodetic, enuAt, type Vec3 } from "../geo/ellipsoid";
 import { lngLatToTile, tileToLngLat } from "../geo/mercator";
 import type { RenderTarget } from "../gpu/device";
+import type { HiZ } from "../frame/hiz";
 import { GpuTimer } from "../gpu/timer";
 import { createShader } from "../gpu/wgsl";
+import { COVER_BLOCKS } from "../bake/drape";
 import { EXAGGERATION, NO_PAGE, type Terrain } from "../terrain/terrain";
 import { birchShare, coniferShare, COVER_TABLE, DETAIL_KINDS, DETAIL_SIZE, DETAIL_SPACING, RUIN_ADD, TREE_SIZE, TREE_SPACING } from "../../world/forestMix";
 import "../frame/frameUniforms";
-import { SCATTER_ZOOM, steadyReach, strideLevel, thinReach, tileFrame, type TileFrame } from "./forestTiles";
+import { keepAt, SCATTER_ZOOM, steadyReach, strideLevel, thinReach, tileFrame, type TileFrame } from "./forestTiles";
 import forestWgsl from "./forest.wgsl?raw";
 import scatterWgsl from "./forestScatter.wgsl?raw";
 import { bakeTreeAtlas, IMPOSTOR_STEP, IMPOSTOR_VIEWS, TREE_VERTEX_LAYOUT, uploadTreeMeshes, type TreeAtlas, type TreeMeshes, type TreeModelData } from "./treeAtlas";
@@ -36,7 +38,9 @@ const MIN_PX = 1.5; // drawn up to where a typical one is this many px tall
 const SINK = 0.3; // m below the ground, so a slope does not show a floating root
 const TILE_SLACK = 150; // m added to a tile's radius for its relief and its trees
 const JOB_WORDS = 36;
-const UNIFORM_FLOATS = 5 * 4 + 4 + 4 + 4 + 4 + 4 + 12 * 4 + 17 * 4 + 4 + 4 * 4;
+const UNIFORM_FLOATS = 5 * 4 + 4 + 4 + 4 + 4 + 4 + 12 * 4 + 17 * 4 + 4 + 4 * 4 + 16 + 4 + 4;
+const COUNTERS = 16; // the 12 slots, then frustum-culled and occluded candidates
+const STATS_MS = 250;
 const LOOK_FLOATS = 8 * 4 + 6 * 4 * 4;
 
 export interface ForestKind {
@@ -71,6 +75,16 @@ export interface ForestStats {
   jobs: number;
   candidates: number;
   reach: number;
+  expected: number; // trees the budget expects at that reach
+}
+
+// What the GPU did with the candidates (read back a few times a second): drawn per slot (kind x level of detail, over
+// capacity included), and how many in reach the frustum and the occluders took.
+export interface ForestCulling {
+  slots: number[];
+  drawn: number;
+  frustum: number;
+  occluded: number;
 }
 
 interface TileInfo extends TileFrame {
@@ -81,7 +95,9 @@ interface TileInfo extends TileFrame {
 export class Forest implements Drawable {
   grow = 0; // 0 hides the forest, 1 full size (the view eases it in with the scale)
   look: ForestLook | null = null;
-  stats: ForestStats = { jobs: 0, candidates: 0, reach: Infinity };
+  stats: ForestStats = { jobs: 0, candidates: 0, reach: Infinity, expected: 0 };
+  culling: ForestCulling = { slots: [], drawn: 0, frustum: 0, occluded: 0 };
+  occlusion = true; // test against the Hi-Z (off: for comparisons)
   readonly timer: GpuTimer | null; // GPU time of the scatter pass, where timestamps are available
   private readonly meshes: TreeMeshes;
   private readonly atlas: TreeAtlas;
@@ -110,12 +126,18 @@ export class Forest implements Drawable {
   private treeReach = Infinity;
   private detailReach = Infinity;
   private readonly tiles = new Map<number, TileInfo>();
+  private hizVersion = -1;
+  private statsRead: GPUBuffer;
+  private statsBusy = false;
+  private statsAt = 0;
+  private statsWanted = false;
 
   constructor(
     private readonly device: GPUDevice,
     target: RenderTarget,
     frameLayout: GPUBindGroupLayout,
     private readonly terrain: Terrain,
+    private readonly hiz: HiZ,
     models: readonly TreeModelData[],
     kinds: readonly ForestKind[],
   ) {
@@ -127,7 +149,8 @@ export class Forest implements Drawable {
     let at = 0;
     for (const c of CAPS) (this.bases.push(at), (at += c));
     this.instances = device.createBuffer({ label: "forest instances", size: at * INSTANCE_BYTES, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX });
-    this.counts = device.createBuffer({ label: "forest counts", size: SLOTS * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+    this.statsRead = device.createBuffer({ label: "forest stats", size: COUNTERS * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    this.counts = device.createBuffer({ label: "forest counts", size: COUNTERS * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
     this.args = device.createBuffer({ label: "forest draws", size: SLOTS * 5 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST });
     const args = new Uint32Array(SLOTS * 5);
     for (let k = 0; k < FOREST_KINDS; k++) {
@@ -216,7 +239,6 @@ export class Forest implements Drawable {
     if (view.eyeAboveGround > maxFar) return;
 
     const planes = frustumPlanes(view);
-    const shares = COVER_TABLE;
     const z = SCATTER_ZOOM;
     const n = 2 ** z;
     const at = lngLatToTile(eyeGeo.lng, eyeGeo.lat, z);
@@ -239,17 +261,7 @@ export class Forest implements Drawable {
         const cover = this.terrain.drape.best(z, tx, ty);
         if (!cover) continue;
         const ruins = mask !== null && tx0 / n < mask[2] && (tx0 + 1) / n > mask[0] && ty / n < mask[3] && (ty + 1) / n > mask[1];
-        let tree = 0;
-        const detail = [0, 0, 0];
-        for (let id = 1; id < cover.shares.length; id++) {
-          const s = cover.shares[id];
-          if (!s) continue;
-          const cl = shares[id - 1];
-          if (cl.tree) tree += s;
-          detail[0] += s * cl.bush;
-          detail[1] += s * cl.reed;
-          detail[2] += s * cl.boulder;
-        }
+        const [tree, ...detail] = blockShares(cover, tx, ty);
         if (tree > 0 && dMin < treeFar) {
           const grid = Math.max(8, Math.round(t.width / TREE_SPACING));
           trees.push({ tile: t, x: tx0, y: ty, group: 0, grid, d, dMin, n: grid * grid * tree });
@@ -310,7 +322,7 @@ export class Forest implements Drawable {
     }
     this.total = total;
     this.jobCount = count;
-    this.stats = { jobs: count, candidates: total, reach: this.treeReach };
+    this.stats = { jobs: count, candidates: total, reach: this.treeReach, expected: Math.round(trees.reduce((a, t) => a + (t.d < TREE_NEAR ? t.n : t.n * keepAt(t.d, this.treeReach)), 0)) };
     if (!count) return;
     this.device.queue.writeBuffer(this.jobs, 0, this.jobData, 0, count * JOB_WORDS * 4);
 
@@ -332,7 +344,12 @@ export class Forest implements Drawable {
     for (const c of COVER_TABLE) put(c.tree ? 1 : 0, c.bush, c.reed, c.boulder);
     put(0, RUIN_ADD.bush, RUIN_ADD.reed, RUIN_ADD.boulder);
     put(...TREE_SIZE, 0);
-    DETAIL_KINDS.forEach((kind) => put(...DETAIL_SIZE[kind], Math.max(...COVER_TABLE.map((c) => c[kind])) + RUIN_ADD[kind]));
+    DETAIL_KINDS.forEach((kind) => put(...DETAIL_SIZE[kind], Math.max(...COVER_TABLE.map((c) => c[kind])) + RUIN_ADD[kind], 0));
+    put(...view.viewProj);
+    const hz = this.hiz.texture;
+    put(view.near, view.tanHalfY * view.aspect, view.tanHalfY, this.occlusion && hz ? this.hiz.levels : 0);
+    put(hz?.width ?? 1, hz?.height ?? 1, 0, 0);
+    if (k !== UNIFORM_FLOATS) throw new Error(`forest uniform out of step with forestScatter.wgsl: ${k}`);
     this.device.queue.writeBuffer(this.uniform, 0, d);
     this.writeLook(up);
   }
@@ -340,6 +357,7 @@ export class Forest implements Drawable {
   compute(encoder: GPUCommandEncoder): void {
     if (!this.jobCount) return;
     encoder.clearBuffer(this.counts);
+    if (this.hiz.version !== this.hizVersion) (this.hizVersion = this.hiz.version), (this.scatterGroup = null);
     const group = (this.scatterGroup ??= this.device.createBindGroup({
       layout: this.scatterPipe.getBindGroupLayout(0),
       entries: [
@@ -350,6 +368,7 @@ export class Forest implements Drawable {
         { binding: 5, resource: this.terrain.pages.texture.createView({ dimension: "2d-array" }) },
         { binding: 6, resource: this.terrain.drape.cover.createView({ dimension: "2d-array" }) },
         { binding: 7, resource: this.maskTexture.createView() },
+        { binding: 8, resource: this.hiz.texture!.createView() },
       ],
     }));
     const pass = encoder.beginComputePass({ label: "forest scatter", timestampWrites: this.timer?.passWrites() });
@@ -363,11 +382,27 @@ export class Forest implements Drawable {
     pass.dispatchWorkgroups(1);
     pass.end();
     this.timer?.resolveInto(encoder);
+    this.statsWanted = !this.statsBusy && performance.now() - this.statsAt > STATS_MS;
+    if (this.statsWanted) encoder.copyBufferToBuffer(this.counts, 0, this.statsRead, 0, COUNTERS * 4);
   }
 
   // After the frame's submit (the engine calls it): read the scatter's time back.
   afterSubmit(): void {
     this.timer?.afterSubmit();
+    if (!this.statsWanted) return;
+    this.statsWanted = false;
+    this.statsBusy = true;
+    this.statsAt = performance.now();
+    this.statsRead
+      .mapAsync(GPUMapMode.READ)
+      .then(() => {
+        const c = new Uint32Array(this.statsRead.getMappedRange()).slice();
+        this.statsRead.unmap();
+        const slots = [...c.subarray(0, SLOTS)];
+        this.culling = { slots, drawn: slots.reduce((a, n, s) => a + Math.min(n, CAPS[s]), 0), frustum: c[SLOTS], occluded: c[SLOTS + 1] };
+      })
+      .catch(() => {})
+      .finally(() => (this.statsBusy = false));
   }
 
   draw(pass: GPURenderPassEncoder): void {
@@ -385,18 +420,6 @@ export class Forest implements Drawable {
       pass.setVertexBuffer(0, this.instances, this.bases[k * 2 + 1] * INSTANCE_BYTES, CAPS[k * 2 + 1] * INSTANCE_BYTES);
       pass.drawIndirect(this.args, (k * 2 + 1) * 20);
     }
-  }
-
-  // Instances drawn per slot (kind x level of detail), read back from the GPU: for benchmarks and tests, not per frame.
-  async readCounts(): Promise<number[]> {
-    const read = this.device.createBuffer({ size: SLOTS * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-    const e = this.device.createCommandEncoder();
-    e.copyBufferToBuffer(this.counts, 0, read, 0, SLOTS * 4);
-    this.device.queue.submit([e.finish()]);
-    await read.mapAsync(GPUMapMode.READ);
-    const out = [...new Uint32Array(read.getMappedRange())].map((c, s) => Math.min(c, CAPS[s]));
-    read.destroy();
-    return out;
   }
 
   private finalizeGroupCache: GPUBindGroup | null = null;
@@ -456,6 +479,22 @@ export class Forest implements Drawable {
     this.device.queue.writeTexture({ texture: t }, mask?.rgba ?? new Uint8Array(4), { bytesPerRow: w * 4 }, [w, h]);
     return t;
   }
+}
+
+// The mean tree, bush, reed and boulder share of the cover blocks under tile (SCATTER_ZOOM, x, y).
+function blockShares(page: { z: number; x: number; y: number; blocks: Float32Array }, x: number, y: number): number[] {
+  const k = 2 ** (SCATTER_ZOOM - page.z);
+  const B = COVER_BLOCKS;
+  const u = ((x - page.x * k) / k) * B;
+  const v = ((y - page.y * k) / k) * B;
+  const i0 = Math.floor(u);
+  const j0 = Math.floor(v);
+  const i1 = Math.max(i0, Math.ceil(u + B / k) - 1);
+  const j1 = Math.max(j0, Math.ceil(v + B / k) - 1);
+  const out = [0, 0, 0, 0];
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) for (let g = 0; g < 4; g++) out[g] += page.blocks[(j * B + i) * 4 + g];
+  const n = (i1 - i0 + 1) * (j1 - j0 + 1);
+  return out.map((s) => s / n);
 }
 
 // Tile (SCATTER_ZOOM, x, y) uv -> a page's uv: offset xy, scale z.

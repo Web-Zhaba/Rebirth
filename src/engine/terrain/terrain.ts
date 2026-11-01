@@ -59,7 +59,7 @@ export class Terrain {
   readonly drapeStream = new TileStream<DrapeResponse, DrapePage>(
     "drape",
     () => new Worker(new URL("../bake/drapeWorker.ts", import.meta.url), { type: "module" }),
-    (key, r) => ({ key, rgba: r.rgba, cover: r.cover, shares: r.shares }),
+    (key, r) => ({ key, rgba: r.rgba, cover: r.cover, blocks: r.blocks }),
     6,
   );
   private cache = new NodeCache();

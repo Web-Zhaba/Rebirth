@@ -37,6 +37,7 @@ interface Mesh {
 }
 
 export class TownMesh implements Drawable {
+  readonly occluder = true;
   private origin: Vec3 | null = null;
   private axes: { east: Vec3; north: Vec3; up: Vec3 } | null = null;
   private roads: Mesh | null = null;

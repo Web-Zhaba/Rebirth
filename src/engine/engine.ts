@@ -2,6 +2,7 @@ import { buildView, clampState, defaultCamera, rayDir, type CameraState, type Ca
 import { pickGround } from "./camera/pick";
 import { transformPoint } from "./camera/projection";
 import { FrameUniforms } from "./frame/frameUniforms";
+import { HiZ } from "./frame/hiz";
 import { enuAt, geodeticToEcef, sub, type Geodetic, type Vec3 } from "./geo/ellipsoid";
 import { DEPTH_FORMAT, fitCanvas, initGpu, SAMPLE_COUNT, type Gpu, type RenderTarget } from "./gpu/device";
 import { GpuTimer } from "./gpu/timer";
@@ -14,6 +15,7 @@ import { EXAGGERATION, Terrain } from "./terrain/terrain";
 // Content kinds (N3+) add themselves as Drawables.
 
 export interface Drawable {
+  occluder?: boolean; // drawn before the Hi-Z build (terrain-like solid geometry that hides what lies behind it)
   update?(view: CameraView, engine: Engine): void;
   compute?(encoder: GPUCommandEncoder): void; // GPU work the draw depends on (culling, scatter), before the main pass
   draw(pass: GPURenderPassEncoder): void;
@@ -52,6 +54,7 @@ export class Engine {
   readonly frameU: FrameUniforms;
   readonly timer: GpuTimer | null;
   readonly drawables: Drawable[] = [];
+  readonly hiz: HiZ;
   light: (s: CameraState) => Light = defaultLight;
   lodTint = false;
   private readonly sky: Sky;
@@ -78,6 +81,7 @@ export class Engine {
     this.overlay = new OverlayRaster(device);
     this.terrain = new Terrain(device, this.target, this.frameU.layout, device.limits.maxTextureArrayLayers, this.overlay);
     this.sky = new Sky(device, this.target, this.frameU.layout);
+    this.hiz = new HiZ(device);
     this.timer = gpu.timestamps ? new GpuTimer(device) : null;
     if (this.timer) this.timer.onSample = (ms) => this.gpuListeners.forEach((f) => f(ms));
   }
@@ -130,6 +134,21 @@ export class Engine {
     return (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, this.canvas.clientHeight);
   }
 
+  // Whether the drawn ground hides a point (h as drawn) from the eye: the ray towards it meets the ground first. The last
+  // stretch before the point is not tested, so a point on a slope is not hidden by the slope it stands on.
+  behindTerrain(lat: number, lng: number, h: number): boolean {
+    const v = this.view;
+    if (!v) return false;
+    const d = sub(geodeticToEcef(lat, lng, h), v.eye);
+    const len = Math.hypot(d[0], d[1], d[2]);
+    const stop = len - Math.max(20, 0.02 * len);
+    if (stop <= 0) return false;
+    const hit = pickGround(v.eye, [d[0] / len, d[1] / len, d[2] / len], this.groundAt, stop);
+    if (!hit) return false;
+    const q = sub(geodeticToEcef(hit.lat, hit.lng, hit.h), v.eye);
+    return Math.hypot(q[0], q[1], q[2]) < stop;
+  }
+
   // Ground under a CSS pixel of the canvas, or null for sky.
   pick(x: number, y: number): Geodetic | null {
     const v = this.view;
@@ -158,7 +177,7 @@ export class Engine {
       this.depth?.destroy();
       const size = [canvas.width, canvas.height];
       this.color = device.createTexture({ label: "msaa color", size, format: this.target.format, sampleCount: SAMPLE_COUNT, usage: GPUTextureUsage.RENDER_ATTACHMENT });
-      this.depth = device.createTexture({ label: "depth", size, format: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      this.depth = device.createTexture({ label: "depth", size, format: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
     }
     const s = this.state;
     // The target rides on the drawn ground; heights that arrive while streaming ease in instead of jumping.
@@ -177,16 +196,31 @@ export class Engine {
     this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: now / 1000 });
 
     const encoder = device.createCommandEncoder({ label: "frame" });
+    // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else
+    // on top of the same colour and depth (docs/PLAN-engine.md N6). The timer spans both passes.
+    const times = this.timer?.passWrites();
+    const colorView = this.color!.createView();
+    const depthView = this.depth.createView();
+    const occluders = encoder.beginRenderPass({
+      label: "occluders",
+      colorAttachments: [{ view: colorView, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" }],
+      depthStencilAttachment: { view: depthView, depthClearValue: 0, depthLoadOp: "clear", depthStoreOp: "store" },
+      timestampWrites: times && { querySet: times.querySet, beginningOfPassWriteIndex: times.beginningOfPassWriteIndex },
+    });
+    occluders.setBindGroup(0, this.frameU.bindGroup);
+    this.terrain.draw(occluders);
+    for (const d of this.drawables) if (d.occluder) d.draw(occluders);
+    occluders.end();
+    this.hiz.build(encoder, this.depth);
     for (const d of this.drawables) d.compute?.(encoder);
     const pass = encoder.beginRenderPass({
       label: "main",
-      colorAttachments: [{ view: this.color!.createView(), resolveTarget: context.getCurrentTexture().createView(), clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "discard" }],
-      depthStencilAttachment: { view: this.depth.createView(), depthClearValue: 0, depthLoadOp: "clear", depthStoreOp: "discard" },
-      timestampWrites: this.timer?.passWrites(),
+      colorAttachments: [{ view: colorView, resolveTarget: context.getCurrentTexture().createView(), loadOp: "load", storeOp: "discard" }],
+      depthStencilAttachment: { view: depthView, depthLoadOp: "load", depthStoreOp: "discard" },
+      timestampWrites: times && { querySet: times.querySet, endOfPassWriteIndex: times.endOfPassWriteIndex },
     });
     pass.setBindGroup(0, this.frameU.bindGroup);
-    this.terrain.draw(pass);
-    for (const d of this.drawables) d.draw(pass);
+    for (const d of this.drawables) if (!d.occluder) d.draw(pass);
     this.sky.draw(pass); // last: only pixels nothing else covered pay for the sky
     pass.end();
     this.timer?.resolveInto(encoder);

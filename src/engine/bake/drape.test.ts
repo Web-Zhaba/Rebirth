@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { biomeColor, C } from "../../world/biome";
 import { coverIdOf } from "../../world/forestMix";
-import { coverShares, DRAPE_SIZE, packDrape, pageMpp, rasterCover, sourceOf, type DrapeSource } from "./drape";
+import { COVER_BLOCKS, coverBlocks, DRAPE_SIZE, packDrape, pageMpp, rasterCover, sourceOf, type DrapeSource } from "./drape";
 
 describe("drape", () => {
   it("pages up to z12 read their own tile, deeper ones a square of the z12 ancestor", () => {
@@ -51,9 +51,10 @@ describe("drape", () => {
     expect(c[5 * DRAPE_SIZE + 128]).toBe(marsh); // the edge falls between texel centres, no mixed id
     expect(c[10 * DRAPE_SIZE + 200]).toBe(0); // water
     expect(new Set(c)).toEqual(new Set([0, wood, marsh]));
-    const shares = coverShares(c, 16);
-    expect(shares[wood]).toBeCloseTo(0.5, 3);
-    expect(shares[0] + shares[wood] + shares[marsh]).toBeCloseTo(1, 6);
+    const blocks = coverBlocks(c);
+    expect(blocks[0]).toBe(1); // top-left block: all wood, trees
+    expect(blocks[(COVER_BLOCKS - 1) * 4 + 2]).toBeCloseTo(0.7, 5); // top-right block: marsh, its reed share
+    expect(blocks[(COVER_BLOCKS - 1) * 4]).toBe(0);
   });
 
   it("fills a ring with a hole by even-odd", () => {

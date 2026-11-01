@@ -5,6 +5,7 @@ import { lngLatToTile, tileToLngLat } from "../../engine/geo/mercator";
 import { loadVector } from "../../world/tiles";
 import { placeLabelsOn } from "../placeNames";
 import { LABEL_PX, labelPriority, labelTileZoom, pickLabels, PLACE_CLASSES, type LabelBox, type PlaceClass } from "./labelLayout";
+import { labelSight } from "./labelSight";
 
 // Old place names on the engine: DOM text over the canvas, faint like pencil notes in an atlas (the look of the old
 // MapLibre symbol layer). Names come from the OpenMapTiles `place` layer of the tiles around the camera target at the
@@ -118,6 +119,7 @@ export function attachPlaceLabels(engine: Engine, container: HTMLElement): void 
     layer.style.display = placeLabelsOn.value ? "" : "none";
   });
 
+  const hidden = labelSight(engine);
   engine.onFrame(() => {
     if (!placeLabelsOn.peek() || !engine.view) return;
     const keys = want();
@@ -140,6 +142,7 @@ export function attachPlaceLabels(engine: Engine, container: HTMLElement): void 
         if (Math.hypot(e[0] - eye[0], e[1] - eye[1], e[2] - eye[2]) > far) continue;
         const s = engine.project(p.lat, p.lng, g);
         if (!s || s[0] < -MARGIN || s[1] < -MARGIN || s[0] > w + MARGIN || s[1] > h + MARGIN) continue;
+        if (hidden(p.key, p.lat, p.lng, g)) continue;
         places.push(p);
         boxes.push({ x: s[0], y: s[1], w: width(p), h: LABEL_PX[p.cls] * 1.3, priority: p.priority });
       }

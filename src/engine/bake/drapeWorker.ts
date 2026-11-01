@@ -1,8 +1,7 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { vectorTileUrl } from "../../world/tiles";
-import { COVER_TABLE } from "../../world/forestMix";
-import { coverShares, DRAPE_SIZE, packDrape, paintDrape, parseSource, rasterCover, sourceOf, type DrapeSource } from "./drape";
+import { coverBlocks, DRAPE_SIZE, packDrape, paintDrape, parseSource, rasterCover, sourceOf, type DrapeSource } from "./drape";
 
 // Drape bake job (bake/drape.ts): fetch the page's OpenMapTiles source tile (cached here: the 16 pages under a z12 tile
 // share it), paint colour and water mask, rasterise the vegetation cover, hand the pixels back transferred. Same request protocol as the DEM worker.
@@ -10,7 +9,7 @@ import { coverShares, DRAPE_SIZE, packDrape, paintDrape, parseSource, rasterCove
 export type DrapeRequest = { type: "load"; id: number; z: number; x: number; y: number } | { type: "cancel"; id: number };
 
 export type DrapeResponse =
-  | { id: number; ok: true; rgba: Uint8Array<ArrayBuffer>; cover: Uint8Array<ArrayBuffer>; shares: Float32Array<ArrayBuffer>; ms: number }
+  | { id: number; ok: true; rgba: Uint8Array<ArrayBuffer>; cover: Uint8Array<ArrayBuffer>; blocks: Float32Array<ArrayBuffer>; ms: number }
   | { id: number; ok: false; status: number; error: string };
 
 const scope = self as unknown as {
@@ -74,8 +73,8 @@ async function load(id: number, z: number, x: number, y: number): Promise<void> 
     const mask = water.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data;
     const rgba = packDrape(colour.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data, mask);
     const cover = rasterCover(src, z, x, y, mask);
-    const shares = coverShares(cover, COVER_TABLE.length);
-    scope.postMessage({ id, ok: true, rgba, cover, shares, ms: performance.now() - t0 }, [rgba.buffer, cover.buffer, shares.buffer]);
+    const blocks = coverBlocks(cover);
+    scope.postMessage({ id, ok: true, rgba, cover, blocks, ms: performance.now() - t0 }, [rgba.buffer, cover.buffer, blocks.buffer]);
   } catch (err) {
     const status = abort.signal.aborted ? -1 : err instanceof HttpError ? err.status : 0;
     scope.postMessage({ id, ok: false, status, error: String(err) } satisfies DrapeResponse);

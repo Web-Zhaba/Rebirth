@@ -49,7 +49,7 @@ export function attachForest(engine: Engine, o: ForestOptions): Forest {
     const info = KIND_INFO[k];
     return { tall: info.tall, season: info.season === "leaf" ? 1 : info.season === "reed" ? 2 : 0, sway: info.sway, leaf: rgb(leafOf(k)) as [number, number, number] };
   });
-  const forest = new Forest(engine.device, engine.target, engine.frameU.layout, engine.terrain, models, kinds);
+  const forest = new Forest(engine.device, engine.target, engine.frameU.layout, engine.terrain, engine.hiz, models, kinds);
   engine.drawables.push(forest);
   if (import.meta.env.DEV) Object.assign(window, { forest });
 
