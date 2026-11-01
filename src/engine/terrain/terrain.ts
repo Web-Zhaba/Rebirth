@@ -4,7 +4,10 @@ import { ecefToGeodetic, type Vec3 } from "../geo/ellipsoid";
 import { MAX_MERCATOR_LAT, tileKey } from "../geo/mercator";
 import { createShader } from "../gpu/wgsl";
 import { DEM_SIZE } from "../bake/terrarium";
-import { DemStream } from "../stream/demStream";
+import { DRAPE_MAX_ZOOM } from "../bake/drape";
+import type { DrapeResponse } from "../bake/drapeWorker";
+import { demStream, TileStream } from "../stream/demStream";
+import { DrapePages, type DrapePage } from "./drapePages";
 import { DEM_MAX_ZOOM, HeightPages, type Page } from "./heightPages";
 import { morphBand } from "./morph";
 import { buildIndices, buildNodeVertices, CAP_NORTH, capFlags, GRID, NODE_FLOATS, nodeOrigin, poleLocal } from "./nodeMesh";
@@ -21,10 +24,12 @@ export const EXAGGERATION = 1.6; // MapLibre relief (src/map/relief.ts RELIEF_EX
 
 const MAX_NODES = 4096; // chunk-table capacity per frame
 const SLOTS = 1024; // resident node vertex blocks
-const NODE_STRIDE = 24; // floats per chunk-table entry (96 B, struct Node in terrain.wgsl)
+const NODE_STRIDE = 28; // floats per chunk-table entry (112 B, struct Node in terrain.wgsl)
 const NO_PAGE = 0xffffffff;
 const VERTEX_BUILDS_PER_FRAME = 64; // 64 x 35 KB ~ 2.2 MB
-const UPLOADS_PER_FRAME = 6; // 6 x 266 KB pages ~ 1.6 MB: with the vertex builds inside the 4 MB/frame budget of section 6
+const UPLOADS_PER_FRAME = 4; // 4 x 266 KB height pages ~ 1 MB
+const DRAPE_UPLOADS_PER_FRAME = 4; // 4 x 256 KB drape pages ~ 1 MB: with the vertex builds inside the 4 MB/frame budget of section 6
+const DRAPE_LAYERS = 256; // 64 MB of rgba8 pages
 const HB_REBUILD = 1000; // m: rebuild a node's vertices when its base height is this far from its height range's middle
 const EVICT_BATCH = 32;
 const EQUATOR = 2 * Math.PI * 6378137;
@@ -42,11 +47,20 @@ export interface TerrainStats {
   selectionHash: number;
   morph: { lo: number; hi: number };
   deferredUploads: number; // decoded pages waiting (e.g. every page layer in use)
+  drapePages: number;
+  drapePending: number;
 }
 
 export class Terrain {
   readonly pages: HeightPages;
-  readonly stream = new DemStream(8);
+  readonly stream = demStream(8);
+  readonly drape: DrapePages;
+  readonly drapeStream = new TileStream<DrapeResponse, DrapePage>(
+    "drape",
+    () => new Worker(new URL("../bake/drapeWorker.ts", import.meta.url), { type: "module" }),
+    (key, r) => ({ key, rgba: r.rgba }),
+    6,
+  );
   private cache = new NodeCache();
   private prevSplit = new Set<number>();
   private nextSplit = new Set<number>();
@@ -76,10 +90,11 @@ export class Terrain {
   tau = DEFAULT_TAU;
   morphing = true; // false: no geomorphing (A/B in devtools: __engine.terrain.morphing = false)
   maxZoom = MAX_ZOOM;
-  stats: TerrainStats = { nodes: 0, visited: 0, maxZoom: 0, pages: 0, pageLayers: 0, pending: 0, inFlight: 0, missing: 0, vertexBuilds: 0, selectionHash: 0, morph: { lo: 0, hi: 0 }, deferredUploads: 0 };
+  stats: TerrainStats = { nodes: 0, visited: 0, maxZoom: 0, pages: 0, pageLayers: 0, pending: 0, inFlight: 0, missing: 0, vertexBuilds: 0, selectionHash: 0, morph: { lo: 0, hi: 0 }, deferredUploads: 0, drapePages: 0, drapePending: 0 };
 
   constructor(private readonly device: GPUDevice, target: RenderTarget, frameLayout: GPUBindGroupLayout, frameLayers: number) {
     this.pages = new HeightPages(device, frameLayers);
+    this.drape = new DrapePages(device, Math.min(DRAPE_LAYERS, frameLayers));
     for (let i = SLOTS - 1; i >= 0; i--) this.freeSlots.push(i);
     const idx = buildIndices();
     this.indexCount = idx.length;
@@ -94,6 +109,8 @@ export class Terrain {
         { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "read-only-storage" } },
         { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: "read-only-storage" } },
         { binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: { sampleType: "unfilterable-float", viewDimension: "2d-array" } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d-array" } },
+        { binding: 4, visibility: GPUShaderStage.FRAGMENT, sampler: { type: "filtering" } },
       ],
     });
     this.bindGroup = device.createBindGroup({
@@ -102,6 +119,8 @@ export class Terrain {
         { binding: 0, resource: { buffer: this.nodeBuf } },
         { binding: 1, resource: { buffer: this.vertBuf } },
         { binding: 2, resource: this.pages.texture.createView({ dimension: "2d-array" }) },
+        { binding: 3, resource: this.drape.texture.createView({ dimension: "2d-array" }) },
+        { binding: 4, resource: device.createSampler({ magFilter: "linear", minFilter: "linear", addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge" }) },
       ],
     });
     const module = createShader(device, "terrain", terrainWgsl, { GRID });
@@ -123,6 +142,9 @@ export class Terrain {
     return h === null ? null : Math.max(h, 0) * EXAGGERATION;
   };
 
+  // Water coverage 0..1 under a point from the drape pages, or null before any page covers it.
+  waterAt = (lat: number, lng: number): number | null => this.drape.waterAt(lat, lng);
+
   private ranges: HeightRanges = {
     source: (z, x, y) => this.pages.source(z, x, y),
     version: () => this.pages.version,
@@ -136,11 +158,14 @@ export class Terrain {
     this.frameNo++;
     this.cache.frame = this.frameNo;
     this.pages.frame = this.frameNo;
+    this.drape.frame = this.frameNo;
     if (this.frameNo % 120 === 0) this.cache.sweep();
 
     // Upload what the worker finished since the last frame, within the budget.
     const deferred = this.pages.upload(this.stream.take(UPLOADS_PER_FRAME));
     if (deferred.length) this.stream.putBack(deferred);
+    const drapeDeferred = this.drape.upload(this.drapeStream.take(DRAPE_UPLOADS_PER_FRAME));
+    if (drapeDeferred.length) this.drapeStream.putBack(drapeDeferred);
 
     const eyeGeo = ecefToGeodetic(v.eye);
     const sv: SelectView = {
@@ -176,6 +201,9 @@ export class Terrain {
       }
 
     this.stream.beginFrame();
+    this.drapeStream.beginFrame();
+    let lastDrapeWant = -1;
+    let lastDrapeAncestor = -1;
     let count = 0;
     let builds = 0;
     let missing = 0;
@@ -263,6 +291,26 @@ export class Terrain {
       } else f[o + 16] = f[o + 17] = f[o + 18] = f[o + 19] = 0;
       u[o + 21] = s;
       u[o + 22] = node.z;
+      // Drape page: the node's own tile up to DRAPE_MAX_ZOOM, ancestors standing in while it bakes.
+      const dpage = this.drape.best(node.z, node.x, node.y);
+      writePage(f, u, o + 24, o + 27, node, dpage);
+      const dz = Math.min(node.z, DRAPE_MAX_ZOOM);
+      if (!dpage || dpage.z < dz) {
+        const want = tileKey(dz, node.x >> (node.z - dz), node.y >> (node.z - dz));
+        if (want !== lastDrapeWant && !this.drapeStream.isFailed(want)) {
+          lastDrapeWant = want;
+          const dx = node.center[0] - eye[0];
+          const dy = node.center[1] - eye[1];
+          const dzz = node.center[2] - eye[2];
+          this.drapeStream.want(want, dz + Math.min(0.99, Math.sqrt(dx * dx + dy * dy + dzz * dzz) / 4e7));
+          if (dz >= 3) {
+            const az = dz - 3;
+            const ak = tileKey(az, node.x >> (node.z - az), node.y >> (node.z - az));
+            if (ak !== lastDrapeAncestor && !this.drape.has(ak)) this.drapeStream.want(ak, az);
+            lastDrapeAncestor = ak;
+          }
+        }
+      }
       count++;
       if (node.z > maxZ) maxZ = node.z;
       hash = (Math.imul(hash, 31) + node.x * 3 + node.y * 5 + node.z * 7 + (page ? page.z * 11 : 0) + (parent ? parent.z * 13 : 0)) | 0;
@@ -273,8 +321,10 @@ export class Terrain {
         for (let x = 0; x < 2 ** z; x++) {
           const key = tileKey(z, x, y);
           if (!this.pages.has(key)) this.stream.want(key, -1);
+          if (!this.drape.has(key)) this.drapeStream.want(key, -1);
         }
     this.stream.pump();
+    this.drapeStream.pump();
     this.drawCount = count;
     if (count) this.device.queue.writeBuffer(this.nodeBuf, 0, this.table, 0, count * NODE_STRIDE * 4);
     this.stats = {
@@ -290,6 +340,8 @@ export class Terrain {
       selectionHash: hash,
       morph: band,
       deferredUploads: this.stream.decoded,
+      drapePages: this.drape.resident,
+      drapePending: this.drapeStream.pending,
     };
   }
 

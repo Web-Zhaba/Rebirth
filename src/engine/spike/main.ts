@@ -80,6 +80,7 @@ async function main(): Promise<void> {
       `frame ${interval.toFixed(1)} ms  cpu ${cpuAvg.toFixed(2)} ms  gpu ${engine.timer ? engine.timer.last.toFixed(2) + " ms" : "n/a"}`,
       `nodes ${s.nodes} (visited ${s.visited}, max z${s.maxZoom}, built ${s.vertexBuilds})`,
       `pages ${s.pages}/${s.pageLayers}  pending ${s.pending} (in flight ${s.inFlight}, missing ${s.missing})`,
+      `drape ${s.drapePages} pages, pending ${s.drapePending}`,
       `lat ${state.lat.toFixed(5)} lng ${state.lng.toFixed(5)} d ${fmtDist(state.distance)} hd ${state.heading.toFixed(0)} p ${state.pitch.toFixed(0)}`,
       `eye ${fmtDist(v.eyeAboveGround)} above ground, near ${v.near.toFixed(2)} m`,
     ].join("\n");

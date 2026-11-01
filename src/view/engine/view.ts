@@ -73,10 +73,13 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
       const p = engine.project(at[1], at[0], engine.groundAt(at[1], at[0]) ?? 0);
       return p ? ([p[0], p[1]] as ScreenPoint) : ([NaN, NaN] as ScreenPoint);
     },
-    // Until the water mask exists (N3): sea level is the water. Sky counts as water too, so nothing gets founded there.
+    // The drape's water mask (what the player sees); sea level stands in until a page covers the point. Sky counts as
+    // water too, so nothing gets founded there.
     isWaterAt(point) {
       const p = engine.pick(point[0], point[1]);
-      return !p || p.h <= 0;
+      if (!p) return true;
+      const w = engine.terrain.waterAt(p.lat, p.lng);
+      return w === null ? p.h <= 0 : w >= 0.5;
     },
 
     on<K extends keyof ViewEvents>(type: K, fn: (e: ViewEvents[K]) => void) {

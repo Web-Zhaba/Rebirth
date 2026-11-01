@@ -54,7 +54,11 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
 function credits(): HTMLElement {
   const el = document.createElement("div");
   el.className = "engine-attrib";
-  el.innerHTML = `Рельеф: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Mapzen Terrarium, AWS Open Data</a>`;
+  el.innerHTML =
+    `Рельеф: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Mapzen Terrarium, AWS Open Data</a> | ` +
+    `<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ` +
+    `<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">&copy; OpenMapTiles</a> ` +
+    `<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; участники OpenStreetMap</a>`;
   return el;
 }
 
