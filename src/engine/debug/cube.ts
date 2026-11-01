@@ -1,3 +1,4 @@
+import type { RenderTarget } from "../gpu/device";
 import "../frame/frameUniforms";
 import { enuAt, geodeticToEcef, type Vec3 } from "../geo/ellipsoid";
 import { writeRelative } from "../frame/chunkTable";
@@ -15,8 +16,7 @@ export class DebugCube {
 
   constructor(
     private readonly device: GPUDevice,
-    format: GPUTextureFormat,
-    depthFormat: GPUTextureFormat,
+    target: RenderTarget,
     frameLayout: GPUBindGroupLayout,
     readonly lat: number,
     readonly lng: number,
@@ -33,9 +33,10 @@ export class DebugCube {
       label: "cube",
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, layout] }),
       vertex: { module, entryPoint: "vs" },
-      fragment: { module, entryPoint: "fs", targets: [{ format }] },
+      fragment: { module, entryPoint: "fs", targets: [{ format: target.format }] },
       primitive: { topology: "triangle-list", cullMode: "none" },
-      depthStencil: { format: depthFormat, depthWriteEnabled: true, depthCompare: "greater" },
+      depthStencil: { format: target.depthFormat, depthWriteEnabled: true, depthCompare: "greater" },
+      multisample: { count: target.sampleCount },
     });
   }
 

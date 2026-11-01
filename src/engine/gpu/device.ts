@@ -11,6 +11,14 @@ export interface Gpu {
 }
 
 export const DEPTH_FORMAT: GPUTextureFormat = "depth32float";
+export const SAMPLE_COUNT = 4; // MSAA: tree/impostor edges use alpha-to-coverage later, and terrain silhouettes need it now
+
+// What every pipeline of the main pass must agree on.
+export interface RenderTarget {
+  format: GPUTextureFormat;
+  depthFormat: GPUTextureFormat;
+  sampleCount: number;
+}
 
 export class WebGpuUnavailable extends Error {}
 

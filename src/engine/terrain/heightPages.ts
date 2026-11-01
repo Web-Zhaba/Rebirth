@@ -17,7 +17,7 @@ export const DEM_MAX_ZOOM = 11; // MapLibre's terrain zoom (src/world/nature.ts 
 const PINNED_ZOOM = 2; // z0-z2 (21 pages) are never evicted: the fallback of last resort
 const CPU_COPIES = 64; // pages kept on the CPU for camera/ground queries
 
-interface Page {
+export interface Page {
   key: number;
   z: number;
   x: number;
@@ -45,6 +45,8 @@ export class HeightPages {
   frame = 0;
   uploads = 0;
   evictions = 0;
+  exhausted = 0; // uploads deferred because every layer was in use
+  version = 0; // bumped when the resident set changes
 
   constructor(private readonly device: GPUDevice, layers: number) {
     this.layers = layers;
@@ -83,6 +85,21 @@ export class HeightPages {
     }
   }
 
+  // Key of the page `best` would return (-1: none), without marking it used: lets node bounds skip unchanged ranges.
+  source(z: number, x: number, y: number): number {
+    let pz = Math.min(z, DEM_MAX_ZOOM);
+    let px = x >> (z - pz);
+    let py = y >> (z - pz);
+    for (;;) {
+      const k = tileKey(pz, px, py);
+      if (this.pages.has(k)) return k;
+      if (pz === 0) return -1;
+      pz--;
+      px >>= 1;
+      py >>= 1;
+    }
+  }
+
   // Raw height range over tile (z, x, y) from the finest resident page: the page's 16 x 16 block grid narrows it for
   // nodes deeper than the page, so a high camera over a z11 page does not see 2 km of relief under every node.
   range(z: number, x: number, y: number): { min: number; max: number; z: number } | null {
@@ -107,14 +124,15 @@ export class HeightPages {
     return { min: lo, max: hi, z: p.z };
   }
 
-  // Upload decoded pages; returns how many went in.
-  upload(list: DemPage[]): number {
-    for (const d of list) {
+  // Upload decoded pages; returns the ones that did not fit (every layer is in use this frame) for a later frame.
+  upload(list: DemPage[]): DemPage[] {
+    for (let n = 0; n < list.length; n++) {
+      const d = list[n];
       if (this.pages.has(d.key)) continue;
       const layer = this.allocate();
       if (layer < 0) {
-        console.warn("[engine] height page pool exhausted");
-        return 0;
+        this.exhausted++;
+        return list.slice(n);
       }
       const t = keyToTile(d.key);
       const edges = new Float32Array(4 * DEM_SIZE);
@@ -127,6 +145,7 @@ export class HeightPages {
       }
       const page: Page = { key: d.key, ...t, layer, min: d.min, max: d.max, blocks: d.blocks, lastUsed: this.frame, edges, cpu: h };
       this.pages.set(d.key, page);
+      this.version++;
       this.cpuCount++;
       this.trimCpu();
       // Pull the neighbours' edges into this page's border before the upload, then push ours into theirs.
@@ -135,7 +154,7 @@ export class HeightPages {
       this.patchNeighbours(page);
       this.uploads++;
     }
-    return list.length;
+    return [];
   }
 
   // Raw DEM height (m, not exaggerated) at a point from the finest page that still has a CPU copy, or null.
@@ -161,6 +180,7 @@ export class HeightPages {
     }
     if (!victim) return -1;
     this.pages.delete(victim.key);
+    this.version++;
     if (victim.cpu) this.cpuCount--;
     this.evictions++;
     return victim.layer;

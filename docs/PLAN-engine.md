@@ -264,6 +264,31 @@ Done (2026-11-01).
 (parity with today's drag/scroll/touch/trackpad, inertia, fly), atmosphere/sky, lighting from the game clock, terrain
 CDLOD with exact game-area heights, picking. `view` implemented by the engine: you can found a town and look around.
 
+Done (2026-11-01). `/?engine=next` runs the game on the engine (remembered in localStorage, `?engine=maplibre` goes
+back; falls back to MapLibre without WebGPU).
+
+- Core: `src/engine/engine.ts` — frame loop, 4× MSAA, one reversed-Z depth, `Drawable`s, `pick` (march + bisect,
+  `camera/pick.ts`), `project`, `onBeforeFrame`/`onFrame`, `light` provider. A generic baker pool, gpu pools and a
+  frame graph are not built yet: they arrive with the first content that needs them (N3 vector tiles).
+- Camera (`camera/controller.ts`, implements `camera/cameraControl.ts`): grab-pan that keeps the ground point under
+  the cursor, wheel/dblclick/pinch zoom about the cursor, rotate/pitch, trackpad (reuses `src/map/trackpadModel.ts` —
+  move it into `src/engine/camera/` before N8), touch, keyboard, MapLibre-like inertia, van Wijk–Nuij `flyTo`,
+  `fitBounds`. Gaps: no touch zoom/rotate inertia or double-tap; touch pitch heuristic simpler than MapLibre's.
+- Terrain: CDLOD geomorphing (vertex target = midpoint on the parent grid, factor from the vertex's own screen-space
+  error; split/merge never pop), node origin at mid-height (worst error 0.02 mm 1–100 m from the eye at any eye
+  height), allocation-free selection (`terrain.update` 1.3 → 0.3 ms in the mountain orbit), stream scheduler with
+  backoff, misses and cancellation (`stream/scheduler.ts`), polar caps (cone to the mean edge height).
+- Rules heights: `src/world/terrain.ts` samples across z11 tile edges with the engine's texel convention (3×3 block,
+  neighbours loaded only near edges); points > 2.5 px from an edge are unchanged.
+- View backend `src/view/engine/`: events from DOM + pick, DOM markers moved every frame, `isWaterAt` = ground ≤ 0
+  until the water mask (N3), overlays keep data only (drawn in N4), terrain credits.
+- Lighting: the sun of the game clock (`sim/weather.ts sunDirection`, already in ECEF axes) via the mount's `light`
+  option; before founding the fixed mid-morning sun; a dim night ambient on the terrain.
+- Bench (RDNA4, 1280×720, ms median): GPU globe 0.33, mountains 0.98, forest 0.79 — ~3× N0, most likely the MSAA +
+  full-screen sky added after N0 (morphing on/off measures the same); CPU 0.1 / 0.5 / 0.3, 2.5–3× lower than N0.
+- Known: an orbit needs ~980 DEM pages against a 512-layer pool and S3 serves ~54 pages/s, so wide orbits keep
+  streaming; the night is dark-blue only (no moon direction, stars or lights yet).
+
 **N3. Nature base.** drape baker (landcover, water mask, waterways, shore, forest tint), water surface (port
 `waterLayer` shading to WGSL, shore from depth), MSDF text (place labels), markers, attribution.
 

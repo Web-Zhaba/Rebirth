@@ -1,9 +1,10 @@
 import type { DemRequest, DemResponse } from "../bake/demWorker";
 import { keyToTile } from "../geo/mercator";
+import { RequestScheduler } from "./scheduler";
 
-// DEM request scheduler: each frame the terrain says which pages it wants and how urgent they are; the scheduler
-// keeps at most `maxInFlight` fetches running, most urgent first, and queues finished pages for upload. Coarse pages
-// go first (lower priority value) so a parent is there to fall back on while children load.
+// DEM streaming: the scheduler (scheduler.ts) decides what to fetch, the bake worker fetches and decodes, finished
+// pages queue here for upload. Coarse pages go first (lower priority value) so a parent is there to fall back on while
+// children load. Transient failures retry with backoff; missing tiles and given-up ones are left to the parent page.
 
 export interface DemPage {
   key: number;
@@ -13,48 +14,44 @@ export interface DemPage {
   max: number;
 }
 
+const MAX_READY = 32; // decoded pages held back while the page pool is full
+
 export class DemStream {
   private worker: Worker;
-  private nextId = 1;
-  private inFlight = new Map<number, number>(); // request id -> page key
-  private inFlightKeys = new Set<number>();
-  private failed = new Set<number>();
-  private wanted = new Map<number, number>(); // key -> priority, rebuilt every frame
+  private readonly sched: RequestScheduler;
   private ready: DemPage[] = [];
   private readyKeys = new Set<number>();
   fetched = 0;
   failures = 0;
   bakeMs = 0;
 
-  constructor(private readonly maxInFlight = 8) {
+  constructor(maxInFlight = 8) {
     this.worker = new Worker(new URL("../bake/demWorker.ts", import.meta.url), { type: "module" });
     this.worker.onmessage = (e: MessageEvent<DemResponse>) => this.done(e.data);
     this.worker.onerror = (e) => console.error("[engine] DEM worker error", e.message);
+    this.sched = new RequestScheduler(
+      {
+        start: (id, key) => {
+          const t = keyToTile(key);
+          this.worker.postMessage({ type: "load", id, z: t.z, x: t.x, y: t.y } satisfies DemRequest);
+        },
+        cancel: (id) => this.worker.postMessage({ type: "cancel", id } satisfies DemRequest),
+      },
+      { maxInFlight },
+    );
   }
 
   beginFrame(): void {
-    this.wanted.clear();
+    this.sched.beginFrame();
   }
 
   want(key: number, priority: number): void {
-    if (this.failed.has(key) || this.inFlightKeys.has(key) || this.readyKeys.has(key)) return;
-    const p = this.wanted.get(key);
-    if (p === undefined || priority < p) this.wanted.set(key, priority);
+    if (this.readyKeys.has(key)) return;
+    this.sched.want(key, priority);
   }
 
-  // Launch the most urgent wanted pages.
   pump(): void {
-    const free = this.maxInFlight - this.inFlight.size;
-    if (free <= 0 || this.wanted.size === 0) return;
-    const list = [...this.wanted].sort((a, b) => a[1] - b[1]);
-    for (let i = 0; i < Math.min(free, list.length); i++) {
-      const key = list[i][0];
-      const id = this.nextId++;
-      this.inFlight.set(id, key);
-      this.inFlightKeys.add(key);
-      const t = keyToTile(key);
-      this.worker.postMessage({ id, z: t.z, x: t.x, y: t.y } satisfies DemRequest);
-    }
+    this.sched.pump();
   }
 
   // Up to `n` decoded pages for upload, oldest first (the per-frame upload budget lives with the caller).
@@ -64,43 +61,58 @@ export class DemStream {
     return out;
   }
 
+  // Decoded pages the caller could not place (pool full): keep a few for a later frame instead of fetching them again;
+  // beyond that they are dropped and fetched again if still wanted.
+  putBack(pages: DemPage[]): void {
+    for (let i = pages.length - 1; i >= 0; i--) {
+      const p = pages[i];
+      if (this.readyKeys.has(p.key) || this.ready.length >= MAX_READY) continue;
+      this.ready.unshift(p);
+      this.readyKeys.add(p.key);
+    }
+  }
+
   get decoded(): number {
     return this.ready.length;
   }
 
+  // Missing upstream or given up on after retries: stop waiting, the parent page stands in.
   isFailed(key: number): boolean {
-    return this.failed.has(key);
+    return this.sched.isDead(key);
   }
 
   isLoading(key: number): boolean {
-    return this.inFlightKeys.has(key);
+    return this.sched.state(key) === "running";
   }
 
   // Wanted-but-not-started, running and decoded-but-not-uploaded: zero means the view has everything it asked for.
   get pending(): number {
-    return this.wanted.size + this.inFlight.size + this.ready.length;
+    return this.sched.pending + this.ready.length;
   }
 
   get running(): number {
-    return this.inFlight.size;
+    return this.sched.inFlight;
+  }
+
+  get stats(): { missing: number; failed: number; cancelled: number; retries: number } {
+    return { missing: this.sched.missingCount, failed: this.sched.failedCount, cancelled: this.sched.cancelled, retries: this.sched.retries };
   }
 
   private done(r: DemResponse): void {
-    const key = this.inFlight.get(r.id);
-    if (key === undefined) return;
-    this.inFlight.delete(r.id);
-    this.inFlightKeys.delete(key);
     if (r.ok) {
+      const key = this.sched.succeeded(r.id);
+      if (key === undefined) return; // cancelled meanwhile
       this.fetched++;
       this.bakeMs += r.ms;
       this.ready.push({ key, heights: r.heights, blocks: r.blocks, min: r.min, max: r.max });
       this.readyKeys.add(key);
-    } else {
-      // Missing tiles stay missing for the session: no retry storm, the parent page covers the area.
-      this.failures++;
-      this.failed.add(key);
-      console.warn("[engine] DEM tile failed", keyToTile(key), r.status, r.error);
+      return;
     }
+    if (r.status === -1) return; // our own cancel
+    const state = this.sched.failed(r.id, r.status);
+    if (state === undefined || state === "missing") return;
+    this.failures++;
+    if (state === "failed") console.warn("[engine] DEM tile given up after retries", r.status, r.error);
   }
 
   dispose(): void {

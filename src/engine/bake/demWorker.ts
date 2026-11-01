@@ -1,14 +1,10 @@
 import { decodeToPage, DEM_SIZE, terrariumUrl } from "./terrarium";
 
 // DEM bake job: fetch a terrarium tile, decode it into a bordered f32 page and hand the buffer back (transferred, no
-// copy). The main thread only uploads. N2 grows this into the worker pool of docs/PLAN-engine.md section 3.3.
+// copy). The main thread only uploads. Requests can be cancelled (the fetch is aborted); a cancelled job answers with
+// status -1. N2 grows this into the worker pool of docs/PLAN-engine.md section 3.3.
 
-export interface DemRequest {
-  id: number;
-  z: number;
-  x: number;
-  y: number;
-}
+export type DemRequest = { type: "load"; id: number; z: number; x: number; y: number } | { type: "cancel"; id: number };
 
 export type DemResponse =
   | { id: number; ok: true; heights: Float32Array<ArrayBuffer>; blocks: Float32Array<ArrayBuffer>; min: number; max: number; ms: number }
@@ -21,19 +17,32 @@ const scope = self as unknown as {
 };
 const canvas = new OffscreenCanvas(DEM_SIZE, DEM_SIZE);
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const jobs = new Map<number, AbortController>();
 
-scope.onmessage = async (e: MessageEvent<DemRequest>) => {
-  const { id, z, x, y } = e.data;
+scope.onmessage = (e: MessageEvent<DemRequest>) => {
+  const m = e.data;
+  if (m.type === "cancel") {
+    jobs.get(m.id)?.abort();
+    return;
+  }
+  void load(m.id, m.z, m.x, m.y);
+};
+
+async function load(id: number, z: number, x: number, y: number): Promise<void> {
   const t0 = performance.now();
+  const abort = new AbortController();
+  jobs.set(id, abort);
   try {
     if (!ctx) throw new Error("2d context unavailable");
-    const res = await fetch(terrariumUrl(z, x, y));
+    const res = await fetch(terrariumUrl(z, x, y), { signal: abort.signal });
     if (!res.ok) {
       scope.postMessage({ id, ok: false, status: res.status, error: res.statusText } satisfies DemResponse);
       return;
     }
+    const blob = await res.blob();
+    if (abort.signal.aborted) throw new DOMException("aborted", "AbortError");
     // No colour management or premultiplication: the RGB bytes encode metres.
-    const bmp = await createImageBitmap(await res.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
+    const bmp = await createImageBitmap(blob, { colorSpaceConversion: "none", premultiplyAlpha: "none" });
     ctx.clearRect(0, 0, DEM_SIZE, DEM_SIZE);
     ctx.drawImage(bmp, 0, 0);
     bmp.close();
@@ -41,6 +50,9 @@ scope.onmessage = async (e: MessageEvent<DemRequest>) => {
     const msg: DemResponse = { id, ok: true, heights: page.heights, blocks: page.blocks, min: page.min, max: page.max, ms: performance.now() - t0 };
     scope.postMessage(msg, [page.heights.buffer, page.blocks.buffer]);
   } catch (err) {
-    scope.postMessage({ id, ok: false, status: 0, error: String(err) } satisfies DemResponse);
+    const cancelled = abort.signal.aborted;
+    scope.postMessage({ id, ok: false, status: cancelled ? -1 : 0, error: String(err) } satisfies DemResponse);
+  } finally {
+    jobs.delete(id);
   }
-};
+}

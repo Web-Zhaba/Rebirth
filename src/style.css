@@ -601,3 +601,33 @@ button:hover:not(:disabled) {
 .tooltip .tip-row.tip-bad > span:last-child {
   color: var(--bad);
 }
+
+/* Own map engine (src/view/engine): credits in the compact attribution's look, and the WebGPU fallback notice. */
+.engine-attrib {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 0 6px;
+  background-color: var(--paper);
+  color: var(--ink);
+  border: var(--bw) solid var(--ink);
+  font-size: var(--fs-xs);
+}
+
+.engine-attrib a {
+  color: var(--info);
+}
+
+.engine-fallback {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 8px 12px;
+  background-color: var(--paper);
+  color: var(--ink);
+  border: var(--bw) solid var(--ink);
+  font-size: var(--fs-sm, var(--fs-xs));
+}

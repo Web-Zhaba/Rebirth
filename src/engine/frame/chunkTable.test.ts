@@ -15,8 +15,9 @@ function rng(seed: number) {
   };
 }
 
-// Worst error over random points around an eye standing `eyeH` above the ellipsoid, using nodes of zoom z.
-function worstError(lat: number, lng: number, eyeH: number, z: number, n = 2000): number {
+// Worst error over random points around an eye standing `eyeH` above the ellipsoid, using nodes of zoom z whose
+// origin and vertices sit at base height `hb` (terrain/nodeMesh.ts: the middle of the node's height range).
+function worstError(lat: number, lng: number, eyeH: number, z: number, hb = eyeH, n = 2000): number {
   const eye = geodeticToEcef(lat, lng, eyeH);
   const rand = rng(12345);
   let worst = 0;
@@ -28,15 +29,19 @@ function worstError(lat: number, lng: number, eyeH: number, z: number, n = 2000)
     const d = 10 ** (rand() * 2);
     const dir = [0, 1, 2].map((i) => (e.east[i] * Math.sin(az) + e.north[i] * Math.cos(az)) * Math.cos(el) + e.up[i] * Math.sin(el));
     const p: Vec3 = [eye[0] + dir[0] * d, eye[1] + dir[1] * d, eye[2] + dir[2] * d];
-    // Decompose as the terrain does: a surface point of the node (stored f32 relative to the node origin) lifted by h
-    // along its geodetic up.
+    // Decompose as the terrain does: a point of the node at base height hb (stored f32 relative to the node origin,
+    // itself at hb) lifted by h - hb (f32 in the shader) along its geodetic up.
     const g = ecefToGeodetic(p);
     const t = tileAt(g.lng, g.lat, z);
-    const origin = nodeOrigin(z, t.x, t.y);
-    const surface = geodeticToEcef(g.lat, g.lng, 0);
+    const origin = nodeOrigin(z, t.x, t.y, hb);
+    const base = geodeticToEcef(g.lat, g.lng, hb);
     const up = enuAt(g.lat, g.lng).up;
-    const rel = shaderRelative(origin, eye, localOffset(surface, origin), up, g.h);
-    const truth = [p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]];
+    // Heights are f32 data (the page), so the true point is at the f32 height: that rounding is fixed on the ground,
+    // not something the eye's position changes.
+    const h = Math.fround(g.h);
+    const rel = shaderRelative(origin, eye, localOffset(base, origin), up, Math.fround(h - Math.fround(hb)));
+    const q = geodeticToEcef(g.lat, g.lng, h);
+    const truth = [q[0] - eye[0], q[1] - eye[1], q[2] - eye[2]];
     worst = Math.max(worst, Math.hypot(rel[0] - truth[0], rel[1] - truth[1], rel[2] - truth[2]));
   }
   return worst;
@@ -54,9 +59,15 @@ describe("chunk-table precision", () => {
       }
     });
 
+  it("stays sub-0.1 mm on a 4 km summit because the node origin sits at its mid-height (0.46 mm at h = 0)", () => {
+    const summit = 2500 * 1.6;
+    expect(worstError(47.08, 12.69, summit, MAX_ZOOM, 0)).toBeGreaterThan(0.0002);
+    expect(worstError(47.08, 12.69, summit, MAX_ZOOM, summit - 150)).toBeLessThan(0.0001);
+  });
+
   it("would not be with one z11-sized node around the eye (why the quadtree goes deeper)", () => {
     // Informative bound: ~20 km nodes leave f32 local offsets at ulp ~1 mm.
-    expect(worstError(60, 179.99, 2, 11)).toBeLessThan(0.005);
+    expect(worstError(60, 179.99, 2, 11, 0)).toBeLessThan(0.005);
   });
 
   it("would be metres off with absolute f32 ECEF (the thing floating origin avoids)", () => {

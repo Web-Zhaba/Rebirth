@@ -2,12 +2,18 @@
 #include "atmosphere"
 
 // Globe terrain: one instanced draw, an instance per selected quadtree node. Node i's chunk-table entry carries its
-// origin relative to the eye (f64 subtraction on the CPU, stored f32), its vertex slot and its height page.
+// origin relative to the eye (f64 subtraction on the CPU, stored f32), its vertex slot, its height page and the page
+// its parent would draw with (the geomorph target, terrain/morph.ts).
 
 struct Node {
   rel: vec4f,   // xyz node origin - eye (m), w skirt depth (m)
-  uv: vec4f,    // xy page uv of the node's corner, z uv scale, w page texel size at the equator (m)
-  info: vec4u,  // x page layer (NO_PAGE = none), y vertex slot, z node zoom, w unused
+  uv: vec4f,    // own page: xy uv of the node's corner, z uv scale, w page texel size at the equator (m)
+  puv: vec4f,   // the parent's page, same layout
+  morph: vec4f, // x base height hb of the vertices (m, as drawn), y cell at the equator x K (0 = never morph), z lo, w hi
+  pole: vec3f,  // cap apex (the pole at the cap height) relative to the origin: z > 0 north cap on the top edge,
+                // z < 0 south cap on the bottom edge, 0 no cap (z0, never drawn as a leaf, gets the north one only)
+  apexH: f32,   // the cap height (m, as drawn)
+  info: vec4u,  // x page layer (NO_PAGE = none), y vertex slot, z node zoom, w parent page layer
 };
 
 @group(1) @binding(0) var<storage, read> nodes: array<Node>;
@@ -18,6 +24,7 @@ const GRID: u32 = ${GRID}u;
 const GRID_VERTS: u32 = GRID * GRID;
 const NO_PAGE: u32 = 0xffffffffu;
 const DEM: f32 = 256.0;
+const NIGHT_AMBIENT = vec3f(0.035, 0.045, 0.08);
 
 // Bilinear height from a bordered page, centre convention: line-by-line copy of bake/terrarium.ts samplePage.
 fn pageHeight(layer: u32, uv: vec2f) -> f32 {
@@ -32,6 +39,18 @@ fn pageHeight(layer: u32, uv: vec2f) -> f32 {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
+// Drawn height: exaggerated, sea surface at 0 until water gets its own mesh (N3).
+fn drawnHeight(layer: u32, uv: vec2f) -> f32 {
+  if (layer == NO_PAGE) {
+    return 0.0;
+  }
+  return max(pageHeight(layer, uv), 0.0) * frame.params.x;
+}
+
+fn gridUv(r: vec4f, ij: vec2u) -> vec2f {
+  return r.xy + vec2f(ij) * (r.z / f32(GRID - 1u));
+}
+
 fn skirtSource(k: u32) -> u32 {
   let e = k / GRID;
   let t = k % GRID;
@@ -43,6 +62,12 @@ fn skirtSource(k: u32) -> u32 {
   }
 }
 
+// Grid vertex ij on the parent's surface, node-local (relative to the origin at base height hb).
+fn parentPoint(node: Node, ij: vec2u) -> vec3f {
+  let base = (node.info.y * GRID_VERTS + ij.y * GRID + ij.x) * 2u;
+  return verts[base].xyz + verts[base + 1u].xyz * (drawnHeight(node.info.w, gridUv(node.puv, ij)) - node.morph.x);
+}
+
 struct VsOut {
   @builtin(position) pos: vec4f,
   @location(0) rel: vec3f,
@@ -51,6 +76,12 @@ struct VsOut {
   @location(3) @interpolate(flat) layer: u32,
   @location(4) @interpolate(flat) texM: f32,
   @location(5) @interpolate(flat) zoom: u32,
+  @location(6) puv: vec2f,
+  @location(7) @interpolate(flat) player: u32,
+  @location(8) @interpolate(flat) ptexM: f32,
+  @location(9) morph: f32,
+  @location(10) cap: f32, // 0 on the edge row, 1 at the pole
+  @location(11) capH: f32, // drawn height of the vertex, for the cap's albedo
 };
 
 @vertex
@@ -58,22 +89,58 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut
   let node = nodes[ii];
   var g = vi;
   var skirt = 0.0;
+  var cap = 0u;
   if (vi >= GRID_VERTS) {
-    g = skirtSource(vi - GRID_VERTS);
+    let k = vi - GRID_VERTS;
+    g = skirtSource(k);
     skirt = 1.0;
+    let e = k / GRID;
+    if ((e == 0u && node.pole.z > 0.0) || (e == 2u && node.pole.z < 0.0)) {
+      cap = 1u;
+    }
   }
-  let i = g % GRID;
-  let j = g / GRID;
+  let ij = vec2u(g % GRID, g / GRID);
   let base = (node.info.y * GRID_VERTS + g) * 2u;
   let local = verts[base].xyz;
   let up = verts[base + 1u].xyz;
-  let uv = node.uv.xy + vec2f(f32(i), f32(j)) * (node.uv.z / f32(GRID - 1u));
-  var h = 0.0;
-  if (node.info.x != NO_PAGE) {
-    h = max(pageHeight(node.info.x, uv), 0.0) * frame.params.x; // sea surface until water gets its own mesh (N3)
-  }
+  let uv = gridUv(node.uv, ij);
+  let dh = drawnHeight(node.info.x, uv) - node.morph.x;
+
   // Same order as frame/chunkTable.ts shaderRelative: (origin - eye) + local, then the height along the normal.
-  let rel = node.rel.xyz + local + up * (h - skirt * node.rel.w);
+  var rel = node.rel.xyz + local + up * (dh - skirt * node.rel.w);
+
+  // Geomorph towards the parent grid by this vertex's own screen-space error (terrain/morph.ts).
+  var m = 0.0;
+  if (node.morph.y > 0.0) {
+    let err = node.morph.y * length(up.xy) / max(length(rel), 1e-3);
+    m = clamp((node.morph.w - err) / (node.morph.w - node.morph.z), 0.0, 1.0);
+  }
+  if (m > 0.0) {
+    let odd = ij & vec2u(1u);
+    var a = ij;
+    var b = ij;
+    if (odd.x == 1u && odd.y == 0u) {
+      a = ij - vec2u(1u, 0u);
+      b = ij + vec2u(1u, 0u);
+    } else if (odd.x == 0u && odd.y == 1u) {
+      a = ij - vec2u(0u, 1u);
+      b = ij + vec2u(0u, 1u);
+    } else if (odd.x == 1u && odd.y == 1u) {
+      a = vec2u(ij.x + 1u, ij.y - 1u);
+      b = vec2u(ij.x - 1u, ij.y + 1u);
+    }
+    let goal = 0.5 * (parentPoint(node, a) + parentPoint(node, b));
+    rel += m * (goal - (local + up * dh));
+  }
+
+  // Polar cap: the north (south) skirt becomes a fan from the edge row to one apex shared by every cap node, so the
+  // fans of neighbours close on each other.
+  var drawnH = dh + node.morph.x;
+  if (cap != 0u) {
+    rel = node.rel.xyz + node.pole;
+    drawnH = node.apexH;
+  }
+
   var o: VsOut;
   o.pos = frame.viewProj * vec4f(rel, 1.0);
   o.rel = rel;
@@ -82,12 +149,35 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut
   o.layer = node.info.x;
   o.texM = node.uv.w;
   o.zoom = node.info.z;
+  o.puv = gridUv(node.puv, ij);
+  o.player = node.info.w;
+  o.ptexM = node.puv.w;
+  o.morph = m;
+  o.cap = 0.0;
+  o.capH = drawnH;
+  if (cap != 0u) {
+    // The fan repeats the edge row's page uv towards the pole: shade it flat, height from the geometry.
+    o.up = vec3f(0.0, 0.0, sign(node.pole.z));
+    o.cap = 1.0;
+  }
   return o;
 }
 
 fn lodTint(z: u32) -> vec3f {
   let k = f32(z % 6u) / 6.0;
   return 0.5 + 0.5 * cos(6.2831 * (k + vec3f(0.0, 0.33, 0.67)));
+}
+
+// Raw height (m) and its east/north gradient from a page at uv.
+fn surface(layer: u32, uv: vec2f, texM: f32, cosLat: f32) -> vec3f {
+  let h = pageHeight(layer, uv);
+  let d = 1.0 / DEM;
+  let hw = max(pageHeight(layer, uv - vec2f(d, 0.0)), 0.0);
+  let he = max(pageHeight(layer, uv + vec2f(d, 0.0)), 0.0);
+  let hn = max(pageHeight(layer, uv - vec2f(0.0, d)), 0.0);
+  let hs = max(pageHeight(layer, uv + vec2f(0.0, d)), 0.0);
+  let span = 2.0 * texM * cosLat;
+  return vec3f(h, (he - hw) / span, (hn - hs) / span); // page v grows south
 }
 
 @fragment
@@ -97,21 +187,20 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   var h = 0.0;
   var slope = 0.0;
   if (v.layer != NO_PAGE) {
-    h = pageHeight(v.layer, v.uv);
-    let d = 1.0 / DEM;
-    let hw = max(pageHeight(v.layer, v.uv - vec2f(d, 0.0)), 0.0);
-    let he = max(pageHeight(v.layer, v.uv + vec2f(d, 0.0)), 0.0);
-    let hn = max(pageHeight(v.layer, v.uv - vec2f(0.0, d)), 0.0);
-    let hs = max(pageHeight(v.layer, v.uv + vec2f(0.0, d)), 0.0);
     let cosLat = max(length(up.xy), 0.01);
-    let span = 2.0 * v.texM * cosLat;
-    let gx = (he - hw) / span; // dh/d(east)
-    let gy = (hn - hs) / span; // dh/d(north): page v grows south
-    slope = degrees(atan(length(vec2f(gx, gy))));
+    var s = surface(v.layer, v.uv, v.texM, cosLat);
+    // Morphing nodes shade towards the parent's page too, so a merge does not pop the lighting either.
+    if (v.morph > 0.0 && v.player != v.layer && v.player != NO_PAGE) {
+      s = mix(s, surface(v.player, v.puv, v.ptexM, cosLat), v.morph);
+    }
+    let capK = smoothstep(0.0, 0.05, v.cap);
+    s = vec3f(mix(s.x, v.capH / frame.params.x, capK), s.yz * (1.0 - capK));
+    h = s.x;
+    slope = degrees(atan(length(s.yz)));
     let east = normalize(vec3f(-up.y, up.x, 0.0));
     let north = cross(up, east);
     let ex = frame.params.x;
-    n = normalize(up - east * gx * ex - north * gy * ex);
+    n = normalize(up - east * s.y * ex - north * s.z * ex);
   }
 
   // Albedo by height and slope (real metres, not exaggerated): lowland green, dry uplands, rock, snow, sea.
@@ -124,13 +213,16 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     n = up;
   }
   if (frame.params.y > 0.5) {
-    albedo = mix(albedo, lodTint(v.zoom) * 0.5, 0.6);
+    // Blends towards the parent level's tint as the vertex morphs: smooth colours mean no pops.
+    let tint = mix(lodTint(v.zoom), lodTint(v.zoom + 5u), clamp(v.morph, 0.0, 1.0));
+    albedo = mix(albedo, tint * 0.5, 0.6);
   }
 
   let light = sunLightAt(up);
   let sun = frame.sun.w * max(dot(n, frame.sun.xyz), 0.0);
   let sky = 0.35 * (0.6 + 0.4 * dot(n, up)) * vec3f(0.55, 0.65, 0.85);
   var c = albedo * (vec3f(sun) + sky) * light;
+  c += albedo * NIGHT_AMBIENT * (1.0 - light); // moon and starlight: the night side stays readable, not black
 
   let alt = max(h, 0.0) * frame.params.x;
   c = applyAir(c, opticalDepth(length(v.rel), frame.eye.w, alt), light);

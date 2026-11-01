@@ -1,0 +1,141 @@
+import { prefersReducedMotion } from "../../map/motion";
+import type { Engine } from "../../engine/engine";
+import type { CameraControl, CameraTarget } from "../../engine/camera/cameraControl";
+import type { Camera, CameraGoal, LngLat, Overlay, OverlayId, ScreenPoint, View, ViewEvents, ViewMarker } from "../view";
+import { CLICK_TOLERANCE, distanceToMpp, isClick, markerTransform, mppToDistance, type MarkerAnchor } from "./scale";
+
+const POINTER_EVENTS = ["click", "contextmenu", "mousedown", "mousemove", "mouseup"] as const;
+type PointerType = (typeof POINTER_EVENTS)[number];
+
+// Same pin as MapLibre's default marker, tinted.
+const pinSvg = (color: string) =>
+  `<svg display="block" width="27" height="41" viewBox="0 0 27 41" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 0C6 0 0 6 0 13.5 0 23.6 13.5 41 13.5 41S27 23.6 27 13.5C27 6 21 0 13.5 0z" fill="${color}" stroke="#000" stroke-opacity=".3"/><circle cx="13.5" cy="13.5" r="5" fill="#fff"/></svg>`;
+
+// The View on the own engine: the canvas is the engine's, the camera is its control, events come from the canvas.
+export function createEngineView(engine: Engine, camera: CameraControl, container: HTMLElement): View {
+  const canvas = engine.canvas;
+  const heightPx = () => canvas.clientHeight || 1;
+  const fov = () => engine.state.fovY;
+
+  const target = (goal: CameraGoal): CameraTarget => ({
+    ...(goal.center && { lng: goal.center[0], lat: goal.center[1] }),
+    ...(goal.distance !== undefined ? { distance: goal.distance } : goal.mpp !== undefined ? { distance: mppToDistance(goal.mpp, fov(), heightPx()) } : {}),
+    ...(goal.heading !== undefined && { heading: goal.heading }),
+    ...(goal.pitch !== undefined && { pitch: goal.pitch }),
+  });
+
+  const local = (e: MouseEvent): ScreenPoint => {
+    const r = canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+
+  // Markers: DOM over the canvas, repositioned every frame.
+  const layer = document.createElement("div");
+  layer.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1";
+  container.append(layer);
+  type Marker = { at: LngLat; holder: HTMLElement; anchor: MarkerAnchor };
+  const markers = new Set<Marker>();
+  const place = (m: Marker) => {
+    const p = engine.project(m.at[1], m.at[0], engine.groundAt(m.at[1], m.at[0]) ?? 0);
+    if (!p) m.holder.style.display = "none";
+    else {
+      m.holder.style.display = "";
+      m.holder.style.transform = markerTransform(p[0], p[1], m.anchor);
+    }
+  };
+  engine.onFrame(() => markers.forEach(place));
+
+  // Overlays (road preview, lots, radii...) are drawn by the engine from N4. Until then the latest data is just kept.
+  const overlays = new Map<OverlayId, Overlay & { data: unknown }>();
+
+  return {
+    canvas,
+    container,
+
+    camera(): Camera {
+      const s = engine.state;
+      return { center: [s.lng, s.lat], distance: s.distance, heading: s.heading, pitch: s.pitch };
+    },
+    metersPerPixel: () => distanceToMpp(engine.state.distance, fov(), heightPx()),
+    jumpTo: (goal) => camera.jumpTo(target(goal)),
+    flyTo(goal) {
+      if (prefersReducedMotion()) camera.jumpTo(target(goal));
+      else camera.flyTo(target(goal));
+    },
+    fitBounds(bounds, { padding, minMpp }) {
+      camera.fitBounds(bounds, { padding, minDistance: mppToDistance(minMpp, fov(), heightPx()), animate: !prefersReducedMotion() });
+    },
+
+    setPanEnabled: (on) => camera.setPanEnabled(on),
+    setDoubleClickZoomEnabled: (on) => camera.setDoubleClickZoomEnabled(on),
+
+    project(at) {
+      const p = engine.project(at[1], at[0], engine.groundAt(at[1], at[0]) ?? 0);
+      return p ? ([p[0], p[1]] as ScreenPoint) : ([NaN, NaN] as ScreenPoint);
+    },
+    // Until the water mask exists (N3): sea level is the water. Sky counts as water too, so nothing gets founded there.
+    isWaterAt(point) {
+      const p = engine.pick(point[0], point[1]);
+      return !p || p.h <= 0;
+    },
+
+    on<K extends keyof ViewEvents>(type: K, fn: (e: ViewEvents[K]) => void) {
+      if ((POINTER_EVENTS as readonly string[]).includes(type)) {
+        const kind = type as PointerType;
+        const call = fn as (e: ViewEvents["click"]) => void;
+        let down: ScreenPoint | null = null;
+        const onDown = (e: MouseEvent) => void (down = local(e));
+        const handler = (e: MouseEvent) => {
+          const point = local(e);
+          if (kind === "click" && !isClick(down, point, CLICK_TOLERANCE)) return;
+          const g = engine.pick(point[0], point[1]);
+          if (!g) return; // the pointer is off the planet
+          call({ lngLat: [g.lng, g.lat], point, original: e });
+        };
+        if (kind === "click") canvas.addEventListener("mousedown", onDown);
+        canvas.addEventListener(kind, handler);
+        return () => {
+          canvas.removeEventListener(kind, handler);
+          canvas.removeEventListener("mousedown", onDown);
+        };
+      }
+      return camera.on(type as "move", fn as () => void);
+    },
+
+    // The pin's tip stands on the point; a custom element is centred on it (MapLibre's defaults).
+    addMarker(opts, at): ViewMarker {
+      const holder = document.createElement("div");
+      holder.style.cssText = "position:absolute;left:0;top:0;will-change:transform";
+      let anchor: MarkerAnchor;
+      if ("element" in opts) {
+        anchor = "center";
+        holder.append(opts.element);
+      } else {
+        anchor = "bottom";
+        holder.innerHTML = pinSvg(opts.color);
+      }
+      layer.append(holder);
+      const m: Marker = { at, holder, anchor };
+      markers.add(m);
+      place(m);
+      return {
+        setLngLat(next) {
+          m.at = next;
+          place(m);
+        },
+        remove() {
+          markers.delete(m);
+          holder.remove();
+        },
+      };
+    },
+    overlay(id) {
+      let o = overlays.get(id);
+      if (!o) {
+        o = { data: null, setData(data) { this.data = data; } };
+        overlays.set(id, o);
+      }
+      return o;
+    },
+  };
+}

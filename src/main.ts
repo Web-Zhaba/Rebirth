@@ -11,7 +11,10 @@ import { attachToolRepeat } from "./map/tools";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
+import { tryMountEngineView, wantsEngine } from "./view/engine/mount";
 import { mountMapLibreView, installDevHandles } from "./view/maplibre/mount";
+import type { MapLibreView } from "./view/maplibre/view";
+import type { View } from "./view/view";
 import { TOWN_START_MPP } from "./view/scale";
 import { App } from "./ui/App";
 import { followResidentById } from "./ui/follow";
@@ -29,7 +32,9 @@ const cloudSite = computed(() => {
   return w ? { seed: w.seed, phase: w.phase } : null;
 });
 const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
-const view = mountMapLibreView({
+// ?engine=next mounts the own WebGPU engine (src/view/engine) instead of MapLibre; it needs none of the renderer layers.
+const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: sunLight }) : null;
+const view: View = engineMount?.view ?? mountMapLibreView({
   container: "map",
   frame,
   gameClock,
@@ -61,5 +66,6 @@ load();
 // simClient again: a second module instance would start a second worker writing the same save.
 if (import.meta.env.DEV) {
   Object.assign(window, { simClient });
-  installDevHandles(view);
+  if (engineMount) Object.assign(window, { __engine: engineMount });
+  else installDevHandles(view as MapLibreView);
 }
