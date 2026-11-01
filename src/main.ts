@@ -39,7 +39,7 @@ const cloudSite = computed(() => {
 });
 const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
 // ?engine=next mounts the own WebGPU engine (src/view/engine) instead of MapLibre; it needs none of the renderer layers.
-const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: { ...sunLight, lng: computed(() => city.value?.lng ?? 0) }, weather: weatherNow, debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1", life: { trips: lifeTrips, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById } }) : null;
+const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: { ...sunLight, lng: computed(() => city.value?.lng ?? 0) }, weather: weatherNow, cloudSite, debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1", life: { trips: lifeTrips, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById } }) : null;
 const view: View = engineMount?.view ?? mountMapLibreView({
   container: "map",
   frame,

@@ -1,5 +1,6 @@
 import { CubeTexture, Data3DTexture, DataTexture, LinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType } from "three";
 import { requestCube, requestNoise, type CubeResult } from "./cloudData";
+import { interval, REBUILD_MIN } from "./constants";
 import { BASE_SIZE, DETAIL_SIZE } from "./noise3d";
 import type { CloudSite } from "./settings";
 import type { ThreeHost } from "../three/host";
@@ -9,13 +10,7 @@ import { STORM_MAX } from "./weatherCube";
 // the ground shadows so each cube is built and uploaded once. Cube A holds interval k, cube B interval k + 1; shaders
 // mix them by `mix` so fronts glide between rebuilds.
 
-export const REBUILD_MIN = 30; // game minutes between two cubes
-
-// Interval of game minute t and how far through it we are (0..1).
-export function interval(t: number): { k: number; f: number } {
-  const k = Math.floor(t / REBUILD_MIN);
-  return { k, f: t / REBUILD_MIN - k };
-}
+export { interval, REBUILD_MIN } from "./constants";
 
 export interface WeatherTextures {
   cubeA: CubeTexture; // swapped with cubeB when time moves on by one interval

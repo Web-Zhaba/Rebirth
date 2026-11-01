@@ -1,5 +1,6 @@
 #include "frame"
 #include "atmosphere"
+#include "weather"
 
 // The town's models (scene/townMesh.ts): a WGSL port of the three.js model layer's shaders (map/modelLayer.ts). Vertices
 // are metres in the east/north/up frame of the town origin; `model.rel` is the origin minus the eye (f64 on the CPU), so
@@ -12,9 +13,8 @@ struct Model {
   n: vec4f,
   u: vec4f,
   light: vec4f,   // xyz light direction in the origin's frame, w sun strength 0..1 (clouds/shadowMath sunStrength)
-  params: vec4f,  // x snow cover 0..1, y how lit the place is (day 1 .. night 0), zw unused
+  params: vec4f,  // x how lit the place is (day 1 .. night 0), yzw unused
   lamp: vec4f,    // xyz how bright house, work and tavern lights are now
-  snowCol: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> model: Model;
@@ -38,6 +38,7 @@ struct VsOut {
   @location(3) z: f32,
   @location(4) xy: vec2f,
   @location(5) lamp: f32,
+  @location(6) shade: f32, // cloud shadow (sky/weather.wgsl cloudShade): kilometre patches, per vertex is plenty
 };
 
 @vertex
@@ -51,6 +52,7 @@ fn vs(v: VsIn) -> VsOut {
   o.z = v.z; // height above the model's own ground (Model.lift), what facades are laid out by
   o.xy = v.pos.xy; // metres east and north of the origin, for patterns laid out in world space
   o.lamp = v.lamp;
+  o.shade = cloudShade(rel, model.u.xyz, 0.0);
   return o;
 }
 
@@ -91,18 +93,6 @@ fn nearDoor(dk: i32, z: f32, f: vec4f) -> bool {
   let dw = select(1.0, 2.6, dk == 2);
   let dh = select(2.0, 2.5, dk == 2);
   return dk > 0 && abs(f.x - f.y * 0.5) < dw * 0.5 + 0.6 && z < dh + 0.4;
-}
-
-fn hash2(p: vec2f) -> f32 {
-  return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
-}
-
-// Smooth value noise 0..1, for the patches the snow lies in.
-fn vnoise(p: vec2f) -> f32 {
-  let i = floor(p);
-  var f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), f.x), mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), f.x), f.y);
 }
 
 // Dark seams every "period" metres of x, gone once they get thinner than a pixel.
@@ -205,22 +195,19 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     col = mix(col, wood, leaf);
   }
   let n = normalize(v.n);
-  let snow = model.params.x;
-  if (snow > 0.0) {
-    // snow lies on what faces up; a thin snowpack is patchy, a thick one closes up; roads keep less of it (trodden)
-    let up = smoothstep(0.12, 0.45, n.z);
-    let blotch = 0.55 * vnoise(v.xy * 0.9) + 0.3 * vnoise(v.xy * 2.7 + 7.0) + 0.15 * hash2(floor(v.xy * 5.0));
-    let lim = 1.0 - snow * 1.3;
-    let a = up * smoothstep(lim, lim + 0.25, blotch) * mix(0.35, 0.95, snow);
-    col = mix(col, model.snowCol.rgb, a * select(1.0, 0.5, code >= 30));
-  }
+  // Rain darkens what it falls on, roofs and roads most; snow lies on what faces up, as on the ground around
+  // (sky/weather.wgsl, the same patches in the same town frame); roads keep less of it (trodden).
+  let up = smoothstep(0.12, 0.45, n.z);
+  col *= 1.0 - weather.ground.y * mix(0.08, 0.2, up);
+  let snow = snowShare(v.xy, up, weather.ground.x, 0.0);
+  col = mix(col, weather.snowCol.rgb, snow * select(1.0, 0.5, code >= 30));
   let d = max(dot(n, model.light.xyz), 0.0);
   var k = mix(0.55, 1.0, d) * mix(0.88, 1.0, model.light.w);
   if (abs(n.z) < 0.5) {
     k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z)); // walls darken towards the ground
   }
   // The old map's dusk-blue night tint, as a dimming by how lit the place is (the ground goes dark the same way).
-  return vec4f(col * k * mix(NIGHT, vec3f(1.0), model.params.y), 1.0);
+  return vec4f(col * k * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
 }
 
 // Window light: only the glass of lit buildings, added on top (blending one, one). Each window of a building is lit or

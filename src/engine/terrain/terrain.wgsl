@@ -1,5 +1,6 @@
 #include "frame"
 #include "atmosphere"
+#include "weather"
 
 // Globe terrain: one instanced draw, an instance per selected quadtree node. Node i's chunk-table entry carries its
 // origin relative to the eye (f64 subtraction on the CPU, stored f32), its vertex slot, its height page and the page
@@ -40,6 +41,8 @@ const GROUND_AIR = 0.12;
 // The game's drawings keep their palette colours like on the old flat map (they are a map, not paint on the ground);
 // at night they dim only this far, so a tool preview stays readable.
 const OVERLAY_NIGHT = 0.45;
+// Snow and ice are brighter than the atlas: they must read white under the same light.
+const SNOW_GAIN = 0.8;
 
 // Bilinear height from a bordered page, centre convention: line-by-line copy of bake/terrarium.ts samplePage.
 fn pageHeight(layer: u32, uv: vec2f) -> f32 {
@@ -205,6 +208,7 @@ fn surface(layer: u32, uv: vec2f, texM: f32, cosLat: f32) -> vec3f {
 
 @fragment
 fn fs(v: VsOut) -> @location(0) vec4f {
+  let foot = length(fwidth(v.rel)); // ground width of the pixel (m); derivatives need uniform control flow
   let up = normalize(v.up);
   var n = up;
   var h = 0.0;
@@ -242,6 +246,19 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   }
   n = normalize(mix(n, up, water)); // water lies flat whatever the DEM says under it
 
+  // The town's weather on its ground (sky/weather.wgsl): wet earth darkens, snow lies on what is flat enough, ice
+  // closes the water.
+  let tg = townGround(v.rel);
+  if (tg > 0.0) {
+    albedo *= 1.0 - 0.3 * weather.ground.y * tg * (1.0 - water);
+    let snow = snowShare(townXY(v.rel), smoothstep(0.5, 0.8, dot(n, up)), weather.ground.x * tg, foot) * (1.0 - water);
+    albedo = mix(albedo, srgbToLinear(weather.snowCol.rgb) * SNOW_GAIN, snow);
+    let ice = 0.8 * smoothstep(0.15, 0.8, weather.ground.z) * tg * water;
+    albedo = mix(albedo, srgbToLinear(weather.iceCol.rgb) * SNOW_GAIN, ice);
+    water *= 1.0 - ice;
+    n = normalize(mix(n, up, ice));
+  }
+
   // The game's drawings (premultiplied, linear): the finest overlay level that covers the point.
   var ov = vec4f(0.0);
   for (var l = 0; l < 3; l++) {
@@ -275,7 +292,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
 
   let alt = max(h, 0.0) * frame.params.x;
   c = applyAir(c, GROUND_AIR * opticalDepth(length(v.rel), frame.eye.w, alt), light);
-  var out = toneMap(c);
+  var out = toneMap(c) * cloudDim(cloudShade(v.rel, up, foot));
   if (ov.a > 0.0) {
     let paint = pow(ov.rgb / ov.a, vec3f(1.0 / 2.2)) * mix(OVERLAY_NIGHT, 1.0, light);
     out = mix(out, paint, ov.a);

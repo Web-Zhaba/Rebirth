@@ -90,3 +90,5 @@ export interface View {
 // same everywhere.
 export const REF_LAT = 55;
 export const mppAtZoom = (zoom: number, lat = REF_LAT) => (2 * Math.PI * 6371008.8 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+// Its inverse, for the visual fades still written in the old zoom levels (clouds, weather cover).
+export const zoomAtMpp = (mpp: number, lat = REF_LAT) => Math.log2((2 * Math.PI * 6371008.8 * Math.cos((lat * Math.PI) / 180)) / (512 * mpp));

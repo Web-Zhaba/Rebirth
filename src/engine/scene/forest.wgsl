@@ -1,4 +1,5 @@
 #include "frame"
+#include "weather"
 
 // The forest's trees and small details (scene/forest.ts), drawn from the scatter's instances (forestScatter.wgsl):
 // near ones as their models, far ones as impostors facing the camera (scene/treeAtlas.ts), both lit, recoloured with the
@@ -72,6 +73,7 @@ struct MeshOut {
   @location(2) p: vec3f, // model position scaled, for the noise of bare twigs and snow
   @location(3) @interpolate(flat) info: vec4f, // x kind, y hash, z shade, w crown
   @location(4) h: f32,
+  @location(5) cloud: f32, // cloud shadow at the tree (sky/weather.wgsl cloudShade)
 };
 
 @vertex
@@ -95,6 +97,7 @@ fn meshVs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) col: ve
   o.p = pos * s + inst.b.y * 17.0;
   o.info = vec4f(inst.b.w, inst.b.y, inst.b.z, crown);
   o.h = pos.z;
+  o.cloud = cloudShade(inst.a.xyz, forest.u.xyz, 0.0);
   return o;
 }
 
@@ -106,7 +109,7 @@ fn meshFs(v: MeshOut) -> @location(0) vec4f {
     discard;
   }
   let spot = smoothstep(0.35, 0.65, cell(v.p * 1.6 + 3.1));
-  return vec4f(shade(v.c, normalize(v.n), v.info.w, v.h, spot, kind, v.info.y, v.info.z), 1.0);
+  return vec4f(shade(v.c, normalize(v.n), v.info.w, v.h, spot, kind, v.info.y, v.info.z) * cloudDim(v.cloud), 1.0);
 }
 
 struct ImpOut {
@@ -116,6 +119,7 @@ struct ImpOut {
   @location(2) r: vec3f, // the quad's right
   @location(3) up: vec3f, // the quad's up
   @location(4) @interpolate(flat) info: vec4f, // x kind, y hash, z shade, w mirrored (-1/1)
+  @location(5) cloud: f32,
 };
 
 @vertex
@@ -143,6 +147,7 @@ fn impostorVs(@builtin(vertex_index) vi: u32, inst: Inst) -> ImpOut {
   o.r = toLocal(R);
   o.up = toLocal(V);
   o.info = vec4f(inst.b.w, hash, inst.b.z, flip);
+  o.cloud = cloudShade(inst.a.xyz, U, 0.0);
   return o;
 }
 
@@ -159,5 +164,5 @@ fn impostorFs(v: ImpOut) -> @location(0) vec4f {
   }
   let nv = (t.xy * 2.0 - 1.0) * vec2f(v.info.w, 1.0);
   let n = normalize(v.r * nv.x + v.up * nv.y + v.f * sqrt(max(0.0, 1.0 - dot(nv, nv))));
-  return vec4f(shade(a.rgb, n, crown, t.z, 0.5, kind, v.info.y, v.info.z), cover);
+  return vec4f(shade(a.rgb, n, crown, t.z, 0.5, kind, v.info.y, v.info.z) * cloudDim(v.cloud), cover);
 }

@@ -14,6 +14,9 @@ import { attachLife, type LifeOptions } from "./life";
 import { attachModels } from "./models";
 import { attachPlaceLabels } from "./placeLabels";
 import { attachStatsHud } from "./statsHud";
+import { attachSmoke } from "./smoke";
+import { attachWeather } from "./weather";
+import type { CloudSite } from "../../map/clouds/settings";
 import { createEngineView } from "./view";
 
 export interface EngineMountOptions {
@@ -21,7 +24,8 @@ export interface EngineMountOptions {
   // The sun of the game clock (the map's clock: another season's while the admin panel previews one). Before a town
   // exists there is no climate phase and the engine keeps its fixed mid-morning sun.
   light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null>; lng: ReadonlySignal<number> };
-  weather?: ReadonlySignal<WeatherState | null>; // snow on roofs and roads
+  weather?: ReadonlySignal<WeatherState | null>; // the town's weather: snow, wet ground, ice, rain, smoke
+  cloudSite?: ReadonlySignal<CloudSite | null>; // the weather site the clouds are drawn for (seed and phase)
   debug3dModels?: boolean;
   life?: LifeOptions; // walkers, carts and the evening glows
 }
@@ -63,8 +67,10 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   const view = createEngineView(engine, camera, container);
   if (o.life) attachLife(engine, view, o.life);
   attachGameLayers(engine);
-  attachModels(engine, { light: o.light, weather: o.weather, debug: o.debug3dModels });
+  if (o.light && o.cloudSite) attachWeather(engine, { clock: o.light.clock, site: o.cloudSite, weather: o.weather });
+  attachModels(engine, { light: o.light, debug: o.debug3dModels });
   const forest = attachForest(engine, { clock: o.light?.clock, weather: o.weather });
+  attachSmoke(engine, { clock: o.light?.clock, weather: o.weather });
   attachPlaceLabels(engine, container);
   attachGameLabels(engine, container);
   container.append(credits());

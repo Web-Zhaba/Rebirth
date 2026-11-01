@@ -54,6 +54,11 @@ describe("needsMarch", () => {
     const m2 = Float64Array.from(matrix);
     m2[5] += 1e-9;
     expect(needsMarch(made, { ...key, matrix: m2 }, false, 1100)).toBe(true);
+    // keys longer than a matrix (the engine appends its eye position) compare every entry
+    expect(needsMarch(made, { ...key, matrix: [...matrix, 1, 2, 3] }, false, 1100)).toBe(true);
+    const long = { ...made, matrix: [...matrix, 1, 2, 3] };
+    expect(needsMarch(long, { ...key, matrix: [...matrix, 1, 2, 3] }, false, 1100)).toBe(false);
+    expect(needsMarch(long, { ...key, matrix: [...matrix, 1, 2, 3.5] }, false, 1100)).toBe(true);
     expect(needsMarch(made, { ...key, width: 961 }, false, 1100)).toBe(true);
     expect(needsMarch(made, { ...key, fade: 0.5 }, false, 1100)).toBe(true);
     expect(needsMarch(made, { ...key, quality: "low" }, false, 1100)).toBe(true);

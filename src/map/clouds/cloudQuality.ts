@@ -40,7 +40,7 @@ export const FLASH_FRAME_MS = 33; // while lightning flashes the march runs at m
 
 // What a march was made for. Two equal keys give the same picture.
 export interface MarchKey {
-  matrix: ArrayLike<number>; // main matrix of the view
+  matrix: ArrayLike<number>; // main matrix of the view (any length: the engine adds its eye position)
   width: number; // target size
   height: number;
   clock: number; // game minutes
@@ -56,7 +56,8 @@ export interface MadeMarch extends MarchKey {
 }
 
 const sameMatrix = (a: ArrayLike<number>, b: ArrayLike<number>) => {
-  for (let i = 0; i < 16; i++) if (a[i] !== b[i]) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
 };
 

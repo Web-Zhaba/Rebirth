@@ -2,10 +2,12 @@ import type { CameraView } from "../camera/camera";
 import type { Vec3 } from "../geo/ellipsoid";
 import frameWgsl from "./frame.wgsl?raw";
 import { registerWgsl } from "../gpu/wgsl";
+import { WeatherGpu } from "../sky/weather";
 
 registerWgsl("frame", frameWgsl);
 
-// The Frame uniform of frame.wgsl: bind group 0 for every pass.
+// Bind group 0 for every pass: the Frame uniform of frame.wgsl and the weather of sky/weather.wgsl (its textures are
+// replaced when the weather cubes change size or swap, so the group is rebuilt then).
 
 const FLOATS = 16 + 6 * 4;
 
@@ -19,17 +21,48 @@ export interface FrameParams {
 
 export class FrameUniforms {
   readonly layout: GPUBindGroupLayout;
-  readonly bindGroup: GPUBindGroup;
+  readonly weather: WeatherGpu;
   private buffer: GPUBuffer;
   private data = new Float32Array(FLOATS);
+  private group: GPUBindGroup | null = null;
+  private groupGeneration = -1;
 
   constructor(private readonly device: GPUDevice) {
+    const all = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
     this.layout = device.createBindGroupLayout({
       label: "frame",
-      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, buffer: { type: "uniform" } }],
+      entries: [
+        { binding: 0, visibility: all, buffer: { type: "uniform" } },
+        { binding: 1, visibility: all, buffer: { type: "uniform" } },
+        { binding: 2, visibility: all, texture: { viewDimension: "cube" } },
+        { binding: 3, visibility: all, texture: { viewDimension: "cube" } },
+        { binding: 4, visibility: all, texture: { viewDimension: "3d" } },
+        { binding: 5, visibility: all, sampler: {} },
+      ],
     });
     this.buffer = device.createBuffer({ label: "frame", size: FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.bindGroup = device.createBindGroup({ layout: this.layout, entries: [{ binding: 0, resource: { buffer: this.buffer } }] });
+    this.weather = new WeatherGpu(device);
+  }
+
+  get bindGroup(): GPUBindGroup {
+    const w = this.weather;
+    if (!this.group || this.groupGeneration !== w.generation) {
+      const [a, b] = w.cubeViews;
+      this.group = this.device.createBindGroup({
+        label: "frame",
+        layout: this.layout,
+        entries: [
+          { binding: 0, resource: { buffer: this.buffer } },
+          { binding: 1, resource: { buffer: w.buffer } },
+          { binding: 2, resource: a },
+          { binding: 3, resource: b },
+          { binding: 4, resource: w.base.createView() },
+          { binding: 5, resource: w.sampler },
+        ],
+      });
+      this.groupGeneration = w.generation;
+    }
+    return this.group;
   }
 
   write(v: CameraView, p: FrameParams): void {

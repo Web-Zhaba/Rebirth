@@ -1,8 +1,6 @@
 import { computed, effect, signal, type ReadonlySignal } from "@preact/signals";
 import { calendar } from "../../sim/clock";
-import type { WeatherState } from "../../sim/weather";
 import { frame } from "../../simClient";
-import { TREE_COLORS } from "../../ui/palette";
 import type { Frame } from "../../world/frame";
 import type { Engine } from "../../engine/engine";
 import { enuAt, geodeticToEcef } from "../../engine/geo/ellipsoid";
@@ -10,10 +8,8 @@ import { TOWN_VERTEX_FLOATS, TownMesh, type TownMeshData } from "../../engine/sc
 import { EXAGGERATION } from "../../engine/terrain/terrain";
 import { sunStrength } from "../../map/clouds/shadowMath";
 import { lightOpacity } from "../../map/lifeLayer";
-import { rgb, type Model } from "../../map/modelGeometry";
+import type { Model } from "../../map/modelGeometry";
 import { coverOf, demoModelItems, keyOf, lampOf, modelEmitters, quantise, seatedModelOf, type Emitter, type ModelItem } from "../../map/modelItems";
-import { snowOpacity } from "../../map/weatherMath";
-import { weatherMapOn } from "../../map/weatherSettings";
 import { ruinWallModel } from "../../map/ruinsGeometry";
 import { buildingItems } from "../layers/buildings";
 import { roadItems } from "../layers/roads";
@@ -24,7 +20,8 @@ import { mppAtZoom } from "../view";
 // The town's buildings and built roads on the engine (scene/townMesh.ts), from the same items and model builders as the
 // old three.js layer (map/modelItems.ts): each item's model is seated on the engine's ground, projected once into the
 // origin's east/north/up frame in float64 and cached by everything that shapes it; a change of the list re-projects
-// only the changed items. Lighting, snow and the window lights follow the game clock and weather every frame.
+// only the changed items. Lighting and the window lights follow the game clock every frame; the weather on them is the
+// engine's (sky/weather.wgsl).
 
 const FALLBACK_LIGHT: [number, number, number] = [-0.45, -0.55, 0.7];
 const RETRY_FRAMES = 20; // while the ground under the town is still streaming, look again this often
@@ -43,7 +40,6 @@ const norm = (v: [number, number, number]): [number, number, number] => {
 
 export interface ModelOptions {
   light?: { clock: ReadonlySignal<number> };
-  weather?: ReadonlySignal<WeatherState | null>;
   debug?: boolean; // every model kind instead of the town (map/modelItems.ts demoModelItems)
 }
 
@@ -120,7 +116,6 @@ export function attachModels(engine: Engine, opts: ModelOptions): void {
     return true;
   };
 
-  const snowCol = rgb(TREE_COLORS.snow);
   engine.onBeforeFrame(() => {
     const tf = frame.peek();
     if (tf && dirty && wait-- <= 0) {
@@ -140,17 +135,14 @@ export function attachModels(engine: Engine, opts: ModelOptions): void {
     const fb = norm(FALLBACK_LIGHT);
     const d = norm([sun[0], sun[1], Math.max(sun[2], 0.05)]);
     const light = norm([fb[0] + (d[0] - fb[0]) * strength, fb[1] + (d[1] - fb[1]) * strength, fb[2] + (d[2] - fb[2]) * strength]);
-    const w = opts.weather?.peek();
     const clock = opts.light?.clock.peek();
     const cal = clock === undefined ? null : calendar(clock);
     const hour = cal ? cal.hour + cal.minute / 60 : 12;
     mesh.look = {
       sunStrength: strength,
       light,
-      snow: weatherMapOn.peek() && w ? snowOpacity(w.snowpack) / snowOpacity(1) : 0,
       daylight: Math.min(1, Math.max(0, (sun[2] + 0.12) / 0.32)), // the terrain's terminator (atmosphere.wgsl sunLightAt)
       lamps: cal ? [lightOpacity("house", hour), lightOpacity("work", hour), lightOpacity("tavern", hour)] : [0, 0, 0],
-      snowColour: snowCol,
     };
   });
 }

@@ -8,6 +8,7 @@ import { DEPTH_FORMAT, fitCanvas, initGpu, SAMPLE_COUNT, type Gpu, type RenderTa
 import { GpuTimer } from "./gpu/timer";
 import { OverlayRaster } from "./overlay/overlayRaster";
 import { Sky } from "./sky/sky";
+import type { WeatherGpu } from "./sky/weather";
 import { EXAGGERATION, Terrain } from "./terrain/terrain";
 
 // The engine on one canvas (docs/PLAN-engine.md section 4): device, the main pass with MSAA and one reversed-Z depth
@@ -16,6 +17,7 @@ import { EXAGGERATION, Terrain } from "./terrain/terrain";
 
 export interface Drawable {
   occluder?: boolean; // drawn before the Hi-Z build (terrain-like solid geometry that hides what lies behind it)
+  transparent?: boolean; // blended without depth writes: drawn after the sky, which would otherwise paint over it
   update?(view: CameraView, engine: Engine): void;
   compute?(encoder: GPUCommandEncoder): void; // GPU work the draw depends on (culling, scatter), before the main pass
   draw(pass: GPURenderPassEncoder): void;
@@ -88,6 +90,10 @@ export class Engine {
 
   get device(): GPUDevice {
     return this.gpu.device;
+  }
+
+  get weather(): WeatherGpu {
+    return this.frameU.weather;
   }
 
   start(): void {
@@ -220,8 +226,9 @@ export class Engine {
       timestampWrites: times && { querySet: times.querySet, endOfPassWriteIndex: times.endOfPassWriteIndex },
     });
     pass.setBindGroup(0, this.frameU.bindGroup);
-    for (const d of this.drawables) if (!d.occluder) d.draw(pass);
-    this.sky.draw(pass); // last: only pixels nothing else covered pay for the sky
+    for (const d of this.drawables) if (!d.occluder && !d.transparent) d.draw(pass);
+    this.sky.draw(pass); // only pixels nothing solid covered pay for the sky
+    for (const d of this.drawables) if (d.transparent) d.draw(pass);
     pass.end();
     this.timer?.resolveInto(encoder);
     device.queue.submit([encoder.finish()]);

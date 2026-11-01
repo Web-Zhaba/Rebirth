@@ -24,10 +24,8 @@ export interface TownMeshData {
 export interface TownLook {
   sunStrength: number; // 0..1
   light: Vec3; // light direction in the origin's east/north/up frame
-  snow: number; // 0..1
   daylight: number; // how lit the place is, 1 day .. 0 night
   lamps: [house: number, work: number, tavern: number];
-  snowColour: [number, number, number];
 }
 
 interface Mesh {
@@ -49,8 +47,8 @@ export class TownMesh implements Drawable {
   private roadPipe: GPURenderPipeline;
   private buildingPipe: GPURenderPipeline;
   private lampPipe: GPURenderPipeline;
-  private data = new Float32Array(32);
-  look: TownLook = { sunStrength: 1, light: [-0.45, -0.55, 0.7], snow: 0, daylight: 1, lamps: [0, 0, 0], snowColour: [1, 1, 1] };
+  private data = new Float32Array(28);
+  look: TownLook = { sunStrength: 1, light: [-0.45, -0.55, 0.7], daylight: 1, lamps: [0, 0, 0] };
 
   constructor(
     private readonly device: GPUDevice,
@@ -131,9 +129,8 @@ export class TownMesh implements Drawable {
     d.set([o[0] - view.eye[0], o[1] - view.eye[1], o[2] - view.eye[2], 0], 0);
     d.set([...east, 0, ...north, 0, ...up, 0], 4);
     d.set([...l.light, l.sunStrength], 16);
-    d.set([l.snow, l.daylight, 0, 0], 20);
+    d.set([l.daylight, 0, 0, 0], 20);
     d.set([...l.lamps, 0], 24);
-    d.set([...l.snowColour, 1], 28);
     this.device.queue.writeBuffer(this.uniform, 0, d);
   }
 

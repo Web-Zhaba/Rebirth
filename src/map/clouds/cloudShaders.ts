@@ -1,4 +1,5 @@
 import { PALETTE } from "../../ui/palette";
+import { MAX_LIGHT_STEPS, MAX_MARCH_STEPS } from "./constants";
 import { FLASH_MAX } from "./lightning";
 
 // GLSL of the volumetric clouds (PLAN-clouds.md section 5). Plain three ShaderMaterial sources (no glslVersion: three
@@ -14,8 +15,7 @@ import { FLASH_MAX } from "./lightning";
 //   5. shade(): palette grading (lit / ink-blue shade / night dusk / warn terminator / rain pencil / snow ice) + lightning
 //   6. main(): coarse steps in empty air, fine steps inside, early exit under 0.02 transmittance, IGN jitter
 
-export const MAX_MARCH_STEPS = 80;
-export const MAX_LIGHT_STEPS = 6;
+export { MAX_LIGHT_STEPS, MAX_MARCH_STEPS };
 
 const vec3 = (hex: string) => {
   const c = (i: number) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(4);
