@@ -117,6 +117,16 @@ describe("walkers", () => {
     expect(back.pts).toEqual([...out.pts].reverse());
     expect(out.pts[0][1]).toBeCloseTo(3, 6); // starts at the door
   });
+  it("tags walkers with the resident they are and where they are heading", () => {
+    const bs = [building(1, "izba", 100), building(2, "izba", 500), building(10, "tavern", 800), building(11, "smithy", 2000)];
+    const s = town(bs, [{ home: 1, jobs: [10, 11] }, { home: 2, jobs: [11] }]);
+    const w = walks(computeLife(s).trips);
+    expect(w.length).toBeGreaterThan(0);
+    for (const t of w) expect(typeof t.who).toBe("number");
+    expect(w.some((t) => t.purpose === "work")).toBe(true);
+    expect(w.some((t) => t.purpose === "home")).toBe(true);
+    expect(w.filter((t) => t.who === 1).length).toBeGreaterThan(0);
+  });
   it("sends at most 300 commuters but counts them all in the traffic", () => {
     const bs = [...Array.from({ length: 100 }, (_, i) => building(i + 1, "izba", 100 + (i % 20) * 100)), building(200, "smithy", 2500)];
     const s = town(bs, Array.from({ length: 100 }, (_, i) => ({ home: i + 1, jobs: [200, 200, 200, 200] })));

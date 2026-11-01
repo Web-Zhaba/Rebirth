@@ -183,8 +183,21 @@ describe("food", () => {
     expect(d.households[1].mood).toBeCloseTo(60 + (10 + 45 * fed + 10 - 60) / 4);
     expect(d.households[2].mood).toBeCloseTo(60 + (10 + 45 * fed - 60) / 4);
     const again = dailyEconomy({ ...d, gameMinutes: at(14) });
-    expect(again.events).toHaveLength(1);
+    expect(again.events.filter((e) => e.text === "Еда закончилась, люди голодают")).toHaveLength(1);
     expect(again.prod.flags.hungry).toBe(true);
+  });
+  it("a day without food leaves the residents hungry and the second day marks them as starving", () => {
+    let s = busy(folk(town([bld(1, "izba", 0)]), [{ home: 1, adults: 2 }]));
+    s = { ...s, stock: { ...s.stock, food: 0 } };
+    const d1 = dailyEconomy({ ...s, gameMinutes: at(13) });
+    expect(d1.residents[1].needs?.food).toBeCloseTo(45);
+    expect(d1.prod.flags.starving).toBeUndefined();
+    const d2 = dailyEconomy({ ...d1, gameMinutes: at(14) });
+    expect(d2.residents[1].needs?.food).toBe(0);
+    expect(d2.prod.flags.starving).toBe(true);
+    expect(d2.events.some((e) => e.text === "Люди истощены: голод подрывает силы")).toBe(true);
+    // the next day the mood is already below the old hunger-only target
+    expect(d2.households[1].mood).toBeLessThan(60);
   });
   it("files yesterday's output", () => {
     let s = folk(town([bld(1, "woodcutter", 50, "active", { forest: 1, water: 0, rock: 0 })]), [{ home: null, adults: 2, job: 1 }]);
@@ -205,6 +218,23 @@ describe("producers", () => {
   it("quarry: 0.15 t per hour x PACE, with or without rock nearby", () => {
     expect(work(staffed("quarry", 3, { forest: 0, water: 0, rock: 0.5 })).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
     expect(work(staffed("quarry", 3, NO_SITE)).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
+  });
+  it("a hungry or exhausted worker gives fewer hours", () => {
+    const s = folk(town([bld(1, "quarry", 50)]), [{ home: null, adults: 2, job: 1 }]);
+    const fed = work(s).stock.stone;
+    const residents = Object.fromEntries(
+      Object.entries(s.residents).map(([k, r]) => [k, { ...r, needs: { food: 0, rest: 100, social: 100, warmth: 100 } }]),
+    );
+    const hungry = work({ ...s, residents }).stock.stone;
+    expect(hungry).toBeCloseTo(fed * 0.6);
+    const tired = work({ ...s, residents: Object.fromEntries(Object.entries(s.residents).map(([k, r]) => [k, { ...r, needs: { food: 100, rest: 0, social: 100, warmth: 100 } }])) }).stock.stone;
+    expect(tired).toBeCloseTo(fed * 0.7);
+  });
+  it("a low mood costs work even when every need is met", () => {
+    const s = folk(town([bld(1, "quarry", 50)]), [{ home: null, adults: 2, job: 1 }]);
+    const full = work(s).stock.stone;
+    const sad = work({ ...s, households: { 1: { ...s.households[1], mood: 35 } } }).stock.stone;
+    expect(sad).toBeCloseTo(full * (0.6 + (0.4 * 35) / 55));
   });
   it("fisher: 0.6 kg per hour, halved in winter", () => {
     expect(work(staffed("fisher", 2, { forest: 0, water: 1, rock: 0 })).stock.food - 1750).toBeCloseTo(1.2);
@@ -481,11 +511,11 @@ describe("mood", () => {
     let m = s.households[1].mood;
     for (let d = 0; d < 12; d++) {
       s = dailyEconomy({ ...s, gameMinutes: at(13 + d) });
-      expect(s.households[1].mood).toBeLessThan(m); // moving towards 10 + 10 = 20
+      expect(s.households[1].mood).toBeLessThan(m); // moving towards a target far below 35: hunger and empty needs
       m = s.households[1].mood;
     }
     expect(m).toBeLessThan(35);
-    expect(m).toBeGreaterThan(20);
+    expect(m).toBeGreaterThanOrEqual(0);
     const out = dailyStep(s, { rand: () => 0.05, only: ["emigration"] });
     expect(Object.keys(out.households)).toHaveLength(0);
   });
@@ -719,6 +749,21 @@ describe("save", () => {
     return { ...s, realTime: NOW };
   };
 
+  it("round-trips personal needs and treats old saves as fully fed", () => {
+    const s = full();
+    s.residents[1].needs = { food: 12, rest: 34, social: 56, warmth: 78 };
+    const parsed = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: s })), NOW)!;
+    expect(parsed.sim.residents[1].needs).toEqual({ food: 12, rest: 34, social: 56, warmth: 78 });
+    const old = JSON.parse(JSON.stringify({ version: 4, city, sim: s }));
+    delete old.sim.residents[1].needs;
+    expect(parseSave(old, NOW)!.sim.residents[1].needs).toBeUndefined();
+    const broken = JSON.parse(JSON.stringify({ version: 4, city, sim: s }));
+    broken.sim.residents[1].needs = { food: 12, rest: "x", social: 56, warmth: 78 };
+    expect(parseSave(broken, NOW)!.sim.residents[1].needs).toBeUndefined();
+    const tooHigh = JSON.parse(JSON.stringify({ version: 4, city, sim: s }));
+    tooHigh.sim.residents[1].needs = { food: 12, rest: 34, social: 56, warmth: 500 };
+    expect(parseSave(tooHigh, NOW)!.sim.residents[1].needs).toBeUndefined();
+  });
   it("round-trips stock, mood, progress and placed buildings", () => {
     const s = { ...full(), stock: { food: 5, logs: 6, planks: 7, stone: 8, wares: 9 } };
     s.buildings[1].site = { forest: 0.3, water: 0.2, rock: 0.1 };

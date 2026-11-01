@@ -36,6 +36,7 @@ import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
 import { App } from "./ui/App";
+import { followResidentById } from "./ui/follow";
 
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
 // Read it before creating the map, which writes its own hash on construction.
@@ -57,7 +58,7 @@ const mapClock = previewClock(gameClock);
 const sunLight = { clock: mapClock, phase: computed(() => state.value?.weather?.site?.phase ?? null) };
 attachBadgeLayer(map); // HTML badges above the buildings
 attachTrafficLayer(map);
-attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec });
+attachLifeLayer(map, { trips: lifeTrips, gameMinutes: gameClock, lights: lifeLights, frame, gameMinPerSec, onWalker: followResidentById });
 attachNightTint(map, gameClock); // dusk tint of the map itself; sits just under the lights
 attachRelief(map, gameClock); // 3D terrain (a setting) and the sky over it
 attachReachLayer(map);

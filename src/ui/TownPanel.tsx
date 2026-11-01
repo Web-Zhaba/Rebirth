@@ -119,6 +119,19 @@ function PeopleTab() {
           {Math.round(eco.avgMood)} из 100
         </Line>
       )}
+      <Line label="Сытость">
+        {Math.round(p.needs.avg.food)} из 100{p.needs.starving > 0 ? ` · голодают ${p.needs.starving}` : ""}
+      </Line>
+      <Line label="Отдых">
+        {Math.round(p.needs.avg.rest)} из 100{p.needs.tired > 0 ? ` · не высыпаются ${p.needs.tired}` : ""}
+      </Line>
+      <Line label="Общение">
+        {Math.round(p.needs.avg.social)} из 100{p.needs.lonely > 0 ? ` · одиноки ${p.needs.lonely}` : ""}
+      </Line>
+      <Line label="Тепло">
+        {Math.round(p.needs.avg.warmth)} из 100{p.needs.freezing > 0 ? ` · мёрзнут ${p.needs.freezing}` : ""}
+      </Line>
+      <Line label="Силы к работе">{Math.round(p.needs.work * 100)} %</Line>
       {sv && sv.houses > 0 && <Line label="Земля, в среднем">{Math.round(sv.avgLandValue)}</Line>}
       {sv && sv.level2 > 0 && <Line label="Дома 2-го уровня">{sv.level2}</Line>}
       <Line label="Рождений и смертей">

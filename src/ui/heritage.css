@@ -1,4 +1,6 @@
-/* Heritage panel (PLAN-research.ru.md section 7): a typed old building and the two ways to restore it. */
+/* World «Береста и грамота» — heritage panel: a typed old building and the two ways to restore it.
+   The choice is a stack of bark slips; the picked one is pinned in resin, never by colour alone. */
+
 .her-opts {
   display: flex;
   flex-direction: column;
@@ -7,32 +9,54 @@
   padding: 0;
   border: 0;
 }
+
 .her-opts legend {
   padding: 0 0 var(--sp-1);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--pencil);
 }
+
 .her-opt {
   display: flex;
   gap: var(--sp-2);
   align-items: flex-start;
   padding: var(--sp-2) var(--sp-3);
   border: var(--bw) solid var(--rule);
-  background: var(--paper-shade);
+  border-radius: 0;
+  background: var(--paper-raised);
   cursor: pointer;
 }
-.her-opt.her-picked {
-  border-color: var(--ink);
+
+.her-opt:hover {
+  background: var(--paper-sunk);
 }
+
+/* The chosen way to restore: a resin rule around the slip, plus its own filled background. */
+.her-opt.her-picked {
+  border-color: var(--resin-deep);
+  box-shadow: inset 0 0 0 1px var(--resin-deep);
+  background: var(--paper-sunk);
+}
+
 .her-opt.her-closed {
   cursor: default;
   opacity: 0.75;
 }
+
 .her-opt-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
   font-size: var(--fs-sm);
+  line-height: 1.4;
 }
+
 .her-gain {
+  font-family: var(--font-display);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }

@@ -1,4 +1,5 @@
 import { ADULT_MAX, ADULT_MIN, ageOf, buildNet, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Spot } from "./people";
+import { residentWorkFactor } from "./needs";
 import { covers } from "./services";
 import { workHours, type Levers } from "./levers";
 import { calendar } from "./time";
@@ -17,21 +18,22 @@ export const EVENING = {
 // The evening starts when work ends (19:00, or 21:00 in the «Долгий день»).
 export const isEvening = (hour: number, levers?: Levers): boolean => hour >= workHours(levers).end && hour < EVENING.to;
 
-// Adults living in a finished house (tent dwellers have no hearth to sit at).
-export function adultsAtHome(s: Pick<SimState, "residents" | "households" | "buildings" | "gameMinutes">): number {
-  let n = 0;
+// Adults living in a finished house (tent dwellers have no hearth to sit at) — the evening's hands are counted in
+// eveningRate below, each with their own working strength.
+
+// Pieces of wares an hour the adults at home make in the evening, at the season of `gameMinutes`.
+// A hungry or unhappy household works slower; a content one (needs and mood full) gives the nominal rate.
+export const eveningRate = (s: Pick<SimState, "residents" | "households" | "buildings" | "gameMinutes">): number => {
+  let hands = 0;
   for (const r of Object.values(s.residents)) {
     const h = s.households[r.household];
     if (!h || h.home === null || !isFinishedHouse(s.buildings[h.home])) continue;
     const age = ageOf(r.born, s.gameMinutes);
-    if (age >= ADULT_MIN && age < ADULT_MAX) n++;
+    if (age < ADULT_MIN || age >= ADULT_MAX) continue;
+    hands += residentWorkFactor(r, h.mood);
   }
-  return n;
-}
-
-// Pieces of wares an hour the adults at home make in the evening, at the season of `gameMinutes`.
-export const eveningRate = (s: Pick<SimState, "residents" | "households" | "buildings" | "gameMinutes">): number =>
-  adultsAtHome(s) * EVENING.waresPerAdultHour * (calendar(s.gameMinutes).season === 3 ? EVENING.winter : 1);
+  return hands * EVENING.waresPerAdultHour * (calendar(s.gameMinutes).season === 3 ? EVENING.winter : 1);
+};
 
 // One tick of `dt` hours of вечерние ремёсла. Call in evening hours only. The wares count toward the day's output under key 0.
 export function eveningStep(s: SimState, dt: number): SimState {

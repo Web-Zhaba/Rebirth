@@ -183,7 +183,7 @@ export function brokenWalls(ring: XY[], key: string, height = 6): { quad: XY[]; 
 
   // Build every wall piece directly from its outer edge. For a counter-clockwise
   // footprint the left-hand normal always points into the building. This avoids the
-  // old outer↔inset vertex correspondence entirely: on concave footprints that
+  // old outer-to-inset vertex correspondence entirely: on concave footprints that
   // correspondence could create a diagonal polygon spanning the building interior.
   for (let i = 0; i < p.length; i++) {
     const j = (i + 1) % p.length;

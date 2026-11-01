@@ -15,7 +15,7 @@ import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
-import { peopleStats, queryBuilding, syncPeople } from "./people";
+import { peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
@@ -157,9 +157,12 @@ export class Handler {
           this.post({ t: "loaded", save: toClientSave(save), migrated: false, away: null });
           return;
         }
-        case "query":
-          this.post({ t: "queryResult", id: msg.id, data: this.save && msg.q?.type === "building" ? inspect(this.save.sim, msg.q.id) : null });
+        case "query": {
+          const q = msg.q;
+          const data = !this.save || !q ? null : q.type === "building" ? inspect(this.save.sim, q.id) : queryResident(this.save.sim, q.id);
+          this.post({ t: "queryResult", id: msg.id, data });
           return;
+        }
         case "cmd":
           return await this.command(msg.id, msg.cmd);
         case "flush":

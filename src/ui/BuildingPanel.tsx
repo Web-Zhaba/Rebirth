@@ -22,6 +22,8 @@ import { Button, Confirm, IconButton, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
 import { duplicateTemplate } from "./actionModel";
+import { followResident } from "./follow";
+import { NeedsBars } from "./NeedsBars";
 import { SEMANTIC_IDS } from "./semanticIds";
 
 const REFRESH_MS = 4000;
@@ -314,11 +316,18 @@ export function BuildingPanel() {
               </div>
               {h.people.map((p) => (
                 <div class="person" key={p.id}>
-                  <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет")}
+                  <div class="person-line">
+                    <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет")}
+                    <button type="button" class="link person-follow" title={`Следить за ${p.name}`} onClick={() => followResident(p.id, p.name)}>
+                      <Icon name="locate" size={13} /> следить
+                    </button>
+                  </div>
                   <div class="person-role">
                     {p.role}
                     {p.literate ? " · грамотный" : p.learn > 0 && ` · грамотность ${p.learn} %`}
                   </div>
+                  {p.needs && <NeedsBars needs={p.needs} compact />}
+                  {p.problems && p.problems.length > 0 && <div class="prod-warn">Тяжело: {p.problems.join(", ")}</div>}
                 </div>
               ))}
             </div>
@@ -329,11 +338,19 @@ export function BuildingPanel() {
           {group ? <StaffControl id={b.id} group={group} jobs={info.capacity} workers={info.workers.length} staff={b.staff} /> : <div class="people-title">Работники {info.workers.length} из {info.capacity}</div>}
           {info.workers.map((w) => (
             <div class="person" key={w.id}>
-              <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет")}
+              <div class="person-line">
+                <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет")}
+                <button type="button" class="link person-follow" title={`Следить за ${w.name}`} onClick={() => followResident(w.id, w.name)}>
+                  <Icon name="locate" size={13} /> следить
+                </button>
+              </div>
               <div class="person-role">
                 {w.idle && "сейчас на стройке (нет работы) · "}
                 {w.commute === null ? "дорога неизвестна" : `дорога ~${Math.round(w.commute)} мин`}
+                {typeof w.work === "number" && w.work < 0.95 ? ` · силы ${Math.round(w.work * 100)} %` : ""}
               </div>
+              {w.needs && <NeedsBars needs={w.needs} compact />}
+              {w.problems && w.problems.length > 0 && <div class="prod-warn">Тяжело: {w.problems.join(", ")}</div>}
             </div>
           ))}
         </div>

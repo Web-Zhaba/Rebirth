@@ -3,7 +3,7 @@ import type { FilterSpecification } from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import { sunDirection, type WeatherState } from "../sim/weather";
 import { WATER_EXCLUDED_CLASSES } from "../world/nature";
-import { PALETTE } from "../ui/palette";
+import { PALETTE , MAP_ONLY} from "../ui/palette";
 import { iceOpacity, overcastOpacity, snowOpacity, sunAzimuth, weatherCoverVisibility } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
 import { reliefScale } from "./relief";
@@ -83,7 +83,7 @@ export function attachWeatherLayer(map: maplibregl.Map, opts: { weather: Readonl
     });
     const under = map.getLayer(BEFORE) ? BEFORE : undefined;
     map.addLayer(
-      { id: SNOW, type: "fill", source: SRC, paint: { "fill-color": PALETTE.paperRaised, "fill-opacity": 0, "fill-antialias": false } },
+      { id: SNOW, type: "fill", source: SRC, paint: { "fill-color": MAP_ONLY.snowSheet, "fill-opacity": 0, "fill-antialias": false } },
       under,
     );
     map.addLayer(

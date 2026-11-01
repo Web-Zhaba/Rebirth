@@ -1,5 +1,6 @@
 @import "maplibre-gl/dist/maplibre-gl.css";
 @import "./ui/tokens.css";
+@import "./ui/motion.css";
 @import "./ui/topbar.css";
 @import "./ui/buildbar.css";
 
@@ -13,12 +14,79 @@ body {
   line-height: var(--lh-body);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  background: var(--paper-shade);
+  /* Deep space behind the globe: MapLibre leaves the canvas transparent outside the sphere, so this is the void the
+     Earth hangs in. Near-black with a cold glow at the planet and a sparse dust of stars, never the moss field. */
+  background-color: #04060c;
+  background-image:
+    radial-gradient(1.6px 1.6px at 11% 19%, var(--star-bright), transparent 62%),
+    radial-gradient(1.2px 1.2px at 23% 64%, var(--star-mid), transparent 62%),
+    radial-gradient(1.8px 1.8px at 34% 12%, var(--star-bright), transparent 62%),
+    radial-gradient(1.1px 1.1px at 46% 82%, var(--star-mid), transparent 62%),
+    radial-gradient(1.4px 1.4px at 58% 27%, var(--star-mid), transparent 62%),
+    radial-gradient(1px 1px at 67% 71%, var(--star-faint), transparent 62%),
+    radial-gradient(1.9px 1.9px at 74% 16%, var(--star-bright), transparent 62%),
+    radial-gradient(1.2px 1.2px at 84% 58%, var(--star-mid), transparent 62%),
+    radial-gradient(1.3px 1.3px at 92% 33%, var(--star-mid), transparent 62%),
+    radial-gradient(1px 1px at 17% 88%, var(--star-faint), transparent 62%),
+    radial-gradient(1.5px 1.5px at 39% 47%, var(--star-faint), transparent 62%),
+    radial-gradient(1.1px 1.1px at 62% 93%, var(--star-faint), transparent 62%),
+    radial-gradient(130% 100% at 50% 47%, var(--void-glow) 0%, var(--void-mid) 42%, var(--void) 68%, var(--void) 100%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 #map {
   width: 100%;
   height: 100vh;
+}
+
+/* Map controls and attribution are part of the world too: dark squares that read on both the void and the moss
+   floor, with bark attribution. */
+.maplibregl-ctrl-group {
+  background: #1b241f;
+  border: var(--bw) solid #0e1411;
+  border-radius: 0;
+  box-shadow: var(--shadow-hard-sm);
+}
+
+.maplibregl-ctrl-group button {
+  width: 34px;
+  height: 34px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top: var(--bw) solid var(--ink);
+}
+
+.maplibregl-ctrl-group button:hover:not(:disabled) {
+  background-color: var(--ink);
+}
+
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1) sepia(0.25) brightness(1.35);
+}
+
+/* MapLibre ships the attribution as a white pill with a 12px radius; it must read as bark like the rest. */
+.maplibregl-ctrl.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib.maplibregl-compact,
+.maplibregl-ctrl-attrib.maplibregl-compact-show {
+  background-color: var(--paper);
+  color: var(--ink);
+  border: var(--bw) solid var(--ink);
+  border-radius: 0;
+  font-size: var(--fs-xs);
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button,
+.maplibregl-ctrl-attrib-button {
+  background-color: var(--paper-shade);
+  border-radius: 0;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--info);
 }
 
 /* Weather particles above the map canvas but below the interface, and never in the way of map gestures. */
@@ -51,7 +119,7 @@ a:focus-visible,
 button.link:focus-visible {
   outline: 2px solid var(--info);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: 0;
 }
 
 /* Scrollbars: thin, square, in the paper and ink palette (standard properties; WebKit for Safari). */
@@ -192,6 +260,74 @@ button.link:focus-visible {
 .person-role {
   color: var(--pencil);
   font-size: 12px;
+}
+
+/* Needs under one resident: four labelled bars. Text and number carry the value; the bar repeats it. */
+.needs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px var(--sp-3);
+  margin: 3px 0 2px;
+}
+
+.needs-compact {
+  font-size: var(--fs-xs);
+}
+
+.need {
+  display: grid;
+  grid-template-columns: 4.9em minmax(28px, 1fr) 2.1em;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--pencil);
+  font-size: inherit;
+}
+
+.need-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.need-track {
+  height: 4px;
+  border: var(--bw-hair) solid var(--rule-soft);
+  background: var(--paper-sunk);
+}
+
+.need-fill {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+
+.need.warn .need-fill {
+  background: var(--warn);
+}
+
+.need.bad .need-fill {
+  background: var(--bad);
+}
+
+.need-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.person-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* «Следить» next to a resident: the map camera locks onto that person. */
+.person-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
 }
 
 .prod {
@@ -439,8 +575,29 @@ button:hover:not(:disabled) {
   font-size: var(--fs-lg);
 }
 
-/* Legend subject ("Дома:", "Дороги:") — which map objects the layer colors. */
+/* Legend subject ("Р”РѕРјР°:", "Р”РѕСЂРѕРіРё:") вЂ” which map objects the layer colors. */
 .legend-what {
   font-weight: 700;
   color: var(--ink);
+}
+
+
+/* A tooltip is a sheet of paper floating over the dark frame: it must own its ink instead of inheriting the
+   bar's light text, or every label inside it turns unreadable. */
+.tooltip,
+.tooltip * {
+  color: var(--ink);
+}
+
+.tooltip .tip-note,
+.tooltip .tip-row > span:first-child {
+  color: var(--pencil);
+}
+
+.tooltip .tip-row.tip-warn > span:last-child {
+  color: var(--warn-text);
+}
+
+.tooltip .tip-row.tip-bad > span:last-child {
+  color: var(--bad);
 }

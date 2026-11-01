@@ -1,8 +1,10 @@
 import type * as maplibregl from "maplibre-gl";
 import { computed, effect, type ReadonlySignal } from "@preact/signals";
 import { cutOffEdges, ROAD_KINDS, workableEdges } from "../sim/roads";
+import type { RoadEdge, RoadGraph, Stock } from "../sim/types";
 import type { ModelItem } from "./modelLayer";
 import { roadChains, type RoadChain, type RoadState } from "./roadChains";
+import { roadJunctions } from "./roadJunctions";
 import { PALETTE } from "../ui/palette";
 import { city, frame, roads, stock } from "../simClient";
 
@@ -24,29 +26,52 @@ function realWidth(k: number, extra = 0): maplibregl.ExpressionSpecification {
   return ["interpolate", ["exponential", 2], ["zoom"], ...stops] as maplibregl.ExpressionSpecification;
 }
 
-// Chains of the road graph by kind and state. Edges short of stone are not workable: they show as waiting. The stock is
-// only watched while some edge owes stone.
-const chains = computed<RoadChain[] | null>(() => {
-  const g = roads.value;
-  if (!g) return null;
-  const st = Object.values(g.edges).some((e) => e.stone) ? stock.value : null;
+// State of every edge of the graph. Edges short of stone are not workable: they show as waiting. The stock is only
+// watched while some edge owes stone.
+const stockOf = (g: RoadGraph) => (Object.values(g.edges).some((e) => e.stone) ? stock.value : null);
+const stateOf = (g: RoadGraph, st: Stock | null): ((e: RoadEdge) => RoadState) => {
   const active = new Set(workableEdges(g, st ?? undefined));
   const cut = cutOffEdges(g);
-  const stateOf = (e: { id: number; done: number; labor: number }): RoadState =>
-    e.done >= e.labor ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting";
-  return roadChains(g, stateOf);
+  return (e) => (e.done >= e.labor ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting");
+};
+
+// Chains of the road graph by kind and state.
+const chains = computed<RoadChain[] | null>(() => {
+  const g = roads.value;
+  return g ? roadChains(g, stateOf(g, stockOf(g))) : null;
 });
 
-// What the model layer draws of the roads: every built chain. The same list comes back while no built chain changed.
+// What the model layer draws of the roads: every built chain, then the aprons where roads meet (roadJunctions.ts). The
+// aprons come last in the list, and the road mesh keeps that order (modelLayer.ts, one mesh drawn without depth writes),
+// so an apron covers the ends of the ribbons it joins and the shoulder lines that would cross it. The same list comes
+// back while no built chain changed.
 let lastItems: ModelItem[] = [];
-const itemSig = (l: readonly ModelItem[]) => l.map((i) => `${i.kind}:${i.ring.map((p) => p.join(",")).join(";")}`).join("|");
+const itemSig = (l: readonly ModelItem[]) =>
+  l
+    .map(
+      (i) =>
+        `${i.kind}:${i.ring.map((p) => p.join(",")).join(";")}${i.ends ? `${i.ends[0] ? 1 : 0}${i.ends[1] ? 1 : 0}` : ""}${i.junction ? `@${i.junction.arms.map((a) => `${a.kind},${a.hw},${a.dir[0]},${a.dir[1]},${a.len}`).join(";")}` : ""}`,
+    )
+    .join("|");
 export const roadItems: ReadonlySignal<ModelItem[]> = computed(() => {
   const list = chains.value;
   const g = roads.value;
   if (!list || !g) return lastItems;
-  const out: ModelItem[] = list
-    .filter((ch) => ch.state === "built")
-    .map((ch) => ({ id: `road${ch.id}`, ring: ch.nodes.map((id): [number, number] => [g.nodes[id].x, g.nodes[id].y]), height: 0, kind: ch.kind, progress: 1, style: "road" }));
+  const built = list.filter((ch) => ch.state === "built");
+  const state = stateOf(g, stockOf(g));
+  const junctions = roadJunctions(g, (e) => state(e) === "built");
+  const nodes = new Set(junctions.map((j) => j.node));
+  const out: ModelItem[] = built.map((ch) => ({
+    id: `road${ch.id}`,
+    ring: ch.nodes.map((id): [number, number] => [g.nodes[id].x, g.nodes[id].y]),
+    height: 0,
+    kind: ch.kind,
+    progress: 1,
+    style: "road",
+    ends: [nodes.has(ch.nodes[0]), nodes.has(ch.nodes[ch.nodes.length - 1])],
+  }));
+  for (const j of junctions)
+    out.push({ id: `junction${j.node}`, ring: [j.p], height: 0, kind: j.arms[0].kind, progress: 1, style: "junction", junction: j });
   if (itemSig(out) !== itemSig(lastItems)) lastItems = out;
   return lastItems;
 });
@@ -135,3 +160,4 @@ export function attachRoadLayer(map: maplibregl.Map): void {
   if (map.isStyleLoaded()) run();
   else map.once("load", run);
 }
+

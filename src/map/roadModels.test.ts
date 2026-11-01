@@ -67,6 +67,12 @@ describe("buildRoadModel", () => {
     expect(codes(buildRoadModel(STRAIGHT, "bridge")).has(PATTERN.deck)).toBe(true);
     expect(codes(buildRoadModel(STRAIGHT, "stonebridge")).has(PATTERN.ashlar)).toBe(true);
   });
+  it("closes a free end with a round joint, and leaves an end that meets another road open", () => {
+    const joints = (m: Model) => m.facade.filter((_, i) => i % 4 === 2).filter((w) => w < 0).length;
+    expect(joints(buildRoadModel(STRAIGHT, "dirt"))).toBeGreaterThan(0);
+    expect(joints(buildRoadModel(STRAIGHT, "dirt", { start: true, end: true }))).toBe(0);
+    expect(joints(buildRoadModel(BENT, "dirt", { start: true, end: true }))).toBeGreaterThan(0); // the bend keeps its own
+  });
   it("raises bridges over the water and brings them down to the banks", () => {
     for (const kind of ["footbridge", "bridge", "stonebridge"] as RoadKind[]) {
       const m = buildRoadModel(STRAIGHT, kind);

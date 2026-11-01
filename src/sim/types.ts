@@ -132,6 +132,14 @@ export interface Site {
   rock: number;
 }
 
+// Personal needs, 0..100 each (src/sim/needs.ts): a satisfied need is 100, an empty one 0.
+export interface Needs {
+  food: number; // satiety: falls when the barns cannot feed the town
+  rest: number; // sleep and recovery: falls with long work, tents and cold
+  social: number; // company: family, evenings, a tavern or a chapel, the market
+  warmth: number; // a heated home: falls when the household has no firewood
+}
+
 export interface Resident {
   id: number;
   first: string;
@@ -146,6 +154,7 @@ export interface Resident {
   literate: boolean; // learned in full (school reached 100)
   school: number; // literacy progress 0..100: grows on school days, see learnPerDay
   inClass?: boolean; // in class today: children 7-14 and, when ordered, illiterate grown-ups; they do no work
+  needs?: Needs; // absent in saves from before the needs system: treated as full
 }
 
 export interface Household {
@@ -271,6 +280,7 @@ export interface ProdFlags {
   done: boolean;
   closed: boolean; // harvest window already settled (lost grain announced)
   hungry: boolean; // food ran out and no recovery since
+  starving?: boolean; // at least one resident reached the starvation line since the last recovery
   rot: number; // kg of food lost to full barns since the last announcement
 }
 
@@ -397,6 +407,16 @@ export interface ServiceStats {
   level2: number; // houses of level 2
 }
 
+// Aggregated condition of the residents, as the town panel and the top bar show it.
+export interface NeedsStats {
+  avg: Needs;
+  starving: number; // residents with food below the warning line
+  tired: number;
+  lonely: number;
+  freezing: number;
+  work: number; // 0..1, average productivity from needs and mood
+}
+
 export interface PeopleStats {
   pop: number;
   adults: number; // 16-59
@@ -408,6 +428,7 @@ export interface PeopleStats {
   tents: number; // households living in tents
   avgCommute: number; // minutes, over the employed
   households: number;
+  needs: NeedsStats; // hunger, rest, company and warmth of the residents
 }
 
 // One job group in the work report: places are the capacity left by priority and staff limits.
@@ -472,6 +493,10 @@ export interface PersonInfo {
   role: string; // occupation text
   literate: boolean;
   learn: number; // literacy progress 0..100
+  needs?: Needs; // absent only for residents of old saves before their first day
+  problems?: string[]; // what is short today: "голод", "усталость", "одиночество", "холод"
+  mood?: number; // mood of the household, 0..100
+  work?: number; // 0..1, personal productivity from needs and household mood
 }
 
 export interface WorkerInfo {
@@ -480,6 +505,28 @@ export interface WorkerInfo {
   age: number;
   commute: number | null;
   idle: boolean; // counted with the construction artel (no work for them at the moment)
+  needs?: Needs;
+  problems?: string[];
+  mood?: number;
+  work?: number; // 0..1, personal productivity
+}
+
+// One resident, fetched for the follow mode (the map camera can stay on a person).
+export interface ResidentQuery {
+  kind: "resident";
+  id: number;
+  name: string;
+  age: number;
+  sex: "m" | "f";
+  role: string;
+  home: number | null;
+  job: number | null;
+  commute: number | null;
+  idle: boolean; // their workplace is idle and they are with the construction artel
+  needs?: Needs;
+  problems?: string[];
+  mood?: number; // mood of the household
+  work?: number; // 0..1, personal productivity
 }
 
 export interface ProductionInfo {

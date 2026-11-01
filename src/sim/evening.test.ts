@@ -233,6 +233,10 @@ describe("lights and walkers", () => {
     expect(life.lights.filter((x) => x.kind === "tavern")).toHaveLength(1);
     const guests = life.trips.filter((t) => t.depart >= 19 * 60 && t.depart < 22 * 60);
     expect(guests.length).toBeGreaterThan(0);
+    // The follow mode needs to know which resident each guest dot is.
+    const eveningGuests = life.trips.filter((t) => t.purpose === "tavern");
+    expect(eveningGuests.length).toBeGreaterThan(0);
+    for (const t of eveningGuests) expect(typeof t.who).toBe("number");
     expect(lightOpacity("tavern", 20)).toBeGreaterThanOrEqual(0.5);
     expect(lightOpacity("tavern", 22)).toBeGreaterThan(0.8);
     expect(lightOpacity("tavern", 12)).toBe(0);

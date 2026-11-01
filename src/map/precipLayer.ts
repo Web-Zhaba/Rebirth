@@ -1,7 +1,7 @@
 import type * as maplibregl from "maplibre-gl";
 import { effect, type ReadonlySignal } from "@preact/signals";
 import type { WeatherState } from "../sim/weather";
-import { PALETTE } from "../ui/palette";
+import { PALETTE, MAP_ONLY } from "../ui/palette";
 import { precipDensity, precipSlant, precipVisibility } from "./weatherMath";
 import { weatherMapOn } from "./weatherSettings";
 
@@ -94,7 +94,7 @@ export function attachPrecipitation(map: maplibregl.Map, opts: { weather: Readon
     fit(Math.max(1, Math.round(max * density)));
 
     if (ws.now.snow) {
-      ctx.fillStyle = withAlpha(PALETTE.paperRaised, 0.7);
+      ctx.fillStyle = withAlpha(MAP_ONLY.snowSheet, 0.8);
       for (const p of drops) {
         p.y += p.vy * 0.22 * dt;
         p.x += Math.sin(p.phase + ts * 0.0012) * p.sway * dt;

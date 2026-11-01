@@ -3,6 +3,7 @@ import { effect, type ReadonlySignal } from "@preact/signals";
 import { daylight, START_MINUTE_OF_DAY } from "../sim/clock";
 import { MAP_ONLY, PALETTE } from "../ui/palette";
 import type { Frame } from "../world/frame";
+import { tool } from "./tools";
 
 export interface Trip {
   id: number;
@@ -10,6 +11,8 @@ export interface Trip {
   pts: [number, number][]; // local m
   depart: number; // game minute of the day
   speed: number; // m per game minute
+  who?: number; // the resident a walker is (sim/life.ts); walkers only
+  purpose?: "work" | "home" | "tavern"; // where a walker is heading; walkers only
 }
 export interface Light {
   id: number; // the building
@@ -23,6 +26,7 @@ export interface LifeOptions {
   lights: ReadonlySignal<Light[]>;
   frame: ReadonlySignal<Frame | null>;
   gameMinPerSec: () => number;
+  onWalker?: (residentId: number) => void; // a walker dot was clicked: follow that resident
 }
 
 const SRC_TRIPS = "life-trips";
@@ -87,6 +91,12 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
 
   const nowGame = (): number => base.gm + Math.min(MAX_EXTRAP, (gameMinPerSec() * (performance.now() - base.at)) / 1000);
 
+  const onWalkerClick = (e: maplibregl.MapLayerMouseEvent) => {
+    if (tool.value) return;
+    const who = e.features?.[0]?.properties?.who;
+    if (typeof who === "number") opts.onWalker?.(who);
+  };
+
   const setup = (lat: number) => {
     const k = 512 / (EQUATOR_M * Math.cos((lat * Math.PI) / 180));
     map.addSource(SRC_LIGHTS, { type: "geojson", data: empty() });
@@ -125,6 +135,20 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
       });
     dot("life-walkers", "walk", [1.5, 3.5], PALETTE.ink);
     dot("life-carts", "cart", [2.5, 6], MAP_ONLY.cart);
+    // An invisible, larger hit target makes a walker easy to click: a click follows that resident.
+    map.addLayer({
+      id: "life-walker-hit",
+      type: "circle",
+      source: SRC_TRIPS,
+      minzoom: 13,
+      filter: ["==", ["get", "kind"], "walk"],
+      paint: {
+        "circle-color": PALETTE.ink,
+        "circle-opacity": 0,
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 8, 19, 14],
+      },
+    });
+    if (opts.onWalker) map.on("click", "life-walker-hit", onWalkerClick);
     ready = true;
   };
 
@@ -136,7 +160,7 @@ export function attachLifeLayer(map: maplibregl.Map, opts: LifeOptions): () => v
       if (!p) continue;
       features.push({
         type: "Feature",
-        properties: { kind: t.kind },
+        properties: { kind: t.kind, ...(t.who !== undefined ? { who: t.who } : {}) },
         geometry: { type: "Point", coordinates: f.toLngLat(p[0], p[1]) },
       });
     }
@@ -223,6 +247,7 @@ const drawDarkness = (minuteOfDay: number) => {
   return () => {
     disposed = true;
     if (raf) cancelAnimationFrame(raf);
+    if (opts.onWalker) map.off("click", "life-walker-hit", onWalkerClick);
     for (const s of stops) s();
     document.removeEventListener("visibilitychange", onVisibility);
   };

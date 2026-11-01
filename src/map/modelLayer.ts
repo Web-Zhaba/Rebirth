@@ -17,6 +17,7 @@ import { buildScaffold, rgb, type Model, type XY } from "./modelGeometry";
 import { seatBridge, seatBuilding, drapeRoad, type Ground } from "./groundSeat";
 import { groundAt, loadGround, reliefScale } from "./relief";
 import { buildRoadModel } from "./roadModels";
+import { buildJunctionModel, type RoadJunction } from "./roadJunctions";
 import { buildTownModel } from "./townModels";
 import { EARTH_RADIUS_M, localFrame, lngLatToMercator, mercatorLocalMatrix, metresPerMercator, weatherToSphere } from "./three/frame";
 import { acquireHost, type ThreeHost } from "./three/host";
@@ -69,18 +70,22 @@ const FALLBACK_LIGHT: [number, number, number] = [-0.45, -0.55, 0.7];
 // - heritage: a restored old building; kind is its OSM class (the `cls` of src/sim/heritage.ts), height its eaves.
 // - town: one of the town's own; kind is the template (src/sim/buildings.ts), height the template's (after an upgrade).
 // - road: a built road chain; ring is its centre line (not closed), kind its RoadKind, height unused.
+// - junction: the apron where built chains meet (roadJunctions.ts); ring is the node, `junction` its arms, kind the
+//   dominant arm's RoadKind.
 export interface ModelItem {
   id: string | number;
   ring: XY[];
   height: number;
   kind: string;
   progress: number;
-  style: "heritage" | "town" | "road";
+  style: "heritage" | "town" | "road" | "junction";
   level?: number; // town: 2 for a rebuilt house
   front?: XY | null; // town: unit vector towards the street (the door side)
   tint?: string; // town: overlay colour, "" or absent for none
   upgrading?: boolean; // town: a rebuild in progress
   lamp?: Light["kind"]; // lit in the evening like this (sim/life.ts lights), absent: dark
+  junction?: RoadJunction; // junction: the arms meeting at ring[0]
+  ends?: [boolean, boolean]; // road: its first/last node is a junction (no round joint there)
 }
 
 export interface ModelLayerOptions {
@@ -124,7 +129,8 @@ void main() {
 
 // Facade codes (modelGeometry.ts PATTERN): 1 house, 2 hall, 3 worship, 4 log courses, 5 wide, 6 tower, 7 roof rows,
 // 8 boards, 9 log cabin; + 10 a door, + 20 a gate at the middle of the wall. Roads (roadModels.ts) from 30: 30 track, 31
-// ruts, 32 cobbles, 33 plank deck, 34 ashlar; there the facade is (s along, offset across, width, code).
+// ruts, 32 cobbles, 33 plank deck, 34 ashlar; there the facade is (s along, offset across, width, code). 35..37 are the
+// junction aprons (roadJunctions.ts): ruts, cobbles and a plain surface, with the shoulder band in the s field.
 // Shared by the surface pass (FRAG) and the window-light pass (LAMP_FRAG).
 const COMMON = /* glsl */ `
 varying vec3 vN;
@@ -203,24 +209,39 @@ float doorway(float dx, float z, float aw, float az, float w, float h) {
   return (1.0 - smoothstep(w * 0.5 - aw, w * 0.5 + aw, dx)) * (1.0 - smoothstep(h - az, h + az, z));
 }
 
+// Cobble joints in world space, so neighbouring surfaces (a junction apron, roadJunctions.ts) line up.
+float cobbles(float axy) {
+  vec2 q = vXY / 0.42;
+  q.x += 0.5 * mod(floor(q.y), 2.0);
+  vec2 f = abs(fract(q) - 0.5);
+  return 0.22 * smoothstep(0.36, 0.47, max(f.x, f.y)) * (1.0 - smoothstep(0.15, 0.5, axy / 0.42));
+}
+
+// Two wheel ruts at 27 % of the half width either side of the centre line.
+float ruts(float ay) {
+  float r = abs(abs(vF.y) - abs(vF.z) * 0.27);
+  return 0.14 * (1.0 - smoothstep(0.18, 0.38 + ay, r));
+}
+
 // Road surface: darker edges, then the pattern of its code.
 vec3 road(vec3 col, int code, float z, float aw, float ay, float az, float axy) {
   float w = abs(vF.z);
   float e = abs(vF.y) / max(w * 0.5, 1e-3); // 0 on the centre line, 1 at the edge
   if (code == 30) return col * mix(1.0, 0.8, smoothstep(0.5, 1.0, e));
+  if (code >= 35) {
+    // Junction aprons (roadJunctions.ts): vF.x is where the point sits in the shoulder band of the nearest road that
+    // reaches it, 0..1, so the same falloff runs along the apron's rim and stops at a mouth; vF.yz hold the through
+    // road's offset and width, which line the ruts up with its ribbons.
+    col *= 1.0 - 0.22 * smoothstep(0.0, 1.0, clamp(vF.x, 0.0, 1.0));
+    if (code == 35) col *= 1.0 - ruts(ay);
+    else if (code == 36) col *= 1.0 - cobbles(axy);
+    return col;
+  }
   col *= mix(1.0, 0.78, smoothstep(0.82, 1.0, e));
-  if (code == 31 && vF.z > 0.0) {
-    // two wheel ruts
-    float r = abs(abs(vF.y) - w * 0.27);
-    col *= 1.0 - 0.14 * (1.0 - smoothstep(0.18, 0.38 + ay, r));
-  } else if (code == 32) {
-    vec2 q = vXY / 0.42;
-    q.x += 0.5 * mod(floor(q.y), 2.0);
-    vec2 f = abs(fract(q) - 0.5);
-    col *= 1.0 - 0.22 * smoothstep(0.36, 0.47, max(f.x, f.y)) * (1.0 - smoothstep(0.15, 0.5, axy / 0.42));
-  } else if (code == 33) {
-    col *= 1.0 - 0.24 * seams(vF.x, aw, 0.3);
-  } else if (code == 34) {
+  if (code == 31 && vF.z > 0.0) col *= 1.0 - ruts(ay);
+  else if (code == 32) col *= 1.0 - cobbles(axy);
+  else if (code == 33) col *= 1.0 - 0.24 * seams(vF.x, aw, 0.3);
+  else if (code == 34) {
     float course = floor(z / 0.5);
     col *= 1.0 - 0.2 * max(seams(z, az, 0.5), seams(vF.x + 0.6 * mod(course, 2.0), aw, 1.2));
   }
@@ -344,12 +365,15 @@ const PLINTH = TOWN_COLORS.stone[1];
 export function seatedModelOf(it: ModelItem, ground: Ground | null): Model {
   const m = modelOf(it);
   if (!ground) return m;
+  if (it.style === "junction") return drapeRoad(m, ground);
   if (it.style !== "road") return seatBuilding(m, it.ring, ground, PLINTH);
   return BRIDGES.has(it.kind) ? seatBridge(m, it.ring, ground) : drapeRoad(m, ground);
 }
 
 export function modelOf(it: ModelItem): Model {
-  if (it.style === "road") return buildRoadModel(it.ring, isRoadKind(it.kind) ? it.kind : "path");
+  // roadLayer.ts always gives a junction item its arms; the style alone cannot carry them
+  if (it.style === "junction") return buildJunctionModel(it.junction!);
+  if (it.style === "road") return buildRoadModel(it.ring, isRoadKind(it.kind) ? it.kind : "path", { start: it.ends?.[0], end: it.ends?.[1] });
   if (it.progress < 1) return buildScaffold(it.ring, it.height, it.progress);
   if (it.style === "heritage") return buildHeritageModel(it.ring, it.height, it.kind);
   return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading });
@@ -379,10 +403,12 @@ function lampOf(it: ModelItem): number {
 }
 
 const quantise = (p: number): number => (p >= 1 ? 1 : Math.min(PROGRESS_STEPS - 1, Math.max(0, Math.floor((Number.isFinite(p) ? p : 0) * PROGRESS_STEPS))) / PROGRESS_STEPS);
+const armKey = (j: RoadJunction): string => j.arms.map((a) => `${a.kind}:${a.hw}:${a.dir[0]},${a.dir[1]}:${a.len}`).join(";");
 // Everything that shapes an item's model (its id is not: two identical buildings share a model).
 const keyOf = (it: ModelItem, p: number, k: number): string => {
   const ring = `${it.ring.map((q) => `${q[0]},${q[1]}`).join(";")}|${k}`;
-  if (it.style === "road") return `road|${it.kind}|${ring}`;
+  if (it.style === "road") return `road|${it.kind}|${it.ends?.map((e) => (e ? 1 : 0)).join("") ?? ""}|${ring}`;
+  if (it.style === "junction") return `junction|${it.junction ? armKey(it.junction) : ""}|${ring}`;
   if (p < 1) return `site|${it.height}|${p}|${ring}`;
   const f = it.front ? `${it.front[0].toFixed(3)},${it.front[1].toFixed(3)}` : "";
   return `${it.style}|${it.kind}|${it.height}|${it.level ?? 1}|${f}|${it.tint ?? ""}|${it.upgrading ? 1 : 0}|${lampOf(it)}|${ring}`;
@@ -516,12 +542,13 @@ export function createModelLayer(map: maplibregl.Map, opts: ModelLayerOptions): 
     const packs: Packed[] = [], roadPacks: Packed[] = [];
     const smoke: Emitter[] = [];
     for (const it of items) {
+      const onRoad = it.style === "road" || it.style === "junction";
       const p = it.style === "road" ? 1 : quantise(it.progress);
       const key = keyOf(it, p, k);
       used.add(key);
       let pack = cache.get(key);
       if (!pack) cache.set(key, (pack = projectModel(seatedModelOf({ ...it, progress: p }, ground), tf.toLngLat, origin, p >= 1 ? lampOf(it) : 0)));
-      (it.style === "road" ? roadPacks : packs).push(pack);
+      (onRoad ? roadPacks : packs).push(pack);
       for (const [x, y, z] of pack.smoke ?? []) smoke.push({ id: it.id, kind: it.kind, style: it.style, lamp: it.lamp, x, y, z });
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
@@ -734,3 +761,4 @@ export function attachModelDebug(map: maplibregl.Map, deps: { frame: ReadonlySig
   attachModelLayer(map, { items, frame: deps.frame, light: deps.light, weather: deps.weather });
   if (import.meta.env.DEV) Object.assign(window, { modelItems: items });
 }
+

@@ -287,6 +287,11 @@ selected service is drawn as its covered road edges.
   paths (polylines in local meters along built roads, home ↔ work). The main thread animates
   dots at 4 km/h of game time: to work departing 06:00–07:00, home 19:00–20:00, so each
   arrives on time for 07–19.
+- **Following a resident:** clicking a walker dot, or «следить» next to a person in the building
+  panel, locks the camera on that resident; a card names them and says whether they are walking
+  to work, home or an evening gathering. The worker tags each walker with `who` and `purpose`
+  (`sim/life.ts`), and the main thread reads the same cosmetic trips
+  (`ui/followModel.ts`, `ui/FollowCamera.tsx`).
 - **Carts:** every producer sends one cart per load (logs 5 m³, planks 2 m³, stone 3 t, food
   500 kg, wares 20 pcs) to the camp along the road network; visual only, drawn as a larger
   dot.

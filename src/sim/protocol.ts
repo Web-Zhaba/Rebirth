@@ -4,7 +4,7 @@ import type { AdminOp } from "./admin";
 import type { Away } from "./away";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
-import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, RestoreMode, Site, StoredArticle, ZoneState, ZoneType } from "./types";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, SimSnapshot, RestoreMode, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
 export type { Away };
 
@@ -66,7 +66,7 @@ export type ToWorker =
   | { t: "load"; legacy: string | null; now: number }
   | { t: "found"; city: City; now: number }
   | { t: "cmd"; id: number; cmd: Cmd }
-  | { t: "query"; id: number; q: { type: "building"; id: number } }
+  | { t: "query"; id: number; q: { type: "building"; id: number } | { type: "resident"; id: number } }
   | { t: "flush" }
   // Session setting, not saved: 0 = paused. `now` keeps paused wall time from being owed later.
   | { t: "speed"; speed: Speed; now: number }
@@ -88,7 +88,7 @@ export type FromWorker =
   // the summary of a catch-up after the tab was hidden (a catch-up at load reports it in "loaded")
   | { t: "away"; away: Away }
   | ({ t: "cmdResult"; id: number } & CmdResult)
-  | { t: "queryResult"; id: number; data: BuildingQuery | null }
+  | { t: "queryResult"; id: number; data: BuildingQuery | ResidentQuery | null }
   // cosmetic, once per game day, whenever the families on their way change, and on load, never during catch-up; not part of the sim state or saves
   | { t: "life"; day: number; trips: Trip[]; traffic: Record<number, number>; lights: Light[] }
   | { t: "resetDone" }

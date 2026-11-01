@@ -253,7 +253,16 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
             caption="настроение"
             title="Настроение"
             align="end"
-            tip={<span class="tip-note">Среднее по семьям, от 0 до 100.</span>}
+            tip={
+              <>
+                <Row label="Сытость" value={Math.round(p.needs.avg.food)} />
+                <Row label="Отдых" value={Math.round(p.needs.avg.rest)} />
+                <Row label="Общение" value={Math.round(p.needs.avg.social)} />
+                <Row label="Тепло" value={Math.round(p.needs.avg.warmth)} />
+                <Row label="Силы к работе" value={`${Math.round(p.needs.work * 100)} %`} tone={p.needs.work < 0.85 ? "warn" : "ok"} />
+                <span class="tip-note">Среднее по семьям, от 0 до 100. Недовольство снижает труд, рождения и учёбу, отпугивает приезжих; несчастные семьи уезжают.</span>
+              </>
+            }
           />
         </section>
       )}
@@ -291,7 +300,7 @@ export function currentWarnings() {
   const { queue } = roadQueue(roads.value);
   const b = buildings.value;
   const building = b ? Object.values(b).filter((x) => x.state === "building").length : 0;
-  const out = warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building });
+  const out = warnings({ food: st.food, eco, builders: p.builders, queue, logs: st.logs, building, needs: p.needs });
   if (snap.services.houses > 0) {
     for (const service of SERVICE_LIST) {
       if (lockReason({ progress: snap.progress }, service.id)) continue;

@@ -100,7 +100,7 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
 
   const showList = open && hits.length > 0;
   return (
-    <div class="panel place-search" role="search">
+    <div class="place-search" role="search">
       <div class="place-search-row">
         <label class="place-search-field">
           <Icon name="search" size={16} />
@@ -149,6 +149,9 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
               {h.where && <span class="place-hit-where">{h.where}</span>}
             </li>
           ))}
+          <li class="place-hit-credit" role="presentation">
+            Поиск: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>, {"\u00a9"} OpenStreetMap
+          </li>
         </ul>
       )}
       {(msg || busy) && (
@@ -156,9 +159,6 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
           {msg || "Ищем…"}
         </div>
       )}
-      <div class="place-search-credit">
-        Поиск: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>, {"\u00a9"} OpenStreetMap
-      </div>
     </div>
   );
 }

@@ -6,8 +6,9 @@ import { Mesh, PATTERN, prism, rgb, shade, square, type Model, type RGB, type XY
 // Models of built roads and bridges: a chain's centre line in town metres + its kind -> mesh in the same metres, on the
 // shared mesh of modelGeometry.ts (the layer, modelLayer.ts, draws them with the buildings).
 //
-// Ground roads are ribbons just above the ground with round joints and ends (discs), like the line caps they replace;
-// their surface patterns (ruts, cobbles) are laid out in world space, so two roads overlapping at a junction match.
+// Ground roads are ribbons just above the ground with round joints (discs) at sharp bends and at ends that go nowhere;
+// an end that meets another road gets none, the junction apron covers it (roadJunctions.ts). Cobbles are laid out in world
+// space, so two surfaces that meet line up; ruts follow the road, so a junction keeps the through road's.
 // Bridges are built along the chain resampled every half metre:
 // - footbridge: a plank deck sagging between end posts, with ropes and hangers;
 // - bridge: a plank deck on piles with railings, ramps at both ends;
@@ -16,6 +17,15 @@ import { Mesh, PATTERN, prism, rgb, shade, square, type Model, type RGB, type XY
 const GROUND_Z: Partial<Record<RoadKind, number>> = { path: 0.02, dirt: 0.035, stone: 0.05 }; // apart, so junctions do not flicker
 const GROUND_STEP = 6; // m; ground ribbons get a point this often, so they can follow the relief (groundSeat.ts)
 const JOINT_TURN = 0.35; // rad: bends sharper than this get a round joint
+
+// Height and surface of a ground road: the junction aprons (roadJunctions.ts) lie at the same heights and paint the same
+// colours, so an apron meets the ribbons at its rim without a step.
+export const groundRoadZ = (kind: RoadKind): number => GROUND_Z[kind] ?? 0.03;
+export function roadSurface(kind: RoadKind): { col: RGB; pat: number } {
+  const pat = kind === "stone" ? PATTERN.cobbles : kind === "dirt" ? PATTERN.ruts : PATTERN.track;
+  const col = rgb(kind === "stone" ? PALETTE.roadStone : kind === "dirt" ? PALETTE.roadDirt : PALETTE.roadPath);
+  return { col, pat };
+}
 
 type P3 = [number, number, number];
 
@@ -138,20 +148,22 @@ function every(st: readonly Station[], s0: number, s1: number, step: number): St
 
 const stationIndex = (st: readonly Station[], x: Station) => st.indexOf(x);
 
-function groundRoad(mesh: Mesh, pts: readonly XY[], kind: RoadKind): void {
+// `joined`: the chain's first/last node is a junction, so that end gets no round joint (its cap would stick out of the
+// junction apron, roadJunctions.ts, which covers the node and the cut instead).
+function groundRoad(mesh: Mesh, pts: readonly XY[], kind: RoadKind, joined: { start?: boolean; end?: boolean }): void {
   const st = stations(pts, GROUND_STEP);
   const w = ROAD_KINDS[kind].width, hw = w / 2;
-  const z = GROUND_Z[kind] ?? 0.03;
-  const pat = kind === "stone" ? PATTERN.cobbles : kind === "dirt" ? PATTERN.ruts : PATTERN.track;
-  const col = rgb(kind === "stone" ? PALETTE.roadStone : kind === "dirt" ? PALETTE.roadDirt : PALETTE.roadPath);
+  const z = groundRoadZ(kind);
+  const { col, pat } = roadSurface(kind);
   if (!st.length) {
-    if (pts.length && Number.isFinite(pts[0][0] + pts[0][1])) disc(mesh, pts[0], hw, z, col, pat, w);
+    if (pts.length && Number.isFinite(pts[0][0] + pts[0][1]) && !joined.start && !joined.end) disc(mesh, pts[0], hw, z, col, pat, w);
     return;
   }
   strip(mesh, st, hw, -hw, st.map(() => z), col, pat, w);
   for (let i = 0; i < st.length; i++) {
-    const end = i === 0 || i === st.length - 1;
-    if (end || st[i].k > 1 / Math.cos(JOINT_TURN / 2)) disc(mesh, st[i].p, hw, z, col, pat, w);
+    const open = (i === 0 && joined.start) || (i === st.length - 1 && joined.end);
+    if ((i === 0 || i === st.length - 1) && !open) disc(mesh, st[i].p, hw, z, col, pat, w);
+    else if (i > 0 && i < st.length - 1 && st[i].k > 1 / Math.cos(JOINT_TURN / 2)) disc(mesh, st[i].p, hw, z, col, pat, w);
   }
 }
 
@@ -237,12 +249,13 @@ function stoneBridge(mesh: Mesh, pts: readonly XY[]): void {
   }
 }
 
-// Builds the model of one built road chain (centre line in town metres, chain order).
-export function buildRoadModel(pts: readonly XY[], kind: RoadKind): Model {
+// Builds the model of one built road chain (centre line in town metres, chain order). `joined` marks the ends that meet
+// another road at a junction: those get no round joint, the junction apron covers the cut.
+export function buildRoadModel(pts: readonly XY[], kind: RoadKind, joined: { start?: boolean; end?: boolean } = {}): Model {
   const mesh = new Mesh({ cx: 0, cy: 0, ux: 1, uy: 0, len: 0, wid: 0 });
   if (kind === "footbridge") footbridge(mesh, pts);
   else if (kind === "bridge") pileBridge(mesh, pts);
   else if (kind === "stonebridge") stoneBridge(mesh, pts);
-  else groundRoad(mesh, pts, kind);
+  else groundRoad(mesh, pts, kind, joined);
   return mesh.m;
 }

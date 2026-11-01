@@ -20,6 +20,42 @@
   flex: none;
 }
 
+/* Follow mode: one resident, their state and the way back to the map. */
+.follow-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+}
+.follow-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.follow-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+}
+.follow-head .icon-btn {
+  margin-left: auto;
+}
+.follow-status {
+  font-weight: 700;
+}
+.follow-home .follow-status,
+.follow-work .follow-status {
+  color: var(--ok-text);
+}
+.follow-tavern .follow-status {
+  color: var(--warn-text);
+}
+.follow-gone .follow-status {
+  color: var(--bad);
+}
+
 
 
 .day-summary-timer {
@@ -27,7 +63,7 @@
   height: 3px;
   margin: var(--sp-1) 0 var(--sp-2);
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--rule-soft);
 }
 .day-summary-timer > span {
@@ -174,7 +210,7 @@ button.event-card-pause-btn:hover {
   padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-2);
   background: var(--paper-raised);
   border: var(--bw-hair) solid var(--rule);
-  border-left-width: 4px;
+  border-left-width: 0;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-hard-sm);
   font-size: var(--fs-sm);
@@ -182,16 +218,16 @@ button.event-card-pause-btn:hover {
   animation: toast-in 0.18s ease-out;
 }
 .toast-ok {
-  border-left-color: var(--ok);
+  border-left-color: transparent;
 }
 .toast-warn {
-  border-left-color: var(--warn);
+  border-left-color: transparent;
 }
 .toast-bad {
-  border-left-color: var(--bad);
+  border-left-color: transparent;
 }
 .toast-info {
-  border-left-color: var(--info);
+  border-left-color: transparent;
 }
 .toast-main {
   flex: 1;
@@ -423,7 +459,7 @@ button.toast-main:hover .toast-text {
   width: 100%;
   padding: var(--sp-1) var(--sp-2);
   border: var(--bw-hair) solid var(--rule);
-  border-left: 4px solid var(--info);
+  border-left: 0;
   border-radius: var(--radius-sm);
   background: var(--paper-raised);
   box-shadow: var(--shadow-hard-sm);
@@ -457,7 +493,7 @@ button.toast-main:hover .toast-text {
   display: block;
   height: 3px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--rule-soft);
 }
 .research-status-track > span {
@@ -466,5 +502,94 @@ button.toast-main:hover .toast-text {
   background: var(--info);
 }
 .research-idle {
-  border-left-color: var(--warn);
+  border-left-color: transparent;
 }
+
+/* ---- World В«Р‘РµСЂРµСЃС‚Р° Рё РіСЂР°РјРѕС‚Р°В» вЂ” the feedback layer ----
+   Toasts and event cards are bark notes with tar edges; the kind of a note is carried by its icon, not by a
+   coloured side bar. Map badges are dark chips so they read on the moss floor. */
+
+.toast {
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 78%, var(--paper-shade));
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+}
+
+.toast-ok .toast-main .icon { color: var(--ok); }
+.toast-warn .toast-main .icon { color: var(--warn); }
+.toast-bad .toast-main .icon { color: var(--bad); }
+.toast-info .toast-main .icon { color: var(--info); }
+
+.toast-text { font-size: var(--fs-sm); line-height: 1.35; }
+
+.event-card {
+  background:
+    radial-gradient(140% 60% at 10% -8%, rgba(31, 26, 19, 0.07), transparent 60%),
+    linear-gradient(178deg, var(--paper-raised), var(--paper) 72%, var(--paper-shade));
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+}
+
+.event-card-head {
+  padding-bottom: var(--sp-2);
+  border-bottom: 2px solid var(--rule);
+}
+
+.event-card-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.event-card-text { font-size: var(--fs-md); line-height: 1.45; }
+.event-card-effect { color: var(--pencil); font-size: var(--fs-sm); }
+.event-card-place { color: var(--pencil); }
+
+.event-card-option {
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.event-card-option:hover:not(:disabled) { background: var(--paper-sunk); }
+
+/* The safe choice is marked in resin вЂ” the world's one warm signal вЂ” never by colour alone. */
+.event-card-option.event-card-safe {
+  border-color: var(--resin-deep);
+  box-shadow: inset 0 0 0 1px var(--resin-deep);
+}
+
+.event-card-timer { font-variant-numeric: tabular-nums; }
+.event-card-timer.urgent { color: var(--bad); }
+
+.event-card-key,
+.event-card-autopause {
+  font-family: var(--font-display);
+}
+
+.event-card-key {
+  border: var(--bw-hair) solid var(--kbd-border);
+  border-radius: 0;
+  background: var(--paper-sunk);
+  color: var(--ink-2);
+}
+
+.map-badge {
+  background: #121722;
+  color: var(--paper-raised);
+  border: var(--bw) solid #05070c;
+  border-radius: 0;
+  box-shadow: var(--shadow-hard-sm);
+  font-weight: 700;
+}
+
+.map-badge-bad { background: var(--bad); color: var(--paper-raised); border-color: #05070c; }
+.map-badge-warn { background: var(--warn-fill); color: var(--warn-text); }
+.map-badge-build { background: var(--paper-raised); color: var(--ink); }
+

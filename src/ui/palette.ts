@@ -1,30 +1,31 @@
-// Colors of the "Field atlas" (PLAN-ui.md section 2) for code that cannot read CSS variables: MapLibre paint
-// properties, canvas patterns, legends. Every entry here has a custom property of the same name (camelCase ->
-// kebab-case) in tokens.css with the same value; palette.test.ts fails when the two drift apart.
+// Colors of the world "Birch bark and letters" (chosen 2026-10-31) for code that cannot read CSS:
+// MapLibre paint properties, canvas patterns, legends. The "paper" roles are birch bark, the "ink" roles are
+// tar, the ground is a forest floor in shade. Every entry here has a custom property of the same name
+// (camelCase -> kebab-case) in tokens.css with the same value; palette.test.ts fails when the two drift apart.
 import type { DomainId } from "../sim/domains";
 
 export const PALETTE = {
-  paper: "#f4eddc",
-  paperRaised: "#fbf7ec",
-  paperShade: "#e9dfc8",
-  paperSunk: "#e3d8bf",
-  ink: "#2b261f",
-  ink2: "#4a4234",
-  pencil: "#6b604f",
-  pencilFaint: "#9a8e76",
-  ruleSoft: "#cdbf9f",
-  ruleDotted: "#b5a684",
-  kbdBorder: "#8a7d63",
-  ok: "#4a6136",
-  okText: "#3f5a2c",
-  okFill: "#d5dfc4",
-  warn: "#b07a1c",
-  warnText: "#7d5410",
-  warnFill: "#efd9a6",
-  bad: "#94331b",
-  badFill: "#ebc9bc",
-  info: "#3a5a78",
-  infoFill: "#d3dfe8",
+  paper: "#dfe4d6",
+  paperRaised: "#e9ecdf",
+  paperShade: "#cfd5c4",
+  paperSunk: "#c1c7b6",
+  ink: "#1e2822",
+  ink2: "#38453d",
+  pencil: "#46554c",
+  pencilFaint: "#7f8c82",
+  ruleSoft: "#a9b1a2",
+  ruleDotted: "#8f988a",
+  kbdBorder: "#5c665c",
+  ok: "#43633a",
+  okText: "#37512c",
+  okFill: "#cddcc0",
+  warn: "#8a5f0d",
+  warnText: "#6b4708",
+  warnFill: "#e9dcb6",
+  bad: "#96331f",
+  badFill: "#e6c8bd",
+  info: "#2b5470",
+  infoFill: "#c8d8e0",
   // Knowledge domains: notable old buildings on the map.
   domainBuild: "#a4562f",
   domainFarm: "#6b8e3d",
@@ -32,36 +33,36 @@ export const PALETTE = {
   domainTrade: "#c08a1e",
   domainLearn: "#3a6f9c",
   domainCare: "#9c3a52",
-  dusk: "#26303a",
-  duskInk: "#ede6d3",
-  // Base map, muted so zones, roads and buildings read on top of it.
-  mapLand: "#ebe4cb",
-  mapGrass: "#dfe2bd",
-  mapForest: "#a6b685",
-  mapWetland: "#bcc9a3",
-  mapSand: "#e6d9ae",
-  mapRock: "#cdc6b2",
-  mapIce: "#f2f1e8",
-  mapWater: "#9fbac8",
+  dusk: "#1b241f",
+  duskInk: "#e6dcc4",
+  // Base map: the Earth as a floor of moss. Roads, works and panels read lighter on it.
+  mapLand: "#4e5a42",
+  mapGrass: "#5d6d45",
+  mapForest: "#2c3a22",
+  mapWetland: "#465839",
+  mapSand: "#7b7051",
+  mapRock: "#5c5d4e",
+  mapIce: "#dfe8e6",
+  mapWater: "#2b4d58",
   // Biomes from the same OpenMapTiles data (subclasses): map only, the game still counts them as meadow or forest.
-  mapForestDeep: "#7d9462", // soft edge of dense forest
-  mapWoodLight: "#bccb9b", // open wood, lighter than the forest
-  mapScrub: "#c9cc98",
-  mapHeath: "#d9c99d",
-  mapFell: "#cfcab4",
-  mapBog: "#93a37b",
-  mapFarm: "#e4dba6",
-  mapBeach: "#efe4c0",
-  mapShore: "#d6cca3", // a sand band where the land meets water
-  // Roads: surface and edge per kind.
-  roadPath: "#dccfa6",
-  roadPathEdge: "#8a7d63",
+  mapForestDeep: "#232e1c", // soft edge of dense forest
+  mapWoodLight: "#4d5f3b", // open wood, lighter than the forest
+  mapScrub: "#616a41",
+  mapHeath: "#6a6344",
+  mapFell: "#5e6252",
+  mapBog: "#3c4a31",
+  mapFarm: "#726d45",
+  mapBeach: "#7f7453",
+  mapShore: "#635b42", // a sand band where the land meets water
+  // Roads: surface and edge per kind; worn light lines on the dark floor.
+  roadPath: "#c4b28a",
+  roadPathEdge: "#7b6d50",
   roadDirt: "#a98a58",
-  roadBridge: "#8c7b5a",
-  roadBridgeEdge: "#3e3424",
-  roadDirtEdge: "#5e4a2c",
-  roadStone: "#a3a39b",
-  roadStoneEdge: "#4a4a45",
+  roadBridge: "#9a8862",
+  roadBridgeEdge: "#2b2315",
+  roadDirtEdge: "#4a3a20",
+  roadStone: "#b4b1a6",
+  roadStoneEdge: "#35352f",
 } as const;
 export type PaletteKey = keyof typeof PALETTE;
 
@@ -77,9 +78,10 @@ export const DOMAIN_COLORS: Record<DomainId, string> = {
 
 // Map colors that have no CSS counterpart (lights, hillshading, moving dots).
 export const MAP_ONLY = {
+  snowSheet: "#eef2f4", // the winter veil over the whole map: an effect colour, never a UI surface
   lamp: "#ffbe55",
-  hillShadow: "#5d5a48",
-  hillAccent: "#7a7660",
+  hillShadow: "#333d2b", // a shade line darker than the moss floor it crosses
+  hillAccent: "#64744f",
   cart: "#6d4f2a",
   badDeep: "#5e2314",
 } as const;
@@ -225,3 +227,5 @@ export function contrast(a: string, b: string): number {
   const [x, y] = [lum(a), lum(b)];
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
+
+

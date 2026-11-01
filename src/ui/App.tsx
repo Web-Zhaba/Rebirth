@@ -11,6 +11,7 @@ import { CentreColumn } from "./CentreColumn";
 import { ClearingPanel } from "./ClearingPanel";
 import { FoundCity } from "./FoundCity";
 import { FpsCounter } from "./FpsCounter";
+import { FollowCamera } from "./FollowCamera";
 import { HeritagePanel } from "./HeritagePanel";
 import { HotkeysDialog } from "./HotkeysDialog";
 import { Hud } from "./Hud";
@@ -37,6 +38,7 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c ? <Hud city={c} map={map} /> : <FoundCity map={map} />}
       {c && <TerrainInspector map={map} />}
       {c && <CentreColumn map={map} />}
+      {c && <FollowCamera map={map} />}
       {c && <BuildingPanel />}
       {c && <ClearingPanel />}
       {c && <TownPanel city={c} map={map} />}
@@ -45,7 +47,8 @@ export function App({ map }: { map: maplibregl.Map }) {
       {c && <NotebookHost map={map} />}
       {c && <BuildBar />}
       {c && <AdminPanel />}
-      <FpsCounter />
+      {/* A readout for a running town: on the first-launch screen it would sit on the founding sheet. */}
+      {c && <FpsCounter />}
       <AwayNotice />
       <AboutDialog />
       <HotkeysDialog />

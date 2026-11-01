@@ -1,4 +1,4 @@
-/* Layout and access (PLAN-ui.md U8). Loaded after the component stylesheets, so it wins at equal specificity.
+﻿/* Layout and access (PLAN-ui.md U8). Loaded after the component stylesheets, so it wins at equal specificity.
 
    Breakpoints
      >= 1100 px   wide: left column, centre column and right slot side by side; full top bar.
@@ -87,7 +87,7 @@ button.event-card-pause-btn {
 
 /* ---- Compact top bar: the full one needs about 1260 px ---- */
 
-@media (max-width: 1299px) {
+@media (max-width: 1559px) {
   .topbar {
     gap: var(--sp-3);
     padding: 0 var(--sp-2);
@@ -337,3 +337,4 @@ html.screenshot-mode .maplibregl-ctrl-top-left,
 html.screenshot-mode .maplibregl-ctrl-top-right {
   display: none;
 }
+
