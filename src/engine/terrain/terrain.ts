@@ -7,6 +7,7 @@ import { DEM_SIZE } from "../bake/terrarium";
 import { DRAPE_MAX_ZOOM } from "../bake/drape";
 import type { DrapeResponse } from "../bake/drapeWorker";
 import { demStream, TileStream } from "../stream/demStream";
+import { OVERLAY_LEVELS, type OverlayRaster } from "../overlay/overlayRaster";
 import { DrapePages, type DrapePage } from "./drapePages";
 import { DEM_MAX_ZOOM, HeightPages, type Page } from "./heightPages";
 import { morphBand } from "./morph";
@@ -24,7 +25,7 @@ export const EXAGGERATION = 1.6; // MapLibre relief (src/map/relief.ts RELIEF_EX
 
 const MAX_NODES = 4096; // chunk-table capacity per frame
 const SLOTS = 1024; // resident node vertex blocks
-const NODE_STRIDE = 28; // floats per chunk-table entry (112 B, struct Node in terrain.wgsl)
+const NODE_STRIDE = 40; // floats per chunk-table entry (160 B, struct Node in terrain.wgsl)
 const NO_PAGE = 0xffffffff;
 const VERTEX_BUILDS_PER_FRAME = 64; // 64 x 35 KB ~ 2.2 MB
 const UPLOADS_PER_FRAME = 4; // 4 x 266 KB height pages ~ 1 MB
@@ -92,7 +93,13 @@ export class Terrain {
   maxZoom = MAX_ZOOM;
   stats: TerrainStats = { nodes: 0, visited: 0, maxZoom: 0, pages: 0, pageLayers: 0, pending: 0, inFlight: 0, missing: 0, vertexBuilds: 0, selectionHash: 0, morph: { lo: 0, hi: 0 }, deferredUploads: 0, drapePages: 0, drapePending: 0 };
 
-  constructor(private readonly device: GPUDevice, target: RenderTarget, frameLayout: GPUBindGroupLayout, frameLayers: number) {
+  constructor(
+    private readonly device: GPUDevice,
+    target: RenderTarget,
+    frameLayout: GPUBindGroupLayout,
+    frameLayers: number,
+    private readonly overlay: OverlayRaster,
+  ) {
     this.pages = new HeightPages(device, frameLayers);
     this.drape = new DrapePages(device, Math.min(DRAPE_LAYERS, frameLayers));
     for (let i = SLOTS - 1; i >= 0; i--) this.freeSlots.push(i);
@@ -106,11 +113,12 @@ export class Terrain {
     const layout = device.createBindGroupLayout({
       label: "terrain",
       entries: [
-        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "read-only-storage" } },
+        { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
         { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: "read-only-storage" } },
         { binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: { sampleType: "unfilterable-float", viewDimension: "2d-array" } },
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d-array" } },
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, sampler: { type: "filtering" } },
+        { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d-array" } },
       ],
     });
     this.bindGroup = device.createBindGroup({
@@ -121,6 +129,7 @@ export class Terrain {
         { binding: 2, resource: this.pages.texture.createView({ dimension: "2d-array" }) },
         { binding: 3, resource: this.drape.texture.createView({ dimension: "2d-array" }) },
         { binding: 4, resource: device.createSampler({ magFilter: "linear", minFilter: "linear", addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge" }) },
+        { binding: 5, resource: overlay.texture.createView({ dimension: "2d-array" }) },
       ],
     });
     const module = createShader(device, "terrain", terrainWgsl, { GRID });
@@ -294,6 +303,7 @@ export class Terrain {
       // Drape page: the node's own tile up to DRAPE_MAX_ZOOM, ancestors standing in while it bakes.
       const dpage = this.drape.best(node.z, node.x, node.y);
       writePage(f, u, o + 24, o + 27, node, dpage);
+      for (let l = 0; l < OVERLAY_LEVELS; l++) this.overlay.nodeUv(l, node.z, node.x, node.y, f, o + 28 + l * 4);
       const dz = Math.min(node.z, DRAPE_MAX_ZOOM);
       if (!dpage || dpage.z < dz) {
         const want = tileKey(dz, node.x >> (node.z - dz), node.y >> (node.z - dz));

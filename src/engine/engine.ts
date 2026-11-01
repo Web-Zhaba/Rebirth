@@ -5,6 +5,7 @@ import { FrameUniforms } from "./frame/frameUniforms";
 import { enuAt, geodeticToEcef, sub, type Geodetic, type Vec3 } from "./geo/ellipsoid";
 import { DEPTH_FORMAT, fitCanvas, initGpu, SAMPLE_COUNT, type Gpu, type RenderTarget } from "./gpu/device";
 import { GpuTimer } from "./gpu/timer";
+import { OverlayRaster } from "./overlay/overlayRaster";
 import { Sky } from "./sky/sky";
 import { EXAGGERATION, Terrain } from "./terrain/terrain";
 
@@ -45,6 +46,7 @@ export class Engine {
   view: CameraView | null = null;
   readonly target: RenderTarget;
   readonly terrain: Terrain;
+  readonly overlay: OverlayRaster;
   readonly frameU: FrameUniforms;
   readonly timer: GpuTimer | null;
   readonly drawables: Drawable[] = [];
@@ -71,7 +73,8 @@ export class Engine {
     const { device, format } = gpu;
     this.target = { format, depthFormat: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT };
     this.frameU = new FrameUniforms(device);
-    this.terrain = new Terrain(device, this.target, this.frameU.layout, device.limits.maxTextureArrayLayers);
+    this.overlay = new OverlayRaster(device);
+    this.terrain = new Terrain(device, this.target, this.frameU.layout, device.limits.maxTextureArrayLayers, this.overlay);
     this.sky = new Sky(device, this.target, this.frameU.layout);
     this.timer = gpu.timestamps ? new GpuTimer(device) : null;
     if (this.timer) this.timer.onSample = (ms) => this.gpuListeners.forEach((f) => f(ms));
@@ -119,6 +122,12 @@ export class Engine {
 
   groundAt = (lat: number, lng: number): number | null => this.terrain.groundAt(lat, lng);
 
+  // Ground metres per CSS px at the camera target (the scale MapLibre's zoom implied, src/view/maplibre/zoom.ts).
+  metersPerPixel(): number {
+    const s = this.state;
+    return (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, this.canvas.clientHeight);
+  }
+
   // Ground under a CSS pixel of the canvas, or null for sky.
   pick(x: number, y: number): Geodetic | null {
     const v = this.view;
@@ -159,6 +168,7 @@ export class Engine {
     clampState(s);
     const view = buildView(s, canvas.clientWidth, canvas.clientHeight, this.groundAt);
     this.view = view;
+    this.overlay.update(s, this.metersPerPixel());
     this.terrain.update(view);
     for (const d of this.drawables) d.update?.(view, this);
     const light = this.light(s);

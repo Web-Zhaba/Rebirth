@@ -15,6 +15,8 @@ struct Node {
   apexH: f32,   // the cap height (m, as drawn)
   info: vec4u,  // x page layer (NO_PAGE = none), y vertex slot, z node zoom, w parent page layer
   drape: vec4f, // drape page (bake/drape.ts): xy uv of the node's corner, z uv scale, w the layer's bits (NO_PAGE = none)
+  ov: array<vec4f, 3>, // overlay levels near to far (overlay/overlayRaster.ts): xy the node's corner in level uv, z its
+                        // size, w 1 = drawn
 };
 
 @group(1) @binding(0) var<storage, read> nodes: array<Node>;
@@ -22,6 +24,7 @@ struct Node {
 @group(1) @binding(2) var heights: texture_2d_array<f32>;
 @group(1) @binding(3) var drapes: texture_2d_array<f32>;
 @group(1) @binding(4) var drapeSampler: sampler;
+@group(1) @binding(5) var overlays: texture_2d_array<f32>;
 
 const GRID: u32 = ${GRID}u;
 const GRID_VERTS: u32 = GRID * GRID;
@@ -93,6 +96,8 @@ struct VsOut {
   @location(11) capH: f32, // drawn height of the vertex, for the cap's albedo
   @location(12) duv: vec2f,
   @location(13) @interpolate(flat) dlayer: u32,
+  @location(14) nl: vec2f, // across the node 0..1: overlay level uv is affine in it, like mercator
+  @location(15) @interpolate(flat) node: u32,
 };
 
 @vertex
@@ -166,6 +171,8 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut
   o.morph = m;
   o.duv = gridUv(node.drape, ij);
   o.dlayer = bitcast<u32>(node.drape.w);
+  o.nl = vec2f(ij) / f32(GRID - 1u);
+  o.node = ii;
   o.cap = 0.0;
   o.capH = drawnH;
   if (cap != 0u) {
@@ -231,6 +238,19 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     albedo = vec3f(0.015, 0.05, 0.11);
   }
   n = normalize(mix(n, up, water)); // water lies flat whatever the DEM says under it
+
+  // The game's drawings (premultiplied, linear): the finest overlay level that covers the point.
+  var ov = vec4f(0.0);
+  for (var l = 0; l < 3; l++) {
+    let lv = nodes[v.node].ov[l];
+    let ouv = lv.xy + v.nl * lv.z;
+    if (lv.w > 0.0 && all(ouv >= vec2f(0.0)) && all(ouv <= vec2f(1.0))) {
+      ov = textureSampleLevel(overlays, drapeSampler, ouv, l, 0.0);
+      break;
+    }
+  }
+  albedo = albedo * (1.0 - ov.a) + ov.rgb * DRAPE_GAIN;
+  water *= 1.0 - ov.a;
   if (frame.params.y > 0.5) {
     // Blends towards the parent level's tint as the vertex morphs: smooth colours mean no pops.
     let tint = mix(lodTint(v.zoom), lodTint(v.zoom + 5u), clamp(v.morph, 0.0, 1.0));

@@ -6,6 +6,7 @@ import type { ReadonlySignal } from "@preact/signals";
 import { defaultLight, SUN_INTENSITY } from "../../engine/engine";
 import { sunDirection } from "../../sim/weather";
 import type { View } from "../view";
+import { TOOL_OVERLAYS } from "./overlayStyles";
 import { attachPlaceLabels } from "./placeLabels";
 import { createEngineView } from "./view";
 
@@ -46,6 +47,7 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
     };
   const camera = createCameraControl(engine);
   const view = createEngineView(engine, camera, container);
+  engine.overlay.setLayers([...TOOL_OVERLAYS]);
   attachPlaceLabels(engine, container);
   container.append(credits());
   engine.start();

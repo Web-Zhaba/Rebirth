@@ -45,8 +45,8 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
   };
   engine.onFrame(() => markers.forEach(place));
 
-  // Overlays (road preview, lots, radii...) are drawn by the engine from N4. Until then the latest data is just kept.
-  const overlays = new Map<OverlayId, Overlay & { data: unknown }>();
+  // Overlays (road preview, lots, radii...) go to the engine's overlay raster; how each looks is in overlayStyles.ts.
+  const overlays = new Map<OverlayId, Overlay>();
 
   return {
     canvas,
@@ -135,7 +135,7 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
     overlay(id) {
       let o = overlays.get(id);
       if (!o) {
-        o = { data: null, setData(data) { this.data = data; } };
+        o = { setData: (data) => engine.overlay.setData(id, data) };
         overlays.set(id, o);
       }
       return o;
