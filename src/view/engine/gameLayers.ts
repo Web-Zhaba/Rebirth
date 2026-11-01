@@ -1,10 +1,11 @@
 import { computed, effect, type ReadonlySignal } from "@preact/signals";
 import type { FeatureCollection } from "geojson";
 import type { Engine } from "../../engine/engine";
+import { OVERLAY_PATTERN } from "../../engine/overlay/geometry";
 import type { OverlayLayer } from "../../engine/overlay/overlayRaster";
 import { TRAFFIC_STOPS, ZONE_COLORS } from "../../map/tools";
 import { C } from "../../world/biome";
-import { mixHex, PALETTE, TREE_COLORS } from "../../ui/palette";
+import { mixHex, PALETTE } from "../../ui/palette";
 import { buildingShapes } from "../layers/buildings";
 import { campArea, cityPoint } from "../layers/city";
 import { serviceReach } from "../layers/reach";
@@ -18,7 +19,7 @@ import { TOOL_OVERLAYS } from "./overlayStyles";
 
 // The game's 2D map on the engine: zones, fields, clearings, roads and lots drawn into the overlay raster from the same
 // data the MapLibre layers show (view/layers/*), in their look and order (bottom first), the tool overlays on top.
-// Clearing labels and the hatch patterns of zones and fields are not drawn yet.
+// Their text (clearing percents, names of the old city) is DOM over the canvas: gameLabels.ts.
 
 type P = Record<string, unknown>;
 
@@ -45,10 +46,15 @@ function trafficRamp(n: number): { color: string; width: number } {
 const is = (state: string) => (p: P) => p.state === state;
 
 const z = mppAtZoom;
+// The hatches of the old fill-pattern images (map/patterns.ts): ink at 55 %, residential dots, craft diagonals, trade
+// cross-hatch (the fallback, as in the old match expression), field furrows.
+const PATTERN_INK = 0.55;
+const ZONE_PATTERN: Record<string, number> = { res: OVERLAY_PATTERN.res, craft: OVERLAY_PATTERN.craft, trade: OVERLAY_PATTERN.trade };
 const ruinState = (p: P) => String(p.s ?? "");
 
 export const GAME_LAYERS: OverlayLayer[] = [
-  // The buried old city under everything of the new town (the old layers' look; walls lie flat here, no names yet).
+  // The buried old city under everything of the new town (the old layers' look). Its broken walls stand in 3D from the
+// same gate (models.ts), its names are DOM text (gameLabels.ts).
   { source: "ruins-floors", maxMpp: z(13), style: { kind: "fill", color: PALETTE.pencilFaint, opacity: 0.28 } },
   {
     source: "ruins-typed",
@@ -67,13 +73,14 @@ export const GAME_LAYERS: OverlayLayer[] = [
       opacity: (p) => (ruinState(p) === "lost" ? 0.45 : p.dim === 1 ? 0.5 : 0.95),
     },
   },
-  { source: "ruins-walls", maxMpp: z(14), style: { kind: "fill", color: mixHex(PALETTE.pencilFaint, TREE_COLORS.stone, 0.3), opacity: 0.95, filter: (p) => p.thin === 0 } },
   { source: "ruins-hints", maxMpp: z(14), style: { kind: "circle", radiusPx: 4, color: PALETTE.pencilFaint, opacity: 0.35, strokeColor: PALETTE.pencilFaint, strokeWidthPx: 1, strokeOpacity: 0.5 } },
   { source: "clearings", style: { kind: "fill", color: C.meadow, filter: (p) => p.done === true } },
   { source: "clearings", style: { kind: "line", color: PALETTE.pencil, widthPx: 2, dash: [2, 1.5], filter: (p) => p.done !== true } },
   { source: "fields", style: { kind: "fill", color: PALETTE.warnFill, opacity: 0.7 } },
+  { source: "fields", style: { kind: "fill", color: PALETTE.ink, opacity: PATTERN_INK, pattern: OVERLAY_PATTERN.field } },
   { source: "fields", style: { kind: "line", color: PALETTE.warn, widthPx: 1.5 } },
   { source: "zone-cells", maxMpp: ZONE_MPP, style: { kind: "fill", color: (p) => ZONE_COLORS[p.zone as keyof typeof ZONE_COLORS] ?? ZONE_COLORS.trade, opacity: (p) => (p.occ ? 0.14 : 0.34) } },
+  { source: "zone-cells", maxMpp: ZONE_MPP, style: { kind: "fill", color: PALETTE.ink, opacity: (p) => PATTERN_INK * (p.occ ? 0.5 : 1), pattern: (p) => ZONE_PATTERN[p.zone as string] ?? OVERLAY_PATTERN.trade } },
   { source: "zone-grid", maxMpp: ZONE_MPP, style: { kind: "line", color: PALETTE.ink, widthPx: 0.8, opacity: 0.22 } },
   { source: "zone-hover", maxMpp: ZONE_MPP, style: { kind: "fill", color: PALETTE.paperRaised, opacity: 0.55 } },
   { source: "zone-hover", maxMpp: ZONE_MPP, style: { kind: "line", color: PALETTE.ink, widthPx: 1 } },

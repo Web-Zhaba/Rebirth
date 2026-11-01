@@ -41,7 +41,7 @@ export interface ModelItem {
 
 // Model of an item. Unfinished: the building site.
 // Points every 1 km over the items' bounds, padded: their DEM tiles (about 10 km wide) cover every model vertex.
-export function coverOf(items: readonly ModelItem[]): XY[] {
+export function coverOf(items: readonly { ring: readonly XY[] }[]): XY[] {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const it of items) for (const [x, y] of it.ring) (x0 = Math.min(x0, x)), (y0 = Math.min(y0, y)), (x1 = Math.max(x1, x)), (y1 = Math.max(y1, y));
   if (!(x1 >= x0)) return [];

@@ -7,6 +7,7 @@ import { defaultLight, SUN_INTENSITY } from "../../engine/engine";
 import { sunDirection } from "../../sim/weather";
 import type { View } from "../view";
 import type { WeatherState } from "../../sim/weather";
+import { attachGameLabels } from "./gameLabels";
 import { attachGameLayers } from "./gameLayers";
 import { attachLife, type LifeOptions } from "./life";
 import { attachModels } from "./models";
@@ -62,6 +63,7 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   attachGameLayers(engine);
   attachModels(engine, { light: o.light, weather: o.weather, debug: o.debug3dModels });
   attachPlaceLabels(engine, container);
+  attachGameLabels(engine, container);
   container.append(credits());
   engine.start();
   return { view, engine, camera };

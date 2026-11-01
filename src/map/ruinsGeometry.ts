@@ -1,5 +1,7 @@
 import { oldStreetKind, ROAD_KINDS } from "../sim/roads";
+import { mixHex, PALETTE, TREE_COLORS } from "../ui/palette";
 import type { XY } from "../world/oldworld";
+import { PATTERN, rgb, type Model, type RGB } from "./modelGeometry";
 
 // Shapes of the buried old city (pure, for every renderer): street widths and the low broken walls over a foundation.
 
@@ -175,3 +177,76 @@ export function brokenWalls(ring: XY[], key: string, height = 6): { quad: XY[]; 
 
 // ---------- layer ----------
 
+
+// ---------- the broken walls as a 3D model (the engine; MapLibre extrudes the same quads itself) ----------
+
+// Colour of a wall piece by its height, the old fill-extrusion ramp (map/ruinsLayer.ts): the lowest pieces grown over
+// with moss, waist-high ones bare, the best kept weathered stone.
+const WALL_STOPS: [number, string][] = [
+  [0.1, mixHex(PALETTE.pencilFaint, TREE_COLORS.summer, 0.45)],
+  [1, PALETTE.pencilFaint],
+  [2.5, mixHex(PALETTE.pencilFaint, TREE_COLORS.stone, 0.5)],
+];
+export function ruinWallColour(h: number): RGB {
+  const s = WALL_STOPS;
+  if (h <= s[0][0]) return rgb(s[0][1]);
+  for (let i = 1; i < s.length; i++)
+    if (h <= s[i][0]) {
+      const t = (h - s[i - 1][0]) / (s[i][0] - s[i - 1][0]);
+      return rgb(mixHex(s[i - 1][1], s[i][1], t));
+    }
+  return rgb(s[s.length - 1][1]);
+}
+
+export const RUIN_WALL_BURY = 0.3; // m the pieces reach below the lowest ground under them, so slopes leave no gap
+const WALL_FOOT = 0.82; // the foot of a piece darker than its top (the old extrusion's vertical gradient)
+
+// Wall pieces (brokenWalls) as one model seated on the ground (town metres -> drawn ground height): each piece a prism
+// from below its lowest corner to its height over the mean ground of its corners, coloured by height, open below.
+// `lift` is that mean ground, so the facade height of a vertex is its height over the ground, like a seated building's.
+export function ruinWallModel(pieces: readonly { quad: XY[]; h: number }[], ground: (x: number, y: number) => number): Model {
+  const m: Model = { positions: [], normals: [], colors: [], facade: [], indices: [], lift: [] };
+  const lift = m.lift!;
+  const vert = (x: number, y: number, z: number, n: [number, number, number], c: RGB, g: number, s = 0, len = 0) => {
+    m.positions.push(x, y, z);
+    m.normals.push(...n);
+    m.colors.push(...c);
+    m.facade.push(s, len, 0, PATTERN.plain);
+    lift.push(g);
+    return m.positions.length / 3 - 1;
+  };
+  for (const { quad, h } of pieces) {
+    if (quad.length < 3 || !(h > 0)) continue;
+    const gs = quad.map(([x, y]) => ground(x, y));
+    const g = gs.reduce((a, b) => a + b, 0) / gs.length;
+    const z0 = Math.min(...gs) - RUIN_WALL_BURY;
+    const z1 = g + h;
+    const top = ruinWallColour(h);
+    const foot: RGB = [top[0] * WALL_FOOT, top[1] * WALL_FOOT, top[2] * WALL_FOOT];
+    const cx = quad.reduce((a, q) => a + q[0], 0) / quad.length;
+    const cy = quad.reduce((a, q) => a + q[1], 0) / quad.length;
+    // top: a fan over the convex quad
+    const t0 = m.positions.length / 3;
+    for (const [x, y] of quad) vert(x, y, z1, [0, 0, 1], top, g);
+    for (let i = 1; i + 1 < quad.length; i++) m.indices.push(t0, t0 + i, t0 + i + 1);
+    // sides, each with its own outward normal
+    for (let i = 0; i < quad.length; i++) {
+      const a = quad[i];
+      const b = quad[(i + 1) % quad.length];
+      const ex = b[0] - a[0];
+      const ey = b[1] - a[1];
+      const len = Math.hypot(ex, ey);
+      if (len < 1e-6) continue;
+      let nx = ey / len;
+      let ny = -ex / len;
+      if (nx * ((a[0] + b[0]) / 2 - cx) + ny * ((a[1] + b[1]) / 2 - cy) < 0) (nx = -nx), (ny = -ny);
+      const n: [number, number, number] = [nx, ny, 0];
+      const i0 = vert(a[0], a[1], z0, n, foot, g, 0, len);
+      const i1 = vert(b[0], b[1], z0, n, foot, g, len, len);
+      const i2 = vert(b[0], b[1], z1, n, top, g, len, len);
+      const i3 = vert(a[0], a[1], z1, n, top, g, 0, len);
+      m.indices.push(i0, i1, i2, i0, i2, i3);
+    }
+  }
+  return m;
+}

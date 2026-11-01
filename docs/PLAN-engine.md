@@ -317,7 +317,7 @@ Done (2026-11-01).
 (3D ribbons near, drape far), zones, building fills, fields, ruins and excavation, tool previews as decals, life
 walkers/lights, traffic, badges, terrain edits. All tools work on the new engine.
 
-Done (2026-11-01), except terrain edits, 3D ruin walls, map text of ruins/zones/clearings and fill patterns.
+Done (2026-11-01), except terrain edits (3D ruin walls, map text and fill patterns followed the same day, see below).
 
 - Data/style split: what the game draws on the map lives in renderer-neutral modules `src/view/layers/` (zones,
   fields, clearings, roads, building footprints, camp, service reach, traffic, ruins, badges, article markers);
@@ -341,8 +341,23 @@ Done (2026-11-01), except terrain edits, 3D ruin walls, map text of ruins/zones/
   `daylight(hour)`); the engine turns it to the town's meridian. The old three.js models still use the Greenwich sun.
 - Verified on a test town: founding, road preview/ordering, zone gate, lot/radius previews, reveal disc, models in day
   and night, walkers/glows, both renderers start clean. Frame on the town: ~0.4 ms CPU, ~0.3 ms GPU (RDNA4).
-- Left for later: terrain edits (pads, cuts, pits), 3D ruin walls (flat fills now), text of ruins, zones and clearings,
-  hatch patterns of zones/fields, smoke and 3D fields (N7 with weather), forest (N5).
+- Left for later: terrain edits (pads, cuts, pits), smoke and 3D fields (N7 with weather), forest (N5).
+- Follow-up (2026-11-01):
+  - Hatches: fills take a procedural `pattern` (`OVERLAY_PATTERN`, `overlay.wgsl patternCover`) on the old images'
+    12 px tile, laid out in screen px fixed to the ground: residential dots, craft diagonals, trade cross-hatch, field
+    furrows, ink at 55 % (half on occupied cells). Antialiased by the texel's px size; where the tile gets only a few
+    texels (far levels) the pattern fades into its mean cover instead of shimmering.
+  - Map text (`src/view/engine/gameLabels.ts`): DOM labels like the place names, in the old symbol layers' look and
+    gates: clearing percents always, names of typed old buildings, named points (hung below their spot) and old
+    streets (one per street, along the line, upright, not over a sharp turn: `labelLayout.ts lineLabelAnchor`) while
+    the old city is shown and from z15 scale. One priority pick without overlaps (clearings, names, points, streets).
+    No occlusion by hills yet, like the place names.
+  - 3D ruin walls: the broken wall pieces (`view/layers/ruins.ts ruinWallPieces`, shared with the 2D walls) become one
+    model (`map/ruinsGeometry.ts ruinWallModel`: a prism per piece from 0.3 m below its lowest corner to its height over
+    its mean ground, the old extrusion's height ramp, a darker foot), a third `TownMesh` mesh drawn with the buildings
+    while the old city is shown and from z14 scale; the flat wall fill is gone from the overlay.
+  - Not verified live: the sandbox's SwiftShader WebGPU loses the device on the full engine (the unchanged code too).
+    The overlay shader compiles and its hatches were rendered offscreen and compared with the old images.
 
 **N5. GPU-driven rendering.** instance pools and compute frustum + LOD culling with indirect draws for trees, models,
 smoke; tree scatter on the GPU from landcover + clearing masks; impostor atlas reused from `treeImpostor`.

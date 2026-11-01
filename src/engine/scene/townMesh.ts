@@ -10,7 +10,8 @@ import townMeshWgsl from "./townMesh.wgsl?raw";
 // The town's models (docs/PLAN-engine.md N4): two indexed meshes in metres in the east/north/up frame of the town
 // origin, built by the game (view/engine/models.ts) from the same model builders the old map used. Roads first without
 // depth writes (ribbons of two chains overlap at a junction, equal depths would flicker), then the buildings, then the
-// window lights added on top. Uniforms carry the origin relative to the eye, so the meshes are camera-relative.
+// window lights added on top; the old city's broken walls with the buildings while they are shown. Uniforms carry
+// the origin relative to the eye, so the meshes are camera-relative.
 
 // Vertex: position 3, normal 3, colour 3, facade 4, height above own ground 1, lamp 1.
 export const TOWN_VERTEX_FLOATS = 15;
@@ -40,6 +41,8 @@ export class TownMesh implements Drawable {
   private axes: { east: Vec3; north: Vec3; up: Vec3 } | null = null;
   private roads: Mesh | null = null;
   private buildings: Mesh | null = null;
+  private ruins: Mesh | null = null;
+  ruinsShown = false; // the old city's broken walls (setRuins), drawn with the buildings' pipeline while shown
   private uniform: GPUBuffer;
   private bindGroup: GPUBindGroup;
   private roadPipe: GPURenderPipeline;
@@ -112,6 +115,12 @@ export class TownMesh implements Drawable {
     this.buildings = this.upload(buildings, "town buildings");
   }
 
+  // The broken walls of the buried old city: a mesh of its own, so showing and hiding them rebuilds nothing.
+  setRuins(ruins: TownMeshData): void {
+    this.free(this.ruins);
+    this.ruins = this.upload(ruins, "town ruins");
+  }
+
   update(view: CameraView, _engine: Engine): void {
     if (!this.origin || !this.axes) return;
     const d = this.data;
@@ -139,6 +148,7 @@ export class TownMesh implements Drawable {
     };
     run(this.roadPipe, this.roads);
     run(this.buildingPipe, this.buildings);
+    if (this.ruinsShown) run(this.buildingPipe, this.ruins);
     if (Math.max(...this.look.lamps) >= 0.01) run(this.lampPipe, this.buildings);
   }
 

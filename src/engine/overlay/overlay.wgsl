@@ -30,6 +30,8 @@ fn colour(bits: f32) -> vec4f {
 struct FillOut {
   @builtin(position) pos: vec4f,
   @location(0) @interpolate(flat) c: vec4f,
+  @location(1) px: vec2f,                      // screen px from the anchor (pattern space, fixed to the ground)
+  @location(2) @interpolate(flat) pattern: f32,
 };
 
 @vertex
@@ -37,12 +39,62 @@ fn fillVs(@location(0) p: vec2f, @location(1) bits: f32, @location(2) pattern: f
   var o: FillOut;
   o.pos = clipOf(uvOf(p));
   o.c = colour(bits);
+  o.px = p * (level.scale.x / max(level.scale.y, 1e-6)); // mercator metres -> screen px at the drawn scale
+  o.pattern = pattern;
   return o;
+}
+
+// Hatch patterns of the old map's fill-pattern images (map/patterns.ts), on the same 12 px tile: 1 residential dots,
+// 2 craft diagonal hatch, 3 trade cross-hatch, 4 field furrows. `aa` is screen px per texel: edges are antialiased
+// over it, and once the 12 px tile gets only a few texels the pattern fades into its average cover (no moire).
+const PATTERN_TILE = 12.0;
+
+fn bar(d: f32, halfWidth: f32, aa: f32) -> f32 {
+  return clamp((halfWidth - d) / aa + 0.5, 0.0, 1.0);
+}
+
+fn patternCover(id: u32, px: vec2f, aa: f32) -> f32 {
+  let q = px - floor(px / PATTERN_TILE) * PATTERN_TILE; // 0..12 inside the tile
+  var cover = 1.0;
+  var mean = 1.0;
+  if (id == 1u) {
+    // two 1.5 px dots at (3, 3) and (9, 9)
+    let d = min(length(q - vec2f(3.0)), length(q - vec2f(9.0)));
+    cover = bar(d, 0.85, aa);
+    mean = 0.031;
+  } else if (id == 2u) {
+    // "/" lines through (0, 12) and (12, 0), 1 px wide
+    let s = (q.x + q.y) / PATTERN_TILE;
+    let d = abs(s - round(s)) * PATTERN_TILE * 0.70710678;
+    cover = bar(d, 0.5, aa);
+    mean = 0.118;
+  } else if (id == 3u) {
+    // a cross at 6.5 px, 1 px wide
+    let d = min(abs(q.x - 6.5), abs(q.y - 6.5));
+    cover = bar(d, 0.5, aa);
+    mean = 0.16;
+  } else if (id == 4u) {
+    // furrows at 2.5 and 8.5 px
+    let t = (q.y - 2.5) / 6.0;
+    let d = abs(t - round(t)) * 6.0;
+    cover = bar(d, 0.5, aa);
+    mean = 0.167;
+  }
+  return mix(cover, mean, clamp((aa - 1.5) / 3.0, 0.0, 1.0));
 }
 
 @fragment
 fn fillFs(v: FillOut) -> @location(0) vec4f {
-  return v.c;
+  let aa = max(max(fwidth(v.px.x), fwidth(v.px.y)), 1e-3); // derivatives first, in uniform control flow
+  let id = u32(round(v.pattern));
+  if (id == 0u) {
+    return v.c;
+  }
+  let cover = patternCover(id, v.px, aa);
+  if (cover <= 0.0) {
+    discard;
+  }
+  return v.c * cover;
 }
 
 // ---------- lines: one quad per segment, a capsule distance field ----------

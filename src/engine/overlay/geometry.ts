@@ -8,6 +8,9 @@ import { latToMy, lngToMx } from "../geo/mercator";
 
 export const EQUATOR = 2 * Math.PI * 6378137;
 
+// Hatch patterns of fills, the ids overlay.wgsl patternCover paints (the old map's images, map/patterns.ts).
+export const OVERLAY_PATTERN = { none: 0, res: 1, craft: 2, trade: 3, field: 4 } as const;
+
 type Props = Record<string, unknown>;
 type Value<T> = T | ((p: Props) => T);
 
@@ -15,7 +18,7 @@ export interface FillStyle {
   kind: "fill";
   color: Value<string>;
   opacity?: Value<number>;
-  pattern?: Value<number>; // procedural pattern id (overlay.wgsl), 0 = none
+  pattern?: Value<number>; // procedural hatch (overlay.wgsl patternCover, OVERLAY_PATTERN), 0 = none; drawn in `color`
 }
 export interface LineStyle {
   kind: "line";

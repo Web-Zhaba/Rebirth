@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FeatureCollection } from "geojson";
-import { buildLayer, CIRCLE_FLOATS, FILL_FLOATS, levelSquare, LINE_FLOATS, mercX, mercY, packColor } from "./geometry";
+import { buildLayer, CIRCLE_FLOATS, FILL_FLOATS, levelSquare, LINE_FLOATS, mercX, mercY, OVERLAY_PATTERN, packColor } from "./geometry";
 
 const fc = (geometry: object, properties: object = {}): FeatureCollection => ({ type: "FeatureCollection", features: [{ type: "Feature", properties, geometry } as never] });
 
@@ -16,6 +16,23 @@ describe("overlay geometry", () => {
     const hole = [[0.004, 0.004], [0.006, 0.004], [0.006, 0.006], [0.004, 0.006], [0.004, 0.004]];
     const g = buildLayer(fc({ type: "Polygon", coordinates: [sq, hole] }), { kind: "fill", color: "#fff" }, [0, 0]);
     expect(g.fills.length / FILL_FLOATS).toBe(8 * 3); // 8 triangles around the hole
+  });
+
+  it("fills carry their hatch pattern per vertex, by feature", () => {
+    const sq = [[0, 0], [0.01, 0], [0.01, 0.01], [0, 0.01], [0, 0]];
+    const data: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: { zone: "res" }, geometry: { type: "Polygon", coordinates: [sq] } },
+        { type: "Feature", properties: { zone: "craft" }, geometry: { type: "Polygon", coordinates: [sq] } },
+      ],
+    };
+    const g = buildLayer(data, { kind: "fill", color: "#000", pattern: (p) => (p.zone === "res" ? OVERLAY_PATTERN.res : OVERLAY_PATTERN.craft) }, [0, 0]);
+    const patterns = new Set<number>();
+    for (let i = 3; i < g.fills.length; i += FILL_FLOATS) patterns.add(g.fills[i]);
+    expect([...patterns].sort()).toEqual([OVERLAY_PATTERN.res, OVERLAY_PATTERN.craft]);
+    const plain = buildLayer(data, { kind: "fill", color: "#000" }, [0, 0]);
+    expect(plain.fills[3]).toBe(OVERLAY_PATTERN.none);
   });
 
   it("lines carry the distance along the line and widths in mercator metres", () => {

@@ -5,7 +5,7 @@ import { isBridge, oldStreetKind } from "../../sim/roads";
 import { pointInPolygon } from "../../sim/zones";
 import { buildings, finds, frame } from "../../simClient";
 import { DOMAIN_COLORS, PALETTE } from "../../ui/palette";
-import { ringCentroid } from "../../world/oldworld";
+import { ringCentroid, type XY } from "../../world/oldworld";
 import { oldWorld } from "../../map/excavation";
 import { hintSpots, selectedSite, typedAt, typedFoundations } from "../../map/heritageSpots";
 import { brokenWalls, streetWidth } from "../../map/ruinsGeometry";
@@ -20,17 +20,21 @@ const close = (ring: [number, number][]): [number, number][] => [...ring, ring[0
 const fc = (features: Feature[]): FeatureCollection => ({ type: "FeatureCollection", features });
 const EMPTY = fc([]);
 
-const foundations = computed(() => {
+// The broken wall pieces of every foundation in town metres (null: too thin for walls, drawn as an outline): the 2D
+// walls below and the engine's 3D walls (view/engine/models.ts) are built from the same pieces.
+export const ruinWallPieces: ReadonlySignal<{ ring: XY[]; pieces: { quad: XY[]; h: number }[] | null }[]> = computed(() => {
   const w = oldWorld.value;
+  return w ? w.foundations.filter((fd) => fd.ring.length >= 3).map((fd) => ({ ring: fd.ring, pieces: brokenWalls(fd.ring, fd.id, fd.height) })) : [];
+});
+
+const foundations = computed(() => {
   const f = frame.value;
   const walls: Feature[] = [];
   const floors: Feature[] = [];
-  if (w && f)
-    for (const fd of w.foundations) {
-      if (fd.ring.length < 3) continue;
-      const outer = fd.ring.map(([x, y]) => f.toLngLat(x, y));
+  if (f)
+    for (const { ring, pieces } of ruinWallPieces.value) {
+      const outer = ring.map(([x, y]) => f.toLngLat(x, y));
       floors.push({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [close(outer)] } });
-      const pieces = brokenWalls(fd.ring, fd.id, fd.height);
       if (!pieces) walls.push({ type: "Feature", properties: { thin: 1 }, geometry: { type: "Polygon", coordinates: [close(outer)] } });
       else for (const q of pieces) walls.push({ type: "Feature", properties: { thin: 0, h: q.h }, geometry: { type: "Polygon", coordinates: [close(q.quad.map(([x, y]) => f.toLngLat(x, y)))] } });
     }
