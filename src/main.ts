@@ -102,3 +102,20 @@ load();
 // Handles for poking at the map and the sim from devtools during development. Use these instead of importing
 // simClient again: a second module instance would start a second worker writing the same save.
 if (import.meta.env.DEV) Object.assign(window, { map, simClient });
+
+// DEV benchmark (docs/PLAN-engine.md N0): ?bench=all|<scene>[&variant=full|base], or window.runBench() from devtools.
+if (import.meta.env.DEV) {
+  const run = async (opts?: { scenes?: string[]; variants?: ("full" | "base")[] }) => (await import("./bench/maplibreBench")).runMapLibreBench(map, opts);
+  Object.assign(window, { runBench: run });
+  const q = new URLSearchParams(location.search);
+  const bench = q.get("bench");
+  if (bench) {
+    const v = q.get("variant");
+    // 'load'/'idle' may never fire while animated layers keep repainting: start once the style is in (the runner then settles itself).
+    const wait = setInterval(() => {
+      if (!(map as any).style?._loaded) return; // isStyleLoaded() flickers false while geojson sources update
+      clearInterval(wait);
+      void run({ scenes: [bench], variants: v === "full" || v === "base" ? [v] : undefined });
+    }, 250);
+  }
+}
