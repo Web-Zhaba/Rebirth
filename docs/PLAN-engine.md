@@ -424,7 +424,12 @@ Done (2026-11-01):
   `weather` and reads the same clouds: `cloudShade` is the old ground-shadow layer at the real world position (shadow
   point towards the sun, two drifting noise taps, patch detail fading with the pixel footprint), applied as the old
   multiply towards dusk in display space — per fragment on the terrain, per vertex on the models and trees.
-- Ground weather: wherever the ground is drawn at town scale (not on the globe views), wet earth darkens, snow lies on what is flat enough
+- Ground weather (`groundWeather`): the town's own sim state within 20 km, handing over by 60 km to the weather
+  cube's climate (snow where the season's mean at that height is below freezing, wet ground under the cube's rain,
+  ice on water in the cold; `view/engine/townWeather.ts climateGround` mirrors it); nothing on the globe views. The
+  cubes are kept whenever there is a site, clouds on or off. The same blend sampled on the CPU at the camera target
+  (a copy of the cube faces) drives the rain/snow particles and the snow on the trees. Measured: no GPU difference
+  with the ground weather on or off. On the ground, wet earth darkens, snow lies on what is flat enough
   in the models' blotch pattern (`snowShare`, same town frame, so the patches run on from the roads onto the ground;
   far pixels take the patches' mean cover), ice closes the water. Models take snow, wetness and the snow colour from
   the same uniform (their own snow uniform is gone). Trees keep their own snow.

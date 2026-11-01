@@ -10,7 +10,8 @@ import { CLOUD_BASE_M, CLOUD_TOP_M, CUBE_SIZE, FADE_TAU_MS, GLOBE_EXAGGERATION, 
 import { activeFlashes, FLASH_MAX } from "../../map/clouds/lightning";
 import { cloudQuality, cloudsOn, type CloudSite } from "../../map/clouds/settings";
 import { DRIFT_DEG, driftPhases, shadowHeight } from "../../map/clouds/shadowMath";
-import { STORM_MAX } from "../../map/clouds/weatherCube";
+import { dirToTexel, STORM_MAX } from "../../map/clouds/weatherCube";
+import { EXAGGERATION } from "../../engine/terrain/terrain";
 import { precipDensity, precipSlant, precipVisibility, snowOpacity, weatherCoverVisibility, WIND_DIR } from "../../map/weatherMath";
 import { weatherMapOn } from "../../map/weatherSettings";
 import { rgb } from "../../map/modelGeometry";
@@ -19,7 +20,7 @@ import { TUNING, type WeatherState } from "../../sim/weather";
 import { frame } from "../../simClient";
 import { MAP_ONLY, PALETTE, TREE_COLORS } from "../../ui/palette";
 import { zoomAtMpp } from "../view";
-import { townWeather, wetness, type WeatherOverride } from "./townWeather";
+import { climateGround, townShare, townWeather, wetness, type CubeWeather, type TownWeather, type WeatherOverride } from "./townWeather";
 
 // The sky and weather of the game on the engine (docs/PLAN-engine.md N7): the weather cube pair and the noise volumes
 // from the cloud worker (map/clouds/cloudData.ts) into the engine's weather textures, the per-frame weather uniform
@@ -41,14 +42,16 @@ interface Slot {
   key: string; // site and size it was built for
   loaded: boolean;
   storms: Float32Array;
+  faces: Uint8Array[]; // a CPU copy, for the weather under the camera
 }
 
-const emptySlot = (): Slot => ({ k: Number.NaN, key: "", loaded: false, storms: new Float32Array(0) });
+const emptySlot = (): Slot => ({ k: Number.NaN, key: "", loaded: false, storms: new Float32Array(0), faces: [] });
 const srgb = (hex: string): Vec3 => rgb(hex) as Vec3;
 
 export interface EngineWeather {
   clouds: Clouds;
   precip: Precip;
+  snowOnTrees: () => number; // 0..1 at the camera target
   override: WeatherOverride; // DEV
 }
 
@@ -66,6 +69,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
   let fade = 0;
   let fadeAt = -1;
   const flashes = new Float32Array(FLASH_MAX * 4);
+  let snowOnTrees = 0;
   const snowColour = srgb(TREE_COLORS.snow);
   const iceColour = srgb(PALETTE.mapIce);
 
@@ -83,6 +87,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
         gpu.writeCube(i as 0 | 1, res.faces);
         slots[i].loaded = true;
         slots[i].storms = res.storms.cells.length ? Float32Array.from(res.storms.cells) : new Float32Array(0);
+        slots[i].faces = res.faces.map((b) => new Uint8Array(b));
       },
       (e: unknown) => console.warn("cloud cube failed", e),
     );
@@ -120,6 +125,34 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
     return { ready: sa.loaded && gpu.noiseReady, mix, storms: (mix >= 0.5 ? sb : sa).storms };
   };
 
+  // The cube pair at an ECEF direction (nearest texel, mixed like the shaders), or null before cube A is there.
+  const sampleCube = (d: Vec3, mix: number): CubeWeather | null => {
+    const [a, b] = slots;
+    if (!a.loaded || !a.faces.length) return null;
+    const size = gpu.cubeSize;
+    const { face, i, j } = dirToTexel(d[1], d[2], d[0], size);
+    const at = (sl: Slot, c: number) => sl.faces[face][(j * size + i) * 4 + c] / 255;
+    const v = (c: number) => (b.loaded && b.faces.length && mix > 0 ? at(a, c) * (1 - mix) + at(b, c) * mix : at(a, c));
+    return { cover: v(0), precip: v(2), temp: v(3) * 80 - 40 };
+  };
+
+  // The weather where the camera looks: the town's own near it, the cube's climate away from it (as groundWeather in
+  // sky/weather.wgsl). Rain and snow particles and the snow on the trees follow it.
+  const weatherAtTarget = (tw: TownWeather | null, town: Vec3 | null, mix: number) => {
+    const s = engine.state;
+    const ground = geodeticToEcef(s.lat, s.lng, 0);
+    const k = !tw ? 0 : town ? townShare(Math.hypot(ground[0] - town[0], ground[1] - town[1], ground[2] - town[2])) : 1;
+    const c = k < 1 ? sampleCube(ground.map((x) => x / Math.hypot(...ground)) as Vec3, mix) : null;
+    const local = c && climateGround(c, s.h / EXAGGERATION, TUNING.precipMax);
+    if (!local) return tw ? { precip: tw.precip, snowing: tw.snowing, treeSnow: Math.min(1, tw.snowpack / 0.05) } : null;
+    if (!tw) return { precip: local.precip, snowing: local.snowing, treeSnow: Math.min(1, local.snow * 2) };
+    return {
+      precip: local.precip + (tw.precip - local.precip) * k,
+      snowing: k > 0.5 ? tw.snowing : local.snowing,
+      treeSnow: Math.min(1, local.snow * 2) * (1 - k) + Math.min(1, tw.snowpack / 0.05) * k,
+    };
+  };
+
   // A zoom jump (wheel tick, double click, fly-to) must not blink the deck: the fade follows its target.
   const easeFade = (target: number, now: number): number => {
     if (fadeAt < 0) fade = target;
@@ -146,15 +179,19 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
     const site = o.site.peek();
     const zoom = zoomAtMpp(engine.metersPerPixel());
     const quality = cloudQuality.peek(); // WebGPU always renders to rgba16float: no step down
-    const on = cloudsOn.peek() && !!site;
-    const c = on && site ? cubes(t, site, CUBE_SIZE[quality]) : null;
+    // The cubes are kept whenever there is a site: the ground's climate needs them even with the clouds off.
+    const c = site ? cubes(t, site, CUBE_SIZE[quality]) : null;
+    const clouded = cloudsOn.peek() && !!c?.ready;
     const ph = driftPhases(t / DAY_MIN);
-    const tw = weatherMapOn.peek() ? townWeather(o.weather?.peek(), override) : null;
+    const own = townWeather(o.weather?.peek(), override);
+    const shown = weatherMapOn.peek();
+    const tw = shown ? own : null;
     const tf = frame.peek();
     let town = null;
+    let origin: Vec3 | null = null;
     if (tf) {
       const [lng0, lat0] = tf.toLngLat(0, 0);
-      const origin = geodeticToEcef(lat0, lng0, 0);
+      origin = geodeticToEcef(lat0, lng0, 0);
       const { east, north } = enuAt(lat0, lng0);
       town = { eye: [view.eye[0] - origin[0], view.eye[1] - origin[1], view.eye[2] - origin[2]] as Vec3, east, north };
     }
@@ -164,7 +201,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
       ages: [ph[0].tau, ph[1].tau],
       offsets: [ph[0].off, ph[1].off],
       mix: c?.mix ?? 0,
-      shadows: !!c?.ready,
+      shadows: clouded,
       wind: [TUNING.windDeg * DRIFT_SCALE, TUNING.tradeDeg * DRIFT_SCALE, TUNING.layerDays],
       days: t / DAY_MIN,
       castHeight: shadowHeight(zoom),
@@ -172,25 +209,29 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
       snow: tw ? snowOpacity(tw.snowpack) / snowOpacity(1) : 0,
       wet: tw ? wetness(tw.precip, tw.snowing, tw.soil) : 0,
       ice: tw?.ice ?? 0,
+      climate: shown && !!c?.ready,
       town,
       groundFade: weatherCoverVisibility(zoom),
       snowColour,
       iceColour,
     });
 
-    // Rain and snow: the town's weather, at town scale.
-    const density = tw && !reducedMotion ? precipDensity(tw.precip) : 0;
-    const shown = density * precipVisibility(zoom);
-    if (tw && shown > 0.01) {
-      const slant = precipSlant(tw.wind) * (tw.snowing ? 0.5 : 1);
+    const here = weatherAtTarget(own, origin, c?.mix ?? 0);
+    snowOnTrees = here?.treeSnow ?? 0;
+
+    // Rain and snow where the camera looks, at town scale.
+    const falling = shown && here && !reducedMotion ? here : null;
+    const density = falling ? precipDensity(falling.precip) : 0;
+    if (falling && density * precipVisibility(zoom) > 0.01) {
+      const slant = precipSlant(own?.wind ?? 2) * (falling.snowing ? 0.5 : 1);
       const { up } = enuAt(engine.state.lat, engine.state.lng);
       const daylight = Math.min(1, Math.max(0, (up[0] * sunE[0] + up[1] * sunE[1] + up[2] * sunE[2] + 0.12) / 0.32));
-      const colour = (tw.snowing ? flakeColour : rainColour).map((c) => c * (0.35 + 0.65 * daylight)) as Vec3;
+      const colour = (falling.snowing ? flakeColour : rainColour).map((c) => c * (0.35 + 0.65 * daylight)) as Vec3;
       precip.look = {
         count: Math.max(1, PRECIP_MAX * density),
         box: Math.min(1500, Math.max(20, engine.state.distance * 0.8)),
-        snow: tw.snowing,
-        opacity: (tw.snowing ? 0.8 : 0.5) * (0.35 + 0.65 * density) * precipVisibility(zoom),
+        snow: falling.snowing,
+        opacity: (falling.snowing ? 0.8 : 0.5) * (0.35 + 0.65 * density) * precipVisibility(zoom),
         drift: [WIND_DIR[0] * slant, WIND_DIR[1] * slant],
         colour,
         time: now / 1000,
@@ -198,8 +239,8 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
     } else precip.look = null;
 
     // The cloud volume: far globe views only.
-    const f = easeFade(c?.ready ? cloudOpacity(zoom) : 0, now);
-    if (!c?.ready || f <= MIN_OPACITY) {
+    const f = easeFade(clouded ? cloudOpacity(zoom) : 0, now);
+    if (!c || !clouded || f <= MIN_OPACITY) {
       clouds.pass = null;
       made = null;
       clouds.forget();
@@ -241,5 +282,5 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
   // The uniform writer goes first, so the cloud pass it decides is there for the clouds' own update.
   engine.drawables.push({ update, draw: () => {} }, precip, clouds);
   if (import.meta.env.DEV) Object.assign(window, { engineWeather: { override, clouds, info: () => ({ slots: slots.map((s) => ({ k: s.k, loaded: s.loaded })), fade, marches: clouds.marches }) } });
-  return { clouds, precip, override };
+  return { clouds, precip, override, snowOnTrees: () => snowOnTrees };
 }

@@ -13,7 +13,7 @@ struct Weather {
   off1: vec4f,    // xyz tile offset of noise layer 1, w cloud shadows on (1) / off or not loaded (0)
   wind: vec4f,    // x westerlies, y trades (degrees of longitude per game day), z layer period (days), w game days
   shadow: vec4f,   // x height the shadows are cast from (m), y their drift (degrees per game day)
-  ground: vec4f,  // the town's ground: x snow 0..1, y wetness 0..1, z ice on water 0..1
+  ground: vec4f,  // the town's ground: x snow 0..1, y wetness 0..1, z ice on water 0..1, w 1 = the cube's climate elsewhere
   town: vec4f,    // xyz eye - town origin (m, subtracted in f64), w 1 = a town exists
   townE: vec4f,   // xyz the town origin's east axis, w the ground cover's scale fade (0 on the globe views)
   townN: vec4f,   // xyz its north axis
@@ -34,6 +34,8 @@ const OVERCAST_MAX = ${OVERCAST_MAX};
 const SUN_OFF = ${SUN_OFF};
 const SUN_FULL = ${SUN_FULL};
 const SHADOW_DUSK = ${SHADOW_DUSK}; // the old shadow layer multiplied the map towards the palette's dusk
+const TOWN_NEAR = ${TOWN_NEAR};
+const TOWN_FAR = ${TOWN_FAR};
 const SHADOW_NOISE_MEAN = 0.48; // base volume G (Worley fbm from 4 cells per tile): mean 0.48, 5..95 % = 0.29..0.68
 const SHADOW_STRETCH = 2.2;     // widen it to about 0.1..0.9 so the patches have contrast
 
@@ -105,10 +107,30 @@ fn townXY(rel: vec3f) -> vec2f {
   return vec2f(dot(p, weather.townE.xyz), dot(p, weather.townN.xyz));
 }
 
-// Share of the town's weather lying on the ground: all of the ground drawn at town scale (the frustum already bounds
-// the work), nothing on the globe views (the clouds' stage, not a white ball painted with the town's snow depth).
-fn townGround() -> f32 {
-  return select(0.0, weather.townE.w, weather.town.w > 0.0);
+// Weather on the ground (x snow 0..1, y wetness, z ice on water) at a camera-relative point at altM metres: the
+// town's own sim state near the town, the weather cube's climate from TOWN_FAR on (view/engine/townWeather.ts
+// climateGround mirrors it), nothing on the globe views (the clouds' stage, not a white ball of snow).
+fn groundWeather(rel: vec3f, altM: f32) -> vec3f {
+  let fade = weather.townE.w;
+  if (fade <= 0.0) {
+    return vec3f(0.0);
+  }
+  let own = weather.ground.xyz;
+  if (weather.ground.w <= 0.0) {
+    return own * fade; // no cube yet: the town's weather everywhere
+  }
+  var k = 0.0;
+  if (weather.town.w > 0.0) {
+    k = 1.0 - smoothstep(TOWN_NEAR, TOWN_FAR, length(weather.town.xyz + rel));
+  }
+  var local = own;
+  if (k < 1.0) {
+    let c = weatherAt(normalize(frame.eye.xyz + rel));
+    let t = c.a * 80.0 - 40.0 - 0.0065 * altM;
+    let falling = smoothstep(0.03, 0.4, c.b);
+    local = vec3f(1.0 - smoothstep(-6.0, 1.0, t), falling * smoothstep(0.0, 2.0, t), 1.0 - smoothstep(-10.0, -2.0, t));
+  }
+  return mix(local, own, k) * fade;
 }
 
 fn hash2(p: vec2f) -> f32 {

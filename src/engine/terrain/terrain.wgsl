@@ -246,14 +246,14 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   }
   n = normalize(mix(n, up, water)); // water lies flat whatever the DEM says under it
 
-  // The town's weather on its ground (sky/weather.wgsl): wet earth darkens, snow lies on what is flat enough, ice
+  // The weather on the ground (sky/weather.wgsl): wet earth darkens, snow lies on what is flat enough, ice
   // closes the water.
-  let tg = townGround();
-  if (tg > 0.0) {
-    albedo *= 1.0 - 0.3 * weather.ground.y * tg * (1.0 - water);
-    let snow = snowShare(townXY(v.rel), smoothstep(0.5, 0.8, dot(n, up)), weather.ground.x * tg, foot) * (1.0 - water);
+  let gw = groundWeather(v.rel, h);
+  if (any(gw > vec3f(0.0))) {
+    albedo *= 1.0 - 0.3 * gw.y * (1.0 - water);
+    let snow = snowShare(townXY(v.rel), smoothstep(0.5, 0.8, dot(n, up)), gw.x, foot) * (1.0 - water);
     albedo = mix(albedo, srgbToLinear(weather.snowCol.rgb) * SNOW_GAIN, snow);
-    let ice = 0.8 * smoothstep(0.15, 0.8, weather.ground.z) * tg * water;
+    let ice = 0.8 * smoothstep(0.15, 0.8, gw.z) * water;
     albedo = mix(albedo, srgbToLinear(weather.iceCol.rgb) * SNOW_GAIN, ice);
     water *= 1.0 - ice;
     n = normalize(mix(n, up, ice));

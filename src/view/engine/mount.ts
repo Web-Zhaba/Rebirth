@@ -67,9 +67,9 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   const view = createEngineView(engine, camera, container);
   if (o.life) attachLife(engine, view, o.life);
   attachGameLayers(engine);
-  if (o.light && o.cloudSite) attachWeather(engine, { clock: o.light.clock, site: o.cloudSite, weather: o.weather });
+  const weather = o.light && o.cloudSite ? attachWeather(engine, { clock: o.light.clock, site: o.cloudSite, weather: o.weather }) : null;
   attachModels(engine, { light: o.light, debug: o.debug3dModels });
-  const forest = attachForest(engine, { clock: o.light?.clock, weather: o.weather });
+  const forest = attachForest(engine, { clock: o.light?.clock, weather: o.weather, snow: weather?.snowOnTrees });
   attachSmoke(engine, { clock: o.light?.clock, weather: o.weather });
   attachPlaceLabels(engine, container);
   attachGameLabels(engine, container);

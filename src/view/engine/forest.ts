@@ -41,6 +41,7 @@ const lerp3 = (a: number[], b: number[], t: number): [number, number, number] =>
 export interface ForestOptions {
   clock?: ReadonlySignal<number>;
   weather?: ReadonlySignal<WeatherState | null>;
+  snow?: () => number; // 0..1 snow on the trees where the camera looks (view/engine/weather.ts); the town's otherwise
 }
 
 export function attachForest(engine: Engine, o: ForestOptions): Forest {
@@ -91,7 +92,7 @@ export function attachForest(engine: Engine, o: ForestOptions): Forest {
     const crown = crownAt(clock);
     const reed = reedAt(clock);
     const w = o.weather?.peek();
-    const snow = Math.min(1, (w?.snowpack ?? 0) / 0.05);
+    const snow = o.snow ? o.snow() : Math.min(1, (w?.snowpack ?? 0) / 0.05);
     const leafA = lerp3(rgb(crown.a), rgb(crown.b), crown.t);
     const leafB = rgb(crown.b) as [number, number, number];
     const reedA = lerp3(rgb(reed.a), rgb(reed.b), reed.t);

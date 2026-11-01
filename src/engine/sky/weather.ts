@@ -10,6 +10,10 @@ import weatherWgsl from "./weather.wgsl?raw";
 // textures, and one uniform of drift, shadow and ground parameters. Bound in group 0 with the frame uniform
 // (frame/frameUniforms.ts); the game fills it (view/engine/weather.ts).
 
+// Near the town its own sim weather lies on the ground; from TOWN_FAR_M on, the weather cube's climate does.
+export const TOWN_NEAR_M = 20000;
+export const TOWN_FAR_M = 60000;
+
 const f = (x: number) => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 const sinDeg = (d: number) => Math.sin((d * Math.PI) / 180);
 const vec3 = (hex: string) => `vec3f(${[1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(4)).join(", ")})`;
@@ -23,6 +27,8 @@ registerWgsl(
     SUN_OFF: f(sinDeg(SUN_OFF_DEG)),
     SUN_FULL: f(sinDeg(SUN_FULL_DEG)),
     SHADOW_DUSK: vec3(PALETTE.dusk),
+    TOWN_NEAR: f(TOWN_NEAR_M),
+    TOWN_FAR: f(TOWN_FAR_M),
   }).reduce((code, [k, v]) => code.replaceAll(`\${${k}}`, v), weatherWgsl),
 );
 
@@ -41,6 +47,7 @@ export interface WeatherLook {
   snow: number; // 0..1
   wet: number; // 0..1
   ice: number; // 0..1
+  climate: boolean; // away from the town the weather cube's climate lies on the ground (the cube is loaded)
   town: { eye: Vec3; east: Vec3; north: Vec3 } | null; // eye - town origin (f64) and its axes; null before founding
   groundFade: number; // 0 on the globe views .. 1 near the ground
   snowColour: Vec3; // sRGB
@@ -63,6 +70,7 @@ export const calmWeather = (): WeatherLook => ({
   snow: 0,
   wet: 0,
   ice: 0,
+  climate: false,
   town: null,
   groundFade: 0,
   snowColour: [1, 1, 1],
@@ -145,7 +153,7 @@ export class WeatherGpu {
     d.set([...l.offsets[1], l.shadows ? 1 : 0], 8);
     d.set([...l.wind, l.days], 12);
     d.set([l.castHeight, l.shadowDrift, 0, 0], 16);
-    d.set([l.snow, l.wet, l.ice, 0], 20);
+    d.set([l.snow, l.wet, l.ice, l.climate ? 1 : 0], 20);
     d.set(t ? [...t.eye, 1] : [0, 0, 0, 0], 24);
     d.set(t ? [...t.east, l.groundFade] : [1, 0, 0, 0], 28);
     d.set(t ? [...t.north, 0] : [0, 1, 0, 0], 32);
