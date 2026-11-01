@@ -16,7 +16,11 @@ import { mountMapLibreView, installDevHandles } from "./view/maplibre/mount";
 import type { MapLibreView } from "./view/maplibre/view";
 import type { View } from "./view/view";
 import { TOWN_START_MPP } from "./view/scale";
+import { attachArticleMarkers } from "./view/layers/articleMarkers";
+import { attachBadges } from "./view/layers/badges";
 import { attachBuildingPick } from "./view/layers/buildings";
+import { attachServiceReach } from "./view/layers/reach";
+import { attachSitePick } from "./view/layers/ruins";
 import { attachClearingPick } from "./view/layers/zones";
 import { App } from "./ui/App";
 import { followResidentById } from "./ui/follow";
@@ -35,7 +39,7 @@ const cloudSite = computed(() => {
 });
 const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
 // ?engine=next mounts the own WebGPU engine (src/view/engine) instead of MapLibre; it needs none of the renderer layers.
-const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: { ...sunLight, lng: computed(() => city.value?.lng ?? 0) }, weather: weatherNow, debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1" }) : null;
+const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: { ...sunLight, lng: computed(() => city.value?.lng ?? 0) }, weather: weatherNow, debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1", life: { trips: lifeTrips, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById } }) : null;
 const view: View = engineMount?.view ?? mountMapLibreView({
   container: "map",
   frame,
@@ -47,9 +51,13 @@ const view: View = engineMount?.view ?? mountMapLibreView({
   life: { trips: lifeTrips, lights: lifeLights, gameMinPerSec, onWalker: followResidentById },
   debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1",
 });
-// Picking what is on the map: clearings first, so a building under the same click wins (layers/buildings.ts).
+// Picking what is on the map: clearings and old buildings first, so a building under the same click wins.
 attachClearingPick(view);
+attachSitePick(view);
 attachBuildingPick(view);
+attachBadges(view); // HTML badges above the buildings that need a look
+attachArticleMarkers(view); // the notebook's Wikipedia entries where they belong
+attachServiceReach(); // what a service reaches, and its coverage overlay while one is selected
 attachRoadTool(view);
 attachZoneTool(view);
 attachPlaceTool(view);

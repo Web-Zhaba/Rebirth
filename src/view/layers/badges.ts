@@ -1,17 +1,17 @@
-import * as maplibregl from "maplibre-gl";
 import { h, render } from "preact";
 import { effect } from "@preact/signals";
-import { BUILDINGS } from "../sim/buildings";
-import type { Building, BuildingQuery } from "../sim/types";
-import { buildings, frame, queryBuilding, state } from "../simClient";
-import { Icon } from "../ui/Icon";
-import { badgeFor, type BadgeSpec } from "./badgeModel";
-import { selectedBuilding } from "../view/layers/buildings";
+import { BUILDINGS } from "../../sim/buildings";
+import type { Building, BuildingQuery } from "../../sim/types";
+import { buildings, frame, queryBuilding, state } from "../../simClient";
+import { Icon } from "../../ui/Icon";
+import { badgeFor, type BadgeSpec } from "../../map/badgeModel";
+import { mppAtZoom, type View, type ViewMarker } from "../view";
+import { selectedBuilding } from "./buildings";
 
 // Small paper tags over buildings that need a look: construction progress, no workers, no input. HTML markers styled
 // with the UI tokens (.map-badge in feedback.css). Only for buildings in view, only when a badge applies, at most MAX.
 const MAX = 24;
-const MIN_ZOOM = 15.5;
+const MAX_MPP = mppAtZoom(15.5); // old MIN_ZOOM 15.5
 const REFRESH_MS = 1000; // snapshots come several times a second; badges change slowly
 const QUERY_MS = 8000; // staffing of a workplace is asked again after this long
 
@@ -19,12 +19,12 @@ const QUERY_MS = 8000; // staffing of a workplace is asked again after this long
 const isWorkplace = (b: Building): boolean => b.state === "active" && !b.upgrade && b.zone !== "res" && (BUILDINGS[b.template]?.jobs ?? 0) > 0;
 
 interface Entry {
-  marker: maplibregl.Marker;
+  marker: ViewMarker;
   el: HTMLButtonElement;
   key: string;
 }
 
-export function attachBadgeLayer(map: maplibregl.Map): void {
+export function attachBadges(view: View): void {
   const shown = new Map<number, Entry>();
   const asked = new Map<number, { at: number; info: BuildingQuery | null; busy: boolean }>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -49,17 +49,22 @@ export function attachBadgeLayer(map: maplibregl.Map): void {
     last = Date.now();
     const all = buildings.peek();
     const fl = frame.peek();
-    if (!all || !fl || map.getZoom() < MIN_ZOOM) {
+    if (!all || !fl || view.metersPerPixel() > MAX_MPP) {
       for (const id of [...shown.keys()]) drop(id);
       return;
     }
     const levers = state.peek()?.levers;
-    const view = map.getBounds();
+    const cw = view.canvas.clientWidth;
+    const ch = view.canvas.clientHeight;
+    const inView = (at: [number, number]) => {
+      const [x, y] = view.project(at);
+      return x >= 0 && y >= 0 && x <= cw && y <= ch; // NaN (behind the camera) fails too
+    };
     const want = new Map<number, { b: Building; spec: BadgeSpec; at: [number, number] }>();
     for (const b of Object.values(all)) {
       if (want.size >= MAX) break;
       const at = fl.toLngLat(b.lot.cx, b.lot.cy);
-      if (!view.contains(at)) continue;
+      if (!inView(at)) continue;
       if (isWorkplace(b)) ask(b.id);
       const spec = badgeFor(b, asked.get(b.id)?.info, levers);
       if (spec) want.set(b.id, { b, spec, at });
@@ -75,13 +80,15 @@ export function attachBadgeLayer(map: maplibregl.Map): void {
           ev.stopPropagation(); // the map must not treat it as a click on the ground
           selectedBuilding.value = id;
         });
-        e = { marker: new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat(at).addTo(map), el, key: "" };
+        // The renderer positions the holder; the button keeps its own classes.
+        const holder = document.createElement("div");
+        holder.append(el);
+        e = { marker: view.addMarker({ element: holder, anchor: "bottom" }, at), el, key: "" };
         shown.set(id, e);
       }
       if (e.key !== key) {
         e.key = key;
-        // Keep maplibregl-marker: it is what makes the element absolutely positioned at its marker's point.
-        e.el.className = `maplibregl-marker map-badge map-badge-${spec.tone}`;
+        e.el.className = `map-badge map-badge-${spec.tone}`;
         e.el.title = `${spec.title}. Открыть здание`;
         render(h("span", { class: "map-badge-in" }, h(Icon, { name: spec.icon, size: 12 }), spec.label), e.el);
       }
@@ -105,6 +112,5 @@ export function attachBadgeLayer(map: maplibregl.Map): void {
     void frame.value;
     schedule();
   });
-  map.on("moveend", schedule);
-  map.on("zoomend", schedule);
+  view.on("moveend", schedule);
 }

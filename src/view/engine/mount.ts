@@ -8,6 +8,7 @@ import { sunDirection } from "../../sim/weather";
 import type { View } from "../view";
 import type { WeatherState } from "../../sim/weather";
 import { attachGameLayers } from "./gameLayers";
+import { attachLife, type LifeOptions } from "./life";
 import { attachModels } from "./models";
 import { attachPlaceLabels } from "./placeLabels";
 import { createEngineView } from "./view";
@@ -19,6 +20,7 @@ export interface EngineMountOptions {
   light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null>; lng: ReadonlySignal<number> };
   weather?: ReadonlySignal<WeatherState | null>; // snow on roofs and roads
   debug3dModels?: boolean;
+  life?: LifeOptions; // walkers, carts and the evening glows
 }
 
 export interface EngineMount {
@@ -56,6 +58,7 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
     };
   const camera = createCameraControl(engine);
   const view = createEngineView(engine, camera, container);
+  if (o.life) attachLife(engine, view, o.life);
   attachGameLayers(engine);
   attachModels(engine, { light: o.light, weather: o.weather, debug: o.debug3dModels });
   attachPlaceLabels(engine, container);

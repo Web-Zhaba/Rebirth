@@ -1,6 +1,6 @@
 import type * as maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
-import { frame, lifeTraffic, roads } from "../simClient";
+import { roadTraffic } from "../view/layers/traffic";
 import { overlay, TRAFFIC_STOPS } from "./tools";
 import { trafficDataActive } from "./trafficModel";
 
@@ -26,28 +26,7 @@ export function attachTrafficLayer(map: maplibregl.Map): void {
     effect(() => {
       map.setLayoutProperty(LAYER, "visibility", trafficDataActive(overlay.value) ? "visible" : "none");
     });
-    effect(() => {
-      // Dependency tracking is dynamic: while hidden this effect only watches overlay,
-      // so life/road/frame updates do not rebuild an invisible GeoJSON source.
-      if (!trafficDataActive(overlay.value)) return;
-      const f = frame.value;
-      const g = roads.value;
-      const traffic = lifeTraffic.value;
-      if (!f || !g) return;
-      const features: GeoJSON.Feature[] = [];
-      for (const e of Object.values(g.edges)) {
-        const n = traffic[e.id];
-        if (!n || e.done < e.labor) continue;
-        const a = g.nodes[e.a];
-        const b = g.nodes[e.b];
-        features.push({
-          type: "Feature",
-          properties: { n },
-          geometry: { type: "LineString", coordinates: [f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y)] },
-        });
-      }
-      (map.getSource(SRC) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
-    });
+    effect(() => void (map.getSource(SRC) as maplibregl.GeoJSONSource).setData(roadTraffic.value));
   };
   if (map.isStyleLoaded()) setup();
   else map.once("load", setup);

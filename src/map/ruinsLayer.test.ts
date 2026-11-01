@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { doneKinds } from "../sim/heritage";
-import { brokenWalls, insetRing, streetWidth, WALL_HEIGHT } from "./ruinsLayer";
+import { brokenWalls, insetRing, streetWidth, WALL_HEIGHT } from "./ruinsGeometry";
 import type { XY } from "../world/oldworld";
 
 const area = (r: XY[]) => {

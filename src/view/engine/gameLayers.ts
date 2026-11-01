@@ -1,11 +1,16 @@
-import { effect, type ReadonlySignal } from "@preact/signals";
+import { computed, effect, type ReadonlySignal } from "@preact/signals";
 import type { FeatureCollection } from "geojson";
 import type { Engine } from "../../engine/engine";
 import type { OverlayLayer } from "../../engine/overlay/overlayRaster";
-import { ZONE_COLORS } from "../../map/tools";
+import { TRAFFIC_STOPS, ZONE_COLORS } from "../../map/tools";
 import { C } from "../../world/biome";
-import { PALETTE } from "../../ui/palette";
+import { mixHex, PALETTE, TREE_COLORS } from "../../ui/palette";
 import { buildingShapes } from "../layers/buildings";
+import { campArea, cityPoint } from "../layers/city";
+import { serviceReach } from "../layers/reach";
+import { ruinFloors, ruinHints, ruinStreets, ruinTyped, ruinWalls } from "../layers/ruins";
+import { roadTraffic } from "../layers/traffic";
+import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { roadLines } from "../layers/roads";
 import { clearings, fieldDraftPoints, fieldDraftShape, fields, zoneCells, zoneGrid, zoneHover } from "../layers/zones";
 import { mppAtZoom } from "../view";
@@ -25,9 +30,45 @@ const roadEdge = (p: P) =>
   ({ dirt: PALETTE.roadDirtEdge, footbridge: PALETTE.roadBridgeEdge, bridge: PALETTE.roadBridgeEdge, stone: PALETTE.roadStoneEdge, stonebridge: PALETTE.roadStoneEdge })[p.kind as string] ??
   PALETTE.roadPathEdge;
 const width = (p: P) => Number(p.w ?? 3);
+
+// The traffic ramp of the old layer (tools.ts TRAFFIC_STOPS), interpolated linearly by commuters per day.
+function trafficRamp(n: number): { color: string; width: number } {
+  const s = TRAFFIC_STOPS;
+  if (n <= s[0].n) return s[0];
+  for (let i = 1; i < s.length; i++)
+    if (n <= s[i].n) {
+      const t = (n - s[i - 1].n) / (s[i].n - s[i - 1].n);
+      return { color: mixHex(s[i - 1].color, s[i].color, t), width: s[i - 1].width + (s[i].width - s[i - 1].width) * t };
+    }
+  return s[s.length - 1];
+}
 const is = (state: string) => (p: P) => p.state === state;
 
+const z = mppAtZoom;
+const ruinState = (p: P) => String(p.s ?? "");
+
 export const GAME_LAYERS: OverlayLayer[] = [
+  // The buried old city under everything of the new town (the old layers' look; walls lie flat here, no names yet).
+  { source: "ruins-floors", maxMpp: z(13), style: { kind: "fill", color: PALETTE.pencilFaint, opacity: 0.28 } },
+  {
+    source: "ruins-typed",
+    maxMpp: z(13),
+    style: { kind: "fill", color: (p) => String(p.c), opacity: (p) => ({ restored: 0.12, restoring: 0.3, lost: 0.2 })[ruinState(p)] ?? (p.dim === 1 ? 0.2 : 0.5) },
+  },
+  { source: "ruins-streets", maxMpp: z(12), style: { kind: "line", color: (p) => (p.bridge ? PALETTE.pencil : PALETTE.warn), widthM: (p) => Number(p.w), widthPx: 1, opacity: (p) => (p.bridge ? 0.6 : 0.3) } },
+  { source: "ruins-walls", maxMpp: z(14), style: { kind: "line", color: PALETTE.pencil, widthPx: 1.2, opacity: 0.85, filter: (p) => p.thin === 1 } },
+  {
+    source: "ruins-typed",
+    maxMpp: z(13),
+    style: {
+      kind: "line",
+      color: (p) => String(p.c),
+      widthPx: (p) => ({ restoring: 3.5, restored: 1 })[ruinState(p)] ?? 2,
+      opacity: (p) => (ruinState(p) === "lost" ? 0.45 : p.dim === 1 ? 0.5 : 0.95),
+    },
+  },
+  { source: "ruins-walls", maxMpp: z(14), style: { kind: "fill", color: mixHex(PALETTE.pencilFaint, TREE_COLORS.stone, 0.3), opacity: 0.95, filter: (p) => p.thin === 0 } },
+  { source: "ruins-hints", maxMpp: z(14), style: { kind: "circle", radiusPx: 4, color: PALETTE.pencilFaint, opacity: 0.35, strokeColor: PALETTE.pencilFaint, strokeWidthPx: 1, strokeOpacity: 0.5 } },
   { source: "clearings", style: { kind: "fill", color: C.meadow, filter: (p) => p.done === true } },
   { source: "clearings", style: { kind: "line", color: PALETTE.pencil, widthPx: 2, dash: [2, 1.5], filter: (p) => p.done !== true } },
   { source: "fields", style: { kind: "fill", color: PALETTE.warnFill, opacity: 0.7 } },
@@ -39,6 +80,9 @@ export const GAME_LAYERS: OverlayLayer[] = [
   { source: "field-draft", style: { kind: "fill", color: (p) => (p.ok ? PALETTE.warnFill : PALETTE.badFill), opacity: 0.6 } },
   { source: "field-draft", style: { kind: "line", color: (p) => (p.ok ? PALETTE.warn : PALETTE.bad), widthPx: 2, dash: [2, 1.5] } },
   { source: "field-draft-pts", style: { kind: "circle", radiusPx: 4, color: PALETTE.paperRaised, strokeColor: PALETTE.ink, strokeWidthPx: 2 } },
+  // The camp area roads must start from, until the first road is built.
+  { source: "camp", maxMpp: mppAtZoom(14), style: { kind: "fill", color: PALETTE.warn, opacity: 0.12 } },
+  { source: "camp", maxMpp: mppAtZoom(14), style: { kind: "line", color: PALETTE.warn, widthPx: 1.5, dash: [3, 2] } },
   // Roads at real width (a pixel at least); up close the 3D ribbons (models.ts) lie over the built ones.
   { source: "roads", style: { kind: "line", color: roadEdge, widthM: (p) => width(p) + 1.2, widthPx: 2.5, filter: is("built") } },
   { source: "roads", style: { kind: "line", color: roadColour, widthM: width, widthPx: 1, filter: is("built") } },
@@ -48,9 +92,23 @@ export const GAME_LAYERS: OverlayLayer[] = [
   { source: "buildings", style: { kind: "fill", color: PALETTE.paperRaised, opacity: 0.4, filter: is("planned") } },
   { source: "buildings", style: { kind: "line", color: PALETTE.ink2, widthPx: 1.5, dash: [2, 1.5], filter: is("planned") } },
   { source: "buildings", style: { kind: "line", color: PALETTE.warn, widthPx: 3, filter: (p) => p.up === true && (p.state === "active" || p.state === "building") } },
+  { source: "road-traffic", style: { kind: "line", color: (p) => trafficRamp(Number(p.n)).color, widthPx: (p) => trafficRamp(Number(p.n)).width, opacity: 0.9 } },
+  // What a service reaches, over a paper casing; the founding point on top.
+  { source: "service-reach", style: { kind: "line", color: PALETTE.paperRaised, widthPx: 8 } },
+  { source: "service-reach", style: { kind: "line", color: (p) => String(p.color ?? PALETTE.info), widthPx: 5, opacity: 0.9 } },
+  { source: "city", style: { kind: "circle", radiusPx: 7, color: PALETTE.warn, strokeColor: PALETTE.paperRaised, strokeWidthPx: 2 } },
 ];
 
+const NONE: FeatureCollection = { type: "FeatureCollection", features: [] };
+// The old city shows while the player keeps it on, or while a dig needs it (ruinsShown.ts).
+const shownRuins = (data: ReadonlySignal<FeatureCollection>): ReadonlySignal<FeatureCollection> => computed(() => (ruinsShown.value || ruinsAutoShown.value ? data.value : NONE));
+
 const SOURCES: [string, ReadonlySignal<FeatureCollection>][] = [
+  ["ruins-floors", shownRuins(ruinFloors)],
+  ["ruins-typed", shownRuins(ruinTyped)],
+  ["ruins-streets", shownRuins(ruinStreets)],
+  ["ruins-walls", shownRuins(ruinWalls)],
+  ["ruins-hints", shownRuins(ruinHints)],
   ["clearings", clearings],
   ["fields", fields],
   ["zone-cells", zoneCells],
@@ -60,6 +118,10 @@ const SOURCES: [string, ReadonlySignal<FeatureCollection>][] = [
   ["field-draft-pts", fieldDraftPoints],
   ["roads", roadLines],
   ["buildings", buildingShapes],
+  ["camp", campArea],
+  ["service-reach", serviceReach],
+  ["road-traffic", roadTraffic],
+  ["city", cityPoint],
 ];
 
 export function attachGameLayers(engine: Engine): void {

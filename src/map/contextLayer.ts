@@ -2,7 +2,7 @@ import type * as maplibregl from "maplibre-gl";
 import { effect } from "@preact/signals";
 import { PALETTE } from "../ui/palette";
 import { contextLayerForTool } from "./contextModel";
-import { ruinsAutoShown } from "./ruinsLayer";
+import { ruinsAutoShown } from "../view/ruinsShown";
 import { tool } from "./tools";
 
 const IDS = ["context-forest", "context-water", "context-quarry-wetland", "context-quarry-water"] as const;

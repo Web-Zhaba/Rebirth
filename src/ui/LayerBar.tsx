@@ -3,7 +3,7 @@ import { OVERLAY_COLORS, OVERLAYS, overlay, setManualOverlay, setManualZonesShow
 import { compactScreen } from "../map/motion";
 import { placeLabelsOn, togglePlaceLabels } from "../view/placeNames";
 import { cloudsOn, toggleClouds } from "../map/clouds/settings";
-import { ruinsShown, toggleRuins } from "../map/ruinsLayer";
+import { ruinsShown, toggleRuins } from "../view/ruinsShown";
 import { toggleWeatherMap, weatherMapOn } from "../map/weatherSettings";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";

@@ -105,13 +105,13 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
       return camera.on(type as "move", fn as () => void);
     },
 
-    // The pin's tip stands on the point; a custom element is centred on it (MapLibre's defaults).
+    // The pin's tip stands on the point; a custom element is centred on it unless it asks for its bottom (MapLibre's).
     addMarker(opts, at): ViewMarker {
       const holder = document.createElement("div");
       holder.style.cssText = "position:absolute;left:0;top:0;will-change:transform";
       let anchor: MarkerAnchor;
       if ("element" in opts) {
-        anchor = "center";
+        anchor = opts.anchor ?? "center";
         holder.append(opts.element);
       } else {
         anchor = "bottom";

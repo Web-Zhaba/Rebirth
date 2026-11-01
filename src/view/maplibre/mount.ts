@@ -1,7 +1,5 @@
 import { computed, type ReadonlySignal } from "@preact/signals";
 import { oldWorld } from "../../map/excavation";
-import { attachArticleMarkers } from "../../map/articleMarkerLayer";
-import { attachBadgeLayer } from "../../map/badgeLayer";
 import { attachBuildingLayer } from "../../map/buildingLayer";
 import { attachCityMarker } from "../../map/cityLayer";
 import { attachClouds } from "../../map/clouds/attach";
@@ -18,7 +16,8 @@ import { attachPrecipitation } from "../../map/precipLayer";
 import { attachReachLayer } from "../../map/reachLayer";
 import { attachRelief } from "../../map/relief";
 import { attachRoadLayer } from "../../map/roadLayer";
-import { attachRuinsLayer, ruinsShown } from "../../map/ruinsLayer";
+import { attachRuinsLayer } from "../../map/ruinsLayer";
+import { ruinsShown } from "../ruinsShown";
 import { attachSmoke } from "../../map/smoke";
 import { attachTrackpadGestures } from "../../map/trackpadGestures";
 import { attachTrafficLayer } from "../../map/trafficLayer";
@@ -49,12 +48,10 @@ export function mountMapLibreView(o: MountOptions): MapLibreView {
   attachPlaceLabels(map);
   attachContextLayer(map);
   attachZoneLayer(map); // zones beneath everything else we add
-  attachRuinsLayer(map, oldWorld, frame); // old foundations and streets, beneath the roads
-  attachArticleMarkers(map);
+  attachRuinsLayer(map, frame); // old foundations and streets, beneath the roads
   attachRoadLayer(map); // before the city marker so roads draw beneath it
   attachBuildingLayer(map);
   // Buildings and built roads as three.js models (loaded with the first one); localStorage debug3dModels = "1" shows every model kind instead.
-  attachBadgeLayer(map); // HTML badges above the buildings
   attachTrafficLayer(map);
   attachLifeLayer(map, { ...o.life, gameMinutes: gameClock, frame });
   attachNightTint(map, gameClock); // dusk tint of the map itself; sits just under the lights

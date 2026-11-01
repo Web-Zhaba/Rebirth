@@ -80,7 +80,8 @@ export interface View {
   isWaterAt(point: ScreenPoint): boolean;
 
   on<K extends keyof ViewEvents>(type: K, fn: (e: ViewEvents[K]) => void): () => void; // returns the unsubscribe
-  addMarker(opts: { element: HTMLElement } | { color: string }, at: LngLat): ViewMarker;
+  // A pin of `color` stands on the point; an element is centred on it, or stands on it with anchor "bottom".
+  addMarker(opts: { element: HTMLElement; anchor?: "center" | "bottom" } | { color: string }, at: LngLat): ViewMarker;
   overlay(id: OverlayId): Overlay;
 }
 
