@@ -1,6 +1,5 @@
-import type * as maplibregl from "maplibre-gl";
-import { flyOrJump } from "../map/motion";
-import { articleMapTarget, articleMapZoom } from "./articleMapModel";
+import type { View } from "../view/view";
+import { articleMapMpp, articleMapTarget } from "./articleMapModel";
 import { computed } from "@preact/signals";
 import { useState } from "preact/hooks";
 import { articles, chronicle, digs, finds } from "../simClient";
@@ -17,7 +16,7 @@ const entries = computed(() =>
 );
 
 // Wires the notebook to the town. It shares the right slot with the inspector and the town panel (panels.ts).
-export function NotebookHost({ map }: { map: maplibregl.Map }) {
+export function NotebookHost({ view }: { view: View }) {
   const open = rightPanel.value === "notebook";
   const [seen, setSeen] = useState(readSeen);
 
@@ -30,7 +29,7 @@ export function NotebookHost({ map }: { map: maplibregl.Map }) {
   const onArticleMap = (article: (typeof articles.value)[number]) => {
     const target = articleMapTarget(article);
     if (!target) return;
-    flyOrJump(map, { center: target, zoom: articleMapZoom(map.getZoom()) });
+    view.flyTo({ center: target, mpp: articleMapMpp(view.metersPerPixel()) });
   };
 
   return <Notebook finds={entries.value} articles={articles.value} chronicle={chronicle.value} seen={seen} onSeen={onSeen} open={open} onOpenChange={onOpenChange} onArticleMap={onArticleMap} />;

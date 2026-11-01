@@ -1,6 +1,6 @@
-import { flyOrJump } from "../map/motion";
 import { useEffect, useRef, useState } from "preact/hooks";
-import * as maplibregl from "maplibre-gl";
+import { FOUND_MPP } from "../view/scale";
+import type { View, ViewMarker, ViewPointer } from "../view/view";
 import { found as foundCity } from "../simClient";
 import { sampleSite } from "../world/site";
 import { landAt, nearRiver, type Land } from "../world/landcover";
@@ -47,35 +47,35 @@ async function survey({ lat, lng }: Point): Promise<Info> {
   return { land, site, elevation: t.elevation, slope: t.slope, river };
 }
 
-export function FoundCity({ map }: { map: maplibregl.Map }) {
+export function FoundCity({ view }: { view: View }) {
   const [point, setPoint] = useState<Point | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
   const [failed, setFailed] = useState(false);
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
-  const marker = useRef<maplibregl.Marker | null>(null);
+  const marker = useRef<ViewMarker | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (map.queryRenderedFeatures(e.point, { layers: ["water"] }).length > 0) {
+    const onClick = (e: ViewPointer) => {
+      if (view.isWaterAt(e.point)) {
         setMsg("Здесь вода — выберите сушу");
         return;
       }
       setMsg("");
-      const { lat, lng } = e.lngLat;
+      const [lng, lat] = e.lngLat;
       if (marker.current) marker.current.setLngLat(e.lngLat);
-      else marker.current = new maplibregl.Marker({ color: "#c07a22" }).setLngLat(e.lngLat).addTo(map);
-      flyOrJump(map, { center: e.lngLat, zoom: 14 });
+      else marker.current = view.addMarker({ color: "#c07a22" }, e.lngLat);
+      view.flyTo({ center: e.lngLat, mpp: FOUND_MPP });
       setPoint({ lat, lng });
     };
-    map.on("click", onClick);
+    const off = view.on("click", onClick);
     return () => {
-      map.off("click", onClick);
+      off();
       marker.current?.remove();
       marker.current = null;
     };
-  }, [map]);
+  }, [view]);
 
   // Survey the land under the marker; a newer click drops the older answer.
   useEffect(() => {
@@ -113,7 +113,7 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
     <>
       <div class="found-vignette" aria-hidden="true" />
       <div class="logo-mark found-mark" role="img" aria-label="Rebirth" />
-      <PlaceSearch map={map} />
+      <PlaceSearch view={view} />
       <div class="found-task" role="status" aria-live="polite">
         {msg || "Выберите место для нового поселения"}
       </div>

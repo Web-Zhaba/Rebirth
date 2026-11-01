@@ -241,6 +241,25 @@ Carry-over for N2:
 - Exit: `grep maplibre` only matches `src/view/maplibre/` and the old layer files; game behaviour unchanged.
 - Worth doing even if the engine stops later: it decouples the game from the map library.
 
+Done (2026-11-01).
+
+- `src/view/view.ts` is the seam: camera as target/distance/heading/pitch, goals by `distance` or `mpp`,
+  `metersPerPixel`, `project`, `isWaterAt`, pointer/camera events, markers, `setPanEnabled` /
+  `setDoubleClickZoomEnabled` (drawing tools own the drag), and overlays by id (`road-preview`, `road-hover`,
+  `road-snap`, `place-lot`, `place-radius`, `reveal-disc`, `follow-target`). The game owns overlay data; the backend
+  owns how they look.
+- MapLibre backend: `src/view/maplibre/` — `view.ts`, `overlays.ts` (layer specs moved out of the tools and
+  FollowCamera; added on first data, re-added on `styledata`), `mount.ts` (map construction, all renderer `attach*`
+  wiring, DEV handles and the bench hook), `zoom.ts` (zoom ↔ distance ↔ mpp; the bench re-exports it).
+- UI, `main.ts` and the five tool files no longer import `maplibre-gl`. Renderer files in `src/map/` still do, as
+  planned; visual `minzoom`/line-width stops inside them stay until they are replaced.
+- Game thresholds are metres per CSS pixel, `mppAtZoom(z)` at a reference latitude of 55° (`src/view/scale.ts`, tool
+  gates in `src/map/tools.ts`, PlaceSearch, TerrainInspector, `articleMapModel`). Behaviour change: the zoom at which
+  a tool opens now varies slightly with latitude (at 59° the zone gate opens at ~z14.83 instead of z15); brush and
+  snap sizes use the scale at the camera target instead of the cursor's latitude.
+- The zone brush is not an overlay: `zoneLayer` draws it from the `hoverKeys` / `paintPreview` signals; it moves with
+  the zone layer in N4.
+
 **N2. Engine core.** gpu pools, frame graph, WGSL module system, stream scheduler, baker workers, camera and input
 (parity with today's drag/scroll/touch/trackpad, inertia, fly), atmosphere/sky, lighting from the game clock, terrain
 CDLOD with exact game-area heights, picking. `view` implemented by the engine: you can found a town and look around.

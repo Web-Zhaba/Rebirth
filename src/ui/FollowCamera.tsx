@@ -1,4 +1,5 @@
-import type * as maplibregl from "maplibre-gl";
+import { TOWN_VIEW_MPP } from "../view/scale";
+import type { View } from "../view/view";
 import { useEffect } from "preact/hooks";
 import { calendar } from "../sim/clock";
 import { isWorkHour } from "../sim/levers";
@@ -9,13 +10,11 @@ import { followed, followInfo, stopFollowing } from "./follow";
 import { residentPoint, residentWalk } from "./followModel";
 import { PALETTE } from "./palette";
 
-const SRC = "follow-target";
-const LAYER = "follow-target";
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 
 // Keeps the camera on the followed resident and draws an amber ring around them. It reads the same
 // cosmetic trips the walkers are drawn from, so following costs the simulation nothing.
-export function FollowCamera({ map }: { map: maplibregl.Map }) {
+export function FollowCamera({ view }: { view: View }) {
   const target = followed.value;
   const activeTool = tool.value;
 
@@ -51,29 +50,6 @@ export function FollowCamera({ map }: { map: maplibregl.Map }) {
     let lastKey = "";
     let first = true;
 
-    const setup = () => {
-      if (!alive || !map.isStyleLoaded() || map.getSource(SRC)) return;
-      map.addSource(SRC, { type: "geojson", data: empty() });
-      const before = map.getLayer("life-walkers") ? "life-walkers" : undefined;
-      map.addLayer(
-        {
-          id: LAYER,
-          type: "circle",
-          source: SRC,
-          paint: {
-            "circle-radius": 12,
-            "circle-color": PALETTE.warn,
-            "circle-opacity": 0.12,
-            "circle-stroke-color": PALETTE.warn,
-            "circle-stroke-width": 2,
-            "circle-stroke-opacity": 0.9,
-            "circle-pitch-alignment": "map",
-          },
-        },
-        before,
-      );
-    };
-
     // A drag means the player wants the map back: stop following instead of fighting the camera.
     const onDrag = () => stopFollowing();
 
@@ -95,32 +71,24 @@ export function FollowCamera({ map }: { map: maplibregl.Map }) {
       if (key === lastKey) return;
       lastKey = key;
       const lngLat = fl.toLngLat(at[0], at[1]);
-      map.jumpTo({ center: lngLat, ...(first ? { zoom: Math.max(map.getZoom(), 16) } : {}) });
+      view.jumpTo({ center: lngLat, ...(first ? { mpp: Math.min(view.metersPerPixel(), TOWN_VIEW_MPP) } : {}) });
       first = false;
-      const src = map.getSource(SRC) as maplibregl.GeoJSONSource | undefined;
-      if (src) {
-        src.setData({
-          type: "FeatureCollection",
-          features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: lngLat } }],
-        });
-      }
+      view.overlay("follow-target").setData({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: lngLat } }],
+      });
     };
 
-    if (map.isStyleLoaded()) setup();
-    else map.once("load", setup);
-    map.on("styledata", setup);
-    map.on("dragstart", onDrag);
+    const offDrag = view.on("dragstart", onDrag);
     raf = requestAnimationFrame(tick);
 
     return () => {
       alive = false;
       cancelAnimationFrame(raf);
-      map.off("styledata", setup);
-      map.off("dragstart", onDrag);
-      if (map.getLayer(LAYER)) map.removeLayer(LAYER);
-      if (map.getSource(SRC)) map.removeSource(SRC);
+      offDrag();
+      view.overlay("follow-target").setData(empty());
     };
-  }, [map, target?.id]);
+  }, [view, target?.id]);
 
   return null;
 }

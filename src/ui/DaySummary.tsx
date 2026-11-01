@@ -1,5 +1,5 @@
-import { flyOrJump } from "../map/motion";
-import type * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
+import { atLeastAsClose, CLOSE_UP_MPP } from "../view/scale";
 import { useEffect, useState } from "preact/hooks";
 import type { SummaryLine } from "../sim/types";
 import { daySummary, frame } from "../simClient";
@@ -13,7 +13,7 @@ const LINE_ICON: Record<SummaryLine["kind"], IconName> = { built: "craft", arriv
 
 // «Итоги дня»: each new card stays on screen for five real seconds. The countdown is independent
 // of game speed and pause; the close button can dismiss it earlier.
-export function DaySummary({ map }: { map: maplibregl.Map }) {
+export function DaySummary({ view }: { view: View }) {
   const [closed, setClosed] = useState<number | null>(null);
   const [remaining, setRemaining] = useState(1);
   const summary = daySummary.value;
@@ -76,7 +76,7 @@ export function DaySummary({ map }: { map: maplibregl.Map }) {
             key={i}
             class="link day-summary-line"
             title="Показать на карте"
-            onClick={() => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}
+            onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}
           >
             {body}
           </button>

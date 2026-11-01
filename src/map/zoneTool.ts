@@ -1,5 +1,5 @@
 import { play } from "../ui/sound";
-import type * as maplibregl from "maplibre-gl";
+import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect } from "@preact/signals";
 import type { ZoneCell, ZoneType } from "../sim/types";
 import { clearingLabor, clearingLogs, validateClearing } from "../sim/clearing";
@@ -9,12 +9,12 @@ import type { Frame } from "../world/frame";
 import { landAt } from "../world/landcover";
 import { fieldDraft, hoverKeys, paintPreview } from "./zoneLayer";
 import { etaText } from "./buildCost";
-import { flash, isBrushTool, mapMpp, MIN_ZONE_ZOOM, setSpacePan, syncPan, tool, type BrushTool } from "./tools";
+import { flash, isBrushTool, ZONE_MAX_MPP, setSpacePan, syncPan, tool, type BrushTool } from "./tools";
 
 const BRUSH_PX = 16;
 const MIN_BRUSH_M = 6;
 const CLOSE_PX = 12;
-const FIELD_MIN_ZOOM = 14;
+const FIELD_MAX_MPP = mppAtZoom(14); // old FIELD_MIN_ZOOM 14
 const GRID_STEP = 10; // m, land sampling inside a field
 const ANALYZE_MS = 200;
 const BUCKET = 16;
@@ -58,11 +58,11 @@ async function analyzeField(f: Frame, poly: Pt[]): Promise<Analysis> {
 }
 
 // Zone brush and field drawing on top of the map.
-export function attachZoneTool(map: maplibregl.Map): void {
+export function attachZoneTool(view: View): void {
   const label = document.createElement("div");
   label.className = "road-label";
   label.hidden = true;
-  map.getContainer().appendChild(label);
+  view.container.appendChild(label);
 
   let cursor: { x: number; y: number } | null = null; // px
   let local: Pt | null = null; // m
@@ -114,7 +114,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
   const clearingActive = () => tool.value === "clearing";
   const fieldActive = () => tool.value === "field" || clearingActive(); // both are drawn as a polygon
 
-  const radiusM = (lat: number) => Math.max(MIN_BRUSH_M, BRUSH_PX * mapMpp(lat, map.getZoom()));
+  const radiusM = () => Math.max(MIN_BRUSH_M, BRUSH_PX * view.metersPerPixel());
 
   // ----- brush -----
   let dragging = false;
@@ -140,16 +140,16 @@ export function attachZoneTool(map: maplibregl.Map): void {
   const fieldAt = (x: number, y: number) => zones.value?.fields.find((fl) => pointInPolygon(x, y, fl.pts)) ?? null;
   const clearingAt = (x: number, y: number) => state.value?.clearings.find((c) => c.done < c.labor && pointInPolygon(x, y, c.pts)) ?? null;
 
-  const brushAt = (e: maplibregl.MapMouseEvent, t: BrushTool) => {
+  const brushAt = (e: ViewPointer, t: BrushTool) => {
     const f = frame.value;
     if (!f) return null;
-    const [x, y] = f.toLocal(e.lngLat.lng, e.lngLat.lat);
+    const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
     local = [x, y];
-    return { x, y, r: radiusM(e.lngLat.lat), zone: brushZone(t) };
+    return { x, y, r: radiusM(), zone: brushZone(t) };
   };
 
-  const onBrushMove = (e: maplibregl.MapMouseEvent, t: BrushTool) => {
-    if (map.getZoom() < MIN_ZONE_ZOOM) {
+  const onBrushMove = (e: ViewPointer, t: BrushTool) => {
+    if (view.metersPerPixel() > ZONE_MAX_MPP) {
       hoverKeys.value = [];
       setLabel("Приблизьте карту");
       return;
@@ -183,9 +183,9 @@ export function attachZoneTool(map: maplibregl.Map): void {
     }
   };
 
-  const onDown = (e: maplibregl.MapMouseEvent) => {
+  const onDown = (e: ViewPointer) => {
     const t = activeBrush();
-    if (!t || e.originalEvent.button !== 0 || spaceDown || map.getZoom() < MIN_ZONE_ZOOM) return;
+    if (!t || e.original.button !== 0 || spaceDown || view.metersPerPixel() > ZONE_MAX_MPP) return;
     const b = brushAt(e, t);
     if (!b) return;
     if (t === "clear") {
@@ -206,7 +206,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
         return;
       }
     }
-    if (e.originalEvent.shiftKey) {
+    if (e.original.shiftKey) {
       // The whole side of the nearest edge, all depths.
       let best: ZoneCell | null = null;
       let bestD = Math.max(b.r, 8);
@@ -361,13 +361,13 @@ export function attachZoneTool(map: maplibregl.Map): void {
       });
   };
 
-  const onFieldClick = (e: maplibregl.MapMouseEvent) => {
+  const onFieldClick = (e: ViewPointer) => {
     const f = frame.value;
-    if (!f || busy || map.getZoom() < FIELD_MIN_ZOOM) return;
-    const [x, y] = f.toLocal(e.lngLat.lng, e.lngLat.lat);
+    if (!f || busy || view.metersPerPixel() > FIELD_MAX_MPP) return;
+    const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
     if (pts.length >= 3) {
-      const first = map.project(f.toLngLat(pts[0][0], pts[0][1]));
-      if (Math.hypot(first.x - e.point.x, first.y - e.point.y) <= CLOSE_PX) {
+      const first = view.project(f.toLngLat(pts[0][0], pts[0][1]));
+      if (Math.hypot(first[0] - e.point[0], first[1] - e.point[1]) <= CLOSE_PX) {
         finishField();
         return;
       }
@@ -380,18 +380,18 @@ export function attachZoneTool(map: maplibregl.Map): void {
   };
 
   // ----- events -----
-  const onMove = (e: maplibregl.MapMouseEvent) => {
-    cursor = { x: e.point.x, y: e.point.y };
+  const onMove = (e: ViewPointer) => {
+    cursor = { x: e.point[0], y: e.point[1] };
     const t = tool.value;
     if (!t) return;
     if (fieldActive()) {
       const f = frame.value;
       if (!f) return;
-      if (map.getZoom() < FIELD_MIN_ZOOM) {
+      if (view.metersPerPixel() > FIELD_MAX_MPP) {
         setLabel("Приблизьте карту");
         return;
       }
-      local = f.toLocal(e.lngLat.lng, e.lngLat.lat);
+      local = f.toLocal(e.lngLat[0], e.lngLat[1]);
       showDraft();
       return;
     }
@@ -399,15 +399,14 @@ export function attachZoneTool(map: maplibregl.Map): void {
     if (b) onBrushMove(e, b);
   };
 
-  const onClick = (e: maplibregl.MapMouseEvent) => {
+  const onClick = (e: ViewPointer) => {
     if (fieldActive()) onFieldClick(e);
   };
 
-  const onContext = (e: maplibregl.MapMouseEvent) => {
+  const onContext = (e: ViewPointer) => {
     const t = tool.value;
     if (!t || !(fieldActive() || isBrushTool(t))) return;
-    e.preventDefault();
-    e.originalEvent.preventDefault();
+    e.original.preventDefault();
     if (fieldActive() && pts.length > 0) {
       pts.pop();
       showDraft();
@@ -425,7 +424,7 @@ export function attachZoneTool(map: maplibregl.Map): void {
       spaceDown = true;
       hoverKeys.value = [];
       setSpacePan(true);
-      syncPan(map);
+      syncPan(view);
       return;
     }
     if (!fieldActive() && !activeBrush()) return;
@@ -440,18 +439,18 @@ export function attachZoneTool(map: maplibregl.Map): void {
     if (e.key !== " ") return;
     spaceDown = false;
     setSpacePan(false);
-    syncPan(map);
+    syncPan(view);
   };
 
-  map.on("mousemove", onMove);
-  map.on("click", onClick);
-  map.on("mousedown", onDown);
-  map.on("contextmenu", onContext);
-  map.on("zoom", () => syncPan(map));
+  view.on("mousemove", onMove);
+  view.on("click", onClick);
+  view.on("mousedown", onDown);
+  view.on("contextmenu", onContext);
+  view.on("move", () => syncPan(view));
   window.addEventListener("mouseup", onUp);
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
-  map.getCanvas().addEventListener("mouseleave", () => {
+  view.canvas.addEventListener("mouseleave", () => {
     cursor = null;
     hoverKeys.value = [];
     setLabel(null);
@@ -469,6 +468,6 @@ export function attachZoneTool(map: maplibregl.Map): void {
     busy = false;
     if (!activeBrush()) spaceDown = false;
     if (inflight === 0) paintPreview.value = null;
-    syncPan(map);
+    syncPan(view);
   });
 }

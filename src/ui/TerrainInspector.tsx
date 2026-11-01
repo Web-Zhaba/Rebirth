@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { formatCoordinates } from "./coordsModel";
-import type * as maplibregl from "maplibre-gl";
+import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { landAt, nearRiver, type Land } from "../world/landcover";
 import { terrainAt } from "../world/terrain";
 
@@ -23,18 +23,18 @@ interface Info {
   lng: number;
 }
 
-const MIN_ZOOM = 13;
+const MAX_MPP = mppAtZoom(13); // inspect only closer than old zoom 13
 const THROTTLE_MS = 150;
 
-export function TerrainInspector({ map }: { map: maplibregl.Map }) {
+export function TerrainInspector({ view }: { view: View }) {
   const [info, setInfo] = useState<Info | null>(null);
 
   useEffect(() => {
     let last = 0;
     let seq = 0;
-    const onMove = (e: maplibregl.MapMouseEvent) => {
+    const onMove = (e: ViewPointer) => {
       const now = Date.now();
-      if (map.getZoom() < MIN_ZOOM) {
+      if (view.metersPerPixel() > MAX_MPP) {
         seq++;
         setInfo(null);
         return;
@@ -42,7 +42,7 @@ export function TerrainInspector({ map }: { map: maplibregl.Map }) {
       if (now - last < THROTTLE_MS) return;
       last = now;
       const mine = ++seq;
-      const { lng, lat } = e.lngLat;
+      const [lng, lat] = e.lngLat;
       Promise.all([landAt(lng, lat), terrainAt(lng, lat), nearRiver(lng, lat)])
         .then(([land, t, river]) => {
           if (mine === seq) setInfo({ land, elevation: t.elevation, slope: t.slope, river, lat, lng });
@@ -55,13 +55,13 @@ export function TerrainInspector({ map }: { map: maplibregl.Map }) {
       seq++;
       setInfo(null);
     };
-    map.on("mousemove", onMove);
-    map.getCanvas().addEventListener("mouseout", onOut);
+    const off = view.on("mousemove", onMove);
+    view.canvas.addEventListener("mouseout", onOut);
     return () => {
-      map.off("mousemove", onMove);
-      map.getCanvas().removeEventListener("mouseout", onOut);
+      off();
+      view.canvas.removeEventListener("mouseout", onOut);
     };
-  }, [map]);
+  }, [view]);
 
   const coords = info ? formatCoordinates(info.lat, info.lng) : "";
   const [copied, setCopied] = useState(false);

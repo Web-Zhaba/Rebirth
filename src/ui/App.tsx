@@ -1,5 +1,5 @@
 import { computed } from "@preact/signals";
-import type * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
 import { useEffect } from "preact/hooks";
 import { city, state } from "../simClient";
 import { AboutDialog } from "./AboutDialog";
@@ -27,7 +27,7 @@ import { TownPanel } from "./TownPanel";
 import { installScreenshotMode } from "./screenshotMode";
 import { RoadDemolishConfirm } from "./RoadDemolishConfirm";
 
-export function App({ map }: { map: maplibregl.Map }) {
+export function App({ view }: { view: View }) {
   const c = city.value;
   useEffect(() => (c ? trackLayout() : undefined), [!!c]);
   useEffect(installClickSound, []);
@@ -35,16 +35,16 @@ export function App({ map }: { map: maplibregl.Map }) {
   useEffect(() => attachWeatherSound(computed(() => state.value?.weather ?? null)), []);
   return (
     <>
-      {c ? <Hud city={c} map={map} /> : <FoundCity map={map} />}
-      {c && <TerrainInspector map={map} />}
-      {c && <CentreColumn map={map} />}
-      {c && <FollowCamera map={map} />}
+      {c ? <Hud city={c} view={view} /> : <FoundCity view={view} />}
+      {c && <TerrainInspector view={view} />}
+      {c && <CentreColumn view={view} />}
+      {c && <FollowCamera view={view} />}
       {c && <BuildingPanel />}
       {c && <ClearingPanel />}
-      {c && <TownPanel city={c} map={map} />}
+      {c && <TownPanel city={c} view={view} />}
       {c && <TechPanel />}
       {c && <HeritagePanel />}
-      {c && <NotebookHost map={map} />}
+      {c && <NotebookHost view={view} />}
       {c && <BuildBar />}
       {c && <AdminPanel />}
       {/* A readout for a running town: on the first-launch screen it would sit on the founding sheet. */}

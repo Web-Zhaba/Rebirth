@@ -1,5 +1,5 @@
-import { flyOrJump } from "../map/motion";
-import type * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
+import { atLeastAsClose, CLOSE_UP_MPP } from "../view/scale";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { frame } from "../simClient";
 import { Icon } from "./Icon";
@@ -9,7 +9,7 @@ import { openPanel } from "./panels";
 import { KIND_ICON, KIND_TONE, opensScience, showMs, type Toast } from "./toastModel";
 
 // One toast: dismisses itself after its time, which stops while the pointer or the focus is on it.
-function ToastItem({ t, map }: { t: Toast; map: maplibregl.Map }) {
+function ToastItem({ t, view }: { t: Toast; view: View }) {
   const [paused, setPaused] = useState(false);
   const left = useRef(showMs(t));
   useEffect(() => {
@@ -23,7 +23,7 @@ function ToastItem({ t, map }: { t: Toast; map: maplibregl.Map }) {
   }, [paused, t.id]);
   const fl = frame.value;
   const pos = t.pos;
-  const fly = pos && fl ? () => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) }) : undefined;
+  const fly = pos && fl ? () => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) }) : undefined;
   const body = (
     <>
       <Icon name={KIND_ICON[t.kind]} size={16} />
@@ -55,11 +55,11 @@ function ToastItem({ t, map }: { t: Toast; map: maplibregl.Map }) {
 }
 
 // The live region stays mounted even when empty so that screen readers announce what appears in it.
-export function Toasts({ map }: { map: maplibregl.Map }) {
+export function Toasts({ view }: { view: View }) {
   return (
     <ul class="toasts" aria-live="polite" aria-label="Новости города">
       {toasts.value.map((t) => (
-        <ToastItem key={t.id} t={t} map={map} />
+        <ToastItem key={t.id} t={t} view={view} />
       ))}
     </ul>
   );

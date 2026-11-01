@@ -11,8 +11,10 @@ import { selectedBuilding } from "./buildingLayer";
 import { PALETTE } from "../ui/palette";
 import { addPatterns, PATTERNS } from "./patterns";
 import { MEADOW_COLOR } from "./style";
-import { isBrushTool, MIN_ZONE_ZOOM, tool, zonesShown, ZONE_COLORS } from "./tools";
+import { isBrushTool, tool, zonesShown, ZONE_COLORS } from "./tools";
 import { cellsForKeys, indexCellsByKey } from "./zoneCellIndex";
+
+const MIN_ZONE_ZOOM = 15; // the layer's own visual stop; the brush gate is ZONE_MAX_MPP in tools.ts
 
 // Unfinished clearing shown in the inspector.
 export const selectedClearing = signal<number | null>(null);

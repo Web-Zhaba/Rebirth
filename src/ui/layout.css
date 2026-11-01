@@ -73,7 +73,7 @@ button.event-card-pause-btn {
   outline-offset: -2px;
 }
 
-/* Reduced motion: no transitions or animations anywhere (the map camera jumps, see flyOrJump). */
+/* Reduced motion: no transitions or animations anywhere (the map camera jumps, see View.flyTo). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

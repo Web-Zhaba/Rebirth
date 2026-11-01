@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { articleMapTarget, articleMapZoom } from "./articleMapModel";
+import { mppAtZoom } from "../view/view";
+import { articleMapMpp, articleMapTarget } from "./articleMapModel";
 
 describe("Wikipedia article map targets", () => {
   it("uses valid article coordinates as lng/lat", () => {
@@ -13,8 +14,8 @@ describe("Wikipedia article map targets", () => {
   });
 
   it("brings articles to a useful map scale without excessive zoom", () => {
-    expect(articleMapZoom(12)).toBe(16.5);
-    expect(articleMapZoom(17)).toBe(17);
-    expect(articleMapZoom(20)).toBe(18);
+    expect(articleMapMpp(mppAtZoom(12))).toBeCloseTo(mppAtZoom(16.5), 9);
+    expect(articleMapMpp(mppAtZoom(17))).toBeCloseTo(mppAtZoom(17), 9);
+    expect(articleMapMpp(mppAtZoom(20))).toBeCloseTo(mppAtZoom(18), 9);
   });
 });

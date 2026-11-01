@@ -1,5 +1,5 @@
-import { flyOrJump } from "../map/motion";
-import type * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
+import { TOWN_VIEW_MPP } from "../view/scale";
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
@@ -88,7 +88,7 @@ const GOODS: { id: Good; icon: IconName; title: string; cap: string }[] = [
   { id: "wares", icon: "wares", title: "Товары", cap: "товары" },
 ];
 
-export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
+export function TopBar({ city, view }: { city: City; view?: View }) {
   const gm = useGameMinutes();
   const cal = calendar(gm);
   const phase = dayPhase(cal.hour);
@@ -109,15 +109,15 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
         return;
       }
       if (e.key === "h" || e.key === "H" || e.key === "Home") {
-        if (map) {
+        if (view) {
           e.preventDefault();
-          flyOrJump(map, { center: [city.lng, city.lat], zoom: 16 });
+          view.flyTo({ center: [city.lng, city.lat], mpp: TOWN_VIEW_MPP });
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [map, city.lng, city.lat]);
+  }, [view, city.lng, city.lat]);
   const p = people.value;
   const st = stock.value;
   const eco = economy.value;
@@ -132,12 +132,12 @@ export function TopBar({ city, map }: { city: City; map?: maplibregl.Map }) {
   return (
     <header class="topbar" aria-label="Верхняя панель управления">
       <div class="tb-city">
-        {map ? (
+        {view ? (
           <Tooltip text="К центру поселения (H)">
             <button
               class="city-name-btn"
               type="button"
-              onClick={() => flyOrJump(map, { center: [city.lng, city.lat], zoom: 16 })}
+              onClick={() => view.flyTo({ center: [city.lng, city.lat], mpp: TOWN_VIEW_MPP })}
             >
               <span class="city-name">{city.name}</span>
             </button>

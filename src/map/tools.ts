@@ -1,10 +1,10 @@
 import { play } from "../ui/sound";
-import type * as maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 import { shouldRepeatTool } from "../ui/inputModel";
 import { storedChoice } from "../ui/preferenceModel";
+import { mppAtZoom, type View } from "../view/view";
 
 // Road tools; a tool plus its material (see roadMaterial) picks the sim RoadKind. restore: rebuild a revealed old street as a whole.
 export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
@@ -28,8 +28,8 @@ effect(() => {
   if (current) lastTool.value = current;
 });
 
-export function attachToolRepeat(map: maplibregl.Map): void {
-  map.getCanvas().addEventListener("mousedown", (e) => {
+export function attachToolRepeat(view: View): void {
+  view.canvas.addEventListener("mousedown", (e) => {
     if (!shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
     e.preventDefault();
     tool.value = lastTool.peek();
@@ -71,8 +71,9 @@ export function flash(text: string): void {
   msgTimer = window.setTimeout(() => (toolMsg.value = null), 3500);
 }
 
-export const MIN_ZONE_ZOOM = 15;
-export const MIN_ROAD_ZOOM = 14;
+// Drawing is allowed only when the map is closer than these (metres per pixel; the zoom they were set at is noted).
+export const ZONE_MAX_MPP = mppAtZoom(15); // old MIN_ZONE_ZOOM 15
+export const ROAD_MAX_MPP = mppAtZoom(14); // old MIN_ROAD_ZOOM 14
 
 // Drawing tools own the drag: the map must not pan under them (Space pans temporarily).
 let panOff = false;
@@ -80,19 +81,14 @@ let spaceHeld = false;
 export const setSpacePan = (on: boolean): void => {
   spaceHeld = on;
 };
-export function syncPan(map: maplibregl.Map): void {
+export function syncPan(view: View): void {
   const t = tool.value;
-  const zoom = map.getZoom();
-  const want = !!t && !spaceHeld && (isRoadTool(t) ? zoom >= MIN_ROAD_ZOOM : isBrushTool(t) ? zoom >= MIN_ZONE_ZOOM : false);
+  const mpp = view.metersPerPixel();
+  const want = !!t && !spaceHeld && (isRoadTool(t) ? mpp <= ROAD_MAX_MPP : isBrushTool(t) ? mpp <= ZONE_MAX_MPP : false);
   if (want === panOff) return;
   panOff = want;
-  if (want) map.dragPan.disable();
-  else map.dragPan.enable();
+  view.setPanEnabled(!want);
 }
-
-const EQUATOR_M = 40075016.686;
-// Meters of ground per screen pixel (MapLibre uses 512 px tiles).
-export const mapMpp = (lat: number, zoom: number) => (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
 export const ZONE_COLORS: Record<ZoneType, string> = { res: PALETTE.ok, craft: PALETTE.warn, trade: PALETTE.info };
 

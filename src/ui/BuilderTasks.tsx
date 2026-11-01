@@ -1,7 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
-import * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
+import { atLeastAsClose, CLOSE_UP_MPP } from "../view/scale";
 import { selectedBuilding } from "../map/buildingLayer";
-import { compactScreen, flyOrJump } from "../map/motion";
+import { compactScreen } from "../map/motion";
 import { etaRealMs, formatReal } from "../sim/buildEta";
 import { BUILDINGS } from "../sim/buildings";
 import { siteTitle } from "../sim/heritage";
@@ -38,7 +39,7 @@ interface Task {
 // Construction work the builders are on now: houses and workshops going up (or being rebuilt), roads they can reach,
 // land being cleared. Bottom-right of the HUD, on the build bar's line. Collapsible (remembered). Sites are listed in the
 // order the builders take them: the priority site first, then the rest. Each row shows when it is expected to finish.
-export function BuilderTasks({ map }: { map: maplibregl.Map }) {
+export function BuilderTasks({ view }: { view: View }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [hover, setHover] = useState<[number, number] | null>(null);
   const s = state.value;
@@ -50,11 +51,11 @@ export function BuilderTasks({ map }: { map: maplibregl.Map }) {
     if (!hover || !fl) return;
     const el = document.createElement("div");
     el.className = "builder-focus-ring";
-    const ring = new maplibregl.Marker({ element: el }).setLngLat(fl.toLngLat(hover[0], hover[1])).addTo(map);
+    const ring = view.addMarker({ element: el }, fl.toLngLat(hover[0], hover[1]));
     return () => {
       ring.remove();
     };
-  }, [hover, fl, map]);
+  }, [hover, fl, view]);
 
   if (!s) return null;
   const priority = s.levers?.priority ?? null;
@@ -124,7 +125,7 @@ export function BuilderTasks({ map }: { map: maplibregl.Map }) {
                     class="link builder-task-title"
                     title="Показать на карте"
                     onClick={() => {
-                      flyOrJump(map, { center: fl.toLngLat(t.at![0], t.at![1]), zoom: Math.max(map.getZoom(), 17) });
+                      view.flyTo({ center: fl.toLngLat(t.at![0], t.at![1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) });
                       if (t.building !== undefined) selectedBuilding.value = t.building;
                     }}
                   >
