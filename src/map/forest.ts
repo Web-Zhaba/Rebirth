@@ -8,11 +8,12 @@ import { buildings, city, frame, roads, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import type { Foundation } from "../world/oldworld";
 import { lngLatToTile } from "../world/mercator";
+import { DETAIL_SIZE, mixOfDetail, RUIN_ADD } from "../world/forestMix";
 import { NATURE_MAXZOOM } from "../world/nature";
 import { getLandTile } from "../world/tiles";
 import type { ModelLayerOptions } from "./modelLayer";
 import type { XY } from "./modelGeometry";
-import { CHUNK, scatterDetails, scatterTrees, TREE_STRIDE, TREES_FROM_ZOOM, type DetailMix, type DetailPoly, type ForestPoly } from "./treeScatter";
+import { CHUNK, scatterDetails, scatterTrees, TREE_STRIDE, TREES_FROM_ZOOM, type DetailPoly, type ForestPoly } from "./treeScatter";
 import { mercatorToLngLat } from "./three/frame";
 
 export const FOREST_RANGE = 150_000;
@@ -30,29 +31,9 @@ export interface ForestSource {
 }
 
 const B = (share: number, a: number, b: number) => ({ share, size: [a, b] as [number, number] });
-const MIXES: Record<string, Record<string, DetailMix>> = {
-  wood: { "": { bush: B(0.04, 0.6, 1.6) } },
-  grass: {
-    scrub: { bush: B(0.5, 0.8, 2.4), boulder: B(0.02, 0.4, 1) },
-    heath: { bush: B(0.3, 0.4, 1.1), boulder: B(0.04, 0.4, 1.2) },
-    fell: { bush: B(0.08, 0.3, 0.7), boulder: B(0.12, 0.4, 1.5) },
-    tundra: { bush: B(0.1, 0.3, 0.8), boulder: B(0.06, 0.4, 1.2) },
-    wet_meadow: { reed: B(0.15, 0.9, 1.6), bush: B(0.02, 0.6, 1.4) },
-    "": { bush: B(0.025, 0.6, 1.8) },
-  },
-  wetland: {
-    marsh: { reed: B(0.7, 1.2, 2.3) },
-    reedbed: { reed: B(0.85, 1.4, 2.5) },
-    saltmarsh: { reed: B(0.4, 0.6, 1.2) },
-    swamp: { reed: B(0.3, 1, 2), bush: B(0.15, 0.8, 2) },
-    bog: { bush: B(0.12, 0.3, 0.9), reed: B(0.1, 0.6, 1.2) },
-    "": { reed: B(0.4, 1, 2), bush: B(0.05, 0.6, 1.5) },
-  },
-  rock: { scree: { boulder: B(0.5, 0.3, 1.2) }, "": { boulder: B(0.35, 0.5, 2.6) } },
-  sand: { "": { bush: B(0.02, 0.4, 1), boulder: B(0.01, 0.3, 0.8) } },
-};
-const mixOf = (cls: string, sub: string): DetailMix | null => MIXES[cls]?.[sub] ?? MIXES[cls]?.[""] ?? null;
-const RUIN_MIX: DetailMix = { bush: B(0.3, 0.6, 2.2), boulder: B(0.35, 0.15, 0.55) };
+
+// The ruins' foundations (world/forestMix.ts RUIN_ADD) as the old scatter's share+size mix.
+const RUIN_MIX = { bush: B(RUIN_ADD.bush, ...DETAIL_SIZE.bush), boulder: B(RUIN_ADD.boulder, ...DETAIL_SIZE.boulder) };
 
 const N = 2 ** NATURE_MAXZOOM;
 const tiles = new Map<string, { wood: ForestPoly[]; details: DetailPoly[] }>();
@@ -68,7 +49,7 @@ function loadTile(f: Frame, tx: number, ty: number, done: () => void): void {
       (tile) => {
         const out = { wood: [] as ForestPoly[], details: [] as DetailPoly[] };
         for (const p of tile.land) {
-          const mix = mixOf(p.cls, p.sub);
+          const mix = mixOfDetail(p.cls, p.sub);
           if (p.cls !== "wood" && !mix) continue;
           const rings = p.rings.map((r) => {
             const ring: XY[] = [];

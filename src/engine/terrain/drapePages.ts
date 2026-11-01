@@ -4,6 +4,9 @@ import { keyToTile, lngLatToTile, tileKey } from "../geo/mercator";
 // Drape page pool (bake/drape.ts): one rgba8unorm-srgb texture array, a layer per resident page, LRU-evicted like the
 // height pages. The texture is filtered (sampled with a linear sampler), so unlike heights there is no border: at a page
 // edge the sample clamps, which at one texel is invisible next to the next page's own edge.
+//
+// Each page also fills the same layer of `cover`, an r8uint array of vegetation class ids (bake/drape.ts rasterCover)
+// read by the tree scatter, and keeps the share of each class on the CPU (the scatter's budget and empty-tile skip).
 
 const PINNED_ZOOM = 2; // z0-z2 never evicted: the fallback of last resort
 const CPU_COPIES = 64; // water masks kept on the CPU for isWaterAt
@@ -11,9 +14,11 @@ const CPU_COPIES = 64; // water masks kept on the CPU for isWaterAt
 export interface DrapePage {
   key: number;
   rgba: Uint8Array<ArrayBuffer>;
+  cover: Uint8Array<ArrayBuffer>;
+  shares: Float32Array; // per class id, index 0 no cover
 }
 
-interface Resident {
+export interface Resident {
   key: number;
   z: number;
   x: number;
@@ -21,10 +26,12 @@ interface Resident {
   layer: number;
   lastUsed: number;
   water: Uint8Array | null; // alpha channel, for CPU queries
+  shares: Float32Array;
 }
 
 export class DrapePages {
   readonly texture: GPUTexture;
+  readonly cover: GPUTexture;
   readonly layers: number;
   private pages = new Map<number, Resident>();
   private free: number[] = [];
@@ -40,6 +47,12 @@ export class DrapePages {
       label: "drape pages",
       size: [DRAPE_SIZE, DRAPE_SIZE, layers],
       format: "rgba8unorm-srgb",
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.cover = device.createTexture({
+      label: "cover pages",
+      size: [DRAPE_SIZE, DRAPE_SIZE, layers],
+      format: "r8uint",
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     for (let i = layers - 1; i >= 0; i--) this.free.push(i);
@@ -80,13 +93,14 @@ export class DrapePages {
       if (layer < 0) return list.slice(n);
       const water = new Uint8Array(DRAPE_SIZE * DRAPE_SIZE);
       for (let i = 0; i < water.length; i++) water[i] = d.rgba[i * 4 + 3];
-      this.pages.set(d.key, { key: d.key, ...keyToTile(d.key), layer, lastUsed: this.frame, water });
+      this.pages.set(d.key, { key: d.key, ...keyToTile(d.key), layer, lastUsed: this.frame, water, shares: d.shares });
       this.cpu.push(d.key);
       while (this.cpu.length > CPU_COPIES) {
         const p = this.pages.get(this.cpu.shift()!);
         if (p) p.water = null;
       }
       this.device.queue.writeTexture({ texture: this.texture, origin: [0, 0, layer] }, d.rgba, { bytesPerRow: DRAPE_SIZE * 4 }, [DRAPE_SIZE, DRAPE_SIZE, 1]);
+      this.device.queue.writeTexture({ texture: this.cover, origin: [0, 0, layer] }, d.cover, { bytesPerRow: DRAPE_SIZE }, [DRAPE_SIZE, DRAPE_SIZE, 1]);
     }
     return [];
   }

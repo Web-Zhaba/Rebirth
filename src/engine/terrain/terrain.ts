@@ -26,7 +26,7 @@ export const EXAGGERATION = 1.6; // MapLibre relief (src/map/relief.ts RELIEF_EX
 const MAX_NODES = 4096; // chunk-table capacity per frame
 const SLOTS = 1024; // resident node vertex blocks
 const NODE_STRIDE = 40; // floats per chunk-table entry (160 B, struct Node in terrain.wgsl)
-const NO_PAGE = 0xffffffff;
+export const NO_PAGE = 0xffffffff;
 const VERTEX_BUILDS_PER_FRAME = 64; // 64 x 35 KB ~ 2.2 MB
 const UPLOADS_PER_FRAME = 4; // 4 x 266 KB height pages ~ 1 MB
 const DRAPE_UPLOADS_PER_FRAME = 4; // 4 x 256 KB drape pages ~ 1 MB: with the vertex builds inside the 4 MB/frame budget of section 6
@@ -59,7 +59,7 @@ export class Terrain {
   readonly drapeStream = new TileStream<DrapeResponse, DrapePage>(
     "drape",
     () => new Worker(new URL("../bake/drapeWorker.ts", import.meta.url), { type: "module" }),
-    (key, r) => ({ key, rgba: r.rgba }),
+    (key, r) => ({ key, rgba: r.rgba, cover: r.cover, shares: r.shares }),
     6,
   );
   private cache = new NodeCache();

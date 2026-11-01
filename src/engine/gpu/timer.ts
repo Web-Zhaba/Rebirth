@@ -1,4 +1,4 @@
-// GPU time of a render pass from timestamp queries. A frame's timestamps are resolved into a buffer and copied to one
+// GPU time of a render or compute pass from timestamp queries. A frame's timestamps are resolved into a buffer and copied to one
 // of a ring of mappable buffers; the result arrives a few frames later through mapAsync. When every ring slot is still
 // waiting, the frame simply goes untimed rather than stalling. Browsers may quantise timestamps (Chrome: 100 us).
 
@@ -20,7 +20,7 @@ export class GpuTimer {
   }
 
   // Timestamp writes for this frame's pass, or undefined when no ring slot is free.
-  passWrites(): GPURenderPassTimestampWrites | undefined {
+  passWrites(): GPURenderPassTimestampWrites & GPUComputePassTimestampWrites | undefined {
     this.current = this.ring.findIndex((r) => !r.busy);
     if (this.current < 0) return undefined;
     return { querySet: this.querySet, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 };

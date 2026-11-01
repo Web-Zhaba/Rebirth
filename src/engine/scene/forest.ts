@@ -1,0 +1,486 @@
+import type { CameraView } from "../camera/camera";
+import type { Drawable, Engine } from "../engine";
+import { ecefToGeodetic, enuAt, type Vec3 } from "../geo/ellipsoid";
+import { lngLatToTile, tileToLngLat } from "../geo/mercator";
+import type { RenderTarget } from "../gpu/device";
+import { GpuTimer } from "../gpu/timer";
+import { createShader } from "../gpu/wgsl";
+import { EXAGGERATION, NO_PAGE, type Terrain } from "../terrain/terrain";
+import { birchShare, coniferShare, COVER_TABLE, DETAIL_KINDS, DETAIL_SIZE, DETAIL_SPACING, RUIN_ADD, TREE_SIZE, TREE_SPACING } from "../../world/forestMix";
+import "../frame/frameUniforms";
+import { SCATTER_ZOOM, steadyReach, strideLevel, thinReach, tileFrame, type TileFrame } from "./forestTiles";
+import forestWgsl from "./forest.wgsl?raw";
+import scatterWgsl from "./forestScatter.wgsl?raw";
+import { bakeTreeAtlas, IMPOSTOR_STEP, IMPOSTOR_VIEWS, TREE_VERTEX_LAYOUT, uploadTreeMeshes, type TreeAtlas, type TreeMeshes, type TreeModelData } from "./treeAtlas";
+
+// The forest on the GPU (docs/PLAN-engine.md N5): trees, bushes, reeds and boulders grown every frame by a compute
+// pass (forestScatter.wgsl) from the cover pages (bake/drape.ts rasterCover), the height pages and the game's mask,
+// over the tiles around the eye that lie in view (scene/forestTiles.ts), culled per candidate against the frustum and
+// the reach of their kind, then drawn with indirect draws: models near, impostors far. Nothing about a tree lives on
+// the CPU; the CPU picks tiles, sets the thinning so the expected count fits the budget, and hands over a job table.
+
+// Kinds: conifer, broadleaf, birch (trees), bush, reed, boulder (details); a slot per (kind, level of detail).
+export const FOREST_KINDS = 6;
+const SLOTS = FOREST_KINDS * 2;
+const CAPS = [12288, 65536, 12288, 65536, 12288, 65536, 8192, 32768, 8192, 32768, 8192, 32768];
+const INSTANCE_BYTES = 32;
+
+const MAX_TREES = 80_000; // expected trees in view (the old layer's cap)
+const MAX_DETAILS = 60_000;
+const MAX_CANDIDATES = 3_000_000;
+const TREE_NEAR = 450; // trees nearer than this are models (and never thinned)
+const DETAIL_NEAR = 60;
+const TREE_FAR_CAP = 12_000;
+const DETAIL_FAR_CAP = 2_000;
+const MIN_PX = 1.5; // drawn up to where a typical one is this many px tall
+const SINK = 0.3; // m below the ground, so a slope does not show a floating root
+const TILE_SLACK = 150; // m added to a tile's radius for its relief and its trees
+const JOB_WORDS = 36;
+const UNIFORM_FLOATS = 5 * 4 + 4 + 4 + 4 + 4 + 4 + 12 * 4 + 17 * 4 + 4 + 4 * 4;
+const LOOK_FLOATS = 8 * 4 + 6 * 4 * 4;
+
+export interface ForestKind {
+  tall: number; // typical height (m): how far it is drawn
+  season: 0 | 1 | 2; // what turns its crown: nothing, the leaves' year, the reeds' year
+  sway: number;
+  leaf: [number, number, number]; // the colour its crown is built with
+}
+
+export interface ForestLook {
+  light: Vec3; // in the target's east/north/up frame
+  sunStrength: number;
+  daylight: number; // 1 day .. 0 night
+  time: number; // s, for the sway
+  wind: number; // 0..1
+  windDir: [number, number]; // east/north
+  bare: [number, number, number];
+  snowColour: [number, number, number];
+  kinds: { colA: [number, number, number]; colB: [number, number, number]; snow: number; bare: number }[];
+}
+
+// The game's mask over a square of web mercator (0..1 units): red how much of the growth is blocked (1 lots, roads,
+// zones, fields; a clearing's progress), green the ruins (where bushes and stones add).
+export interface ForestMask {
+  rgba: Uint8Array<ArrayBuffer>;
+  width: number;
+  height: number;
+  box: [number, number, number, number]; // mercator x0, y0, x1, y1
+}
+
+export interface ForestStats {
+  jobs: number;
+  candidates: number;
+  reach: number;
+}
+
+interface TileInfo extends TileFrame {
+  seed: number;
+  ground: number | null; // drawn height at the centre, once known
+}
+
+export class Forest implements Drawable {
+  grow = 0; // 0 hides the forest, 1 full size (the view eases it in with the scale)
+  look: ForestLook | null = null;
+  stats: ForestStats = { jobs: 0, candidates: 0, reach: Infinity };
+  readonly timer: GpuTimer | null; // GPU time of the scatter pass, where timestamps are available
+  private readonly meshes: TreeMeshes;
+  private readonly atlas: TreeAtlas;
+  private readonly kinds: readonly ForestKind[];
+  private readonly scatterPipe: GPUComputePipeline;
+  private readonly finalizePipe: GPUComputePipeline;
+  private readonly meshPipe: GPURenderPipeline;
+  private readonly impostorPipe: GPURenderPipeline;
+  private readonly uniform: GPUBuffer;
+  private readonly lookBuffer: GPUBuffer;
+  private readonly instances: GPUBuffer;
+  private readonly counts: GPUBuffer;
+  private readonly args: GPUBuffer;
+  private jobs: GPUBuffer;
+  private jobCapacity = 0;
+  private scatterGroup: GPUBindGroup | null = null;
+  private readonly drawGroup: GPUBindGroup;
+  private maskTexture: GPUTexture;
+  private maskBox: ForestMask["box"] | null = null;
+  private readonly bases: number[] = [];
+  private readonly data = new Float32Array(UNIFORM_FLOATS);
+  private readonly lookData = new Float32Array(LOOK_FLOATS);
+  private jobData = new ArrayBuffer(0);
+  private total = 0;
+  private jobCount = 0;
+  private treeReach = Infinity;
+  private detailReach = Infinity;
+  private readonly tiles = new Map<number, TileInfo>();
+
+  constructor(
+    private readonly device: GPUDevice,
+    target: RenderTarget,
+    frameLayout: GPUBindGroupLayout,
+    private readonly terrain: Terrain,
+    models: readonly TreeModelData[],
+    kinds: readonly ForestKind[],
+  ) {
+    this.kinds = kinds;
+    this.timer = device.features.has("timestamp-query") ? new GpuTimer(device) : null;
+    this.meshes = uploadTreeMeshes(device, models);
+    this.atlas = bakeTreeAtlas(device, this.meshes, models, kinds.map((k) => k.leaf));
+
+    let at = 0;
+    for (const c of CAPS) (this.bases.push(at), (at += c));
+    this.instances = device.createBuffer({ label: "forest instances", size: at * INSTANCE_BYTES, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX });
+    this.counts = device.createBuffer({ label: "forest counts", size: SLOTS * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+    this.args = device.createBuffer({ label: "forest draws", size: SLOTS * 5 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST });
+    const args = new Uint32Array(SLOTS * 5);
+    for (let k = 0; k < FOREST_KINDS; k++) {
+      const r = this.meshes.ranges[k];
+      args.set([r.count, 0, r.firstIndex, r.baseVertex, 0], k * 10); // drawIndexedIndirect
+      args.set([4, 0, 0, 0, 0], k * 10 + 5); // drawIndirect: a quad as a strip
+    }
+    device.queue.writeBuffer(this.args, 0, args);
+    this.uniform = device.createBuffer({ label: "forest scatter", size: this.data.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.lookBuffer = device.createBuffer({ label: "forest look", size: this.lookData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.jobs = this.jobBuffer(256);
+    this.maskTexture = this.createMask(null);
+
+    const scatterModule = createShader(device, "forest scatter", scatterWgsl);
+    const compute = (entryPoint: string) => device.createComputePipeline({ label: `forest ${entryPoint}`, layout: "auto", compute: { module: scatterModule, entryPoint } });
+    this.scatterPipe = compute("scatter");
+    this.finalizePipe = compute("finalize");
+
+    const module = createShader(device, "forest", forestWgsl, { IMPOSTOR_VIEWS, IMPOSTOR_STEP });
+    const drawLayout = device.createBindGroupLayout({
+      label: "forest",
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: "2d-array" } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: "2d-array" } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      ],
+    });
+    this.drawGroup = device.createBindGroup({
+      layout: drawLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.lookBuffer } },
+        { binding: 1, resource: this.atlas.color.createView({ dimension: "2d-array" }) },
+        { binding: 2, resource: this.atlas.data.createView({ dimension: "2d-array" }) },
+        { binding: 3, resource: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear", addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge" }) },
+      ],
+    });
+    const layout = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, drawLayout] });
+    const instanceLayout: GPUVertexBufferLayout = {
+      arrayStride: INSTANCE_BYTES,
+      stepMode: "instance",
+      attributes: [
+        { shaderLocation: 4, offset: 0, format: "float32x4" },
+        { shaderLocation: 5, offset: 16, format: "float32x4" },
+      ],
+    };
+    const depthStencil: GPUDepthStencilState = { format: target.depthFormat, depthWriteEnabled: true, depthCompare: "greater" };
+    this.meshPipe = device.createRenderPipeline({
+      label: "forest models",
+      layout,
+      vertex: { module, entryPoint: "meshVs", buffers: [TREE_VERTEX_LAYOUT, instanceLayout] },
+      fragment: { module, entryPoint: "meshFs", targets: [{ format: target.format }] },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil,
+      multisample: { count: target.sampleCount },
+    });
+    this.impostorPipe = device.createRenderPipeline({
+      label: "forest impostors",
+      layout,
+      vertex: { module, entryPoint: "impostorVs", buffers: [instanceLayout] },
+      fragment: { module, entryPoint: "impostorFs", targets: [{ format: target.format }] },
+      primitive: { topology: "triangle-strip" },
+      depthStencil,
+      multisample: { count: target.sampleCount, alphaToCoverageEnabled: target.sampleCount > 1 },
+    });
+  }
+
+  // The game's mask, or null where there is no town.
+  setMask(mask: ForestMask | null): void {
+    this.maskTexture.destroy();
+    this.maskTexture = this.createMask(mask);
+    this.maskBox = mask?.box ?? null;
+    this.scatterGroup = null;
+  }
+
+  update(view: CameraView, engine: Engine): void {
+    this.total = 0;
+    this.jobCount = 0;
+    if (this.grow <= 0 || !this.look) return;
+    const eyeGeo = ecefToGeodetic(view.eye);
+    // How far a typical one of each kind is still MIN_PX tall.
+    const farOf = (tall: number) => (tall * 0.5 * view.viewportH) / view.tanHalfY / MIN_PX;
+    const treeFar = Math.min(TREE_FAR_CAP, farOf(this.kinds[0].tall));
+    const detailFar = DETAIL_KINDS.map((_, i) => Math.min(DETAIL_FAR_CAP, farOf(this.kinds[3 + i].tall)));
+    const maxFar = Math.max(treeFar, ...detailFar);
+    if (view.eyeAboveGround > maxFar) return;
+
+    const planes = frustumPlanes(view);
+    const shares = COVER_TABLE;
+    const z = SCATTER_ZOOM;
+    const n = 2 ** z;
+    const at = lngLatToTile(eyeGeo.lng, eyeGeo.lat, z);
+    const width = (2 * Math.PI * 6378137 * Math.cos((eyeGeo.lat * Math.PI) / 180)) / n;
+    const span = Math.ceil(maxFar / width) + 1;
+    type Want = { tile: TileInfo; x: number; y: number; group: number; grid: number; d: number; dMin: number; n: number };
+    const trees: Want[] = [];
+    const details: Want[] = [];
+    const mask = this.maskBox;
+    for (let ty = Math.max(0, Math.floor(at.y) - span); ty <= Math.min(n - 1, Math.floor(at.y) + span); ty++)
+      for (let tx0 = Math.floor(at.x) - span; tx0 <= Math.floor(at.x) + span; tx0++) {
+        const tx = ((tx0 % n) + n) % n;
+        const t = this.tile(tx, ty);
+        const h = t.ground ?? 0;
+        const c: Vec3 = [t.centre[0] + t.up[0] * h - view.eye[0], t.centre[1] + t.up[1] * h - view.eye[1], t.centre[2] + t.up[2] * h - view.eye[2]];
+        const d = Math.hypot(c[0], c[1], c[2]);
+        const dMin = Math.max(1, d - t.radius - TILE_SLACK);
+        if (dMin > maxFar) continue;
+        if (!inside(planes, c, t.radius + TILE_SLACK)) continue;
+        const cover = this.terrain.drape.best(z, tx, ty);
+        if (!cover) continue;
+        const ruins = mask !== null && tx0 / n < mask[2] && (tx0 + 1) / n > mask[0] && ty / n < mask[3] && (ty + 1) / n > mask[1];
+        let tree = 0;
+        const detail = [0, 0, 0];
+        for (let id = 1; id < cover.shares.length; id++) {
+          const s = cover.shares[id];
+          if (!s) continue;
+          const cl = shares[id - 1];
+          if (cl.tree) tree += s;
+          detail[0] += s * cl.bush;
+          detail[1] += s * cl.reed;
+          detail[2] += s * cl.boulder;
+        }
+        if (tree > 0 && dMin < treeFar) {
+          const grid = Math.max(8, Math.round(t.width / TREE_SPACING));
+          trees.push({ tile: t, x: tx0, y: ty, group: 0, grid, d, dMin, n: grid * grid * tree });
+        }
+        DETAIL_KINDS.forEach((kind, i) => {
+          const add = ruins ? [RUIN_ADD.bush, RUIN_ADD.reed, RUIN_ADD.boulder][i] : 0;
+          if ((detail[i] <= 0 && add <= 0) || dMin >= detailFar[i]) return;
+          const grid = Math.max(8, Math.round(t.width / DETAIL_SPACING[kind]));
+          details.push({ tile: t, x: tx0, y: ty, group: 1 + i, grid, d, dMin, n: grid * grid * Math.max(detail[i], add * 0.05) });
+        });
+      }
+
+    this.treeReach = steadyReach(this.treeReach, thinReach(trees, MAX_TREES, TREE_NEAR));
+    this.detailReach = steadyReach(this.detailReach, thinReach(details, MAX_DETAILS, DETAIL_NEAR));
+    const all = [...trees, ...details].sort((a, b) => a.d - b.d);
+
+    // The job table, nearest first, until the candidate budget runs out.
+    if (all.length > this.jobCapacity) this.jobs = this.jobBuffer(all.length);
+    const words = new Uint32Array(this.jobData);
+    const floats = new Float32Array(this.jobData);
+    let total = 0;
+    let count = 0;
+    for (const w of all) {
+      const reach = w.group ? this.detailReach : this.treeReach;
+      const level = strideLevel(w.dMin, reach);
+      const stride = 2 ** level;
+      const cols = Math.ceil(w.grid / stride);
+      if (total + cols * cols > MAX_CANDIDATES) break;
+      const t = w.tile;
+      const tx = ((w.x % n) + n) % n;
+      const o = count * JOB_WORDS;
+      // the tile's north-west corner, eye-relative: centre - (east + south) / 2 (f64 here, f32 on the GPU)
+      for (let i = 0; i < 3; i++) {
+        floats[o + i] = t.centre[i] - 0.5 * (t.east[i] + t.south[i]) - view.eye[i];
+        floats[o + 4 + i] = t.east[i];
+        floats[o + 8 + i] = t.south[i];
+      }
+      words[o + 3] = total;
+      words[o + 7] = cols;
+      words[o + 11] = w.grid;
+      words[o + 12] = stride;
+      words[o + 13] = w.group;
+      words[o + 14] = t.seed;
+      const hp = this.terrain.pages.best(z, tx, w.y);
+      words[o + 15] = hp ? hp.layer : NO_PAGE;
+      const cp = this.terrain.drape.best(z, tx, w.y)!;
+      words[o + 16] = cp.layer;
+      pageUv(floats, o + 20, tx, w.y, hp);
+      pageUv(floats, o + 24, tx, w.y, cp);
+      if (mask) {
+        const sx = 1 / n / (mask[2] - mask[0]);
+        const sy = 1 / n / (mask[3] - mask[1]);
+        floats.set([(w.x / n - mask[0]) / (mask[2] - mask[0]), (w.y / n - mask[1]) / (mask[3] - mask[1]), sx, sy], o + 28);
+      } else floats.set([0, 0, 0, 0], o + 28);
+      floats.set([coniferShare(t.lat), birchShare(t.lat), 4 ** -level, 0], o + 32);
+      total += cols * cols;
+      count++;
+    }
+    this.total = total;
+    this.jobCount = count;
+    this.stats = { jobs: count, candidates: total, reach: this.treeReach };
+    if (!count) return;
+    this.device.queue.writeBuffer(this.jobs, 0, this.jobData, 0, count * JOB_WORDS * 4);
+
+    const up = enuAt(engine.state.lat, engine.state.lng);
+    const d = this.data;
+    let k = 0;
+    const put = (...v: number[]) => (d.set(v, k), (k += v.length));
+    for (const p of planes) put(...p);
+    const groups = Math.ceil(total / 64);
+    put(...up.up, total);
+    new Uint32Array(d.buffer).set([count, Math.min(groups, 65535) * 64, 0, 0], k);
+    k += 4;
+    put(treeFar, ...detailFar);
+    put(this.treeReach === Infinity ? 1e9 : this.treeReach, this.detailReach === Infinity ? 1e9 : this.detailReach, this.grow, EXAGGERATION);
+    put(TREE_NEAR, DETAIL_NEAR, SINK, 0);
+    const u = new Uint32Array(d.buffer);
+    for (let s = 0; s < SLOTS; s++) (u.set([this.bases[s], CAPS[s], 0, 0], k), (k += 4));
+    put(0, 0, 0, 0); // cover id 0: nothing grows
+    for (const c of COVER_TABLE) put(c.tree ? 1 : 0, c.bush, c.reed, c.boulder);
+    put(0, RUIN_ADD.bush, RUIN_ADD.reed, RUIN_ADD.boulder);
+    put(...TREE_SIZE, 0);
+    DETAIL_KINDS.forEach((kind) => put(...DETAIL_SIZE[kind], Math.max(...COVER_TABLE.map((c) => c[kind])) + RUIN_ADD[kind]));
+    this.device.queue.writeBuffer(this.uniform, 0, d);
+    this.writeLook(up);
+  }
+
+  compute(encoder: GPUCommandEncoder): void {
+    if (!this.jobCount) return;
+    encoder.clearBuffer(this.counts);
+    const group = (this.scatterGroup ??= this.device.createBindGroup({
+      layout: this.scatterPipe.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.uniform } },
+        { binding: 1, resource: { buffer: this.jobs } },
+        { binding: 2, resource: { buffer: this.instances } },
+        { binding: 3, resource: { buffer: this.counts } },
+        { binding: 5, resource: this.terrain.pages.texture.createView({ dimension: "2d-array" }) },
+        { binding: 6, resource: this.terrain.drape.cover.createView({ dimension: "2d-array" }) },
+        { binding: 7, resource: this.maskTexture.createView() },
+      ],
+    }));
+    const pass = encoder.beginComputePass({ label: "forest scatter", timestampWrites: this.timer?.passWrites() });
+    pass.setPipeline(this.scatterPipe);
+    pass.setBindGroup(0, group);
+    const groups = Math.ceil(this.total / 64);
+    const x = Math.min(groups, 65535);
+    pass.dispatchWorkgroups(x, Math.ceil(groups / x));
+    pass.setPipeline(this.finalizePipe);
+    pass.setBindGroup(0, this.finalizeGroup());
+    pass.dispatchWorkgroups(1);
+    pass.end();
+    this.timer?.resolveInto(encoder);
+  }
+
+  // After the frame's submit (the engine calls it): read the scatter's time back.
+  afterSubmit(): void {
+    this.timer?.afterSubmit();
+  }
+
+  draw(pass: GPURenderPassEncoder): void {
+    if (!this.jobCount) return;
+    pass.setBindGroup(1, this.drawGroup);
+    pass.setPipeline(this.meshPipe);
+    pass.setVertexBuffer(0, this.meshes.vertices);
+    pass.setIndexBuffer(this.meshes.indices, "uint32");
+    for (let k = 0; k < FOREST_KINDS; k++) {
+      pass.setVertexBuffer(1, this.instances, this.bases[k * 2] * INSTANCE_BYTES, CAPS[k * 2] * INSTANCE_BYTES);
+      pass.drawIndexedIndirect(this.args, k * 2 * 20);
+    }
+    pass.setPipeline(this.impostorPipe);
+    for (let k = 0; k < FOREST_KINDS; k++) {
+      pass.setVertexBuffer(0, this.instances, this.bases[k * 2 + 1] * INSTANCE_BYTES, CAPS[k * 2 + 1] * INSTANCE_BYTES);
+      pass.drawIndirect(this.args, (k * 2 + 1) * 20);
+    }
+  }
+
+  // Instances drawn per slot (kind x level of detail), read back from the GPU: for benchmarks and tests, not per frame.
+  async readCounts(): Promise<number[]> {
+    const read = this.device.createBuffer({ size: SLOTS * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const e = this.device.createCommandEncoder();
+    e.copyBufferToBuffer(this.counts, 0, read, 0, SLOTS * 4);
+    this.device.queue.submit([e.finish()]);
+    await read.mapAsync(GPUMapMode.READ);
+    const out = [...new Uint32Array(read.getMappedRange())].map((c, s) => Math.min(c, CAPS[s]));
+    read.destroy();
+    return out;
+  }
+
+  private finalizeGroupCache: GPUBindGroup | null = null;
+  private finalizeGroup(): GPUBindGroup {
+    return (this.finalizeGroupCache ??= this.device.createBindGroup({
+      layout: this.finalizePipe.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.uniform } },
+        { binding: 3, resource: { buffer: this.counts } },
+        { binding: 4, resource: { buffer: this.args } },
+      ],
+    }));
+  }
+
+  private writeLook(axes: { east: Vec3; north: Vec3; up: Vec3 }): void {
+    const l = this.look!;
+    const d = this.lookData;
+    d.set([...axes.east, 0, ...axes.north, 0, ...axes.up, 0, ...l.light, l.sunStrength, l.daylight, l.time, l.wind, 0, ...l.windDir, 0, 0, ...l.bare, 0, ...l.snowColour, 0], 0);
+    for (let k = 0; k < FOREST_KINDS; k++) {
+      const info = this.kinds[k];
+      const s = l.kinds[k];
+      d.set([info.season, info.sway, s.snow, s.bare], 32 + k * 4);
+      d.set([...s.colA, this.atlas.radius[k]], 56 + k * 4);
+      d.set([...s.colB, 0], 80 + k * 4);
+      d.set([...info.leaf, 0], 104 + k * 4);
+    }
+    this.device.queue.writeBuffer(this.lookBuffer, 0, d);
+  }
+
+  private tile(x: number, y: number): TileInfo {
+    const key = y * 2 ** SCATTER_ZOOM + x;
+    let t = this.tiles.get(key);
+    if (!t) {
+      if (this.tiles.size > 20000) this.tiles.clear();
+      t = { ...tileFrame(x, y), seed: (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0, ground: null };
+      this.tiles.set(key, t);
+    }
+    if (t.ground === null) {
+      const c = tileToLngLat(SCATTER_ZOOM, x, y, 0.5, 0.5);
+      t.ground = this.terrain.groundAt(c.lat, c.lng);
+    }
+    return t;
+  }
+
+  private jobBuffer(jobs: number): GPUBuffer {
+    this.jobs?.destroy();
+    this.jobCapacity = 2 ** Math.ceil(Math.log2(Math.max(256, jobs)));
+    this.jobData = new ArrayBuffer(this.jobCapacity * JOB_WORDS * 4);
+    this.scatterGroup = null;
+    return this.device.createBuffer({ label: "forest jobs", size: this.jobData.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  }
+
+  private createMask(mask: ForestMask | null): GPUTexture {
+    const w = mask?.width ?? 1;
+    const h = mask?.height ?? 1;
+    const t = this.device.createTexture({ label: "forest mask", size: [w, h], format: "rgba8unorm", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    this.device.queue.writeTexture({ texture: t }, mask?.rgba ?? new Uint8Array(4), { bytesPerRow: w * 4 }, [w, h]);
+    return t;
+  }
+}
+
+// Tile (SCATTER_ZOOM, x, y) uv -> a page's uv: offset xy, scale z.
+function pageUv(out: Float32Array, o: number, x: number, y: number, page: { z: number; x: number; y: number } | null): void {
+  if (!page) return void out.set([0, 0, 1, 0], o);
+  const k = 2 ** (SCATTER_ZOOM - page.z);
+  out.set([(x - page.x * k) / k, (y - page.y * k) / k, 1 / k, 0], o);
+}
+
+type Plane = [number, number, number, number];
+
+// The view's side planes through the eye and its near plane, eye-relative, normals inward.
+export function frustumPlanes(v: CameraView): Plane[] {
+  const tx = v.tanHalfY * v.aspect;
+  const ty = v.tanHalfY;
+  const plane = (a: Vec3, s: number, b: Vec3): Plane => {
+    const p: Vec3 = [a[0] * s + b[0], a[1] * s + b[1], a[2] * s + b[2]];
+    const l = Math.hypot(p[0], p[1], p[2]);
+    return [p[0] / l, p[1] / l, p[2] / l, 0];
+  };
+  const neg = (a: Vec3): Vec3 => [-a[0], -a[1], -a[2]];
+  return [plane(v.forward, tx, v.right), plane(v.forward, tx, neg(v.right)), plane(v.forward, ty, v.up), plane(v.forward, ty, neg(v.up)), [...v.forward, -v.near]];
+}
+
+function inside(planes: readonly Plane[], c: Vec3, r: number): boolean {
+  for (const p of planes) if (p[0] * c[0] + p[1] * c[1] + p[2] * c[2] + p[3] < -r) return false;
+  return true;
+}

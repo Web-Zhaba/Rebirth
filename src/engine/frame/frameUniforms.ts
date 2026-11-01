@@ -26,7 +26,7 @@ export class FrameUniforms {
   constructor(private readonly device: GPUDevice) {
     this.layout = device.createBindGroupLayout({
       label: "frame",
-      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } }],
+      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, buffer: { type: "uniform" } }],
     });
     this.buffer = device.createBuffer({ label: "frame", size: FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.bindGroup = device.createBindGroup({ layout: this.layout, entries: [{ binding: 0, resource: { buffer: this.buffer } }] });

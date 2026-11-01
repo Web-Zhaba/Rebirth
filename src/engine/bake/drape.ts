@@ -1,11 +1,16 @@
 import type { VectorTile } from "@mapbox/vector-tile";
 import { biomeColor, C, isDrawnLandcover } from "../../world/biome";
+import { coverIdOf } from "../../world/forestMix";
 import { isNatureWater, isNatureWaterway } from "../../world/nature";
 
 // Drape pages: the land's colour and water coverage over one quadtree tile, rasterised from the OpenMapTiles tile of
 // the same place (docs/PLAN-engine.md section 4, "Far world" and "Water"). RGB is the atlas colour (sRGB, the palette of
 // world/biome.ts, the same as the MapLibre style), alpha is water coverage. The terrain shader lights the colour and
 // shades water where alpha is high, so one texture replaces the fill, line, shore and hillshade layers of the old map.
+//
+// The same page carries the vegetation cover for the GPU tree scatter (N5, `rasterCover`): an 8-bit class id per texel
+// (world/forestMix.ts COVER_TABLE, 0 = nothing grows), rasterised without antialiasing so every texel is one class, the
+// first feature of the tile winning like the old scatter's point-in-polygon tests.
 //
 // Nature comes from tiles generalised at z12 at most (world/nature.ts NATURE_MAXZOOM): deeper pages draw a sub-square
 // of their z12 ancestor at a finer scale, so edges stay sharp near the camera without fetching z13+ tiles.
@@ -22,6 +27,8 @@ const RIVER_M = 10; // width of a river or stream drawn from a line
 export interface DrapeFeature {
   kind: "land" | "water" | "forestEdge" | "river";
   color: string;
+  cls: string; // landcover class/subclass (land features), for the cover id
+  sub: string;
   rings: number[][]; // flat [x, y, ...] in source tile units; one line per entry for rivers
 }
 
@@ -57,8 +64,8 @@ export function parseSource(vt: VectorTile | null): DrapeSource {
       const cls = String(f.properties.class ?? "");
       const sub = String(f.properties.subclass ?? "");
       const rings = f.loadGeometry().map(flat);
-      out.features.push({ kind: "land", color: biomeColor(cls, sub), rings });
-      if (cls === "wood" && sub === "forest") out.features.push({ kind: "forestEdge", color: C.forestDeep, rings });
+      out.features.push({ kind: "land", color: biomeColor(cls, sub), cls, sub, rings });
+      if (cls === "wood" && sub === "forest") out.features.push({ kind: "forestEdge", color: C.forestDeep, cls, sub, rings });
     }
   }
   const water = vt.layers.water;
@@ -66,14 +73,14 @@ export function parseSource(vt: VectorTile | null): DrapeSource {
     out.extent = water.extent;
     for (let i = 0; i < water.length; i++) {
       const f = water.feature(i);
-      if (f.type === 3 && isNatureWater(f.properties)) out.features.push({ kind: "water", color: C.water, rings: f.loadGeometry().map(flat) });
+      if (f.type === 3 && isNatureWater(f.properties)) out.features.push({ kind: "water", color: C.water, cls: "", sub: "", rings: f.loadGeometry().map(flat) });
     }
   }
   const ways = vt.layers.waterway;
   if (ways)
     for (let i = 0; i < ways.length; i++) {
       const f = ways.feature(i);
-      if (f.type === 2 && isNatureWaterway(f.properties)) out.features.push({ kind: "river", color: C.water, rings: f.loadGeometry().map(flat) });
+      if (f.type === 2 && isNatureWaterway(f.properties)) out.features.push({ kind: "river", color: C.water, cls: "", sub: "", rings: f.loadGeometry().map(flat) });
     }
   return out;
 }
@@ -82,15 +89,17 @@ const flat = (r: { x: number; y: number }[]) => r.flatMap((p) => [p.x, p.y]);
 
 type Ctx = OffscreenCanvasRenderingContext2D;
 
+// The square of the source tile a page covers: page px = (source unit - o) * k.
+function pageWindow(src: DrapeSource, z: number, x: number, y: number): { ox: number; oy: number; k: number } {
+  const n = 2 ** sourceOf(z, x, y).dz;
+  const size = src.extent / n; // source units the page spans
+  return { ox: (x % n) * size, oy: (y % n) * size, k: DRAPE_SIZE / size };
+}
+
 // Paint page (z, x, y) from its source tile. `colour` gets the atlas colours, `water` the coverage mask (white = water).
 export function paintDrape(colour: Ctx, water: Ctx, src: DrapeSource, z: number, x: number, y: number): void {
   const S = DRAPE_SIZE;
-  const { dz } = sourceOf(z, x, y);
-  const n = 2 ** dz;
-  const size = src.extent / n; // source units the page spans
-  const ox = (x % n) * size;
-  const oy = (y % n) * size;
-  const k = S / size;
+  const { ox, oy, k } = pageWindow(src, z, x, y);
   const mpp = pageMpp(z, y);
   const px = (m: number) => m / mpp;
 
@@ -156,6 +165,58 @@ export function paintDrape(colour: Ctx, water: Ctx, src: DrapeSource, z: number,
       ctx.restore();
     }
   }
+
+}
+
+// The vegetation class id of every texel of page (z, x, y), row by row: a scanline fill of each landcover polygon
+// (even-odd, texel centres inside), where no earlier feature already claimed the texel; texels under water (the mask's
+// red at least half) stay 0.
+export function rasterCover(src: DrapeSource, z: number, x: number, y: number, water: Uint8ClampedArray | null): Uint8Array<ArrayBuffer> {
+  const S = DRAPE_SIZE;
+  const out = new Uint8Array(S * S);
+  const { ox, oy, k } = pageWindow(src, z, x, y);
+  const xs: number[] = [];
+  for (const f of src.features) {
+    if (f.kind !== "land") continue;
+    const id = coverIdOf(f.cls, f.sub);
+    if (!id) continue;
+    // the feature's rings in page px, and the rows they span
+    const rings = f.rings.map((r) => r.map((v, i) => (i & 1 ? (v - oy) * k : (v - ox) * k)));
+    let top = Infinity;
+    let bottom = -Infinity;
+    for (const r of rings) for (let i = 1; i < r.length; i += 2) (top = Math.min(top, r[i])), (bottom = Math.max(bottom, r[i]));
+    const j0 = Math.max(0, Math.ceil(top - 0.5));
+    const j1 = Math.min(S - 1, Math.floor(bottom - 0.5));
+    for (let j = j0; j <= j1; j++) {
+      const cy = j + 0.5;
+      xs.length = 0;
+      for (const r of rings) {
+        const n = r.length;
+        for (let a = 0, b = n - 2; a < n; b = a, a += 2) {
+          const ya = r[a + 1];
+          const yb = r[b + 1];
+          if (ya > cy !== yb > cy) xs.push(r[a] + ((cy - ya) * (r[b] - r[a])) / (yb - ya));
+        }
+      }
+      xs.sort((p, q) => p - q);
+      const row = j * S;
+      for (let s = 0; s + 1 < xs.length; s += 2) {
+        const i0 = Math.max(0, Math.ceil(xs[s] - 0.5));
+        const i1 = Math.min(S, Math.ceil(xs[s + 1] - 0.5));
+        for (let i = i0; i < i1; i++) if (!out[row + i]) out[row + i] = id;
+      }
+    }
+  }
+  if (water) for (let i = 0; i < out.length; i++) if (water[i * 4] >= 128) out[i] = 0;
+  return out;
+}
+
+// Share of a page's texels in each class id (index 0: no cover), for the scatter's budget and to skip empty tiles.
+export function coverShares(cover: Uint8Array, classes: number): Float32Array<ArrayBuffer> {
+  const counts = new Float32Array(classes + 1);
+  for (let i = 0; i < cover.length; i++) counts[cover[i]]++;
+  for (let c = 0; c <= classes; c++) counts[c] /= cover.length;
+  return counts;
 }
 
 // Interleave the colour canvas's RGB with the mask's red channel as alpha.

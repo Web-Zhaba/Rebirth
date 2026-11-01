@@ -362,6 +362,31 @@ Done (2026-11-01), except terrain edits (3D ruin walls, map text and fill patter
 **N5. GPU-driven rendering.** instance pools and compute frustum + LOD culling with indirect draws for trees, models,
 smoke; tree scatter on the GPU from landcover + clearing masks; impostor atlas reused from `treeImpostor`.
 
+Done for the forest (2026-11-01):
+
+- Cover pages: the drape bake also rasterises the vegetation class of every texel (`bake/drape.ts rasterCover`: a
+  scanline even-odd fill, no antialiasing, the tile's first feature wins, nothing under water) into an r8uint array
+  beside the drape layers, and reports each page's class shares. One table of what grows where
+  (`world/forestMix.ts COVER_TABLE`, the old `MIXES`) feeds both this and the old CPU scatter.
+- Scatter on the GPU (`engine/scene/forest.ts`, `forestScatter.wgsl`): candidates on a jittered grid of z15 mercator
+  tiles (9 m for trees; 5 / 2.5 / 7 m for bushes, reeds, boulders), one thread each, every frame. The CPU only picks
+  the tiles around the eye that are in view and in reach, skips those whose cover page holds nothing of a kind, sets
+  the full-density reach so the expected count fits the budget (80k trees, 60k details; the old `thinReach`, now fed by
+  the class shares) and writes a job table (`forestTiles.ts`). Far tiles run every 2nd or 4th row and column; each
+  candidate is then kept with its distance's share against what the stride took, so thinning is continuous and
+  nested (trees drop out with distance, never move). Per candidate: cover class, game mask, height page, distance,
+  frustum sphere, then an atomic append into its (kind, level of detail) slot; a finalize pass writes the instance
+  counts of 12 indirect draws. Nothing about a tree lives on the CPU.
+- Drawing (`forest.wgsl`): models within 450 m (details 60 m), impostors beyond, alpha to coverage with the 4x MSAA.
+  Impostors are baked on WebGPU at start (`treeAtlas.ts`: 6 kinds x 4 elevations, 128 px views, colour + normal/height/
+  crown, own mip chain). Shading, seasons, bare twigs, snow, sway and the night dimming are the old tree layer's.
+- Game mask (`view/engine/forest.ts`): lots, roads, zone cells, fields and clearings (by progress share) block growth,
+  ruins add bushes and stones, rasterised over the town into a square of mercator when those change.
+- Measured (Białowieża orbit at 400 m, 75°; RDNA4, small browser pane): ~27k trees drawn from ~0.9M candidates;
+  scatter 0.10–0.21 ms GPU, main pass 0.13 ms; the forest's CPU part ~0.3 ms of a ~1.1 ms frame.
+- Not done here: the town's models stay merged meshes, one draw each (per-item culling would cost more than it saves
+  at a town's size); smoke waits for N7. Trees are not yet hidden behind hills (N6).
+
 **N6. Occlusion culling.** two-phase Hi-Z (terrain ridges and buildings as occluders), stats overlay for culled counts.
 
 **N7. Sky and weather.** clouds ray-march + composite (port `clouds/`), cloud shadows in the shading model,

@@ -1,14 +1,17 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { vectorTileUrl } from "../../world/tiles";
-import { DRAPE_SIZE, packDrape, paintDrape, parseSource, sourceOf, type DrapeSource } from "./drape";
+import { COVER_TABLE } from "../../world/forestMix";
+import { coverShares, DRAPE_SIZE, packDrape, paintDrape, parseSource, rasterCover, sourceOf, type DrapeSource } from "./drape";
 
 // Drape bake job (bake/drape.ts): fetch the page's OpenMapTiles source tile (cached here: the 16 pages under a z12 tile
-// share it), paint colour and water mask, hand the pixels back transferred. Same request protocol as the DEM worker.
+// share it), paint colour and water mask, rasterise the vegetation cover, hand the pixels back transferred. Same request protocol as the DEM worker.
 
 export type DrapeRequest = { type: "load"; id: number; z: number; x: number; y: number } | { type: "cancel"; id: number };
 
-export type DrapeResponse = { id: number; ok: true; rgba: Uint8Array<ArrayBuffer>; ms: number } | { id: number; ok: false; status: number; error: string };
+export type DrapeResponse =
+  | { id: number; ok: true; rgba: Uint8Array<ArrayBuffer>; cover: Uint8Array<ArrayBuffer>; shares: Float32Array<ArrayBuffer>; ms: number }
+  | { id: number; ok: false; status: number; error: string };
 
 const scope = self as unknown as {
   onmessage: ((e: MessageEvent<DrapeRequest>) => void) | null;
@@ -68,8 +71,11 @@ async function load(id: number, z: number, x: number, y: number): Promise<void> 
     const src = await source(s.z, s.x, s.y);
     if (abort.signal.aborted) throw new DOMException("aborted", "AbortError");
     paintDrape(colour, water, src, z, x, y);
-    const rgba = packDrape(colour.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data, water.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data);
-    scope.postMessage({ id, ok: true, rgba, ms: performance.now() - t0 }, [rgba.buffer]);
+    const mask = water.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data;
+    const rgba = packDrape(colour.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data, mask);
+    const cover = rasterCover(src, z, x, y, mask);
+    const shares = coverShares(cover, COVER_TABLE.length);
+    scope.postMessage({ id, ok: true, rgba, cover, shares, ms: performance.now() - t0 }, [rgba.buffer, cover.buffer, shares.buffer]);
   } catch (err) {
     const status = abort.signal.aborted ? -1 : err instanceof HttpError ? err.status : 0;
     scope.postMessage({ id, ok: false, status, error: String(err) } satisfies DrapeResponse);

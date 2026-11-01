@@ -9,6 +9,7 @@ import type { View } from "../view";
 import type { WeatherState } from "../../sim/weather";
 import { attachGameLabels } from "./gameLabels";
 import { attachGameLayers } from "./gameLayers";
+import { attachForest } from "./forest";
 import { attachLife, type LifeOptions } from "./life";
 import { attachModels } from "./models";
 import { attachPlaceLabels } from "./placeLabels";
@@ -62,6 +63,7 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   if (o.life) attachLife(engine, view, o.life);
   attachGameLayers(engine);
   attachModels(engine, { light: o.light, weather: o.weather, debug: o.debug3dModels });
+  attachForest(engine, { clock: o.light?.clock, weather: o.weather });
   attachPlaceLabels(engine, container);
   attachGameLabels(engine, container);
   container.append(credits());

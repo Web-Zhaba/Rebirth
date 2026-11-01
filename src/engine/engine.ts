@@ -15,7 +15,9 @@ import { EXAGGERATION, Terrain } from "./terrain/terrain";
 
 export interface Drawable {
   update?(view: CameraView, engine: Engine): void;
+  compute?(encoder: GPUCommandEncoder): void; // GPU work the draw depends on (culling, scatter), before the main pass
   draw(pass: GPURenderPassEncoder): void;
+  afterSubmit?(): void; // the frame's commands are on the queue (timer read-backs)
 }
 
 export interface FrameSample {
@@ -175,6 +177,7 @@ export class Engine {
     this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: now / 1000 });
 
     const encoder = device.createCommandEncoder({ label: "frame" });
+    for (const d of this.drawables) d.compute?.(encoder);
     const pass = encoder.beginRenderPass({
       label: "main",
       colorAttachments: [{ view: this.color!.createView(), resolveTarget: context.getCurrentTexture().createView(), clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "discard" }],
@@ -189,6 +192,7 @@ export class Engine {
     this.timer?.resolveInto(encoder);
     device.queue.submit([encoder.finish()]);
     this.timer?.afterSubmit();
+    for (const d of this.drawables) d.afterSubmit?.();
 
     const interval = this.prevNow ? now - this.prevNow : 0;
     this.prevNow = now;
