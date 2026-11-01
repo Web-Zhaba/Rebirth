@@ -41,7 +41,7 @@ export interface WeatherLook {
   snow: number; // 0..1
   wet: number; // 0..1
   ice: number; // 0..1
-  town: { eye: Vec3; reach: number; east: Vec3; north: Vec3 } | null; // eye - town origin (f64), reach (m)
+  town: { eye: Vec3; east: Vec3; north: Vec3 } | null; // eye - town origin (f64) and its axes; null before founding
   groundFade: number; // 0 on the globe views .. 1 near the ground
   snowColour: Vec3; // sRGB
   iceColour: Vec3;
@@ -146,7 +146,7 @@ export class WeatherGpu {
     d.set([...l.wind, l.days], 12);
     d.set([l.castHeight, l.shadowDrift, 0, 0], 16);
     d.set([l.snow, l.wet, l.ice, 0], 20);
-    d.set(t ? [...t.eye, t.reach] : [0, 0, 0, 0], 24);
+    d.set(t ? [...t.eye, 1] : [0, 0, 0, 0], 24);
     d.set(t ? [...t.east, l.groundFade] : [1, 0, 0, 0], 28);
     d.set(t ? [...t.north, 0] : [0, 1, 0, 0], 32);
     d.set([...l.snowColour, 1], 36);

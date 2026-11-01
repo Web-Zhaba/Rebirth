@@ -248,7 +248,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
 
   // The town's weather on its ground (sky/weather.wgsl): wet earth darkens, snow lies on what is flat enough, ice
   // closes the water.
-  let tg = townGround(v.rel);
+  let tg = townGround();
   if (tg > 0.0) {
     albedo *= 1.0 - 0.3 * weather.ground.y * tg * (1.0 - water);
     let snow = snowShare(townXY(v.rel), smoothstep(0.5, 0.8, dot(n, up)), weather.ground.x * tg, foot) * (1.0 - water);

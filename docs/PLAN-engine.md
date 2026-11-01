@@ -424,7 +424,7 @@ Done (2026-11-01):
   `weather` and reads the same clouds: `cloudShade` is the old ground-shadow layer at the real world position (shadow
   point towards the sun, two drifting noise taps, patch detail fading with the pixel footprint), applied as the old
   multiply towards dusk in display space — per fragment on the terrain, per vertex on the models and trees.
-- Ground weather: within 25 km of the town and off the globe views, wet earth darkens, snow lies on what is flat enough
+- Ground weather: wherever the ground is drawn at town scale (not on the globe views), wet earth darkens, snow lies on what is flat enough
   in the models' blotch pattern (`snowShare`, same town frame, so the patches run on from the roads onto the ground;
   far pixels take the patches' mean cover), ice closes the water. Models take snow, wetness and the snow colour from
   the same uniform (their own snow uniform is gone). Trees keep their own snow.
@@ -439,7 +439,7 @@ Done (2026-11-01):
 - Precipitation (`engine/scene/precip.ts`): up to 6000 particles in a box of air around the eye, positions from the
   instance index and the time; the box scales with the camera distance and travels with the eye like the old 2D
   overlay, but the particles are depth-tested. Rain streaks along the wind slant, snow flakes sway. Gates of the old
-  layer (town scale, density, reduced motion) plus nearness to the town.
+  layer (town scale, density, reduced motion).
 - Smoke (`engine/scene/smoke.ts` + `view/engine/smoke.ts`): the old smoke layer's puffs, rules (`smokeMath.ts`) and
   gates (z15.5 scale, 650 m reach, 400 nearest chimneys re-picked every 30 m), dimmed at night like the models.
 - DEV: `engineWeather.override` forces snowpack / ice / precip / snowing / wind; `engineWeather.info()`.

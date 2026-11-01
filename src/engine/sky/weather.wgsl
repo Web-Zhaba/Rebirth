@@ -14,7 +14,7 @@ struct Weather {
   wind: vec4f,    // x westerlies, y trades (degrees of longitude per game day), z layer period (days), w game days
   shadow: vec4f,   // x height the shadows are cast from (m), y their drift (degrees per game day)
   ground: vec4f,  // the town's ground: x snow 0..1, y wetness 0..1, z ice on water 0..1
-  town: vec4f,    // xyz eye - town origin (m, subtracted in f64), w reach of the town's weather (m, 0 = no town)
+  town: vec4f,    // xyz eye - town origin (m, subtracted in f64), w 1 = a town exists
   townE: vec4f,   // xyz the town origin's east axis, w the ground cover's scale fade (0 on the globe views)
   townN: vec4f,   // xyz its north axis
   snowCol: vec4f, // rgb snow (sRGB)
@@ -105,14 +105,10 @@ fn townXY(rel: vec3f) -> vec2f {
   return vec2f(dot(p, weather.townE.xyz), dot(p, weather.townN.xyz));
 }
 
-// Share of the town's weather lying on the ground at a point: whole over the town and its fields, gone past its reach,
-// and nothing on the globe views (the clouds' stage, not a white ball painted with the town's snow depth).
-fn townGround(rel: vec3f) -> f32 {
-  let reach = weather.town.w;
-  if (reach <= 0.0) {
-    return 0.0;
-  }
-  return (1.0 - smoothstep(0.4 * reach, reach, length(weather.town.xyz + rel))) * weather.townE.w;
+// Share of the town's weather lying on the ground: all of the ground drawn at town scale (the frustum already bounds
+// the work), nothing on the globe views (the clouds' stage, not a white ball painted with the town's snow depth).
+fn townGround() -> f32 {
+  return select(0.0, weather.townE.w, weather.town.w > 0.0);
 }
 
 fn hash2(p: vec2f) -> f32 {

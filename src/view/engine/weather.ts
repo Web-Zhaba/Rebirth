@@ -29,8 +29,6 @@ import { townWeather, wetness, type WeatherOverride } from "./townWeather";
 
 // Visual speed of the cloud noise drift relative to the sim wind (map/clouds/cloudLayer.ts DRIFT_SCALE).
 const DRIFT_SCALE = 0.08;
-// The town's weather lies on the ground this far from its origin (m), fading out over the outer 60 %.
-const TOWN_REACH_M = 25000;
 
 export interface WeatherOptions {
   clock: ReadonlySignal<number>; // game minutes (the map's clock)
@@ -154,13 +152,11 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
     const tw = weatherMapOn.peek() ? townWeather(o.weather?.peek(), override) : null;
     const tf = frame.peek();
     let town = null;
-    let nearTown = 0;
     if (tf) {
       const [lng0, lat0] = tf.toLngLat(0, 0);
       const origin = geodeticToEcef(lat0, lng0, 0);
       const { east, north } = enuAt(lat0, lng0);
-      town = { eye: [view.eye[0] - origin[0], view.eye[1] - origin[1], view.eye[2] - origin[2]] as Vec3, reach: TOWN_REACH_M, east, north };
-      nearTown = 1 - smoothstep(0.4 * TOWN_REACH_M, TOWN_REACH_M, Math.hypot(...town.eye));
+      town = { eye: [view.eye[0] - origin[0], view.eye[1] - origin[1], view.eye[2] - origin[2]] as Vec3, east, north };
     }
     const sunE = engine.light(engine.state).sun;
     gpu.write({
@@ -182,9 +178,9 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
       iceColour,
     });
 
-    // Rain and snow: the town's, near the town and at town scale only.
+    // Rain and snow: the town's weather, at town scale.
     const density = tw && !reducedMotion ? precipDensity(tw.precip) : 0;
-    const shown = density * precipVisibility(zoom) * nearTown;
+    const shown = density * precipVisibility(zoom);
     if (tw && shown > 0.01) {
       const slant = precipSlant(tw.wind) * (tw.snowing ? 0.5 : 1);
       const { up } = enuAt(engine.state.lat, engine.state.lng);
@@ -194,7 +190,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
         count: Math.max(1, PRECIP_MAX * density),
         box: Math.min(1500, Math.max(20, engine.state.distance * 0.8)),
         snow: tw.snowing,
-        opacity: (tw.snowing ? 0.8 : 0.5) * (0.35 + 0.65 * density) * precipVisibility(zoom) * nearTown,
+        opacity: (tw.snowing ? 0.8 : 0.5) * (0.35 + 0.65 * density) * precipVisibility(zoom),
         drift: [WIND_DIR[0] * slant, WIND_DIR[1] * slant],
         colour,
         time: now / 1000,
