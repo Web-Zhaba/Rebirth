@@ -6,7 +6,7 @@ import type { Building, BuildingQuery } from "../sim/types";
 import { buildings, frame, queryBuilding, state } from "../simClient";
 import { Icon } from "../ui/Icon";
 import { badgeFor, type BadgeSpec } from "./badgeModel";
-import { selectedBuilding } from "./buildingLayer";
+import { selectedBuilding } from "../view/layers/buildings";
 
 // Small paper tags over buildings that need a look: construction progress, no workers, no input. HTML markers styled
 // with the UI tokens (.map-badge in feedback.css). Only for buildings in view, only when a badge applies, at most MAX.

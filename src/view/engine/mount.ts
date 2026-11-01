@@ -6,7 +6,7 @@ import type { ReadonlySignal } from "@preact/signals";
 import { defaultLight, SUN_INTENSITY } from "../../engine/engine";
 import { sunDirection } from "../../sim/weather";
 import type { View } from "../view";
-import { TOOL_OVERLAYS } from "./overlayStyles";
+import { attachGameLayers } from "./gameLayers";
 import { attachPlaceLabels } from "./placeLabels";
 import { createEngineView } from "./view";
 
@@ -14,7 +14,7 @@ export interface EngineMountOptions {
   container: string; // element id
   // The sun of the game clock (the map's clock: another season's while the admin panel previews one). Before a town
   // exists there is no climate phase and the engine keeps its fixed mid-morning sun.
-  light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null> };
+  light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null>; lng: ReadonlySignal<number> };
 }
 
 export interface EngineMount {
@@ -42,12 +42,17 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   if (light)
     engine.light = (s) => {
       const phase = light.phase.peek();
-      // sim/weather's sun vector is already in ECEF axes: x to (0°E, 0°N), y to 90°E, z north.
-      return phase === null ? defaultLight(s) : { sun: sunDirection(light.clock.peek(), phase), intensity: SUN_INTENSITY };
+      if (phase === null) return defaultLight(s);
+      // sim/weather's sun vector is in ECEF axes (x to 0°E 0°N, y to 90°E, z north) with noon over Greenwich. The game
+      // clock is the town's own time (night and day follow sim/clock.ts daylight by its hour), so the sun is turned to
+      // stand over the town's meridian at the clock's noon.
+      const [x, y, z] = sunDirection(light.clock.peek(), phase);
+      const a = (light.lng.peek() * Math.PI) / 180;
+      return { sun: [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a), z], intensity: SUN_INTENSITY };
     };
   const camera = createCameraControl(engine);
   const view = createEngineView(engine, camera, container);
-  engine.overlay.setLayers([...TOOL_OVERLAYS]);
+  attachGameLayers(engine);
   attachPlaceLabels(engine, container);
   container.append(credits());
   engine.start();

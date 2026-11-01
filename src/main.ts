@@ -16,6 +16,8 @@ import { mountMapLibreView, installDevHandles } from "./view/maplibre/mount";
 import type { MapLibreView } from "./view/maplibre/view";
 import type { View } from "./view/view";
 import { TOWN_START_MPP } from "./view/scale";
+import { attachBuildingPick } from "./view/layers/buildings";
+import { attachClearingPick } from "./view/layers/zones";
 import { App } from "./ui/App";
 import { followResidentById } from "./ui/follow";
 
@@ -33,7 +35,7 @@ const cloudSite = computed(() => {
 });
 const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
 // ?engine=next mounts the own WebGPU engine (src/view/engine) instead of MapLibre; it needs none of the renderer layers.
-const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: sunLight }) : null;
+const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: { ...sunLight, lng: computed(() => city.value?.lng ?? 0) } }) : null;
 const view: View = engineMount?.view ?? mountMapLibreView({
   container: "map",
   frame,
@@ -45,6 +47,9 @@ const view: View = engineMount?.view ?? mountMapLibreView({
   life: { trips: lifeTrips, lights: lifeLights, gameMinPerSec, onWalker: followResidentById },
   debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1",
 });
+// Picking what is on the map: clearings first, so a building under the same click wins (layers/buildings.ts).
+attachClearingPick(view);
+attachBuildingPick(view);
 attachRoadTool(view);
 attachZoneTool(view);
 attachPlaceTool(view);

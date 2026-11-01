@@ -18,6 +18,7 @@ const FORMAT: GPUTextureFormat = "rgba8unorm-srgb";
 export interface OverlayLayer {
   source: string; // data key: several layers can draw one source (a fill and its outline)
   style: OverlayStyle;
+  maxMpp?: number; // drawn only while the view is at least this close (metres per CSS px at the target)
 }
 
 interface Built {
@@ -45,6 +46,7 @@ export class OverlayRaster {
   private built: (Built | null)[] = [];
   private anchor: [number, number] | null = null;
   private dirty = true;
+  private shown: boolean[] = []; // layers within their scale, as last drawn
   private uniforms: GPUBuffer[];
   private bindGroups: GPUBindGroup[];
   private fillPipe: GPURenderPipeline;
@@ -144,6 +146,11 @@ export class OverlayRaster {
     const sec = 1 / Math.cos((s.lat * Math.PI) / 180);
 
     const any = this.anchor !== null && this.layers.length > 0;
+    const shown = this.layers.map((l) => l.maxMpp === undefined || mpp <= l.maxMpp);
+    if (shown.some((v, i) => v !== this.shown[i])) {
+      this.shown = shown;
+      this.dirty = true;
+    }
     let encoder: GPUCommandEncoder | null = null;
     for (let i = 0; i < OVERLAY_LEVELS; i++) {
       const sq = levelSquare(cx, cy, LEVEL_SIDES[i] * s.distance * sec);
@@ -180,6 +187,7 @@ export class OverlayRaster {
       this.device.queue.writeBuffer(this.uniforms[i], 0, u);
       pass.setBindGroup(0, this.bindGroups[i]);
       this.layers.forEach((layer, k) => {
+        if (!this.shown[k]) return;
         const b = this.geometry(k, layer);
         if (!b) return;
         if (b.fillCount) {

@@ -37,6 +37,9 @@ const DRAPE_GAIN = 0.6;
 // Aerial perspective on the ground is thinned against the sky's: the game wants the town and the next hills crisp and
 // in the atlas colours, with haze only building up over tens of kilometres.
 const GROUND_AIR = 0.12;
+// The game's drawings keep their palette colours like on the old flat map (they are a map, not paint on the ground);
+// at night they dim only this far, so a tool preview stays readable.
+const OVERLAY_NIGHT = 0.45;
 
 // Bilinear height from a bordered page, centre convention: line-by-line copy of bake/terrarium.ts samplePage.
 fn pageHeight(layer: u32, uv: vec2f) -> f32 {
@@ -249,7 +252,6 @@ fn fs(v: VsOut) -> @location(0) vec4f {
       break;
     }
   }
-  albedo = albedo * (1.0 - ov.a) + ov.rgb * DRAPE_GAIN;
   water *= 1.0 - ov.a;
   if (frame.params.y > 0.5) {
     // Blends towards the parent level's tint as the vertex morphs: smooth colours mean no pops.
@@ -273,5 +275,10 @@ fn fs(v: VsOut) -> @location(0) vec4f {
 
   let alt = max(h, 0.0) * frame.params.x;
   c = applyAir(c, GROUND_AIR * opticalDepth(length(v.rel), frame.eye.w, alt), light);
-  return vec4f(toneMap(c), 1.0);
+  var out = toneMap(c);
+  if (ov.a > 0.0) {
+    let paint = pow(ov.rgb / ov.a, vec3f(1.0 / 2.2)) * mix(OVERLAY_NIGHT, 1.0, light);
+    out = mix(out, paint, ov.a);
+  }
+  return vec4f(out, 1.0);
 }

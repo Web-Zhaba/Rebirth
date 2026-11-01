@@ -4,7 +4,7 @@ import { reachSegments } from "../sim/coverage";
 import { lotFront } from "../sim/people";
 import { isService, SERVICES } from "../sim/services";
 import { frame, state } from "../simClient";
-import { selectedBuilding } from "./buildingLayer";
+import { selectedBuilding } from "../view/layers/buildings";
 import { PALETTE } from "../ui/palette";
 import { relationRadius } from "./coveragePreviewModel";
 import { manualOverlay, overlay, placeReach, tool } from "./tools";

@@ -1,8 +1,8 @@
 import { batch, effect, signal } from "@preact/signals";
-import { selectedBuilding } from "../map/buildingLayer";
+import { selectedBuilding } from "../view/layers/buildings";
 import { selectedSite } from "../map/heritageSpots";
 import { tool } from "../map/tools";
-import { selectedClearing } from "../map/zoneLayer";
+import { selectedClearing } from "../view/layers/zones";
 import { cancelUiState } from "./inputModel";
 
 // The right-hand slot (PLAN-ui.md section 5) holds one panel at a time: the inspector of the selected

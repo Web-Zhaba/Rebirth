@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import type { View } from "../view/view";
 import { atLeastAsClose, CLOSE_UP_MPP } from "../view/scale";
-import { selectedBuilding } from "../map/buildingLayer";
+import { selectedBuilding } from "../view/layers/buildings";
 import { compactScreen } from "../map/motion";
 import { etaRealMs, formatReal } from "../sim/buildEta";
 import { BUILDINGS } from "../sim/buildings";

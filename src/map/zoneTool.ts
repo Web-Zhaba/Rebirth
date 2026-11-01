@@ -7,7 +7,7 @@ import { pointInPolygon, validateField } from "../sim/zones";
 import { frame, roads, sendCmd, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { landAt } from "../world/landcover";
-import { fieldDraft, hoverKeys, paintPreview } from "./zoneLayer";
+import { fieldDraft, hoverKeys, paintPreview } from "../view/layers/zones";
 import { etaText } from "./buildCost";
 import { flash, isBrushTool, ZONE_MAX_MPP, setSpacePan, syncPan, tool, type BrushTool } from "./tools";
 

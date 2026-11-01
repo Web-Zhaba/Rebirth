@@ -11,7 +11,7 @@ import { SERVICE, SERVICES } from "../sim/services";
 import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
 import type { Building, BuildingQuery, FoundFoundation, ProductionInfo, Stock } from "../sim/types";
-import { selectedBuilding } from "../map/buildingLayer";
+import { selectedBuilding } from "../view/layers/buildings";
 import { PLACE_TOOLS, tool, type PlaceTool } from "../map/tools";
 import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simClient";
 import { Icon } from "./Icon";

@@ -3,9 +3,9 @@ import type { ReadonlySignal } from "@preact/signals";
 import type { WeatherState } from "../sim/weather";
 import { computed, effect } from "@preact/signals";
 import { frame } from "../simClient";
-import { buildingItems } from "./buildingLayer";
+import { buildingItems } from "../view/layers/buildings";
 import type { ModelItem, ModelLayerOptions } from "./modelLayer";
-import { roadItems } from "./roadLayer";
+import { roadItems } from "../view/layers/roads";
 
 // Main-chunk side of the three.js model layer (modelLayer.ts): what it draws is the buildings (buildingLayer.ts) and the
 // built roads (roadLayer.ts). The layer, and three.js with it, loads with the first item.

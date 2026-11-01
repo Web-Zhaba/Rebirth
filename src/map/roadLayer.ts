@@ -1,12 +1,8 @@
 import type * as maplibregl from "maplibre-gl";
-import { computed, effect, type ReadonlySignal } from "@preact/signals";
-import { cutOffEdges, ROAD_KINDS, workableEdges } from "../sim/roads";
-import type { RoadEdge, RoadGraph, Stock } from "../sim/types";
-import type { ModelItem } from "./modelLayer";
-import { roadChains, type RoadChain, type RoadState } from "./roadChains";
-import { roadJunctions } from "./roadJunctions";
+import { effect } from "@preact/signals";
 import { PALETTE } from "../ui/palette";
-import { city, frame, roads, stock } from "../simClient";
+import { city } from "../simClient";
+import { roadLines } from "../view/layers/roads";
 
 const SRC = "roads";
 const EQUATOR_M = 40075016.686;
@@ -25,56 +21,6 @@ function realWidth(k: number, extra = 0): maplibregl.ExpressionSpecification {
   for (let z = 8; z <= 22; z++) stops.push(z, ["+", ["max", 1, ["*", ["get", "w"], k * 2 ** z]], extra]);
   return ["interpolate", ["exponential", 2], ["zoom"], ...stops] as maplibregl.ExpressionSpecification;
 }
-
-// State of every edge of the graph. Edges short of stone are not workable: they show as waiting. The stock is only
-// watched while some edge owes stone.
-const stockOf = (g: RoadGraph) => (Object.values(g.edges).some((e) => e.stone) ? stock.value : null);
-const stateOf = (g: RoadGraph, st: Stock | null): ((e: RoadEdge) => RoadState) => {
-  const active = new Set(workableEdges(g, st ?? undefined));
-  const cut = cutOffEdges(g);
-  return (e) => (e.done >= e.labor ? "built" : active.has(e.id) ? "active" : cut.has(e.id) ? "cut" : "waiting");
-};
-
-// Chains of the road graph by kind and state.
-const chains = computed<RoadChain[] | null>(() => {
-  const g = roads.value;
-  return g ? roadChains(g, stateOf(g, stockOf(g))) : null;
-});
-
-// What the model layer draws of the roads: every built chain, then the aprons where roads meet (roadJunctions.ts). The
-// aprons come last in the list, and the road mesh keeps that order (modelLayer.ts, one mesh drawn without depth writes),
-// so an apron covers the ends of the ribbons it joins and the shoulder lines that would cross it. The same list comes
-// back while no built chain changed.
-let lastItems: ModelItem[] = [];
-const itemSig = (l: readonly ModelItem[]) =>
-  l
-    .map(
-      (i) =>
-        `${i.kind}:${i.ring.map((p) => p.join(",")).join(";")}${i.ends ? `${i.ends[0] ? 1 : 0}${i.ends[1] ? 1 : 0}` : ""}${i.junction ? `@${i.junction.arms.map((a) => `${a.kind},${a.hw},${a.dir[0]},${a.dir[1]},${a.len}`).join(";")}` : ""}`,
-    )
-    .join("|");
-export const roadItems: ReadonlySignal<ModelItem[]> = computed(() => {
-  const list = chains.value;
-  const g = roads.value;
-  if (!list || !g) return lastItems;
-  const built = list.filter((ch) => ch.state === "built");
-  const state = stateOf(g, stockOf(g));
-  const junctions = roadJunctions(g, (e) => state(e) === "built");
-  const nodes = new Set(junctions.map((j) => j.node));
-  const out: ModelItem[] = built.map((ch) => ({
-    id: `road${ch.id}`,
-    ring: ch.nodes.map((id): [number, number] => [g.nodes[id].x, g.nodes[id].y]),
-    height: 0,
-    kind: ch.kind,
-    progress: 1,
-    style: "road",
-    ends: [nodes.has(ch.nodes[0]), nodes.has(ch.nodes[ch.nodes.length - 1])],
-  }));
-  for (const j of junctions)
-    out.push({ id: `junction${j.node}`, ring: [j.p], height: 0, kind: j.arms[0].kind, progress: 1, style: "junction", junction: j });
-  if (itemSig(out) !== itemSig(lastItems)) lastItems = out;
-  return lastItems;
-});
 
 // Roads as lines at real width: built ones while zoomed out (closer, the three.js models draw them), planned and waiting
 // edges dashed and faded, cut-off ones red.
@@ -137,23 +83,10 @@ export function attachRoadLayer(map: maplibregl.Map): void {
 
   const apply = () => {
     const c = city.value;
-    const f = frame.value;
-    const g = roads.value;
-    const list = chains.value;
-    if (!c || !f || !g || !list) return;
+    const data = roadLines.value;
+    if (!c || (!styled && !data.features.length)) return;
     if (!styled) addLayers(c.lat); // one city per page load
-    const features: GeoJSON.Feature[] = list.map((ch) => ({
-      type: "Feature",
-      properties: { id: ch.id, kind: ch.kind, w: ROAD_KINDS[ch.kind].width, state: ch.state },
-      geometry: {
-        type: "LineString",
-        coordinates: ch.nodes.map((id) => {
-          const n = g.nodes[id];
-          return f.toLngLat(n.x, n.y);
-        }),
-      },
-    }));
-    (map.getSource(SRC) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
+    (map.getSource(SRC) as maplibregl.GeoJSONSource).setData(data);
   };
 
   const run = () => effect(apply);
