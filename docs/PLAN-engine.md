@@ -317,6 +317,33 @@ Done (2026-11-01).
 (3D ribbons near, drape far), zones, building fills, fields, ruins and excavation, tool previews as decals, life
 walkers/lights, traffic, badges, terrain edits. All tools work on the new engine.
 
+Done (2026-11-01), except terrain edits, 3D ruin walls, map text of ruins/zones/clearings and fill patterns.
+
+- Data/style split: what the game draws on the map lives in renderer-neutral modules `src/view/layers/` (zones,
+  fields, clearings, roads, building footprints, camp, service reach, traffic, ruins, badges, article markers);
+  MapLibre layers only style that data, the engine draws the same signals. Picking (buildings, clearings, old
+  buildings, walkers) goes through the View; `main.ts` attaches it with the tools.
+- Overlay raster (`engine/overlay/`): the 2D map is rasterised on the GPU into three squares of web mercator around
+  the camera (1.5, 6 and 24 camera distances, 2048² each, redrawn on data change or a real camera step): fills as
+  triangles, lines and circles as antialiased distance fields with dashes, scale gates like the old `minzoom`. The
+  terrain samples the finest level covering a fragment through the node's own mercator uv (computed in the fragment
+  from the node index — the 16 inter-stage locations ran out). Drawings keep their palette colours over the lit
+  ground (a map, as before) and dim only to 45 % at night, so tool previews stay readable; the road preview has a
+  paper halo. Engine styles: `src/view/engine/gameLayers.ts`, `overlayStyles.ts`.
+- Models (`engine/scene/townMesh.ts` + `.wgsl`): buildings, sites, restored buildings, roads, bridges, aprons from
+  the same builders (`src/map/modelItems.ts`, three-free, with the `debug3dModels` demo set), seated on the engine's
+  ground, projected in f64 into the town origin's east/north/up frame and cached per item. Facades, road surfaces,
+  snow and window lights ported to WGSL; roads drawn first without depth writes and a small depth bias; nights dim to
+  the old dusk blue.
+- Life (`engine/scene/dots.ts`): walkers and carts as screen-sized discs, evening glows as ground discs, ~20 updates a
+  second; a click near a walker follows the resident.
+- Sun: the sim's sun stands over Greenwich at noon, but the game clock is the town's time (night/day follow
+  `daylight(hour)`); the engine turns it to the town's meridian. The old three.js models still use the Greenwich sun.
+- Verified on a test town: founding, road preview/ordering, zone gate, lot/radius previews, reveal disc, models in day
+  and night, walkers/glows, both renderers start clean. Frame on the town: ~0.4 ms CPU, ~0.3 ms GPU (RDNA4).
+- Left for later: terrain edits (pads, cuts, pits), 3D ruin walls (flat fills now), text of ruins, zones and clearings,
+  hatch patterns of zones/fields, smoke and 3D fields (N7 with weather), forest (N5).
+
 **N5. GPU-driven rendering.** instance pools and compute frustum + LOD culling with indirect draws for trees, models,
 smoke; tree scatter on the GPU from landcover + clearing masks; impostor atlas reused from `treeImpostor`.
 
