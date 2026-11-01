@@ -6,7 +6,7 @@ import { pointInPolygon } from "../../sim/zones";
 import { buildings, buildingSet, frame, lifeLights, state } from "../../simClient";
 import type { Frame } from "../../world/frame";
 import { mixHex } from "../../ui/palette";
-import type { ModelItem } from "../../map/modelLayer";
+import type { ModelItem } from "../../map/modelItems";
 import { overlay, OVERLAY_COLORS, tool, type Overlay } from "../../map/tools";
 import { buildBuildingSpatialIndex, buildingSpatialCandidates, type BuildingSpatialIndex } from "../../map/buildingHitIndex";
 import type { View } from "../view";

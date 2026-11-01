@@ -3,7 +3,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import { cutOffEdges, ROAD_KINDS, workableEdges } from "../../sim/roads";
 import type { RoadEdge, RoadGraph, Stock } from "../../sim/types";
 import { frame, roads, stock } from "../../simClient";
-import type { ModelItem } from "../../map/modelLayer";
+import type { ModelItem } from "../../map/modelItems";
 import { roadChains, type RoadChain, type RoadState } from "../../map/roadChains";
 import { roadJunctions } from "../../map/roadJunctions";
 

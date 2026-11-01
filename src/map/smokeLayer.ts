@@ -30,11 +30,8 @@ import {
   smoke3dOn,
 } from "./graphicsSettings";
 import { projectPoints } from "./modelBuffers";
-import {
-  frameSetter,
-  modelEmitters,
-  type ModelLayerOptions,
-} from "./modelLayer";
+import { frameSetter, type ModelLayerOptions } from "./modelLayer";
+import { modelEmitters } from "./modelItems";
 import {
   smokeKindOf,
   smokeStrength,

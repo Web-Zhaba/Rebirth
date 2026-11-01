@@ -39,19 +39,15 @@ export const GAME_LAYERS: OverlayLayer[] = [
   { source: "field-draft", style: { kind: "fill", color: (p) => (p.ok ? PALETTE.warnFill : PALETTE.badFill), opacity: 0.6 } },
   { source: "field-draft", style: { kind: "line", color: (p) => (p.ok ? PALETTE.warn : PALETTE.bad), widthPx: 2, dash: [2, 1.5] } },
   { source: "field-draft-pts", style: { kind: "circle", radiusPx: 4, color: PALETTE.paperRaised, strokeColor: PALETTE.ink, strokeWidthPx: 2 } },
-  // Roads at real width (a pixel at least); the 3D ribbons cover the built ones up close once models are drawn.
+  // Roads at real width (a pixel at least); up close the 3D ribbons (models.ts) lie over the built ones.
   { source: "roads", style: { kind: "line", color: roadEdge, widthM: (p) => width(p) + 1.2, widthPx: 2.5, filter: is("built") } },
   { source: "roads", style: { kind: "line", color: roadColour, widthM: width, widthPx: 1, filter: is("built") } },
   { source: "roads", style: { kind: "line", color: roadColour, widthM: width, widthPx: 1, opacity: (p) => (p.state === "active" ? 0.7 : 0.4), dash: [2, 2], filter: (p) => p.state === "active" || p.state === "waiting" } },
   { source: "roads", style: { kind: "line", color: PALETTE.bad, widthM: width, widthPx: 3, opacity: 0.8, dash: [2, 1.5], filter: is("cut") } },
-  // Lots: planned ones dashed; standing ones as footprints until the 3D models stand on them.
+  // Lots: planned ones dashed; standing ones are 3D models (models.ts), a rebuild in progress is ringed.
   { source: "buildings", style: { kind: "fill", color: PALETTE.paperRaised, opacity: 0.4, filter: is("planned") } },
   { source: "buildings", style: { kind: "line", color: PALETTE.ink2, widthPx: 1.5, dash: [2, 1.5], filter: is("planned") } },
-  { source: "buildings", style: { kind: "fill", color: PALETTE.paperRaised, opacity: 0.85, filter: (p) => p.state === "active" || p.state === "building" } },
-  {
-    source: "buildings",
-    style: { kind: "line", color: (p) => (p.up ? PALETTE.warn : PALETTE.ink), widthPx: (p) => (p.up ? 3 : 1), opacity: (p) => (p.up ? 1 : 0.55), filter: (p) => p.state === "active" || p.state === "building" },
-  },
+  { source: "buildings", style: { kind: "line", color: PALETTE.warn, widthPx: 3, filter: (p) => p.up === true && (p.state === "active" || p.state === "building") } },
 ];
 
 const SOURCES: [string, ReadonlySignal<FeatureCollection>][] = [

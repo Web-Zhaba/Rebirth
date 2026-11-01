@@ -6,7 +6,9 @@ import type { ReadonlySignal } from "@preact/signals";
 import { defaultLight, SUN_INTENSITY } from "../../engine/engine";
 import { sunDirection } from "../../sim/weather";
 import type { View } from "../view";
+import type { WeatherState } from "../../sim/weather";
 import { attachGameLayers } from "./gameLayers";
+import { attachModels } from "./models";
 import { attachPlaceLabels } from "./placeLabels";
 import { createEngineView } from "./view";
 
@@ -15,6 +17,8 @@ export interface EngineMountOptions {
   // The sun of the game clock (the map's clock: another season's while the admin panel previews one). Before a town
   // exists there is no climate phase and the engine keeps its fixed mid-morning sun.
   light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null>; lng: ReadonlySignal<number> };
+  weather?: ReadonlySignal<WeatherState | null>; // snow on roofs and roads
+  debug3dModels?: boolean;
 }
 
 export interface EngineMount {
@@ -53,6 +57,7 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   const camera = createCameraControl(engine);
   const view = createEngineView(engine, camera, container);
   attachGameLayers(engine);
+  attachModels(engine, { light: o.light, weather: o.weather, debug: o.debug3dModels });
   attachPlaceLabels(engine, container);
   container.append(credits());
   engine.start();

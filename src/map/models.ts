@@ -4,7 +4,8 @@ import type { WeatherState } from "../sim/weather";
 import { computed, effect } from "@preact/signals";
 import { frame } from "../simClient";
 import { buildingItems } from "../view/layers/buildings";
-import type { ModelItem, ModelLayerOptions } from "./modelLayer";
+import type { ModelLayerOptions } from "./modelLayer";
+import type { ModelItem } from "./modelItems";
 import { roadItems } from "../view/layers/roads";
 
 // Main-chunk side of the three.js model layer (modelLayer.ts): what it draws is the buildings (buildingLayer.ts) and the
