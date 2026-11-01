@@ -292,6 +292,27 @@ back; falls back to MapLibre without WebGPU).
 **N3. Nature base.** drape baker (landcover, water mask, waterways, shore, forest tint), water surface (port
 `waterLayer` shading to WGSL, shore from depth), MSDF text (place labels), markers, attribution.
 
+Done (2026-11-01).
+
+- Drape: `bake/drape.ts` + `bake/drapeWorker.ts` rasterise OpenMapTiles landcover, forest edge, shore band, water and
+  rivers with Canvas2D into 256² RGBA pages (alpha = water coverage), in the palette of `src/world/biome.ts` (shared
+  with the MapLibre style, so both draw the same atlas). Pages exist to z16; deeper than z12 they redraw a square of
+  the z12 tile (sharp edges near the camera, ~2.4 m/texel at 60°), sources cached in the worker. Empty tiles (open
+  ocean) report missing, so the ancestor page with the ocean polygon stands in. Pool `terrain/drapePages.ts`
+  (rgba8unorm-srgb array, 256 layers = 64 MB, LRU, z0–z2 pinned, CPU water masks for queries). DEM and drape share
+  `stream/demStream.ts TileStream`.
+- Terrain shading: drape colour × `DRAPE_GAIN` (the flat palette back under sun + sky + tone map), water flattens the
+  normal, sun glint and a Schlick sheen; ground aerial perspective thinned (`GROUND_AIR`) to keep the near view crisp.
+- `isWaterAt` reads the drape's water mask (sea level only where no page covers the point yet).
+- Place names: DOM labels instead of MSDF text (`src/view/engine/placeLabels.ts`, pure layout in `labelLayout.ts`):
+  OpenMapTiles `place` from the 5×5 tiles around the target at the zoom a web map would show, projected every frame,
+  greedy collision by rank, the old layer's look. The on/off switch moved to `src/view/placeNames.ts` for both
+  renderers. A GPU text path waits until there are many labels (N4 zone/ruin names may need it).
+- Credits: terrain + OpenFreeMap / OpenMapTiles / OpenStreetMap.
+- Not done here, moved to N4/N7: a separate water surface at water level with the old `waterLayer` look (ripples,
+  flow, foam, shore from depth) — water is drape-shaded for now; small streams (OpenMapTiles has them from z14 only,
+  the drape reads z12). Labels are not occluded by hills.
+
 **N4. Game content.** models + lamps (builders kept, output re-anchored to chunk origins, single vertex set), roads
 (3D ribbons near, drape far), zones, building fills, fields, ruins and excavation, tool previews as decals, life
 walkers/lights, traffic, badges, terrain edits. All tools work on the new engine.

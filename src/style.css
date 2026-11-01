@@ -619,6 +619,32 @@ button:hover:not(:disabled) {
   color: var(--info);
 }
 
+/* Old place names on the engine (view/engine/placeLabels.ts): the look of the old symbol layer, ink at 75 % with a
+   paper halo. */
+.engine-place-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.engine-place-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: var(--font-body);
+  font-style: italic;
+  white-space: nowrap;
+  color: var(--ink-2);
+  opacity: 0.75;
+  text-shadow:
+    0 0 1.4px var(--paper-raised),
+    0 0 1.4px var(--paper-raised),
+    0 0 2px var(--paper-raised);
+  will-change: transform;
+}
+
 .engine-fallback {
   position: fixed;
   top: 12px;

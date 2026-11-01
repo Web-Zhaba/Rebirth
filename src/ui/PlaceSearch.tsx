@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { mppAtZoom, type View } from "../view/view";
-import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
+import { placeLabelsOn, togglePlaceLabels } from "../view/placeNames";
 import { MIN_QUERY, searchPlaces, type PlaceHit } from "../world/geocode";
 import { IconButton } from "./kit";
 import { Icon } from "./Icon";
