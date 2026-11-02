@@ -15,6 +15,7 @@ import { roadItems } from "../layers/roads";
 import { ruinWallPieces } from "../layers/ruins";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { mppAtZoom } from "../view";
+import { GroundSeat } from "./groundSeat";
 import { townLight } from "./townLight";
 
 // The town's buildings and built roads on the engine (scene/townMesh.ts), from the same items and model builders as the
@@ -48,6 +49,8 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
   let wait = 0;
   let ruinsDirty = true;
   let ruinsWait = 0;
+  const seat = new GroundSeat(engine);
+  const ruinsSeat = new GroundSeat(engine);
 
   effect(() => {
     void items.value;
@@ -67,7 +70,9 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
       const [a, b] = tf.toLngLat(x, y);
       return engine.groundAt(b, a);
     };
-    if (coverOf(list).some(([x, y]) => ground(x, y) === null)) return false;
+    const cover = coverOf(list);
+    if (cover.some(([x, y]) => ground(x, y) === null)) return false;
+    ruinsSeat.seated(cover.map(([x, y]) => latLng(tf, x, y)));
     const pieces = list.flatMap((f) => f.pieces ?? []);
     mesh.setRuins(merge(pieces.length ? [projector(tf)(ruinWallModel(pieces, (x, y) => ground(x, y) ?? 0), 0)] : []));
     return true;
@@ -87,20 +92,23 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
       const [a, b] = tf.toLngLat(x, y);
       return engine.groundAt(b, a);
     };
-    if (coverOf(list).some(([x, y]) => ground(x, y) === null)) return false;
+    const cover = coverOf(list);
+    if (cover.some(([x, y]) => ground(x, y) === null)) return false;
+    if (seat.finer()) cache.clear(); // the cached models sit on coarser ground than has come since
+    seat.seated(cover.map(([x, y]) => latLng(tf, x, y)));
     const project = projector(tf);
     const used = new Set<string>();
     const roads: Pack[] = [];
     const buildings: Pack[] = [];
     const smoke: Emitter[] = [];
-    const seat = (x: number, y: number) => ground(x, y) ?? 0;
+    const seatAt = (x: number, y: number) => ground(x, y) ?? 0;
     for (const it of list) {
       const onRoad = it.style === "road" || it.style === "junction";
       const p = it.style === "road" ? 1 : quantise(it.progress);
       const k = keyOf(it, p, EXAGGERATION);
       used.add(k);
       let pack = cache.get(k);
-      if (!pack) cache.set(k, (pack = project(seatedModelOf({ ...it, progress: p }, seat), p >= 1 ? lampOf(it) : 0)));
+      if (!pack) cache.set(k, (pack = project(seatedModelOf({ ...it, progress: p }, seatAt), p >= 1 ? lampOf(it) : 0)));
       (onRoad ? roads : buildings).push(pack);
       for (const [x, y, z] of pack.smoke) smoke.push({ id: it.id, kind: it.kind, style: it.style, lamp: it.lamp, x, y, z });
     }
@@ -112,6 +120,15 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
 
   engine.onBeforeFrame(() => {
     const tf = frame.peek();
+    // Finer ground under the town than it was seated on (pages still streaming at the first build): seat it again.
+    if (!dirty && wait-- <= 0) {
+      wait = RETRY_FRAMES;
+      if (seat.finer()) (dirty = true), (wait = 0);
+    }
+    if (!ruinsDirty && ruinsWait-- <= 0) {
+      ruinsWait = RETRY_FRAMES;
+      if (ruinsSeat.finer()) (ruinsDirty = true), (ruinsWait = 0);
+    }
     if (tf && dirty && wait-- <= 0) {
       if (rebuild(tf)) dirty = false;
       else wait = RETRY_FRAMES;
@@ -165,6 +182,11 @@ function projector(tf: Frame): (m: Model, lamp: number) => Pack {
     }
     return { v, i: Uint32Array.from(m.indices), smoke: m.smoke ?? [] };
   };
+}
+
+function latLng(tf: Frame, x: number, y: number): [number, number] {
+  const [lng, lat] = tf.toLngLat(x, y);
+  return [lat, lng];
 }
 
 function merge(list: readonly Pack[]): TownMeshData {

@@ -155,6 +155,14 @@ export class Terrain {
     return h === null ? null : Math.max(h, 0) * EXAGGERATION;
   };
 
+  // DEM zoom groundAt answers from at a point (-1 before any page covers it); it rises as finer pages stream in.
+  groundZoomAt = (lat: number, lng: number): number => this.pages.zoomAt(lat, lng);
+
+  // Bumped whenever the pages groundAt answers from change.
+  get groundVersion(): number {
+    return this.pages.version;
+  }
+
   // Water coverage 0..1 under a point from the drape pages, or null before any page covers it.
   waterAt = (lat: number, lng: number): number | null => this.drape.waterAt(lat, lng);
 

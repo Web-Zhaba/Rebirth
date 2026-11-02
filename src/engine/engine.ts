@@ -134,6 +134,10 @@ export class Engine {
   }
 
   groundAt = (lat: number, lng: number): number | null => this.terrain.groundAt(lat, lng);
+  groundZoomAt = (lat: number, lng: number): number => this.terrain.groundZoomAt(lat, lng);
+  get groundVersion(): number {
+    return this.terrain.groundVersion;
+  }
 
   // Ground metres per CSS px at the camera target (the scale a web map's zoom implies: view/view.ts mppAtZoom).
   metersPerPixel(): number {

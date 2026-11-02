@@ -41,6 +41,8 @@ interface Label {
   text: string;
   pts: [number, number][]; // lng, lat: one point, or a street's line
   ground: Float64Array; // drawn ground height under each point, NaN until its terrain is in
+  zoom: Int8Array; // the DEM zoom each ground height came from: looked up again when finer pages come
+  version: number; // the engine's groundVersion when the zooms were last checked
 }
 
 function labelsOf(kind: Kind, data: FeatureCollection, field: string): Label[] {
@@ -52,7 +54,7 @@ function labelsOf(kind: Kind, data: FeatureCollection, field: string): Label[] {
     const pts = g.type === "Point" ? [g.coordinates] : g.type === "LineString" ? g.coordinates : null;
     if (!pts?.length) continue;
     const ll = pts.map((p) => [p[0], p[1]] as [number, number]);
-    out.push({ key: `${kind}|${text}|${ll[0][0].toFixed(6)},${ll[0][1].toFixed(6)}`, kind, text, pts: ll, ground: new Float64Array(ll.length).fill(NaN) });
+    out.push({ key: `${kind}|${text}|${ll[0][0].toFixed(6)},${ll[0][1].toFixed(6)}`, kind, text, pts: ll, ground: new Float64Array(ll.length).fill(NaN), zoom: new Int8Array(ll.length).fill(-1), version: -1 });
   }
   return out;
 }
@@ -98,15 +100,26 @@ export function attachGameLabels(engine: Engine, container: HTMLElement): void {
     return el;
   };
 
-  // Screen position of a label's point i, with its ground looked up once the terrain there is in.
-  const screen = (l: Label, i: number): [number, number] | null => {
-    let g = l.ground[i];
-    if (Number.isNaN(g)) {
-      const h = engine.groundAt(l.pts[i][1], l.pts[i][0]);
-      if (h === null) return null;
-      g = l.ground[i] = h;
+  // A label's ground under each point, looked up when the terrain there is in and again when finer pages have come
+  // (the first pages after a load are coarse stand-ins, far off the drawn ground).
+  const seat = (l: Label) => {
+    const v = engine.groundVersion;
+    if (l.version === v) return;
+    l.version = v;
+    for (let i = 0; i < l.pts.length; i++) {
+      const [lng, lat] = l.pts[i];
+      const z = engine.groundZoomAt(lat, lng);
+      if (z <= l.zoom[i]) continue;
+      l.zoom[i] = z;
+      l.ground[i] = engine.groundAt(lat, lng) ?? NaN;
     }
-    return engine.project(l.pts[i][1], l.pts[i][0], g);
+  };
+
+  // Screen position of a label's point i on its ground, or null before the terrain there is in.
+  const screen = (l: Label, i: number): [number, number] | null => {
+    seat(l);
+    const g = l.ground[i];
+    return Number.isNaN(g) ? null : engine.project(l.pts[i][1], l.pts[i][0], g);
   };
 
   const hidden = labelSight(engine);

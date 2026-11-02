@@ -158,13 +158,23 @@ export class HeightPages {
 
   // Raw DEM height (m, not exaggerated) at a point from the finest page that still has a CPU copy, or null.
   heightAt(lat: number, lng: number): number | null {
+    const q = this.cpuPageAt(lat, lng);
+    return q ? samplePage(q.cpu, q.fx, q.fy) : null;
+  }
+
+  // Zoom of the page heightAt answers from, or -1: a coarse stand-in until the point's own pages have streamed in.
+  zoomAt(lat: number, lng: number): number {
+    return this.cpuPageAt(lat, lng)?.z ?? -1;
+  }
+
+  private cpuPageAt(lat: number, lng: number): { cpu: Float32Array; z: number; fx: number; fy: number } | null {
     for (let z = DEM_MAX_ZOOM; z >= 0; z--) {
       const f = lngLatToTile(lng, lat, z);
       const n = 2 ** z;
       const tx = Math.floor(f.x);
       const ty = Math.max(0, Math.min(n - 1, Math.floor(f.y)));
       const p = this.pages.get(tileKey(z, ((tx % n) + n) % n, ty));
-      if (p?.cpu) return samplePage(p.cpu, f.x - tx, f.y - ty);
+      if (p?.cpu) return { cpu: p.cpu, z, fx: f.x - tx, fy: f.y - ty };
     }
     return null;
   }

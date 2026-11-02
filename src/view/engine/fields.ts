@@ -11,6 +11,7 @@ import { buildFieldMesh } from "../../map/fieldMesh";
 import { fields3dOn } from "../../map/graphicsSettings";
 import { rgb, type XY } from "../../map/modelGeometry";
 import { mppAtZoom, zoomAtMpp } from "../view";
+import { GroundSeat } from "./groundSeat";
 import { townLight } from "./townLight";
 
 // The town's farm fields up close on the engine (scene/fields.ts), from the same fields and rules as the old 3D field
@@ -58,6 +59,7 @@ export function attachFields(engine: Engine, o: { clock?: ReadonlySignal<number>
   const fake = new Map<number, { sown: number; harv: number }>(); // devtools: overrides of the real work
   let progKey = ""; // what the work in the mesh shows
   let originKey = "";
+  const seat = new GroundSeat(engine);
 
   effect(() => {
     const z = zones.value;
@@ -94,6 +96,7 @@ export function attachFields(engine: Engine, o: { clock?: ReadonlySignal<number>
     for (const { m } of parts) for (let v = 0; v < m.xy.length / 2; v++) at.push(tf.toLngLat(m.xy[v * 2], m.xy[v * 2 + 1]));
     const ground = at.map(([lng, lat]) => engine.groundAt(lat, lng));
     if (ground.some((h) => h === null)) return false;
+    seat.seated(at.map(([lng, lat]) => [lat, lng] as const));
     const [lng0, lat0] = tf.toLngLat(0, 0);
     const or = geodeticToEcef(lat0, lng0, 0);
     const { east, north, up } = enuAt(lat0, lng0);
@@ -167,6 +170,10 @@ export function attachFields(engine: Engine, o: { clock?: ReadonlySignal<number>
     if (okey !== originKey) {
       originKey = okey;
       have = "";
+    }
+    if (want === have && wait-- <= 0) {
+      wait = RETRY_FRAMES;
+      if (seat.finer()) (have = ""), (wait = 0); // finer ground than the fields were draped on: drape them again
     }
     if (want !== have && wait-- <= 0) {
       if (build(tf)) have = want;
