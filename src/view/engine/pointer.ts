@@ -1,0 +1,44 @@
+import { CLICK_TOLERANCE, isClick } from "./scale";
+
+// Tracks one-pointer taps independently of the camera controller. A second active pointer
+// invalidates the whole gesture, so a pinch/tilt can never become a placement or field click.
+export class PointerClickTracker {
+  private readonly active = new Set<number>();
+  private readonly starts = new Map<number, readonly [number, number]>();
+  private multiPointer = false;
+
+  pointerDown(pointerId: number, point: readonly [number, number]): void {
+    if (this.active.size === 0) {
+      // A previous drag may not have generated a click. Drop its stale start before pointer-id reuse.
+      this.starts.clear();
+      this.multiPointer = false;
+    } else {
+      this.multiPointer = true;
+    }
+    this.active.add(pointerId);
+    this.starts.set(pointerId, point);
+  }
+
+  pointerUp(pointerId: number): void {
+    this.active.delete(pointerId);
+    if (this.multiPointer && this.active.size === 0) this.reset();
+  }
+
+  pointerCancel(pointerId: number): void {
+    this.active.delete(pointerId);
+    this.starts.delete(pointerId);
+    if (this.active.size === 0) this.reset();
+  }
+
+  isClick(pointerId: number, point: readonly [number, number], tolerance = CLICK_TOLERANCE): boolean {
+    if (this.multiPointer) return false;
+    const start = this.starts.get(pointerId);
+    this.starts.delete(pointerId);
+    return start !== undefined && isClick(start, point, tolerance);
+  }
+
+  private reset(): void {
+    this.starts.clear();
+    this.multiPointer = false;
+  }
+}
