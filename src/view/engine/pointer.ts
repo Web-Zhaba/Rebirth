@@ -6,12 +6,14 @@ export class PointerClickTracker {
   private readonly active = new Set<number>();
   private readonly starts = new Map<number, readonly [number, number]>();
   private multiPointer = false;
+  private suppressClickUntilNextPointerDown = false;
 
   pointerDown(pointerId: number, point: readonly [number, number]): void {
     if (this.active.size === 0) {
       // A previous drag may not have generated a click. Drop its stale start before pointer-id reuse.
       this.starts.clear();
       this.multiPointer = false;
+      this.suppressClickUntilNextPointerDown = false;
     } else {
       this.multiPointer = true;
     }
@@ -21,17 +23,23 @@ export class PointerClickTracker {
 
   pointerUp(pointerId: number): void {
     this.active.delete(pointerId);
-    if (this.multiPointer && this.active.size === 0) this.reset();
+    if (this.multiPointer && this.active.size === 0) {
+      this.suppressClickUntilNextPointerDown = true;
+      this.reset();
+    }
   }
 
   pointerCancel(pointerId: number): void {
     this.active.delete(pointerId);
     this.starts.delete(pointerId);
-    if (this.active.size === 0) this.reset();
+    if (this.active.size === 0) {
+      this.suppressClickUntilNextPointerDown = true;
+      this.reset();
+    }
   }
 
   isClick(pointerId: number | null, point: readonly [number, number], tolerance = CLICK_TOLERANCE): boolean {
-    if (this.multiPointer) return false;
+    if (this.multiPointer || this.suppressClickUntilNextPointerDown) return false;
 
     if (pointerId === null) {
       // Some browsers expose Pointer Events for down/up but still deliver click as MouseEvent.
