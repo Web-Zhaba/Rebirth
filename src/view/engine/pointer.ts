@@ -5,6 +5,7 @@ import { CLICK_TOLERANCE, isClick } from "./scale";
 export class PointerClickTracker {
   private readonly active = new Set<number>();
   private readonly starts = new Map<number, readonly [number, number]>();
+  private readonly dragged = new Set<number>();
   private multiPointer = false;
   private suppressClickUntilNextPointerDown = false;
 
@@ -12,6 +13,7 @@ export class PointerClickTracker {
     if (this.active.size === 0) {
       // A previous drag may not have generated a click. Drop its stale start before pointer-id reuse.
       this.starts.clear();
+      this.dragged.clear();
       this.multiPointer = false;
       this.suppressClickUntilNextPointerDown = false;
     } else {
@@ -19,6 +21,11 @@ export class PointerClickTracker {
     }
     this.active.add(pointerId);
     this.starts.set(pointerId, point);
+  }
+
+  pointerMove(pointerId: number, point: readonly [number, number], tolerance = CLICK_TOLERANCE): void {
+    const start = this.starts.get(pointerId);
+    if (start && !isClick(start, point, tolerance)) this.dragged.add(pointerId);
   }
 
   pointerUp(pointerId: number): void {
@@ -32,6 +39,7 @@ export class PointerClickTracker {
   pointerCancel(pointerId: number): void {
     this.active.delete(pointerId);
     this.starts.delete(pointerId);
+    this.dragged.delete(pointerId);
     if (this.active.size === 0) {
       this.suppressClickUntilNextPointerDown = true;
       this.reset();
@@ -44,20 +52,23 @@ export class PointerClickTracker {
     if (pointerId === null) {
       // Some browsers expose Pointer Events for down/up but still deliver click as MouseEvent.
       // Older browsers expose no Pointer Events at all: with no recorded start, preserve native clicks.
-      const start = this.starts.size === 1
-        ? this.starts.values().next().value as readonly [number, number] | undefined
-        : undefined;
+      const entry = this.starts.size === 1 ? [...this.starts.entries()][0] : undefined;
+      const wasDragged = entry !== undefined && this.dragged.has(entry[0]);
       this.starts.clear();
-      return start === undefined || isClick(start, point, tolerance);
+      this.dragged.clear();
+      return entry === undefined || (!wasDragged && isClick(entry[1], point, tolerance));
     }
 
     const start = this.starts.get(pointerId);
+    const wasDragged = this.dragged.has(pointerId);
     this.starts.delete(pointerId);
-    return start !== undefined && isClick(start, point, tolerance);
+    this.dragged.delete(pointerId);
+    return start !== undefined && !wasDragged && isClick(start, point, tolerance);
   }
 
   private reset(): void {
     this.starts.clear();
+    this.dragged.clear();
     this.multiPointer = false;
   }
 }
