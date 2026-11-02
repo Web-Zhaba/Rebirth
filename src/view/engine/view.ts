@@ -107,8 +107,8 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
           const pointerId = (e as PointerEvent).pointerId;
           if (typeof pointerId === "number" && pointerId >= 0) {
             if (!clicks.isClick(pointerId, local(e))) return;
-          } else if (e.detail !== 0) {
-            return; // a keyboard/programmatic click has no preceding pointerdown
+          } else if (e.detail !== 0 && !clicks.isClick(null, local(e))) {
+            return; // non-PointerEvent browsers still get drag-filtered clicks
           }
           dispatch(e);
         };
