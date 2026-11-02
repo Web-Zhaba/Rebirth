@@ -1,6 +1,6 @@
 import earcut from "earcut";
 import type { XY } from "./modelGeometry";
-import { clipBox } from "./waterMesh";
+import { clipBox } from "./geometryClip";
 
 // Geometry of the 3D farm fields (view/engine/fields.ts), pure maths in town metres: one field polygon cut into a grid of small
 // cells (so the surface follows the relief between its vertices), each cell piece triangulated, the vertices on shared
