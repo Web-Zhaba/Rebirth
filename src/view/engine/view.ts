@@ -2,10 +2,8 @@ import { prefersReducedMotion } from "../../map/motion";
 import type { Engine } from "../../engine/engine";
 import type { CameraControl, CameraTarget } from "../../engine/camera/cameraControl";
 import type { Camera, CameraGoal, LngLat, Overlay, OverlayId, ScreenPoint, View, ViewEvents, ViewMarker } from "../view";
-import { CLICK_TOLERANCE, distanceToMpp, isClick, markerTransform, mppToDistance, type MarkerAnchor } from "./scale";
-
-const POINTER_EVENTS = ["click", "contextmenu", "mousedown", "mousemove", "mouseup"] as const;
-type PointerType = (typeof POINTER_EVENTS)[number];
+import { distanceToMpp, markerTransform, mppToDistance, type MarkerAnchor } from "./scale";
+import { PointerClickTracker } from "./pointer";
 
 // Same pin as MapLibre's default marker, tinted.
 const pinSvg = (color: string) =>
@@ -83,27 +81,82 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
     },
 
     on<K extends keyof ViewEvents>(type: K, fn: (e: ViewEvents[K]) => void) {
-      if ((POINTER_EVENTS as readonly string[]).includes(type)) {
-        const kind = type as PointerType;
-        const call = fn as (e: ViewEvents["click"]) => void;
-        let down: ScreenPoint | null = null;
-        const onDown = (e: MouseEvent) => void (down = local(e));
-        const handler = (e: MouseEvent) => {
-          const point = local(e);
-          if (kind === "click" && !isClick(down, point, CLICK_TOLERANCE)) return;
-          const g = engine.pick(point[0], point[1]);
-          if (!g) return; // the pointer is off the planet
-          call({ lngLat: [g.lng, g.lat], point, original: e });
+      const call = fn as (e: ViewPointer) => void;
+      const dispatch = (e: MouseEvent): void => {
+        const point = local(e);
+        const g = engine.pick(point[0], point[1]);
+        if (!g) return; // game tools only act on the planet, never on the sky
+        const pointer = e as PointerEvent;
+        const hasPointer = typeof pointer.pointerId === "number";
+        call({
+          lngLat: [g.lng, g.lat],
+          point,
+          original: e,
+          pointerId: hasPointer ? pointer.pointerId : null,
+          pointerType: hasPointer ? pointer.pointerType : null,
+          isPrimary: hasPointer ? pointer.isPrimary : true,
+        });
+      };
+
+      if (type === "click") {
+        const clicks = new PointerClickTracker();
+        const onPointerDown = (e: PointerEvent) => clicks.pointerDown(e.pointerId, local(e));
+        const onPointerUp = (e: PointerEvent) => clicks.pointerUp(e.pointerId);
+        const onPointerCancel = (e: PointerEvent) => clicks.pointerCancel(e.pointerId);
+        const onClick = (e: MouseEvent) => {
+          const pointerId = (e as PointerEvent).pointerId;
+          if (typeof pointerId === "number" && pointerId >= 0) {
+            if (!clicks.isClick(pointerId, local(e))) return;
+          } else if (e.detail !== 0) {
+            return; // a keyboard/programmatic click has no preceding pointerdown
+          }
+          dispatch(e);
         };
-        if (kind === "click") canvas.addEventListener("mousedown", onDown);
-        canvas.addEventListener(kind, handler);
+        canvas.addEventListener("pointerdown", onPointerDown);
+        window.addEventListener("pointerup", onPointerUp);
+        window.addEventListener("pointercancel", onPointerCancel);
+        canvas.addEventListener("click", onClick);
         return () => {
-          canvas.removeEventListener(kind, handler);
-          canvas.removeEventListener("mousedown", onDown);
+          canvas.removeEventListener("pointerdown", onPointerDown);
+          window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("pointercancel", onPointerCancel);
+          canvas.removeEventListener("click", onClick);
         };
       }
+
+      if (type === "contextmenu") {
+        const onContextMenu = (e: MouseEvent) => dispatch(e);
+        canvas.addEventListener("contextmenu", onContextMenu);
+        return () => canvas.removeEventListener("contextmenu", onContextMenu);
+      }
+
+      if (type === "pointerdown") {
+        const onPointer = (e: PointerEvent) => {
+          try {
+            canvas.setPointerCapture(e.pointerId);
+          } catch {
+            /* the pointer may already have been released */
+          }
+          dispatch(e);
+        };
+        canvas.addEventListener("pointerdown", onPointer);
+        return () => canvas.removeEventListener("pointerdown", onPointer);
+      }
+
+      if (type === "pointermove") {
+        const onPointer = (e: PointerEvent) => dispatch(e);
+        canvas.addEventListener("pointermove", onPointer);
+        return () => canvas.removeEventListener("pointermove", onPointer);
+      }
+
+      if (type === "pointerup") {
+        const onPointer = (e: PointerEvent) => dispatch(e);
+        canvas.addEventListener("pointerup", onPointer);
+        return () => canvas.removeEventListener("pointerup", onPointer);
+      }
+
       return camera.on(type as "move", fn as () => void);
-    },
+    },,
 
     // The pin's tip stands on the point; a custom element is centred on it unless it asks for its bottom (MapLibre's).
     addMarker(opts, at): ViewMarker {
