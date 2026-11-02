@@ -9,6 +9,24 @@ describe("PointerClickTracker", () => {
     expect(clicks.isClick(1, [24, 33])).toBe(true);
   });
 
+  it("rejects a drag that returns to its starting point", () => {
+    const clicks = new PointerClickTracker();
+    clicks.pointerDown(1, [0, 0]);
+    clicks.pointerMove(1, [30, 0]);
+    clicks.pointerMove(1, [1, 0]);
+    clicks.pointerUp(1);
+    expect(clicks.isClick(1, [1, 0])).toBe(false);
+  });
+
+  it("rejects a MouseEvent fallback after a drag returns to its start", () => {
+    const clicks = new PointerClickTracker();
+    clicks.pointerDown(1, [0, 0]);
+    clicks.pointerMove(1, [30, 0]);
+    clicks.pointerMove(1, [0, 0]);
+    clicks.pointerUp(1);
+    expect(clicks.isClick(null, [0, 0])).toBe(false);
+  });
+
   it("rejects a drag beyond the click tolerance", () => {
     const clicks = new PointerClickTracker();
     clicks.pointerDown(1, [20, 30]);
