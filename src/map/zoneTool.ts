@@ -521,7 +521,7 @@ export function attachZoneTool(view: View): void {
     cancelBrush();
     releaseSpacePan();
   });
-  view.canvas.addEventListener("mouseleave", () => {
+  view.canvas.addEventListener("pointerleave", () => {
     cursor = null;
     hoverKeys.value = [];
     setLabel(null);
