@@ -114,8 +114,11 @@ export function attachRoadTool(view: View): void {
   let lastEvent: ViewPointer | null = null;
   let streetHint = ""; // " · по старой улице X" while the snap is on a named old street
   let angleHint = ""; // "45°" while Shift locks the direction
-  let pressing = false; // left button is down on the map
+  let pressing = false; // the primary pointer is down on the map
   let dragging = false; // the press has become a drag
+  let activePointerId: number | null = null;
+  const activePointers = new Set<number>();
+  let multiPointer = false;
   let pressScreen: { x: number; y: number } | null = null;
   let pressSnap: Snap | null = null; // where the drag began
   let pressOld: OldRef | null = null;
@@ -487,6 +490,7 @@ export function attachRoadTool(view: View): void {
   };
 
   const onMove = (e: ViewPointer) => {
+    if (multiPointer || !e.isPrimary || (activePointerId !== null && e.pointerId !== activePointerId)) return;
     lastEvent = e;
     cursor = { x: e.point[0], y: e.point[1] };
     const t = roadT();
@@ -611,7 +615,26 @@ export function attachRoadTool(view: View): void {
     commitPath([[start.x, start.y], [a.snap.x, a.snap.y]], a.snap, a.old);
   };
 
+  const resetPress = () => {
+    pressing = false;
+    dragging = false;
+    pressScreen = null;
+    pressSnap = null;
+    pressOld = null;
+  };
+
   const onDown = (e: ViewPointer) => {
+    if (e.pointerId === null) return;
+    if (activePointers.size === 0) multiPointer = false;
+    activePointers.add(e.pointerId);
+    if (activePointers.size > 1 || !e.isPrimary) {
+      multiPointer = true;
+      activePointerId = null;
+      resetPress();
+      clearOverlay();
+      return;
+    }
+    activePointerId = e.pointerId;
     suppressClick = false;
     const t = roadT();
     if (!t || !roadKindOf(t) || busy || spaceDown || arcEnd) return;
@@ -626,16 +649,16 @@ export function attachRoadTool(view: View): void {
     pressOld = a.old;
   };
 
-  const onUp = () => {
+  const onUp = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 0) multiPointer = false;
+    if (activePointerId !== e.pointerId) return;
+    activePointerId = null;
     if (!pressing) return;
     const wasDrag = dragging;
     const anchor = pressSnap;
     const anchorOld = pressOld;
-    pressing = false;
-    dragging = false;
-    pressScreen = null;
-    pressSnap = null;
-    pressOld = null;
+    resetPress();
     if (!wasDrag || !anchor || !lastEvent || spaceDown) return;
     suppressClick = true;
     const ctx = context(lastEvent);
@@ -651,6 +674,16 @@ export function attachRoadTool(view: View): void {
       return;
     }
     commitPath([[anchor.x, anchor.y], [a.snap.x, a.snap.y]], a.snap, a.old);
+  };
+
+  const onCancel = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 0) multiPointer = false;
+    if (activePointerId !== e.pointerId) return;
+    activePointerId = null;
+    resetPress();
+    clearOverlay();
+    if (!multiPointer && lastEvent) onMove(lastEvent);
   };
 
   const endChain = () => {
@@ -725,8 +758,8 @@ export function attachRoadTool(view: View): void {
     }
   };
 
-  view.on("mousemove", onMove);
-  view.on("mousedown", onDown);
+  view.on("pointermove", onMove);
+  view.on("pointerdown", onDown);
   view.on("click", onClick);
   view.on("contextmenu", onContext);
   view.on("move", () => syncPan(view));
@@ -735,16 +768,17 @@ export function attachRoadTool(view: View): void {
     if (!start && !dragging) clearOverlay();
     else setLabel(null);
   });
-  window.addEventListener("mouseup", onUp);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
   window.addEventListener("keydown", onKey);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", () => {
     shiftDown = false;
     spaceDown = false;
-    pressing = false;
-    dragging = false;
-    pressSnap = null;
-    pressOld = null;
+    activePointers.clear();
+    activePointerId = null;
+    multiPointer = false;
+    resetPress();
     setSpacePan(false);
     syncPan(view);
   });
