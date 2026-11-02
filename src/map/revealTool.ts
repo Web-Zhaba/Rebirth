@@ -30,6 +30,10 @@ export function attachRevealTool(view: View): void {
     at = f.toLocal(e.lngLat[0], e.lngLat[1]);
     draw();
   });
+  view.canvas.addEventListener("pointerleave", () => {
+    at = null;
+    draw();
+  });
   view.on("click", (e) => {
     const f = frame.value;
     const r = revealRadius.value;
