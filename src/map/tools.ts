@@ -30,8 +30,8 @@ effect(() => {
 });
 
 export function attachToolRepeat(view: View): void {
-  view.canvas.addEventListener("mousedown", (e) => {
-    if (!shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
+  view.canvas.addEventListener("pointerdown", (e: PointerEvent) => {
+    if (!e.isPrimary || !shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
     e.preventDefault();
     tool.value = lastTool.peek();
   });
