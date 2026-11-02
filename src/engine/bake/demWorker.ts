@@ -1,3 +1,4 @@
+import { decodePng } from "./png";
 import { decodeToPage, DEM_SIZE, terrariumUrl } from "./terrarium";
 
 // DEM bake job: fetch a terrarium tile, decode it into a bordered f32 page and hand the buffer back (transferred, no
@@ -15,8 +16,6 @@ const scope = self as unknown as {
   onmessage: ((e: MessageEvent<DemRequest>) => void) | null;
   postMessage(msg: DemResponse, transfer?: Transferable[]): void;
 };
-const canvas = new OffscreenCanvas(DEM_SIZE, DEM_SIZE);
-const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const jobs = new Map<number, AbortController>();
 
 scope.onmessage = (e: MessageEvent<DemRequest>) => {
@@ -33,20 +32,18 @@ async function load(id: number, z: number, x: number, y: number): Promise<void> 
   const abort = new AbortController();
   jobs.set(id, abort);
   try {
-    if (!ctx) throw new Error("2d context unavailable");
     const res = await fetch(terrariumUrl(z, x, y), { signal: abort.signal });
     if (!res.ok) {
       scope.postMessage({ id, ok: false, status: res.status, error: res.statusText } satisfies DemResponse);
       return;
     }
-    const blob = await res.blob();
+    const png = await decodePng(await res.arrayBuffer());
     if (abort.signal.aborted) throw new DOMException("aborted", "AbortError");
-    // No colour management or premultiplication: the RGB bytes encode metres.
-    const bmp = await createImageBitmap(blob, { colorSpaceConversion: "none", premultiplyAlpha: "none" });
-    ctx.clearRect(0, 0, DEM_SIZE, DEM_SIZE);
-    ctx.drawImage(bmp, 0, 0);
-    bmp.close();
-    const page = decodeToPage(ctx.getImageData(0, 0, DEM_SIZE, DEM_SIZE).data);
+    if (png.width !== DEM_SIZE || png.height !== DEM_SIZE) {
+      throw new Error(`Unexpected Terrarium tile size: ${png.width}x${png.height}`);
+    }
+    // Terrarium stores elevation in the original PNG RGB bytes. Never route these values through a colour-managed image.
+    const page = decodeToPage(png.rgba);
     const msg: DemResponse = { id, ok: true, heights: page.heights, blocks: page.blocks, min: page.min, max: page.max, ms: performance.now() - t0 };
     scope.postMessage(msg, [page.heights.buffer, page.blocks.buffer]);
   } catch (err) {
