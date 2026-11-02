@@ -1,7 +1,7 @@
 import { prefersReducedMotion } from "../../map/motion";
 import type { Engine } from "../../engine/engine";
 import type { CameraControl, CameraTarget } from "../../engine/camera/cameraControl";
-import type { Camera, CameraGoal, LngLat, Overlay, OverlayId, ScreenPoint, View, ViewEvents, ViewMarker } from "../view";
+import type { Camera, CameraGoal, LngLat, Overlay, OverlayId, ScreenPoint, View, ViewEvents, ViewMarker, ViewPointer } from "../view";
 import { distanceToMpp, markerTransform, mppToDistance, type MarkerAnchor } from "./scale";
 import { PointerClickTracker } from "./pointer";
 
