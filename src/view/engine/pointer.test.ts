@@ -38,11 +38,26 @@ describe("PointerClickTracker", () => {
     expect(clicks.isClick(null, [12, 12])).toBe(true);
   });
 
+  it("rejects a MouseEvent click after a multi-pointer gesture", () => {
+    const clicks = new PointerClickTracker();
+    clicks.pointerDown(1, [20, 30]);
+    clicks.pointerDown(2, [80, 30]);
+    clicks.pointerUp(1);
+    clicks.pointerUp(2);
+    expect(clicks.isClick(null, [20, 30])).toBe(false);
+
+    // A new, unambiguous pointer sequence clears the one-shot suppression.
+    clicks.pointerDown(3, [50, 50]);
+    clicks.pointerUp(3);
+    expect(clicks.isClick(null, [51, 50])).toBe(true);
+  });
+
   it("rejects a pointer that was cancelled", () => {
     const clicks = new PointerClickTracker();
     clicks.pointerDown(7, [10, 10]);
     clicks.pointerCancel(7);
     expect(clicks.isClick(7, [10, 10])).toBe(false);
+    expect(clicks.isClick(null, [10, 10])).toBe(false);
   });
 
   it("does not reuse a stale drag start when the browser reuses a pointer id", () => {
