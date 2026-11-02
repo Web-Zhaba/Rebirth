@@ -779,7 +779,7 @@ export function attachRoadTool(view: View): void {
   view.on("click", onClick);
   view.on("contextmenu", onContext);
   view.on("move", () => syncPan(view));
-  view.canvas.addEventListener("mouseleave", () => {
+  view.canvas.addEventListener("pointerleave", () => {
     cursor = null;
     if (!start && !dragging) clearOverlay();
     else setLabel(null);
