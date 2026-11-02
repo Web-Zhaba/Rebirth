@@ -17,7 +17,6 @@ import { attachModels } from "./models";
 import { attachPlaceLabels } from "./placeLabels";
 import { attachStatsHud } from "./statsHud";
 import { attachSmoke } from "./smoke";
-import { attachWater } from "./water";
 import { attachWeather } from "./weather";
 import type { CloudSite } from "../../map/clouds/settings";
 import { attachControls, credits } from "./controls";
@@ -77,7 +76,6 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   attachToolContext(engine);
   const weather = o.light && o.cloudSite ? attachWeather(engine, { clock: o.light.clock, site: o.cloudSite, weather: o.weather }) : null;
   attachFields(engine, { clock: o.light?.clock });
-  attachWater(engine, { clock: o.light?.clock, weather: o.weather, rain: weather?.rain });
   const forest = attachForest(engine, { clock: o.light?.clock, weather: o.weather, snow: weather?.snowOnTrees });
   attachSmoke(engine, { clock: o.light?.clock, weather: o.weather });
   attachPlaceLabels(engine, container);

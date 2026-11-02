@@ -148,7 +148,7 @@ fn pageHeight(layer: u32, uv: vec2f) -> f32 {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-// Drawn height: exaggerated, sea surface at 0 until water gets its own mesh (N3).
+// Drawn height: exaggerated, with negative terrain clamped to the sea-level datum.
 fn drawnHeight(layer: u32, uv: vec2f) -> f32 {
   if (layer == NO_PAGE) {
     return 0.0;
@@ -342,12 +342,13 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     water = 1.0;
     albedo = vec3f(0.015, 0.05, 0.11);
   }
-  // Keep the original drape coverage for shoreline distance; later ice and map overlays can reduce open water.
+  // Keep screen-space UV derivatives for a small shoreline-mask filter below; the source mask is only 256 texels wide.
+  let maskDx = dpdx(v.duv);
+  let maskDy = dpdy(v.duv);
   let shoreCoverage = water;
-  let shoreSlope = fwidth(shoreCoverage);
   n = normalize(mix(n, up, water)); // water lies flat whatever the DEM says under it
 
-  // The ordinary far-water mask shares the terrain mesh. Add procedural wave normals without creating another mesh.
+  // Water shares the terrain mesh at every scale. Add procedural wave normals without creating a separate surface.
   // Precipitation comes from the climate cube; local wetness gives the town's own rain a subtle fallback.
   if (water > 0.0) {
     let rain = clamp(max(weatherAt(up).b, weather.ground.y * 0.25), 0.0, 1.0);
@@ -391,8 +392,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   var c = albedo * (vec3f(sun) + sky) * light;
   c += albedo * NIGHT_AMBIENT * (1.0 - light); // moon and starlight: the night side stays readable, not black
   if (water > 0.0) {
-    // Approximate the sky and horizon in the reflected direction. This gives far water a real reflection response
-    // without a screen-space reflection pass or another render target.
+    // Approximate the sky and horizon in the reflected direction without a screen-space reflection pass or another render target.
     let view = -normalize(v.rel);
     let reflected = reflect(-view, n);
     let reflectedHeight = dot(reflected, up);
@@ -417,18 +417,37 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   c = applyAir(c, GROUND_AIR * opticalDepth(length(v.rel), frame.eye.w, alt), light);
   var out = toneMap(c) * cloudDim(cloudShade(v.rel, up, foot));
 
-  // A narrow, broken white foam rim on the water side of the drape mask. Estimate distance from the mask gradient
-  // in screen pixels, then convert it to metres using the terrain pixel footprint: no second texture or water mesh.
-  if (shoreSlope > 0.015 && water > 0.0) {
-    let shoreDistance = max(shoreCoverage - 0.5, 0.0) * foot / shoreSlope;
-    let foamWidth = max(4.0, foot * 1.35);
-    let foamFeather = max(1.0, foot * 0.55);
-    let foamBand = 1.0 - smoothstep(foamWidth - foamFeather, foamWidth + foamFeather, shoreDistance);
-    let foamP = waterMod(waterCoordinates(frame.eye.xyz + v.rel, up) * 0.055 + vec2f(frame.params.z * 0.035, -frame.params.z * 0.021), 8192.0);
+  // Shore foam: the drape mask is a 256px raster, so filter it across one screen pixel before measuring distance.
+  // The four explicit-LOD taps smooth the polygon edge without blurring the water body or adding another texture.
+  var foamCoverage = shoreCoverage;
+  if (v.dlayer != NO_PAGE) {
+    let layer = i32(v.dlayer);
+    let ox = maskDx * 0.75;
+    let oy = maskDy * 0.75;
+    let c0 = textureSampleLevel(drapes, drapeSampler, v.duv - ox - oy, layer, 0.0).a;
+    let c1 = textureSampleLevel(drapes, drapeSampler, v.duv + ox - oy, layer, 0.0).a;
+    let c2 = textureSampleLevel(drapes, drapeSampler, v.duv - ox + oy, layer, 0.0).a;
+    let c3 = textureSampleLevel(drapes, drapeSampler, v.duv + ox + oy, layer, 0.0).a;
+    foamCoverage = (c0 + c1 + c2 + c3) * 0.25;
+  }
+  let foamGradient = vec2f(dpdx(foamCoverage), dpdy(foamCoverage));
+  let foamSlope = length(foamGradient);
+  if (foamCoverage > 0.0 && foamSlope > 0.003) {
+    // Convert the filtered mask gradient to metres. A footprint-sized feather prevents sub-pixel edges becoming steps.
+    let shoreDistance = max(foamCoverage - 0.5, 0.0) * foot / foamSlope;
+    let foamWidth = max(3.5, foot * 0.8);
+    let foamFeather = max(1.5, foot * 0.9);
+    let foamBand = 1.0 - smoothstep(max(0.0, foamWidth - foamFeather), foamWidth + foamFeather, shoreDistance);
+
+    // Keep foam breakup at roughly 2-3 screen pixels. At distant LODs the pattern grows rather than aliasing into
+    // square speckles; a restrained contrast keeps the white shore line continuous.
+    let foamWorld = waterCoordinates(frame.eye.xyz + v.rel, up);
+    let foamCell = max(28.0, foot * 2.6);
+    let foamP = waterMod(foamWorld / foamCell + vec2f(frame.params.z * 0.012, -frame.params.z * 0.008), 8192.0);
     let foamNoise = vnoise(foamP);
-    let foamBreakup = mix(0.58, 1.0, smoothstep(0.18, 0.78, foamNoise));
+    let foamBreakup = mix(0.82, 1.0, smoothstep(0.18, 0.82, foamNoise));
     let foam = clamp(foamBand * foamBreakup * water, 0.0, 1.0);
-    out = mix(out, vec3f(0.82, 0.89, 0.91), foam);
+    out = mix(out, vec3f(0.86, 0.92, 0.94), foam);
   }
 
   out = mix(out, frame.highlight.rgb, lit * frame.highlight.a);
