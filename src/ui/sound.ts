@@ -53,6 +53,8 @@ export function loadSettings(): SoundSettings {
 const initial = loadSettings();
 export const soundEnabled = signal(initial.enabled);
 export const soundVolume = signal(initial.volume);
+// Silence asked by the portal (its ads and overlays, see src/platform); not saved, the settings stay as they are.
+export const soundPaused = signal(false);
 
 function save(): void {
   try {
@@ -91,7 +93,9 @@ export const resetSound = (): void => {
 };
 
 export function play(name: SoundName): void {
-  if (!soundEnabled.peek() || soundVolume.peek() <= 0) return;
+  if (!soundEnabled.peek() || soundVolume.peek() <= 0 || soundPaused.peek()) return;
+  // Game events keep coming in a background tab; a hidden game stays silent.
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
   try {
     const c = context();
     if (!c) return;

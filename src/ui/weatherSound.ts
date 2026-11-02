@@ -1,6 +1,6 @@
 import { effect, signal, type ReadonlySignal } from "@preact/signals";
 import type { WeatherState } from "../sim/weather";
-import { soundVolume } from "./sound";
+import { soundPaused, soundVolume } from "./sound";
 
 // Ambient weather (rain, wind, snow hush), synthesized with the Web Audio API. Off by default, separate from UI
 // clicks: it shares the volume slider but ignores `soundEnabled`. Nothing here ever throws.
@@ -201,7 +201,7 @@ function apply(): void {
   if (!g) return;
   try {
     const t = g.ctx.currentTime;
-    const live = weatherSoundOn.peek() && !hidden;
+    const live = weatherSoundOn.peek() && !hidden && !soundPaused.peek();
     const rain = live ? current.rain : 0;
     const wind = live ? current.wind : 0;
     const hush = live ? current.hush : 0;
@@ -263,6 +263,7 @@ export function attachWeatherSound(weather: ReadonlySignal<WeatherState | null>)
   const stopControl = effect(() => {
     const on = weatherSoundOn.value;
     void soundVolume.value;
+    void soundPaused.value;
     if (!on) {
       stopGraph();
       return;

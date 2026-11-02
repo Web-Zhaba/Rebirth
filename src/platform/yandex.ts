@@ -1,0 +1,48 @@
+import { NO_PLATFORM, type Platform, type PlatformHooks } from "./index";
+
+// Yandex Games SDK v2 (https://yandex.ru/dev/games/doc/ru/sdk/sdk-about). The portal serves `/sdk.js` next to the
+// game; anywhere else (local preview) it is missing and the game runs without the portal.
+interface YaSdk {
+  features: {
+    LoadingAPI?: { ready(): void };
+    GameplayAPI?: { start(): void; stop(): void };
+  };
+  on?(event: "game_api_pause" | "game_api_resume", cb: () => void): void;
+}
+
+declare global {
+  interface Window {
+    YaGames?: { init(): Promise<YaSdk> };
+  }
+}
+
+const SDK_URL = "/sdk.js";
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`${src} did not load`));
+    document.head.append(s);
+  });
+}
+
+export async function initYandex(hooks: PlatformHooks): Promise<Platform> {
+  let ysdk: YaSdk;
+  try {
+    await loadScript(SDK_URL);
+    if (!window.YaGames) throw new Error("YaGames is not defined");
+    ysdk = await window.YaGames.init();
+  } catch (e) {
+    console.warn("Yandex Games SDK unavailable, running without it:", e);
+    return NO_PLATFORM;
+  }
+  ysdk.on?.("game_api_pause", hooks.pause);
+  ysdk.on?.("game_api_resume", hooks.resume);
+  return {
+    ready: () => ysdk.features.LoadingAPI?.ready(),
+    gameplay: (on) => (on ? ysdk.features.GameplayAPI?.start() : ysdk.features.GameplayAPI?.stop()),
+  };
+}

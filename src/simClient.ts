@@ -31,6 +31,8 @@ export const chronicle = computed(() => state.value?.chronicle ?? []);
 export const finds = computed(() => state.value?.finds ?? null);
 export const articles = computed(() => state.value?.articles ?? []);
 export const away = signal<Away | null>(null);
+// The save (or its absence) has come back from the worker: the game can be played from here on.
+export const loaded = signal(false);
 // Catch-up progress in game minutes while the worker advances the town; null otherwise.
 export const catchUp = signal<{ done: number; total: number } | null>(null);
 
@@ -114,6 +116,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       state.value = m.save?.sim ?? null;
       away.value = m.away;
       catchUp.value = null;
+      loaded.value = true;
       break;
     case "progress":
       catchUp.value = { done: m.done, total: m.total };

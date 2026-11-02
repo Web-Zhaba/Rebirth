@@ -10,7 +10,10 @@ import { attachZoneTool } from "./map/zoneTool";
 import { attachToolRepeat } from "./map/tools";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
-import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
+import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
+import type { Speed } from "./sim/clock";
+import { initPlatform } from "./platform";
+import { soundPaused } from "./ui/sound";
 import { tryMountEngineView } from "./view/engine/mount";
 import type { View } from "./view/view";
 import { TOWN_START_MPP } from "./view/scale";
@@ -26,6 +29,24 @@ import { followResidentById } from "./ui/follow";
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
 // Read it before creating the map, which writes its own hash on construction.
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
+// The portal's own pauses (its ads and overlays) stop the clock and the sound, then give back the speed the player had.
+let speedBeforePause: Speed | null = null;
+const platformInit = initPlatform({
+  pause() {
+    if (speedBeforePause === null) {
+      speedBeforePause = speed.peek();
+      setSpeed(0);
+    }
+    soundPaused.value = true;
+  },
+  resume() {
+    if (speedBeforePause !== null) {
+      setSpeed(speedBeforePause);
+      speedBeforePause = null;
+    }
+    soundPaused.value = false;
+  },
+});
 attachExcavation();
 attachArticles();
 // The map's clock and weather: the game's, or another season's while the admin panel previews one (seasonPreview.ts).
@@ -45,7 +66,11 @@ const engineMount = await tryMountEngineView({
   debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1",
   life: { trips: lifeTrips, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById },
 });
+// The portal's SDK is up before the game starts; it loads alongside the map.
+const platform = await platformInit;
 if (engineMount) start(engineMount.view);
+// Without the engine the page explains why; the portal still has to drop its loader to show that.
+else platform.ready();
 
 function start(view: View): void {
   // Picking what is on the map: clearings and old buildings first, so a building under the same click wins.
@@ -71,6 +96,12 @@ function start(view: View): void {
 
   render(h(App, { view }), document.getElementById("ui")!);
   load();
+  effect(() => {
+    if (loaded.value) platform.ready();
+  });
+  // The clock running is what the portal counts as play: a paused town (by the player or the portal) is not.
+  const playing = computed(() => loaded.value && speed.value > 0);
+  effect(() => platform.gameplay(playing.value));
 
   // Handles for poking at the map and the sim from devtools during development. Use these instead of importing
   // simClient again: a second module instance would start a second worker writing the same save.
