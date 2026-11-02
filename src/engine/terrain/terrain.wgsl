@@ -48,6 +48,92 @@ const GROUND_AIR = 0.12;
 const OVERLAY_NIGHT = 0.45;
 // Snow and ice are brighter than the atlas: they must read white under the same light.
 const SNOW_GAIN = 0.8;
+const WATER_TAU = 6.2831853;
+
+// The distant water shares the terrain grid, so its motion is shading-only. A triplanar ECEF projection keeps the
+// procedural pattern stable while the camera moves and avoids a longitude seam at the antimeridian.
+fn waterCoordinates(p: vec3f, up: vec3f) -> vec2f {
+  let w = abs(up);
+  let q = w / max(w.x + w.y + w.z, 1e-4);
+  return vec2f(p.x * (q.y + q.z) + p.y * q.x, p.y * q.z + p.z * (q.x + q.y));
+}
+
+// Convert a gradient in waterCoordinates back into the tangent plane of the globe.
+fn waterGradientWorld(g: vec2f, up: vec3f) -> vec3f {
+  let w = abs(up);
+  let q = w / max(w.x + w.y + w.z, 1e-4);
+  let dx = vec3f(q.y + q.z, q.x, 0.0);
+  let dy = vec3f(0.0, q.z, q.x + q.y);
+  let worldGradient = dx * g.x + dy * g.y;
+  return worldGradient - up * dot(worldGradient, up);
+}
+
+fn waterMod(p: vec2f, period: f32) -> vec2f {
+  return p - floor(p / period) * period;
+}
+
+// Longer wavelengths than the close-up water: they remain legible while the terrain is several pixels per metre.
+fn terrainWaterRipples(p: vec2f, t: f32, foot: f32, windDir: vec2f, windStrength: f32) -> vec2f {
+  var g = vec2f(0.0);
+  for (var k = 0; k < 4; k++) {
+    let fk = f32(k);
+    let len = 34.0 / (1.0 + fk * 0.75);
+    let angle = (fk - 1.5) * 0.42;
+    let dir = vec2f(windDir.x * cos(angle) - windDir.y * sin(angle), windDir.x * sin(angle) + windDir.y * cos(angle));
+    let fade = clamp(1.4 - foot * 3.2 / len, 0.0, 1.0);
+    let phase = fract(dot(dir, p) / len - t * (0.28 + fk * 0.07) + fk * 0.19) * WATER_TAU;
+    g += dir * cos(phase) * 0.055 * windStrength * fade;
+  }
+  let q = waterMod(p * 0.085 + windDir * t * 0.12, 8192.0);
+  let n0 = vnoise(q);
+  let detail = vec2f(vnoise(q + vec2f(0.06, 0.0)) - n0, vnoise(q + vec2f(0.0, 0.06)) - n0);
+  g += detail * 0.55 * windStrength * clamp(1.4 - foot * 0.16, 0.0, 1.0);
+  return g;
+}
+
+// Slow broad swells make large lakes and oceans read as water even when the smaller ripples are filtered out.
+fn terrainWaterSwells(p: vec2f, t: f32, windDir: vec2f, windStrength: f32) -> vec2f {
+  let q = waterMod(p * 0.012 + windDir * t * 0.008, 8192.0);
+  let q2 = waterMod(q * 2.3 + vec2f(5.1, 9.7), 8192.0);
+  let a = vnoise(q);
+  let b = vnoise(q2);
+  let eps = 0.045;
+  let gx = (vnoise(q + vec2f(eps, 0.0)) - a) + 0.5 * (vnoise(waterMod(q2 + vec2f(eps * 2.3, 0.0), 8192.0)) - b);
+  let gy = (vnoise(q + vec2f(0.0, eps)) - a) + 0.5 * (vnoise(waterMod(q2 + vec2f(0.0, eps * 2.3), 8192.0)) - b);
+  return vec2f(gx, gy) * 0.95 * windStrength;
+}
+
+// Broad, expanding rain rings. They are faded with pixel footprint to avoid sparkly aliasing at globe distances.
+fn terrainWaterRain(p: vec2f, t: f32, foot: f32) -> vec2f {
+  var g = vec2f(0.0);
+  for (var k = 0; k < 3; k++) {
+    let offset = f32(k) * vec2f(17.7, 29.3);
+    let q = waterMod(p + offset, 8192.0);
+    let cell = floor(q / 32.0);
+    let origin = (cell + vec2f(0.25) + 0.5 * vec2f(hash2(cell + 3.1), hash2(cell + 7.7))) * 32.0;
+    let age = fract(t * 0.28 + hash2(cell + f32(k) * 11.0));
+    let dv = q - origin;
+    let r = length(dv);
+    let ring = exp(-pow((r - age * 14.0) * 0.24, 2.0)) * (1.0 - age);
+    g += dv / max(r, 1e-3) * ring * 0.18;
+  }
+  return g * clamp(1.4 - foot / 15.0, 0.0, 1.0);
+}
+
+fn terrainWaterNormal(world: vec3f, up: vec3f, t: f32, foot: f32, rain: f32) -> vec3f {
+  let p = waterCoordinates(world, up);
+  let east = normalize(vec3f(-up.y, up.x, 0.0));
+  let north = normalize(cross(up, east));
+  let latitude = abs(asin(clamp(up.z, -1.0, 1.0)) * 57.29578);
+  let zonal = mix(weather.wind.y, weather.wind.x, smoothstep(10.0, 65.0, latitude));
+  let wind3 = east * zonal + north * 0.18;
+  let wind2 = normalize(waterCoordinates(wind3, up));
+  let windStrength = clamp(0.28 + abs(zonal) * 0.36, 0.2, 0.9);
+  var slope = terrainWaterRipples(p, t, foot, wind2, windStrength);
+  slope += terrainWaterSwells(p, t, wind2, windStrength) * 0.55;
+  slope += terrainWaterRain(p, t, foot) * rain;
+  return normalize(up - waterGradientWorld(slope, up));
+}
 
 // Bilinear height from a bordered page, centre convention: line-by-line copy of bake/terrarium.ts samplePage.
 fn pageHeight(layer: u32, uv: vec2f) -> f32 {
@@ -258,6 +344,14 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   }
   n = normalize(mix(n, up, water)); // water lies flat whatever the DEM says under it
 
+  // The ordinary far-water mask shares the terrain mesh. Add procedural wave normals without creating another mesh.
+  // Precipitation comes from the climate cube; local wetness gives the town's own rain a subtle fallback.
+  if (water > 0.0) {
+    let rain = clamp(max(weatherAt(up).b, weather.ground.y * 0.25), 0.0, 1.0);
+    let waveN = terrainWaterNormal(frame.eye.xyz + v.rel, up, frame.params.z, foot, rain);
+    n = normalize(mix(n, waveN, water));
+  }
+
   // The weather on the ground (sky/weather.wgsl): wet earth darkens, snow lies on what is flat enough, ice
   // closes the water.
   let gw = groundWeather(v.rel, h);
@@ -294,12 +388,26 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   var c = albedo * (vec3f(sun) + sky) * light;
   c += albedo * NIGHT_AMBIENT * (1.0 - light); // moon and starlight: the night side stays readable, not black
   if (water > 0.0) {
-    // Sun glint and a sky sheen growing towards grazing angles (Schlick), only on water.
+    // Approximate the sky and horizon in the reflected direction. This gives far water a real reflection response
+    // without a screen-space reflection pass or another render target.
     let view = -normalize(v.rel);
-    let hv = normalize(view + frame.sun.xyz);
-    let glint = pow(max(dot(n, hv), 0.0), 180.0) * frame.sun.w * 6.0;
+    let reflected = reflect(-view, n);
+    let reflectedHeight = dot(reflected, up);
+    let horizon = vec3f(0.58, 0.66, 0.69);
+    let zenith = vec3f(0.25, 0.40, 0.57);
+    var skyReflection = mix(horizon, zenith, smoothstep(-0.08, 0.48, reflectedHeight));
+    let reflectedCloud = smoothstep(0.28, 0.78, weatherAt(normalize(reflected)).r);
+    skyReflection = mix(skyReflection, vec3f(0.68, 0.72, 0.73), reflectedCloud * 0.28);
+    skyReflection = mix(vec3f(0.035, 0.055, 0.09), skyReflection, frame.sun.w);
+
     let fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, view), 0.0), 5.0);
-    c += water * (vec3f(glint) * light + fres * vec3f(0.35, 0.45, 0.6) * light);
+    let reflectionAmount = water * (0.09 + 0.62 * fres);
+    c = mix(c, skyReflection * (0.45 + 0.55 * light), reflectionAmount);
+
+    // Wave normals sharpen the sun glint and keep it moving across the surface.
+    let reflectedSun = max(dot(reflected, frame.sun.xyz), 0.0);
+    let glint = (pow(reflectedSun, 128.0) * 2.8 + pow(reflectedSun, 28.0) * 0.07) * frame.sun.w;
+    c += water * vec3f(1.0, 0.96, 0.86) * glint * light;
   }
 
   let alt = max(h, 0.0) * frame.params.x;
