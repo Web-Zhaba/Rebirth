@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodePng } from "./png";
+import { decodePng } from "./pngDecoder";
 
 const SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 

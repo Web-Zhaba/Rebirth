@@ -1,4 +1,4 @@
-import { decodePng } from "./png";
+import { decodePng } from "../../world/pngDecoder";
 import { decodeToPage, DEM_SIZE, terrariumUrl } from "./terrarium";
 
 // DEM bake job: fetch a terrarium tile, decode it into a bordered f32 page and hand the buffer back (transferred, no
