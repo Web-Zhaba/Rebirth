@@ -760,6 +760,22 @@ export function attachRoadTool(view: View): void {
 
   view.on("pointermove", onMove);
   view.on("pointerdown", onDown);
+  // Track every canvas pointer, including a second finger placed over the sky.
+  // The View event above only dispatches when the ray hits the planet.
+  const trackPointerDown = (e: PointerEvent) => {
+    if (activePointers.size === 0) multiPointer = false;
+    activePointers.add(e.pointerId);
+    if (activePointers.size > 1 || !e.isPrimary) {
+      const wasMultiPointer = multiPointer;
+      multiPointer = true;
+      activePointerId = null;
+      if (!wasMultiPointer) {
+        resetPress();
+        clearOverlay();
+      }
+    }
+  };
+  view.canvas.addEventListener("pointerdown", trackPointerDown);
   view.on("click", onClick);
   view.on("contextmenu", onContext);
   view.on("move", () => syncPan(view));
