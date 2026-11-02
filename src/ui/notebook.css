@@ -1,5 +1,7 @@
-/* Right-side drawer under the zoom buttons (zoom, compass and globe reach down to ~100 px); keeps the top-left HUD free.
-   Shares the column with the building panel (only one is open) and stays above the bottom toolbar. */
+/* World «Береста и грамота» — the notebook: a bark page of finds, articles and the chronicle.
+   Rows are ruled by lenticels (dashed), the margin is a vertical lenticel, the tab strip is pressed like the
+   build bar's courses. No school-notebook ruling and no red margin. */
+
 .notebook {
   position: absolute;
   top: 176px;
@@ -7,49 +9,67 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
+  gap: var(--sp-2);
   pointer-events: none;
 }
 
 .notebook .notebook-toggle {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  border: 0;
+  border: var(--bw) solid #10150d;
+  border-radius: 0;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  color: var(--ink);
+  background: #121722;
+  color: var(--paper-raised);
+  box-shadow: var(--shadow-hard-sm);
 }
 
+.notebook .notebook-toggle:hover:not(:disabled) {
+  background: #37432c;
+}
+
+.notebook .notebook-toggle[aria-pressed="true"] {
+  background: var(--resin);
+  border-color: var(--resin);
+  color: #1a1509;
+}
+
+/* A new entry is marked in resin, the world's one warm signal. */
 .notebook-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -6px;
+  right: -6px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
   box-sizing: border-box;
-  border-radius: var(--radius-sm);
-  background: var(--bad);
-  color: var(--paper);
+  border: var(--bw-hair) solid var(--ink);
+  border-radius: 0;
+  background: var(--resin);
+  color: #1a1509;
+  font-family: var(--font-display);
   font-size: var(--fs-xs);
-  font-weight: 700;
-  line-height: 16px;
+  font-weight: 800;
+  line-height: 14px;
   text-align: center;
 }
 
-/* A field book page: ruled paper (lines scroll with the text), a red margin rule, ink headings. */
 .notebook .notebook-panel {
-  width: min(320px, calc(100vw - 20px));
-  max-height: min(500px, max(160px, calc(100vh - 372px)));
+  width: min(330px, calc(100vw - 20px));
+  max-height: min(520px, max(160px, calc(100vh - 372px)));
   display: flex;
   flex-direction: column;
   font-size: var(--fs-sm);
-  background: var(--paper-raised);
+  /* Flat bark: no ruled field behind the text, so nothing reads as a tinted stripe. */
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 74%, var(--paper-shade));
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-dotted) transparent;
 }
 
 .notebook-head {
@@ -58,7 +78,7 @@
   gap: var(--sp-2);
   padding-bottom: var(--sp-2);
   margin-bottom: var(--sp-2);
-  border-bottom: var(--bw) solid var(--rule);
+  border-bottom: 1px dotted var(--rule-dotted);
 }
 
 .notebook-title {
@@ -66,51 +86,126 @@
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--fs-lg);
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   line-height: var(--lh-tight);
 }
 
 .notebook-tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-2);
 }
 
 .notebook-tab {
   flex: 1;
-  padding: 4px 6px;
+  padding: 5px 6px;
   border: var(--bw) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--paper);
-  color: inherit;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
   font: inherit;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
   cursor: pointer;
 }
 
-.notebook-tab.active {
-  background: var(--ink);
-  color: var(--paper);
+.notebook-tab:hover:not(.active):not(:disabled) {
+  background: var(--paper-sunk);
 }
 
+.notebook-tab.active,
 .notebook-tab.active:hover:not(:disabled) {
-  background-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper-raised);
 }
 
+/* How much is in the section, in the tab itself. */
+.notebook-tab-n {
+  margin-left: 6px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.notebook-main {
+  min-width: 0;
+}
+
+/* Search: a bark field under the tabs, the icon inside, no separate button. */
+.notebook-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--sp-2);
+  padding: 5px 8px;
+  border: var(--bw) solid var(--rule);
+  background: var(--paper-raised);
+  color: var(--pencil);
+}
+
+.notebook-search:focus-within {
+  outline: 2px solid var(--info);
+  outline-offset: 1px;
+}
+
+.notebook-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  caret-color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+.notebook-search input::placeholder {
+  color: var(--pencil);
+  opacity: 1;
+}
+
+/* A year opens a run of entries: quiet caps, no rule competing with the entry separators. */
+.notebook-year {
+  padding: 2px 0 4px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pencil);
+  font-variant-numeric: tabular-nums;
+}
+
+.notebook-year-group + .notebook-year-group {
+  margin-top: var(--sp-3);
+}
+
+/* The page: one dashed margin column, entries separated by a single lenticel. No ruling, no tinted field. */
 .notebook-body {
   overflow-y: auto;
   min-height: 0;
   padding: 0 2px 0 34px;
-  background:
-    linear-gradient(90deg, transparent 26px, var(--bad-fill) 26px 28px, transparent 28px) local,
-    repeating-linear-gradient(to bottom, transparent 0 23px, var(--rule-soft) 23px 24px) local;
-  background-color: var(--paper-raised);
-  line-height: 24px;
+  background-image: repeating-linear-gradient(180deg, var(--rule-dotted) 0 3px, transparent 3px 9px);
+  background-repeat: repeat-y;
+  background-position: 27px 0;
+  background-size: 2px 100%;
+  line-height: 22px;
+  scrollbar-color: var(--ink) var(--paper-shade);
 }
 
 .notebook-entry {
   position: relative;
-  padding: 0 0 24px;
+  padding: 0 0 14px;
+}
+
+.notebook-entry + .notebook-entry {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dotted rgba(31, 26, 19, 0.22);
 }
 
 .notebook-kind {
@@ -120,7 +215,7 @@
   width: 22px;
   display: flex;
   justify-content: center;
-  color: var(--bad);
+  color: var(--resin-deep);
 }
 
 .notebook-pen {
@@ -143,8 +238,11 @@
 .notebook-date {
   font-size: var(--fs-xs);
   color: var(--pencil);
+  font-family: var(--font-display);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
+  font-variant-numeric: tabular-nums;
 }
 
 .notebook-date a {
@@ -157,19 +255,21 @@
   padding: 0;
   color: var(--pencil);
   font-family: var(--font-display);
-  font-style: italic;
 }
-
 
 .notebook-map-link {
   display: inline;
   padding: 0;
   border: 0;
   background: none;
+  color: var(--info);
   font: inherit;
   font-family: var(--font-display);
   font-weight: 700;
   text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
 
@@ -181,9 +281,10 @@
   height: 18px;
   margin-left: 5px;
   border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--paper);
-  font: 700 12px/1 var(--font-body);
+  color: var(--ink);
+  font: 700 12px/1 var(--font-display);
   text-decoration: none;
   vertical-align: text-bottom;
 }
@@ -196,7 +297,7 @@
   height: 25px;
   padding: 0;
   border: var(--bw) solid var(--info);
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--paper-raised);
   box-shadow: var(--shadow-hard-sm);
   color: var(--info);

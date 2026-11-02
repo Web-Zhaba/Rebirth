@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { sunDirection, TUNING } from "../../sim/weather";
 import { CLOUD_BASE_M, CLOUD_TOP_M, GLOBE_EXAGGERATION } from "./constants";
-import { EARTH_RADIUS_M, invert4, lngLatToSphere, rayFromNdc, sphereToLngLat, weatherToSphere, type Vec3 } from "../three/frame";
+import { EARTH_RADIUS_M, lngLatToSphere, sphereToLngLat, weatherToSphere, type Vec3 } from "./sphere";
 import {
   blendDrift,
   darkening,
   DRIFT_DEG,
   driftPhases,
   noiseDetail,
-  rayBasis,
   localFrame,
   localToDirection,
   OVERCAST_MAX,
@@ -183,35 +182,5 @@ describe("darkening", () => {
   });
   it("more cover shades more of the noise", () => {
     expect(darkening(0.8, 1, 0.4, 1)).toBeGreaterThan(darkening(0.3, 1, 0.4, 1));
-  });
-});
-
-describe("ray basis", () => {
-  // column-major perspective * lookAt, built by hand: eye looks at the origin from (0.3, 0.2, 2.5), fov 40 deg, aspect 1.5
-  const mul = (a: number[], b: number[]) => {
-    const o = new Array(16).fill(0);
-    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
-    return o;
-  };
-  const f = 1 / Math.tan((40 * RAD) / 2), asp = 1.5, n = 0.01, fa = 10;
-  const proj = [f / asp, 0, 0, 0, 0, f, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, (2 * fa * n) / (n - fa), 0];
-  const eye = [0.3, 0.2, 2.5];
-  const zAxis = (() => { const l = Math.hypot(...eye); return eye.map((v) => v / l); })();
-  const xAxis = (() => { const up = [0, 1, 0]; const x = [up[1] * zAxis[2] - up[2] * zAxis[1], up[2] * zAxis[0] - up[0] * zAxis[2], up[0] * zAxis[1] - up[1] * zAxis[0]]; const l = Math.hypot(...x); return x.map((q) => q / l); })();
-  const yAxis = [zAxis[1] * xAxis[2] - zAxis[2] * xAxis[1], zAxis[2] * xAxis[0] - zAxis[0] * xAxis[2], zAxis[0] * xAxis[1] - zAxis[1] * xAxis[0]];
-  const dotv = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const view = [xAxis[0], yAxis[0], zAxis[0], 0, xAxis[1], yAxis[1], zAxis[1], 0, xAxis[2], yAxis[2], zAxis[2], 0, -dotv(xAxis, eye), -dotv(yAxis, eye), -dotv(zAxis, eye), 1];
-  const m = mul(proj, view);
-  const inv = invert4(m)!;
-  it("matches the plain per-pixel unprojection", () => {
-    const rb = rayBasis(inv)!;
-    expect(rb.cam[0]).toBeCloseTo(eye[0], 9);
-    expect(rb.cam[2]).toBeCloseTo(eye[2], 9);
-    for (const [x, y] of [[0, 0], [0.7, -0.4], [-0.9, 0.9], [1, 1]]) {
-      const ref = rayFromNdc(inv, x, y);
-      const d: Vec3 = [rb.a[0] + x * rb.b[0] + y * rb.c[0], rb.a[1] + x * rb.b[1] + y * rb.c[1], rb.a[2] + x * rb.b[2] + y * rb.c[2]];
-      const l = Math.hypot(...d);
-      for (let i = 0; i < 3; i++) expect(d[i] / l).toBeCloseTo(ref.dir[i], 9);
-    }
   });
 });

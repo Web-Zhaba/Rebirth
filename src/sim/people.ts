@@ -7,7 +7,8 @@ import { covers, SERVICE, servicesIn } from "./services";
 import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
-import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, RoadGraph, SimState, Stock, EventKind } from "./types";
+import { birthFactor, deathChanceFromNeeds, fullNeeds, leaveRisk, MOOD_NEUTRAL, needProblems, needsOf, needsStats, residentMoveFactor, residentWorkFactor, satisfaction } from "./needs";
+import type { Building, BuildingQuery, Clearing, Household, Incoming, PeopleState, PeopleStats, Resident, ResidentQuery, RoadGraph, SimState, Stock, EventKind } from "./types";
 import { cropOf } from "./tech";
 import { foodNeedFactor, mortalityFactor, orchardQuality } from "./weatherEffects";
 import type { WeatherState } from "./weather";
@@ -98,7 +99,7 @@ function say(w: W, kind: EventKind, text: string, pos?: [number, number]): void 
 
 function addPerson(w: W, first: string, last: string, sex: "m" | "f", age: number, household: number): Resident {
   const id = w.nextPersonId++;
-  const r: Resident = { id, first, last, sex, born: w.now - age * YEAR_MIN, household, spouse: null, job: null, commute: null, idleDays: 0, literate: false, school: 0 };
+  const r: Resident = { id, first, last, sex, born: w.now - age * YEAR_MIN, household, spouse: null, job: null, commute: null, idleDays: 0, literate: false, school: 0, needs: fullNeeds() };
   w.residents[id] = r;
   return r;
 }
@@ -417,9 +418,18 @@ export function idleResidents(s: ArtelState): Set<number> {
   return out;
 }
 
-export const forageKg = (s: ArtelState): number => idleResidents(s).size * forageRate(s.gameMinutes);
+// A hungry, tired or unhappy adult gathers less: the day's forage is the sum of their strength, not a head count.
+export function forageKg(s: ArtelState): number {
+  let hands = 0;
+  for (const id of idleResidents(s)) {
+    const r = s.residents[id];
+    if (!r) continue;
+    hands += residentWorkFactor(r, s.households?.[r.household]?.mood ?? MOOD_NEUTRAL);
+  }
+  return hands * forageRate(s.gameMinutes);
+}
 
-type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock"> & { clearings?: Clearing[]; levers?: Levers };
+type ArtelState = Pick<SimState, "residents" | "buildings" | "roads" | "gameMinutes" | "zones" | "prod" | "stock"> & { clearings?: Clearing[]; levers?: Levers; households?: Record<number, Household> };
 
 export function artel(s: ArtelState): { hands: number; drafted: number; employed: number } {
   const c = countResidents(s.residents, s.gameMinutes);
@@ -525,6 +535,7 @@ export function peopleStats(s: ArtelState & Pick<SimState, "households">): Peopl
     tents,
     avgCommute: c.employed > 0 ? c.commuteSum / c.employed : 0,
     households,
+    needs: needsStats(s.residents, s.households, s.gameMinutes),
   };
 }
 
@@ -681,7 +692,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
       for (const r of g.adults) {
         if (r.job === null) continue;
         const m = g.candMap.get(r.job);
-        const t = m === undefined ? Infinity : m / WALK_SPEED;
+        const t = m === undefined ? Infinity : m / (WALK_SPEED * residentMoveFactor(r));
         if (t <= MAX_COMMUTE) r.commute = Math.round(t * 10) / 10;
         else lose(r);
       }
@@ -707,8 +718,9 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
           let best: JobCand | null = null;
           let bp = had ? pri.get(r.job!)! : -1;
           if (bp >= 3) continue;
+          const speed = WALK_SPEED * residentMoveFactor(r);
           for (const c of g.cands) {
-            if (c.m / WALK_SPEED > MAX_COMMUTE) break;
+            if (c.m / speed > MAX_COMMUTE) break;
             const p = pri.get(c.id)!;
             if (p <= bp || (workers.get(c.id) ?? 0) >= (cap.get(c.id) ?? 0)) continue;
             best = c;
@@ -722,7 +734,7 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
           }
           workers.set(best.id, (workers.get(best.id) ?? 0) + 1);
           r.job = best.id;
-          r.commute = Math.round((best.m / WALK_SPEED) * 10) / 10;
+          r.commute = Math.round((best.m / speed) * 10) / 10;
         }
       }
       return moved;
@@ -763,8 +775,11 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     for (const id of ids()) {
       const r = w.residents[id];
       const home = w.households[r.household]?.home;
-      const care = (home != null && covers(s.coverage[home], "healer") ? SERVICE.healerDeathFactor : 1) * mortalityFactor(s.weather, w.households[r.household]?.cold);
-      if (rand() < (deathRate(ageOf(r.born, now)) * care) / YEAR_DAYS) {
+      const healer = home != null && covers(s.coverage[home], "healer") ? SERVICE.healerDeathFactor : 1;
+      const care = healer * mortalityFactor(s.weather, w.households[r.household]?.cold);
+      const age = ageOf(r.born, now);
+      // Starvation, exhaustion and cold add their own chance a day on top of the age table; a healer helps with those too.
+      if (rand() < (deathRate(age) * care) / YEAR_DAYS + deathChanceFromNeeds(needsOf(r), age) * healer) {
         say(w, "death", `${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`);
         removePerson(w, r);
       }
@@ -777,12 +792,14 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       const home = buildings[h.home];
       if (!isFinishedHouse(home)) continue;
       const cap = houseCap(home);
+      const sat = h.members.length > 0 ? h.members.reduce((a, m) => a + satisfaction(needsOf(w.residents[m])), 0) / h.members.length : 100;
+      const chance = (RATES.birthYear / YEAR_DAYS) * birthFactor(h.mood, sat);
       for (const m of h.members.slice()) {
         if (h.members.length >= cap) break;
         const r = w.residents[m];
         const age = ageOf(r.born, now);
         if (r.sex !== "f" || r.spouse === null || age < 18 || age > 42) continue;
-        if (rand() < RATES.birthYear / YEAR_DAYS) {
+        if (rand() < chance) {
           const sex = rand() < 0.5 ? "m" : "f";
           const kid = addPerson(w, pick(sex === "m" ? MALE_NAMES : FEMALE_NAMES, rand), surnameFor(h.last, sex), sex, 0, h.id);
           h.members.push(kid.id);
@@ -843,7 +860,8 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   if (on("emigration")) {
     for (const h of Object.values(w.households)) {
       if (h.home === null || h.founder) continue;
-      if (!(h.mood < MOOD_LEAVE) || !(rand() < RATES.moodLeaveDay)) continue;
+      const sat = h.members.length > 0 ? h.members.reduce((a, m) => a + satisfaction(needsOf(w.residents[m])), 0) / h.members.length : 100;
+      if (!(h.mood < MOOD_LEAVE) || !(rand() < RATES.moodLeaveDay * leaveRisk(sat))) continue;
       const n = h.members.length;
       const pop = Object.keys(w.residents).length;
       stock = { ...stock, food: stock.food * (1 - n / pop) };
@@ -858,7 +876,11 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   const attract = (() => {
     let adults = 0;
     let jobless = 0;
+    let satSum = 0;
+    let satN = 0;
     for (const r of Object.values(w.residents)) {
+      satSum += satisfaction(needsOf(r));
+      satN++;
       if (!isAdultAge(ageOf(r.born, now))) continue;
       adults++;
       if (r.job === null && !r.inClass) jobless++;
@@ -869,7 +891,8 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     for (const h of Object.values(w.households)) moodSum += h.mood;
     const hs = Object.keys(w.households).length;
     const avgMood = hs > 0 ? moodSum / hs : MOOD_START;
-    return Math.min(1, Math.max(0, 1 - unemployment * 2)) * outlook * Math.min(1, Math.max(0, avgMood / 100));
+    const needPull = 0.5 + 0.5 * (satN > 0 ? satSum / satN : 100) / 100; // a town whose people are content draws more
+    return Math.min(1, Math.max(0, 1 - unemployment * 2)) * outlook * Math.min(1, Math.max(0, avgMood / 100)) * needPull;
   })();
 
   return {
@@ -1014,7 +1037,15 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
           .filter((r): r is Resident => !!r)
           .map((r) => {
             const age = ageOf(r.born, now);
-            return { id: r.id, name: fullName(r), age: Math.floor(age), sex: r.sex, role: roleOf(s, r, age, work, idle), literate: r.literate, learn: Math.round(r.school) };
+            const person = { id: r.id, name: fullName(r), age: Math.floor(age), sex: r.sex, role: roleOf(s, r, age, work, idle), literate: r.literate, learn: Math.round(r.school) };
+            if (!r.needs) return person; // a resident of an old save before the first daily step
+            return {
+              ...person,
+              needs: r.needs,
+              problems: needProblems(r.needs),
+              mood: Math.round(h.mood),
+              work: Math.round(residentWorkFactor(r, h.mood) * 100) / 100,
+            };
           }),
       }));
     return {
@@ -1029,6 +1060,36 @@ export function queryBuilding(s: SimState, id: number): BuildingQuery | null {
   const idle = idleWorkplaces(s).has(id);
   const workers = Object.values(s.residents)
     .filter((r) => r.job === id)
-    .map((r) => ({ id: r.id, name: fullName(r), age: Math.floor(ageOf(r.born, now)), commute: r.commute, idle }));
+    .map((r) => {
+      const worker = { id: r.id, name: fullName(r), age: Math.floor(ageOf(r.born, now)), commute: r.commute, idle };
+      if (!r.needs) return worker;
+      const mood = s.households[r.household]?.mood ?? MOOD_NEUTRAL;
+      return { ...worker, needs: r.needs, problems: needProblems(r.needs), mood: Math.round(mood), work: Math.round(residentWorkFactor(r, mood) * 100) / 100 };
+    });
   return { kind: "workplace", capacity: jobsOf(b, s), workers };
+}
+
+// One resident by id: what the follow mode needs to keep the camera on a person.
+export function queryResident(s: SimState, id: number): ResidentQuery | null {
+  const r = s.residents[id];
+  if (!r) return null;
+  const age = ageOf(r.born, s.gameMinutes);
+  const work = constructionWork(s.buildings, s.roads, s.clearings, s.stock);
+  const idle = idleWorkplaces(s);
+  const mood = s.households[r.household]?.mood ?? MOOD_NEUTRAL;
+  return {
+    kind: "resident",
+    id,
+    name: fullName(r),
+    age: Math.floor(age),
+    sex: r.sex,
+    role: roleOf(s, r, age, work, idle),
+    home: s.households[r.household]?.home ?? null,
+    job: r.job,
+    commute: r.commute,
+    idle: r.job !== null && idle.has(r.job),
+    ...(r.needs
+      ? { needs: r.needs, problems: needProblems(r.needs), mood: Math.round(mood), work: Math.round(residentWorkFactor(r, mood) * 100) / 100 }
+      : {}),
+  };
 }

@@ -216,11 +216,10 @@ export function BuildBar() {
   return (
     <section class="build-bar" aria-label={LANDMARK_LABELS.build}>
       <div class="bb-lines" aria-live="polite">
-        {msg ? (
-          <div class="road-msg">{msg}</div>
-        ) : (
+        {msg && <div class="road-msg">{msg}</div>}
+        {(hint || growth) && (
           <div class="road-hint">
-            {hint ?? (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? "Два пальца — наклон" : "Правая кнопка — наклон")}
+            {hint}
             {growth && <div>{growth}</div>}
           </div>
         )}

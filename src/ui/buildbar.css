@@ -1,4 +1,5 @@
-/* Build bar: hint and cost lines above, category tabs and item buttons below (PLAN-ui.md U3). */
+/* World В«Р‘РµСЂРµСЃС‚Р° Рё РіСЂР°РјРѕС‚Р°В» вЂ” the build bar: a bark catalogue sheet at the foot of the field.
+   Tabs are pressed courses; the live item is inked solid. The hint and cost line sit on their own thin strip. */
 
 .build-bar {
   position: absolute;
@@ -21,9 +22,11 @@
   align-items: center;
   gap: 2px;
   max-width: 720px;
-  padding: 2px var(--sp-3);
-  background: var(--paper);
-  border-radius: var(--radius);
+  padding: 4px var(--sp-3);
+  background: var(--paper-raised);
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
+  box-shadow: var(--shadow-hard-sm);
   pointer-events: auto;
 }
 
@@ -45,6 +48,7 @@
 .road-msg {
   font-size: var(--fs-md);
   color: var(--bad);
+  font-weight: 700;
 }
 
 .bb-cost {
@@ -66,6 +70,19 @@
 .bb-tabs .tab {
   padding: var(--sp-1) var(--sp-3);
   font-size: var(--fs-sm);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* The live course is inked solid, not outlined: one tar block in a row of bare bark. */
+.bb-tabs .tab.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper-raised);
+}
+
+.bb-tabs .tab:not(.on):hover {
+  background: var(--paper-shade);
 }
 
 .bb-items {
@@ -77,14 +94,14 @@
 
 .build-btn {
   position: relative;
+  border: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   width: 100px;
   padding: var(--sp-2) var(--sp-1) var(--sp-1);
-  border: var(--bw) solid transparent;
-  border-radius: var(--radius);
+  border-radius: 0;
   background: transparent;
   color: var(--ink);
   font: inherit;
@@ -93,19 +110,20 @@
 }
 
 .build-btn:hover:not(:disabled) {
-  border-color: var(--rule);
+  background: var(--paper-shade);
 }
 
 .build-btn.on,
 .build-btn.on:hover:not(:disabled) {
-  border-color: var(--rule);
   background: var(--ink);
-  color: var(--paper);
+  color: var(--paper-raised);
 }
 
 .bb-name {
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
 }
 
 kbd {
@@ -114,23 +132,13 @@ kbd {
   right: 3px;
   padding: 0 4px;
   border: var(--bw-hair) solid var(--kbd-border);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--paper-shade);
   color: var(--ink-2);
-  font-family: var(--font-body);
+  font-family: var(--font-display);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.35;
-}
-
-.build-btn.on kbd {
-  background: var(--paper);
-  color: var(--ink);
-}
-
-.bb-tabs kbd {
-  position: static;
-  margin-left: var(--sp-1);
 }
 
 .bb-items .tooltip {
@@ -150,7 +158,7 @@ kbd {
   display: block;
   margin-bottom: var(--sp-1);
   font-family: var(--font-display);
-  font-style: italic;
+  font-weight: 400;
   color: var(--ink-2);
 }
 
@@ -180,14 +188,14 @@ kbd {
   }
 }
 
-/* Tools closed until a goal pays them: dimmed, a lock in the corner, the goal in the hover card. */
+/* Tools closed until a tech pays them: dimmed, a lock in the corner, the goal in the hover card. */
 .build-btn.locked {
   color: var(--pencil);
   cursor: not-allowed;
 }
 
 .build-btn.locked .icon:not(.bb-lock) {
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .bb-lock {
@@ -202,4 +210,124 @@ kbd {
   margin-bottom: var(--sp-1);
   font-weight: 700;
   color: var(--warn-text);
+}
+
+/* The bar is the bottom bracket of the frame: tar, like the top bar, so the map sits between two dark edges
+   and the bark sheets stay the only pale surfaces. */
+.panel.bb-panel {
+  background: linear-gradient(180deg, #26302b, var(--moss-deep) 72%);
+  border-color: #141a16;
+  color: var(--paper-raised);
+}
+
+.bb-panel .tabs {
+  border-bottom-color: #141a16;
+}
+
+.bb-panel .tab {
+  color: var(--paper-raised);
+}
+
+.bb-tabs .tab.on,
+.bb-tabs .tab.on:hover {
+  background: var(--resin);
+  border-color: var(--resin);
+  color: #1a1509;
+}
+
+.bb-tabs .tab:not(.on):hover {
+  background: #33403a;
+}
+
+.bb-panel .build-btn {
+  color: var(--paper-raised);
+}
+
+.bb-panel .build-btn:hover:not(:disabled) {
+  background: #33403a;
+  border-color: #56645c;
+}
+
+.bb-panel .build-btn.on,
+.bb-panel .build-btn.on:hover:not(:disabled) {
+  background: var(--resin);
+  border-color: var(--resin);
+  color: #1a1509;
+}
+
+.bb-panel .build-btn.locked {
+  color: #9a9482;
+}
+
+.bb-panel .build-btn.locked .bb-lock {
+  color: #c2bba8;
+}
+
+
+
+
+/* ---- States and finish of the bar ---- */
+
+/* Tabs span the whole bar: one course per category, the shortcut as a quiet mark in the corner. */
+.bb-tabs {
+  width: 100%;
+}
+
+.bb-tabs .tab {
+  position: relative;
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.bb-items .build-btn kbd,
+.bb-tabs .tab kbd {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #9a9482;
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.bb-tabs .tab kbd {
+  top: 2px;
+  right: 6px;
+}
+
+.bb-tabs .tab.on kbd {
+  color: #1a1509;
+  opacity: 0.75;
+}
+
+/* Hover and the live tool belong to the tar bar, never to bark. */
+.bb-panel .build-btn:hover:not(:disabled) {
+  background: #33403a;
+}
+
+.bb-panel .build-btn.on,
+.bb-panel .build-btn.on:hover:not(:disabled) {
+  background: var(--resin);
+  color: #1a1509;
+}
+
+.bb-panel .build-btn.on kbd {
+  color: #1a1509;
+  opacity: 0.8;
+}
+
+/* The card follows the pointer. A clicked tile keeps focus, so focus alone must not hold it open:
+   the keyboard still gets the card through :focus-visible, a mouse click does not. */
+.bb-items .tooltip-wrap:focus-within .tooltip {
+  display: none;
+}
+
+.bb-items .tooltip-wrap:hover .tooltip,
+.bb-items .tooltip-wrap:has(:focus-visible) .tooltip {
+  display: flex;
 }

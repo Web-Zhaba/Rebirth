@@ -5,9 +5,10 @@ const smoothstep = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-// Snow on the ground: absent below a dusting, a paper-white veil at half opacity once the pack is deep.
+// Snow on the ground: absent below a dusting, then a cold veil that thickens with the pack. It must read as snow over a
+// dark land — a half-opaque white over dark green is only pale green.
 export function snowOpacity(snowpack: number): number {
-  return 0.5 * smoothstep(0.01, 0.4, snowpack);
+  return 0.78 * smoothstep(0.01, 0.4, snowpack);
 }
 
 // The wind on the map, as the trees sway and the water ripples: westerly (the zonal wind of sim/weather.ts).
@@ -15,7 +16,7 @@ export const WIND_DIR: [number, number] = [0.98, 0.2]; // toward the east
 
 // Ice on water: nothing until the ice has some thickness, then a translucent pale sheet.
 export function iceOpacity(ice: number): number {
-  return 0.55 * smoothstep(0.15, 0.8, ice);
+  return 0.8 * smoothstep(0.15, 0.8, ice);
 }
 
 // A cool haze for overcast and wet weather; rain adds a little more than cloud alone.

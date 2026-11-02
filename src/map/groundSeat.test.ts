@@ -3,8 +3,6 @@ import { buildHeritageModel } from "./heritageModels";
 import { drapeRoad, ROAD_LIFT, seatBridge, seatBuilding } from "./groundSeat";
 import type { Model, XY } from "./modelGeometry";
 import { buildRoadModel } from "./roadModels";
-import { projectModel } from "./modelBuffers";
-import { makeFrame } from "../world/frame";
 
 const zs = (m: Model) => m.positions.filter((_, i) => i % 3 === 2);
 const ring: XY[] = [[0, 0], [10, 0], [10, 6], [0, 6]];
@@ -26,12 +24,14 @@ describe("groundSeat", () => {
 
   it("keeps the facade height above the model's own ground (windows are laid out by it)", () => {
     const m = buildHeritageModel(ring, 6, "house");
-    const frame = makeFrame(55.75, 37.6);
-    const origin = { lng: frame.toLngLat(0, 0)[0], lat: frame.toLngLat(0, 0)[1] };
-    const flat = projectModel(m, frame.toLngLat, origin);
-    const seated = projectModel(seatBuilding(m, ring, (x) => 130 + x * 0.3, "#888888"), frame.toLngLat, origin);
-    expect(Array.from(seated.z.slice(0, flat.z.length))).toEqual(Array.from(flat.z));
-    expect(Math.max(...seated.m.filter((_, i) => i % 3 === 2))).toBeGreaterThan(133);
+    const s = seatBuilding(m, ring, (x) => 130 + x * 0.3, "#888888");
+    // the height the facades are laid out by: the vertex's z less the lift the seat gave it (view/engine/models.ts)
+    const facadeZ = (q: Model) => zs(q).map((z, k) => z - (q.lift?.[k] ?? 0));
+    const own = facadeZ(m);
+    facadeZ(s)
+      .slice(0, own.length)
+      .forEach((z, k) => expect(z).toBeCloseTo(own[k], 9));
+    expect(Math.max(...zs(s))).toBeGreaterThan(133);
   });
 
   it("adds no plinth on flat ground", () => {

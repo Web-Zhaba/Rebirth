@@ -11,17 +11,20 @@ import { SERVICE, SERVICES } from "../sim/services";
 import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
 import type { Building, BuildingQuery, FoundFoundation, ProductionInfo, Stock } from "../sim/types";
-import { selectedBuilding } from "../map/buildingLayer";
+import { selectedBuilding } from "../view/layers/buildings";
 import { PLACE_TOOLS, tool, type PlaceTool } from "../map/tools";
 import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simClient";
 import { Icon } from "./Icon";
 import { act, InspectorHead, Line, num, plural, siteEta, SiteLevers } from "./InspectorParts";
 import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspectorModel";
 import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
-import { Button, Confirm, IconButton, ProgressBar } from "./kit";
+import { Button, Confirm, IconButton, ProgressBar, Segmented } from "./kit";
+import { TRADE, TRADE_GOODS, tradeCapacity, tradeRate, type TradeGood, type TradeOrder } from "../sim/trade";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
 import { duplicateTemplate } from "./actionModel";
+import { followResident } from "./follow";
+import { NeedsBars } from "./NeedsBars";
 import { SEMANTIC_IDS } from "./semanticIds";
 
 const REFRESH_MS = 4000;
@@ -166,6 +169,53 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
 
 const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
 
+const TRADE_LABEL: Record<TradeGood, string> = { food: "Еда", logs: "Брёвна", planks: "Доски", stone: "Камень", wares: "Товары" };
+const TRADE_OFF = { id: "none", label: "—", title: "Не меняем" } as const;
+
+// The town's trade order, shown in every market: one good given, one got, swapped each day by the market workers.
+function MarketTrade({ workers }: { workers: number }) {
+  const order = state.value?.levers.trade ?? null;
+  const last = state.value?.economy.trade;
+  const st = stock.value ?? EMPTY_STOCK;
+  const set = (o: TradeOrder | null) => act({ type: "setTrade", order: o });
+  const options = (skip: TradeGood | null) => TRADE_GOODS.map((g) => ({ id: g as string, label: TRADE_LABEL[g], title: OUTPUT[g].name, disabled: g === skip }));
+  const unit = (g: TradeGood) => OUTPUT[g].unit;
+  const surplus = order ? st[order.give] - TRADE.keep[order.give] : 0;
+  return (
+    <div class="prod">
+      <div class="people-title">Обмен</div>
+      <Segmented
+        label="Отдаём"
+        value={order?.give ?? TRADE_OFF.id}
+        options={[TRADE_OFF, ...options(null)]}
+        onChange={(id) => {
+          if (id === TRADE_OFF.id) return set(null);
+          const give = id as TradeGood;
+          set({ give, get: order && order.get !== give ? order.get : give === "wares" ? "food" : "wares" });
+        }}
+      />
+      {order && (
+        <>
+          <Segmented label="Получаем" value={order.get} options={options(order.give)} onChange={(id) => set({ give: order.give, get: id as TradeGood })} />
+          <div>
+            1 {unit(order.give)} = {num(tradeRate(order))} {unit(order.get)} · до {num(tradeCapacity(order, workers))} {unit(order.give)} в день
+          </div>
+          <div class="people-note">
+            Остаётся на складе: {num(TRADE.keep[order.give])} {unit(order.give)}. Обмен общий для всех рынков
+          </div>
+          {workers === 0 && <div class="prod-warn">Некому торговать: нужны работники рынка</div>}
+          {workers > 0 && surplus <= 0 && <div class="prod-warn">Излишков нет: всё, что есть, остаётся на складе</div>}
+          {last && (
+            <div>
+              Вчера: отдали {num(last.gave)} {unit(last.give)}, получили {num(last.got)} {unit(last.get)}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Inspector of the selected building (right slot).
 export function BuildingPanel() {
   const [confirming, setConfirming] = useState(false);
@@ -302,6 +352,7 @@ export function BuildingPanel() {
         </Line>
       )}
       {info?.kind === "workplace" && info.production && <Production template={b.template} p={info.production} />}
+      {b.template === "market" && b.state === "active" && info?.kind === "workplace" && <MarketTrade workers={info.workers.length} />}
       {info?.kind === "house" &&
         (info.households.length === 0 ? (
           <div class="people-note">Пока пустует</div>
@@ -314,11 +365,18 @@ export function BuildingPanel() {
               </div>
               {h.people.map((p) => (
                 <div class="person" key={p.id}>
-                  <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет")}
+                  <div class="person-line">
+                    <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет")}
+                    <button type="button" class="link person-follow" title={`Следить за ${p.name}`} onClick={() => followResident(p.id, p.name)}>
+                      <Icon name="locate" size={13} /> следить
+                    </button>
+                  </div>
                   <div class="person-role">
                     {p.role}
                     {p.literate ? " · грамотный" : p.learn > 0 && ` · грамотность ${p.learn} %`}
                   </div>
+                  {p.needs && <NeedsBars needs={p.needs} compact />}
+                  {p.problems && p.problems.length > 0 && <div class="prod-warn">Тяжело: {p.problems.join(", ")}</div>}
                 </div>
               ))}
             </div>
@@ -329,11 +387,19 @@ export function BuildingPanel() {
           {group ? <StaffControl id={b.id} group={group} jobs={info.capacity} workers={info.workers.length} staff={b.staff} /> : <div class="people-title">Работники {info.workers.length} из {info.capacity}</div>}
           {info.workers.map((w) => (
             <div class="person" key={w.id}>
-              <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет")}
+              <div class="person-line">
+                <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет")}
+                <button type="button" class="link person-follow" title={`Следить за ${w.name}`} onClick={() => followResident(w.id, w.name)}>
+                  <Icon name="locate" size={13} /> следить
+                </button>
+              </div>
               <div class="person-role">
                 {w.idle && "сейчас на стройке (нет работы) · "}
                 {w.commute === null ? "дорога неизвестна" : `дорога ~${Math.round(w.commute)} мин`}
+                {typeof w.work === "number" && w.work < 0.95 ? ` · силы ${Math.round(w.work * 100)} %` : ""}
               </div>
+              {w.needs && <NeedsBars needs={w.needs} compact />}
+              {w.problems && w.problems.length > 0 && <div class="prod-warn">Тяжело: {w.problems.join(", ")}</div>}
             </div>
           ))}
         </div>

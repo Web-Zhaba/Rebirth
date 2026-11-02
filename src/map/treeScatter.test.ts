@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { DAYS_PER_SEASON, START_MINUTE_OF_DAY } from "../sim/clock";
 import { TREE_COLORS } from "../ui/palette";
 import { buildTree, crownAt, KIND_INFO, reedAt } from "./treeModels";
-import { impostorRadius } from "./treeImpostor";
 import { coniferShare, keepAt, MIN_KEEP, scatterDetails, scatterTrees, thinReach, TREE_KINDS, TREE_STRIDE, type DetailPoly, type ForestPoly } from "./treeScatter";
 
 const square = (x0: number, y0: number, x1: number, y1: number): ForestPoly => ({ bbox: [x0, y0, x1, y1], rings: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1]]] });
@@ -67,10 +66,6 @@ describe("trees", () => {
         return t.indices.length / 3;
       });
       expect(tris[1]).toBeLessThanOrEqual(6);
-      // the impostor's view holds the whole tree, turned any way about its middle, and not much more
-      const r = impostorRadius(buildTree(kind, 0));
-      expect(r).toBeGreaterThan(0.5);
-      expect(r).toBeLessThan(KIND_INFO[kind].tall > 5 ? 0.65 : 0.9);
     }
     for (const kind of ["conifer", "broadleaf", "birch", "reed"] as const) expect(buildTree(kind, 0).crown).toContain(0); // a trunk, or the reeds' heads
     expect(buildTree("boulder", 0).crown).not.toContain(0); // snow lies all over a boulder

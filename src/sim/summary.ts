@@ -66,7 +66,13 @@ export function daySummary(s: SimState): DaySummary {
     lines.push({ kind: "problem", text: e.text, ...(e.pos ? { pos: e.pos } : {}) });
   }
   if (s.prod.flags.hungry && !seen.has("Еда закончилась, люди голодают")) lines.push({ kind: "problem", text: "Люди голодают" });
-  const idle = peopleStats(s).unemployed;
+  const ps = peopleStats(s);
+  const needs = ps.needs;
+  if (needs.starving > 0) lines.push({ kind: "problem", text: `Истощены: ${needs.starving}` });
+  if (needs.tired > 0) lines.push({ kind: "problem", text: `Не высыпаются: ${needs.tired}` });
+  if (needs.lonely > 0) lines.push({ kind: "problem", text: `Одиноки: ${needs.lonely}` });
+  if (needs.freezing > 0) lines.push({ kind: "problem", text: `Мёрзнут: ${needs.freezing}` });
+  const idle = ps.unemployed;
   if (idle > 0) lines.push({ kind: "problem", text: `Без дела: ${idle} ${plural(idle, "взрослый", "взрослых", "взрослых")}` });
 
   return { at: s.gameMinutes, lines };

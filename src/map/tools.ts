@@ -1,10 +1,10 @@
 import { play } from "../ui/sound";
-import type * as maplibregl from "maplibre-gl";
 import { effect, signal } from "@preact/signals";
 import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 import { shouldRepeatTool } from "../ui/inputModel";
 import { storedChoice } from "../ui/preferenceModel";
+import { mppAtZoom, type View } from "../view/view";
 
 // Road tools; a tool plus its material (see roadMaterial) picks the sim RoadKind. restore: rebuild a revealed old street as a whole.
 export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
@@ -17,6 +17,7 @@ export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
+export const isZoneTool = (t: Tool): t is ZoneTool => isBrushTool(t) || t === "field" || t === "clearing";
 export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
@@ -28,9 +29,9 @@ effect(() => {
   if (current) lastTool.value = current;
 });
 
-export function attachToolRepeat(map: maplibregl.Map): void {
-  map.getCanvas().addEventListener("mousedown", (e) => {
-    if (!shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
+export function attachToolRepeat(view: View): void {
+  view.canvas.addEventListener("pointerdown", (e: PointerEvent) => {
+    if (!e.isPrimary || !shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
     e.preventDefault();
     tool.value = lastTool.peek();
   });
@@ -71,28 +72,28 @@ export function flash(text: string): void {
   msgTimer = window.setTimeout(() => (toolMsg.value = null), 3500);
 }
 
-export const MIN_ZONE_ZOOM = 15;
-export const MIN_ROAD_ZOOM = 14;
+// Drawing is allowed only when the map is closer than these (metres per pixel; the zoom they were set at is noted).
+export const ZONE_MAX_MPP = mppAtZoom(15); // old MIN_ZONE_ZOOM 15
+export const ROAD_MAX_MPP = mppAtZoom(14); // old MIN_ROAD_ZOOM 14
 
-// Drawing tools own the drag: the map must not pan under them (Space pans temporarily).
+// Drawing and placement tools own map input; Space temporarily gives panning back to the camera.
 let panOff = false;
 let spaceHeld = false;
 export const setSpacePan = (on: boolean): void => {
   spaceHeld = on;
 };
-export function syncPan(map: maplibregl.Map): void {
-  const t = tool.value;
-  const zoom = map.getZoom();
-  const want = !!t && !spaceHeld && (isRoadTool(t) ? zoom >= MIN_ROAD_ZOOM : isBrushTool(t) ? zoom >= MIN_ZONE_ZOOM : false);
-  if (want === panOff) return;
-  panOff = want;
-  if (want) map.dragPan.disable();
-  else map.dragPan.enable();
+export function panLockedForTool(t: Tool | null, mpp: number, temporaryPan = false): boolean {
+  if (!t || temporaryPan) return false;
+  if (isRoadTool(t)) return mpp <= ROAD_MAX_MPP;
+  return (isZoneTool(t) || isPlaceTool(t)) && mpp <= ZONE_MAX_MPP;
 }
 
-const EQUATOR_M = 40075016.686;
-// Meters of ground per screen pixel (MapLibre uses 512 px tiles).
-export const mapMpp = (lat: number, zoom: number) => (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+export function syncPan(view: View): void {
+  const want = panLockedForTool(tool.value, view.metersPerPixel(), spaceHeld);
+  if (want === panOff) return;
+  panOff = want;
+  view.setPanEnabled(!want);
+}
 
 export const ZONE_COLORS: Record<ZoneType, string> = { res: PALETTE.ok, craft: PALETTE.warn, trade: PALETTE.info };
 

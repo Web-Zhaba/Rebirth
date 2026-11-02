@@ -3,7 +3,7 @@ import { TREE_COLORS } from "../ui/palette";
 import { Mesh, revolve, rgb, type Model, type XY } from "./modelGeometry";
 import type { TreeKind } from "./treeScatter";
 
-// One tree of each kind, 1 m tall, on the shared mesh of modelGeometry.ts; the tree layer (treeLayer.ts) scales, turns
+// One tree of each kind, 1 m tall, on the shared mesh of modelGeometry.ts; the forest (engine/scene/treeAtlas.ts) scales, turns
 // and sways each instance. `crown` marks the vertices of the foliage (1) against the trunk (0): the layer recolours
 // seasonal crowns and whitens snow on them. The small details (a bush, a clump of reeds, a boulder) are built the same
 // way and drawn by the same layer: a boulder is all "crown" (snow lies on its top), its colour kept through the year.

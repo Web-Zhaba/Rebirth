@@ -1,5 +1,5 @@
 import { play } from "../ui/sound";
-import type * as maplibregl from "maplibre-gl";
+import type { View, ViewPointer } from "../view/view";
 import { effect, signal } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
 import { lockReason } from "../sim/tech";
@@ -15,7 +15,7 @@ import { etaText } from "./buildCost";
 import { needsRoadDemolishConfirm } from "../ui/actionModel";
 import { arcPath, snapAngle, type Pt } from "./curve";
 import { restoreMissingPieces } from "./roadRestoreModel";
-import { flash, isRoadTool, mapMpp, roadKindOf, MIN_ROAD_ZOOM, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
+import { flash, isRoadTool, roadKindOf, ROAD_MAX_MPP, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
 
 
 export const roadDemolishRequest = signal<number | null>(null);
@@ -94,13 +94,12 @@ interface Aim {
 }
 
 // Interactive road drawing and bulldozing on top of the map.
-export function attachRoadTool(map: maplibregl.Map): void {
+export function attachRoadTool(view: View): void {
   const label = document.createElement("div");
   label.className = "road-label";
   label.hidden = true;
-  map.getContainer().appendChild(label);
+  view.container.appendChild(label);
 
-  let ready = false;
   let start: Snap | null = null; // last placed point of the current chain
   let startOld: OldRef | null = null; // the old street start sits on
   let arcEnd: Snap | null = null; // arc mode: the chord's far end; the cursor then bends the arc
@@ -112,11 +111,14 @@ export function attachRoadTool(map: maplibregl.Map): void {
   let timer = 0;
   let pendingCost: { pts: Pt[]; along: OldRef | null } | null = null;
   let verdict: { ok: boolean; text: string } | null = null;
-  let lastEvent: maplibregl.MapMouseEvent | null = null;
+  let lastEvent: ViewPointer | null = null;
   let streetHint = ""; // " · по старой улице X" while the snap is on a named old street
   let angleHint = ""; // "45°" while Shift locks the direction
-  let pressing = false; // left button is down on the map
+  let pressing = false; // the primary pointer is down on the map
   let dragging = false; // the press has become a drag
+  let activePointerId: number | null = null;
+  const activePointers = new Set<number>();
+  let multiPointer = false;
   let pressScreen: { x: number; y: number } | null = null;
   let pressSnap: Snap | null = null; // where the drag began
   let pressOld: OldRef | null = null;
@@ -124,47 +126,6 @@ export function attachRoadTool(map: maplibregl.Map): void {
   let spaceDown = false;
   let shiftDown = false;
   let restore: Restore | null = null;
-
-  const source = (id: string) => map.getSource(id) as maplibregl.GeoJSONSource | undefined;
-
-  const setup = () => {
-    if (ready) return;
-    ready = true;
-    map.addSource("road-preview", { type: "geojson", data: empty() });
-    map.addSource("road-hover", { type: "geojson", data: empty() });
-    map.addSource("road-snap", { type: "geojson", data: empty() });
-    map.addLayer({
-      id: "road-hover",
-      type: "line",
-      source: "road-hover",
-      paint: { "line-color": PALETTE.bad, "line-width": 6, "line-opacity": 0.75 },
-    });
-    map.addLayer({
-      id: "road-preview",
-      type: "line",
-      source: "road-preview",
-      paint: {
-        "line-color": ["case", ["get", "ok"], PALETTE.ok, PALETTE.bad],
-        "line-width": 3,
-        "line-dasharray": [2, 1.5],
-      },
-    });
-    map.addLayer({
-      id: "road-snap",
-      type: "circle",
-      source: "road-snap",
-      paint: {
-        "circle-radius": 6,
-        "circle-color": PALETTE.paperRaised,
-        "circle-stroke-color": PALETTE.info,
-        "circle-stroke-width": 2,
-      },
-    });
-  };
-  const ensure = () => {
-    if (map.isStyleLoaded()) setup();
-    return ready;
-  };
 
   const setLabel = (raw: string | null) => {
     const base = raw === null ? (streetHint ? streetHint.slice(3) : null) : raw + streetHint;
@@ -188,20 +149,19 @@ export function attachRoadTool(map: maplibregl.Map): void {
     hoverEdge = null;
     streetHint = "";
     angleHint = "";
-    if (!ready) return;
-    source("road-preview")?.setData(empty());
-    source("road-hover")?.setData(empty());
-    source("road-snap")?.setData(empty());
+    view.overlay("road-preview").setData(empty());
+    view.overlay("road-hover").setData(empty());
+    view.overlay("road-snap").setData(empty());
     setLabel(null);
   };
 
   const drawPreview = (pts: readonly Pt[]) => {
     const f = frame.value;
     if (!f || pts.length < 2) {
-      source("road-preview")?.setData(empty());
+      view.overlay("road-preview").setData(empty());
       return;
     }
-    source("road-preview")?.setData({
+    view.overlay("road-preview").setData({
       type: "FeatureCollection",
       features: [
         {
@@ -229,7 +189,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       s && f && guide
         ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: f.toLngLat(s.x, s.y) } }]
         : [];
-    source("road-snap")?.setData({ type: "FeatureCollection", features: pt });
+    view.overlay("road-snap").setData({ type: "FeatureCollection", features: pt });
   };
 
   const costText = (len: number, labor: number, stone = 0) =>
@@ -280,18 +240,18 @@ export function attachRoadTool(map: maplibregl.Map): void {
     return id;
   };
 
-  const context = (e: maplibregl.MapMouseEvent) => {
+  const context = (e: ViewPointer) => {
     const f = frame.value;
     const g = roads.value;
     if (!f || !g) return null;
-    const [x, y] = f.toLocal(e.lngLat.lng, e.lngLat.lat);
-    const tol = SNAP_PX * mapMpp(e.lngLat.lat, map.getZoom());
+    const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
+    const tol = SNAP_PX * view.metersPerPixel();
     return { f, g, x, y, tol };
   };
 
-  const shiftOn = (e: maplibregl.MapMouseEvent) => shiftDown || !!e.originalEvent.shiftKey;
+  const shiftOn = (e: ViewPointer) => shiftDown || !!e.original.shiftKey;
 
-  const aim = (e: maplibregl.MapMouseEvent, ctx: NonNullable<ReturnType<typeof context>>, anchor: Snap | null): Aim => {
+  const aim = (e: ViewPointer, ctx: NonNullable<ReturnType<typeof context>>, anchor: Snap | null): Aim => {
     const r = resolve(ctx.g, { x: ctx.x, y: ctx.y }, ctx.tol);
     if (!anchor || !shiftOn(e)) return { snap: r.snap, old: r.old, guide: r.guide, name: r.name, deg: null };
     const a = snapAngle([anchor.x, anchor.y], [ctx.x, ctx.y], ANGLE_STEP_DEG);
@@ -403,7 +363,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
   const drawRestore = (r: Restore) => {
     const f = frame.value;
     if (!f) return;
-    source("road-preview")?.setData({
+    view.overlay("road-preview").setData({
       type: "FeatureCollection",
       features: r.lines.map((l) => ({
         type: "Feature",
@@ -529,14 +489,15 @@ export function attachRoadTool(map: maplibregl.Map): void {
     if (lastEvent) onMove(lastEvent);
   };
 
-  const onMove = (e: maplibregl.MapMouseEvent) => {
+  const onMove = (e: ViewPointer) => {
+    if (multiPointer || !e.isPrimary || (activePointerId !== null && e.pointerId !== activePointerId)) return;
     lastEvent = e;
-    cursor = { x: e.point.x, y: e.point.y };
+    cursor = { x: e.point[0], y: e.point[1] };
     const t = roadT();
-    if (!t || !ensure()) return;
+    if (!t) return;
     const ctx = context(e);
     if (!ctx) return;
-    if (map.getZoom() < MIN_ROAD_ZOOM) {
+    if (view.metersPerPixel() > ROAD_MAX_MPP) {
       clearOverlay();
       setLabel("Приблизьте карту");
       return;
@@ -550,13 +511,13 @@ export function attachRoadTool(map: maplibregl.Map): void {
       hoverEdge = nearestEdge(x, y, tol);
       const edge = hoverEdge === null ? null : g.edges[hoverEdge];
       if (!edge) {
-        source("road-hover")?.setData(empty());
+        view.overlay("road-hover").setData(empty());
         setLabel(null);
         return;
       }
       const a = g.nodes[edge.a];
       const b = g.nodes[edge.b];
-      source("road-hover")?.setData({
+      view.overlay("road-hover").setData({
         type: "FeatureCollection",
         features: [line(f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y))],
       });
@@ -578,7 +539,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       return;
     }
     if (pressing && pressScreen) {
-      if (!dragging && Math.hypot(e.point.x - pressScreen.x, e.point.y - pressScreen.y) >= DRAG_PX) dragging = true;
+      if (!dragging && Math.hypot(e.point[0] - pressScreen.x, e.point[1] - pressScreen.y) >= DRAG_PX) dragging = true;
       const anchor = pressSnap;
       if (dragging && anchor) {
         const a = aim(e, ctx, anchor);
@@ -600,15 +561,15 @@ export function attachRoadTool(map: maplibregl.Map): void {
     showPath([[start.x, start.y], [a.snap.x, a.snap.y]], sameOldStreet(startOld, a.old));
   };
 
-  const onClick = (e: maplibregl.MapMouseEvent) => {
+  const onClick = (e: ViewPointer) => {
     if (suppressClick) {
       suppressClick = false;
       return;
     }
     const t = roadT();
-    if (!t || busy || !ensure()) return;
+    if (!t || busy) return;
     const ctx = context(e);
-    if (!ctx || map.getZoom() < MIN_ROAD_ZOOM || spaceDown) return;
+    if (!ctx || view.metersPerPixel() > ROAD_MAX_MPP || spaceDown) return;
     if (t === "restore") {
       void commitRestore();
       return;
@@ -619,7 +580,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
       if (id === null) return;
       const edge = g.edges[id];
       hoverEdge = null;
-      source("road-hover")?.setData(empty());
+      view.overlay("road-hover").setData(empty());
       setLabel(null);
       if (edge && needsRoadDemolishConfirm(edge.kind, edge.done, edge.labor)) {
         roadDemolishRequest.value = id;
@@ -654,31 +615,50 @@ export function attachRoadTool(map: maplibregl.Map): void {
     commitPath([[start.x, start.y], [a.snap.x, a.snap.y]], a.snap, a.old);
   };
 
-  const onDown = (e: maplibregl.MapMouseEvent) => {
-    suppressClick = false;
-    const t = roadT();
-    if (!t || !roadKindOf(t) || busy || spaceDown || arcEnd || !ensure()) return;
-    if (e.originalEvent.button !== 0) return;
-    const ctx = context(e);
-    if (!ctx || map.getZoom() < MIN_ROAD_ZOOM) return;
-    const a = aim(e, ctx, null);
-    pressing = true;
-    dragging = false;
-    pressScreen = { x: e.point.x, y: e.point.y };
-    pressSnap = a.snap;
-    pressOld = a.old;
-  };
-
-  const onUp = () => {
-    if (!pressing) return;
-    const wasDrag = dragging;
-    const anchor = pressSnap;
-    const anchorOld = pressOld;
+  const resetPress = () => {
     pressing = false;
     dragging = false;
     pressScreen = null;
     pressSnap = null;
     pressOld = null;
+  };
+
+  const onDown = (e: ViewPointer) => {
+    if (e.pointerId === null) return;
+    if (activePointers.size === 0) multiPointer = false;
+    activePointers.add(e.pointerId);
+    if (activePointers.size > 1 || !e.isPrimary) {
+      multiPointer = true;
+      activePointerId = null;
+      resetPress();
+      clearOverlay();
+      return;
+    }
+    activePointerId = e.pointerId;
+    suppressClick = false;
+    const t = roadT();
+    if (!t || !roadKindOf(t) || busy || spaceDown || arcEnd) return;
+    if (e.original.button !== 0) return;
+    const ctx = context(e);
+    if (!ctx || view.metersPerPixel() > ROAD_MAX_MPP) return;
+    const a = aim(e, ctx, null);
+    pressing = true;
+    dragging = false;
+    pressScreen = { x: e.point[0], y: e.point[1] };
+    pressSnap = a.snap;
+    pressOld = a.old;
+  };
+
+  const onUp = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 0) multiPointer = false;
+    if (activePointerId !== e.pointerId) return;
+    activePointerId = null;
+    if (!pressing) return;
+    const wasDrag = dragging;
+    const anchor = pressSnap;
+    const anchorOld = pressOld;
+    resetPress();
     if (!wasDrag || !anchor || !lastEvent || spaceDown) return;
     suppressClick = true;
     const ctx = context(lastEvent);
@@ -696,6 +676,16 @@ export function attachRoadTool(map: maplibregl.Map): void {
     commitPath([[anchor.x, anchor.y], [a.snap.x, a.snap.y]], a.snap, a.old);
   };
 
+  const onCancel = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 0) multiPointer = false;
+    if (activePointerId !== e.pointerId) return;
+    activePointerId = null;
+    resetPress();
+    clearOverlay();
+    if (!multiPointer && lastEvent) onMove(lastEvent);
+  };
+
   const endChain = () => {
     start = null;
     startOld = null;
@@ -710,10 +700,9 @@ export function attachRoadTool(map: maplibregl.Map): void {
   };
 
   // Back from the bend stage to the chord, or out of the chain.
-  const onContext = (e: maplibregl.MapMouseEvent) => {
+  const onContext = (e: ViewPointer) => {
     if (!roadT()) return;
-    e.preventDefault();
-    e.originalEvent.preventDefault();
+    e.original.preventDefault();
     if (arcEnd) {
       arcEnd = null;
       arcOld = null;
@@ -739,7 +728,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
         pressOld = null;
       }
       setSpacePan(true);
-      syncPan(map);
+      syncPan(view);
       clearOverlay();
       return;
     }
@@ -761,7 +750,7 @@ export function attachRoadTool(map: maplibregl.Map): void {
     if (e.key === " ") {
       spaceDown = false;
       setSpacePan(false);
-      syncPan(map);
+      syncPan(view);
       if (roadT() && lastEvent) onMove(lastEvent);
     } else if (e.key === "Shift") {
       shiftDown = false;
@@ -769,28 +758,45 @@ export function attachRoadTool(map: maplibregl.Map): void {
     }
   };
 
-  map.on("mousemove", onMove);
-  map.on("mousedown", onDown);
-  map.on("click", onClick);
-  map.on("contextmenu", onContext);
-  map.on("zoom", () => syncPan(map));
-  map.getCanvas().addEventListener("mouseleave", () => {
+  view.on("pointermove", onMove);
+  view.on("pointerdown", onDown);
+  // Track every canvas pointer, including a second finger placed over the sky.
+  // The View event above only dispatches when the ray hits the planet.
+  const trackPointerDown = (e: PointerEvent) => {
+    if (activePointers.size === 0) multiPointer = false;
+    activePointers.add(e.pointerId);
+    if (activePointers.size > 1 || !e.isPrimary) {
+      const wasMultiPointer = multiPointer;
+      multiPointer = true;
+      activePointerId = null;
+      if (!wasMultiPointer) {
+        resetPress();
+        clearOverlay();
+      }
+    }
+  };
+  view.canvas.addEventListener("pointerdown", trackPointerDown);
+  view.on("click", onClick);
+  view.on("contextmenu", onContext);
+  view.on("move", () => syncPan(view));
+  view.canvas.addEventListener("pointerleave", () => {
     cursor = null;
     if (!start && !dragging) clearOverlay();
     else setLabel(null);
   });
-  window.addEventListener("mouseup", onUp);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
   window.addEventListener("keydown", onKey);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", () => {
     shiftDown = false;
     spaceDown = false;
-    pressing = false;
-    dragging = false;
-    pressSnap = null;
-    pressOld = null;
+    activePointers.clear();
+    activePointerId = null;
+    multiPointer = false;
+    resetPress();
     setSpacePan(false);
-    syncPan(map);
+    syncPan(view);
   });
 
   // Tool switched on or off from the toolbar.
@@ -806,16 +812,10 @@ export function attachRoadTool(map: maplibregl.Map): void {
     pressScreen = null;
     pressSnap = null;
     pressOld = null;
-    if (ready) clearOverlay();
-    map.getCanvas().style.cursor = t ? "crosshair" : "";
-    if (t) {
-      map.doubleClickZoom.disable();
-      map.boxZoom.disable(); // Shift-drag locks the road angle instead
-    } else {
-      map.doubleClickZoom.enable();
-      map.boxZoom.enable();
-    }
-    syncPan(map);
+    clearOverlay();
+    view.canvas.style.cursor = t ? "crosshair" : "";
+    view.setDoubleClickZoomEnabled(!t); // also box zoom: Shift-drag locks the road angle instead
+    syncPan(view);
   });
 
   // A different drawing mode starts a fresh chain.
@@ -830,6 +830,6 @@ export function attachRoadTool(map: maplibregl.Map): void {
     pressScreen = null;
     pressSnap = null;
     pressOld = null;
-    if (ready) clearOverlay();
+    clearOverlay();
   });
 }

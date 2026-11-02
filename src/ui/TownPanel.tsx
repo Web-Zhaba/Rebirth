@@ -1,6 +1,6 @@
-import { flyOrJump } from "../map/motion";
 import { signal } from "@preact/signals";
-import type * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
+import { atLeastAsClose, CLOSE_UP_MPP, TOWN_VIEW_MPP } from "../view/scale";
 import { useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { calendar } from "../sim/clock";
@@ -119,6 +119,19 @@ function PeopleTab() {
           {Math.round(eco.avgMood)} из 100
         </Line>
       )}
+      <Line label="Сытость">
+        {Math.round(p.needs.avg.food)} из 100{p.needs.starving > 0 ? ` · голодают ${p.needs.starving}` : ""}
+      </Line>
+      <Line label="Отдых">
+        {Math.round(p.needs.avg.rest)} из 100{p.needs.tired > 0 ? ` · не высыпаются ${p.needs.tired}` : ""}
+      </Line>
+      <Line label="Общение">
+        {Math.round(p.needs.avg.social)} из 100{p.needs.lonely > 0 ? ` · одиноки ${p.needs.lonely}` : ""}
+      </Line>
+      <Line label="Тепло">
+        {Math.round(p.needs.avg.warmth)} из 100{p.needs.freezing > 0 ? ` · мёрзнут ${p.needs.freezing}` : ""}
+      </Line>
+      <Line label="Силы к работе">{Math.round(p.needs.work * 100)} %</Line>
       {sv && sv.houses > 0 && <Line label="Земля, в среднем">{Math.round(sv.avgLandValue)}</Line>}
       {sv && sv.level2 > 0 && <Line label="Дома 2-го уровня">{sv.level2}</Line>}
       <Line label="Рождений и смертей">
@@ -150,7 +163,7 @@ function WeatherBlock() {
   );
 }
 
-function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
+function WorkTab({ city, view }: { city: City; view: View }) {
   const p = people.value;
   const dem = p?.demand ?? { res: 0, craft: 0, trade: 0 };
   const eco = economy.value;
@@ -199,7 +212,7 @@ function WorkTab({ city, map }: { city: City; map: maplibregl.Map }) {
       {cut.size > 0 && (
         <div class="hud-warn rs-warn">
           <Icon name="warning" size={16} /> Отрезано от лагеря: {cut.size} {plural(cut.size, "участок", "участка", "участков")} дорог. Их не построят: ведите дорогу от лагеря или от готовой дороги.{" "}
-          <button type="button" class="link" onClick={() => flyOrJump(map, { center: [city.lng, city.lat], zoom: Math.max(map.getZoom(), 16) })}>
+          <button type="button" class="link" onClick={() => view.flyTo({ center: [city.lng, city.lat], mpp: atLeastAsClose(view.metersPerPixel(), TOWN_VIEW_MPP) })}>
             К лагерю
           </button>
         </div>
@@ -240,7 +253,7 @@ function ServicesTab() {
   );
 }
 
-function EventsTab({ map }: { map: maplibregl.Map }) {
+function EventsTab({ view }: { view: View }) {
   const list = events.value.slice().reverse();
   const fl = frame.value;
   if (list.length === 0) return <div class="people-note">Пока тихо</div>;
@@ -255,7 +268,7 @@ function EventsTab({ map }: { map: maplibregl.Map }) {
               г{c.year} д{c.dayOfYear}
             </span>{" "}
             {pos && fl ? (
-              <button type="button" class="link event-go" title="Показать на карте" onClick={() => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}>
+              <button type="button" class="link event-go" title="Показать на карте" onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}>
                 {e.text}
               </button>
             ) : (
@@ -342,7 +355,7 @@ function OrdersTab() {
 }
 
 // Town panel (right slot): people, work and demand, services, events and orders.
-export function TownPanel({ city, map }: { city: City; map: maplibregl.Map }) {
+export function TownPanel({ city, view }: { city: City; view: View }) {
   if (rightPanel.value !== "town") return null;
   return (
     <aside class="rs-panel town-panel panel" id={SEMANTIC_IDS.townPanel} aria-label="Город">
@@ -359,9 +372,9 @@ export function TownPanel({ city, map }: { city: City; map: maplibregl.Map }) {
       <Tabs tabs={TABS} active={tab.value} onChange={(id) => (tab.value = id)} label="Разделы города" idPrefix="town" />
       <div class="rs-body" role="tabpanel" id={tabPanelId("town", tab.value)} aria-labelledby={tabId("town", tab.value)}>
         {tab.value === "people" && <PeopleTab />}
-        {tab.value === "work" && <WorkTab city={city} map={map} />}
+        {tab.value === "work" && <WorkTab city={city} view={view} />}
         {tab.value === "services" && <ServicesTab />}
-        {tab.value === "events" && <EventsTab map={map} />}
+        {tab.value === "events" && <EventsTab view={view} />}
         {tab.value === "orders" && <OrdersTab />}
       </div>
     </aside>

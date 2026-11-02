@@ -49,4 +49,11 @@ describe("top bar model", () => {
     expect(warnings({ ...base, eco: eco({ foodDays: 12 }) }).map((w) => w.id)).toEqual(["lowfood"]);
     expect(warnings({ ...base, queue: 3, builders: 0, building: 1, logs: 0 }).map((w) => w.id)).toEqual(["nohands", "nologs"]);
   });
+
+  it("names the residents whose needs are not met", () => {
+    const base = { food: 5000, eco: eco(), builders: 2, queue: 0, logs: 5, building: 0 };
+    const needs = { avg: { food: 40, rest: 90, social: 90, warmth: 90 }, starving: 3, tired: 2, lonely: 1, freezing: 4, work: 0.8 };
+    expect(warnings({ ...base, needs }).map((w) => w.id)).toEqual(["starving", "tired", "lonely", "freezing"]);
+    expect(warnings({ ...base, needs: { ...needs, starving: 0, tired: 0, lonely: 0, freezing: 0 } })).toEqual([]);
+  });
 });

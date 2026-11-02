@@ -10,6 +10,7 @@ import {
   isNatureWater,
   isNatureWaterway,
 } from "./nature";
+import { decodePng } from "./pngDecoder";
 import { decodeTerrariumPixels, TERRARIUM_SIZE } from "./terrain";
 
 // Geometry is kept in tile coordinates (0..extent) with a bbox for fast rejection.
@@ -49,18 +50,22 @@ function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   return p;
 }
 
+// Decode the same raw Terrarium bytes as the engine's DEM worker. Water levels and game terrain queries must not
+// go through the browser's colour-managed ImageBitmap/Canvas pipeline either.
+export async function decodeDemTile(input: ArrayBuffer | Uint8Array): Promise<Float32Array> {
+  const png = await decodePng(input);
+  if (png.width !== TERRARIUM_SIZE || png.height !== TERRARIUM_SIZE) {
+    throw new Error(`Unexpected Terrarium tile size: ${png.width}x${png.height}`);
+  }
+  return decodeTerrariumPixels(png.rgba);
+}
+
 export function getDemTile(x: number, y: number): Promise<Float32Array> {
   return cached(`dem/${x}/${y}`, async () => {
     const url = TERRAIN_URL.replace("{z}", String(TERRAIN_ZOOM)).replace("{x}", String(x)).replace("{y}", String(y));
     const res = await fetch(url);
     if (!res.ok) throw new Error(`${res.status} ${url}`);
-    // No color management or alpha premultiplication: the RGB bytes encode meters.
-    const bmp = await createImageBitmap(await res.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
-    const ctx = new OffscreenCanvas(TERRARIUM_SIZE, TERRARIUM_SIZE).getContext("2d", { willReadFrequently: true });
-    if (!ctx) throw new Error("2d context unavailable");
-    ctx.drawImage(bmp, 0, 0);
-    bmp.close();
-    return decodeTerrariumPixels(ctx.getImageData(0, 0, TERRARIUM_SIZE, TERRARIUM_SIZE).data);
+    return decodeDemTile(await res.arrayBuffer());
   });
 }
 
@@ -83,8 +88,12 @@ function tileTemplate(): Promise<string> {
 }
 
 // A missing tile (404/204) means no features there, e.g. open ocean.
+export async function vectorTileUrl(z: number, x: number, y: number): Promise<string> {
+  return (await tileTemplate()).replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
+}
+
 export async function loadVector(z: number, x: number, y: number): Promise<VectorTile | null> {
-  const url = (await tileTemplate()).replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
+  const url = await vectorTileUrl(z, x, y);
   const res = await fetch(url);
   if (res.status === 404 || res.status === 204) return null;
   if (!res.ok) throw new Error(`${res.status} ${url}`);

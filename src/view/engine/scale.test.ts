@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { CLICK_TOLERANCE, distanceToMpp, isClick, markerTransform, mppToDistance } from "./scale";
+
+describe("mpp <-> distance", () => {
+  it("round-trips", () => {
+    expect(mppToDistance(distanceToMpp(12345, 36.87, 900), 36.87, 900)).toBeCloseTo(12345, 6);
+  });
+  it("is linear in distance and survives a zero-height canvas", () => {
+    expect(distanceToMpp(2000, 40, 600)).toBeCloseTo(2 * distanceToMpp(1000, 40, 600), 9);
+    expect(Number.isFinite(distanceToMpp(1000, 40, 0))).toBe(true);
+  });
+});
+
+describe("click vs drag", () => {
+  it("accepts small pointer drift such as a touchpad tap", () => {
+    expect(isClick([10, 10], [10 + CLICK_TOLERANCE, 10])).toBe(true);
+    expect(isClick([10, 10], [15, 10])).toBe(true);
+    expect(isClick([10, 10], [12, 12])).toBe(true);
+  });
+  it("rejects a deliberate drag beyond the click tolerance", () => {
+    expect(isClick([10, 10], [17, 10])).toBe(false);
+    expect(isClick([0, 0], [6, 6])).toBe(false);
+  });
+  it("lets a click without a press through", () => {
+    expect(isClick(null, [5, 5])).toBe(true);
+  });
+});
+
+describe("marker anchor", () => {
+  it("pin sits on its tip, custom elements on their centre", () => {
+    expect(markerTransform(100, 50, "bottom")).toContain("-100%");
+    expect(markerTransform(100, 50, "center")).toContain("-50%)");
+    expect(markerTransform(100, 50, "center")).not.toContain("-100%");
+  });
+});

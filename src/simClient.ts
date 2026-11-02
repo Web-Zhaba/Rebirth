@@ -1,8 +1,8 @@
 import { computed, effect, signal } from "@preact/signals";
-import type { Light, Trip } from "./map/lifeLayer";
+import type { Light, Trip } from "./map/life";
 import { BASE_TICK, clockAt, tickMs, type Speed } from "./sim/clock";
 import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
-import type { BuildingQuery, City, ClientState } from "./sim/types";
+import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";
 import { makeFrame } from "./world/frame";
 
 const LEGACY_KEY = "rebirth.save";
@@ -31,6 +31,8 @@ export const chronicle = computed(() => state.value?.chronicle ?? []);
 export const finds = computed(() => state.value?.finds ?? null);
 export const articles = computed(() => state.value?.articles ?? []);
 export const away = signal<Away | null>(null);
+// The save (or its absence) has come back from the worker: the game can be played from here on.
+export const loaded = signal(false);
 // Catch-up progress in game minutes while the worker advances the town; null otherwise.
 export const catchUp = signal<{ done: number; total: number } | null>(null);
 
@@ -58,6 +60,12 @@ export const gameMinPerSec = (): number => {
   return s && speed.peek() > 0 ? (BASE_TICK * 1000) / tickMs(s.gameMinutes, { speed: speed.peek(), offline: false }) : 0;
 };
 
+// The game clock interpolated to this instant: smooth enough to follow a walker dot.
+export const gameNow = (): number => {
+  const s = state.peek();
+  return s ? clockAt(s.gameMinutes, s.realTime, Date.now(), speed.peek()) : gameClock.peek();
+};
+
 const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module" });
 const send = (msg: ToWorker) => worker.postMessage(msg);
 
@@ -72,14 +80,23 @@ export function sendCmd(cmd: Cmd): Promise<CmdResult> {
   });
 }
 
-const queries = new Map<number, (d: BuildingQuery | null) => void>();
+const queries = new Map<number, (d: BuildingQuery | ResidentQuery | null) => void>();
 
 // Who lives in / works at a building; null when it does not exist (any more).
 export function queryBuilding(id: number): Promise<BuildingQuery | null> {
   return new Promise((resolve) => {
     const qid = nextCmdId++;
-    queries.set(qid, resolve);
+    queries.set(qid, (d) => resolve(d && d.kind !== "resident" ? d : null));
     send({ t: "query", id: qid, q: { type: "building", id } });
+  });
+}
+
+// One resident by id, for the follow mode; null when they are gone.
+export function queryResident(id: number): Promise<ResidentQuery | null> {
+  return new Promise((resolve) => {
+    const qid = nextCmdId++;
+    queries.set(qid, (d) => resolve(d && d.kind === "resident" ? d : null));
+    send({ t: "query", id: qid, q: { type: "resident", id } });
   });
 }
 
@@ -99,6 +116,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       state.value = m.save?.sim ?? null;
       away.value = m.away;
       catchUp.value = null;
+      loaded.value = true;
       break;
     case "progress":
       catchUp.value = { done: m.done, total: m.total };

@@ -1,13 +1,12 @@
-import { flyOrJump } from "../map/motion";
 import { useEffect, useRef, useState } from "preact/hooks";
-import * as maplibregl from "maplibre-gl";
+import { FOUND_MPP } from "../view/scale";
+import type { View, ViewMarker, ViewPointer } from "../view/view";
 import { found as foundCity } from "../simClient";
 import { sampleSite } from "../world/site";
 import { landAt, nearRiver, type Land } from "../world/landcover";
 import { terrainAt } from "../world/terrain";
 import type { Site } from "../sim/types";
-import { Icon } from "./Icon";
-import { Button, Panel } from "./kit";
+import { Button } from "./kit";
 import { siteNotes, suggestNames } from "./foundModel";
 import { PlaceSearch } from "./PlaceSearch";
 import "./journal.css";
@@ -48,35 +47,35 @@ async function survey({ lat, lng }: Point): Promise<Info> {
   return { land, site, elevation: t.elevation, slope: t.slope, river };
 }
 
-export function FoundCity({ map }: { map: maplibregl.Map }) {
+export function FoundCity({ view }: { view: View }) {
   const [point, setPoint] = useState<Point | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
   const [failed, setFailed] = useState(false);
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
-  const marker = useRef<maplibregl.Marker | null>(null);
+  const marker = useRef<ViewMarker | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (map.queryRenderedFeatures(e.point, { layers: ["water"] }).length > 0) {
+    const onClick = (e: ViewPointer) => {
+      if (view.isWaterAt(e.point)) {
         setMsg("Здесь вода — выберите сушу");
         return;
       }
       setMsg("");
-      const { lat, lng } = e.lngLat;
+      const [lng, lat] = e.lngLat;
       if (marker.current) marker.current.setLngLat(e.lngLat);
-      else marker.current = new maplibregl.Marker({ color: "#e0a050" }).setLngLat(e.lngLat).addTo(map);
-      flyOrJump(map, { center: e.lngLat, zoom: 14 });
+      else marker.current = view.addMarker({ color: "#c07a22" }, e.lngLat);
+      view.flyTo({ center: e.lngLat, mpp: FOUND_MPP });
       setPoint({ lat, lng });
     };
-    map.on("click", onClick);
+    const off = view.on("click", onClick);
     return () => {
-      map.off("click", onClick);
+      off();
       marker.current?.remove();
       marker.current = null;
     };
-  }, [map]);
+  }, [view]);
 
   // Survey the land under the marker; a newer click drops the older answer.
   useEffect(() => {
@@ -112,82 +111,89 @@ export function FoundCity({ map }: { map: maplibregl.Map }) {
 
   return (
     <>
-      <PlaceSearch map={map} />
-      <Panel class="hint" role="status" aria-live="polite">{msg || "Выберите место для нового поселения"}</Panel>
+      <div class="found-vignette" aria-hidden="true" />
+      <div class="logo-mark found-mark" role="img" aria-label="Rebirth" />
+      <PlaceSearch view={view} />
+      <div class="found-task" role="status" aria-live="polite">
+        {msg || "Выберите место для нового поселения"}
+      </div>
       {point && (
-        <section class="panel found" aria-labelledby={SEMANTIC_IDS.foundCityTitle}>
-          <form
-            class="found-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              found();
-            }}
-          >
-            <div class="found-head">
-              <Icon name="tent" size={20} />
+        <section class="found" aria-labelledby={SEMANTIC_IDS.foundCityTitle}>
+          <div class="found-sheet">
+            <div class="found-seal" aria-hidden="true">
+              ЗЕМЛЯ
+            </div>
+            <form
+              class="found-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                found();
+              }}
+            >
               <h2 id={SEMANTIC_IDS.foundCityTitle}>Основать поселение</h2>
-            </div>
-            <div class="coords">
-              {point.lat.toFixed(4)}, {point.lng.toFixed(4)}
-            </div>
-            <div class="found-land" aria-live="polite">
-              {failed && <div class="found-note">Не удалось осмотреть землю: карта ещё грузится.</div>}
-              {!info && !failed && <div class="found-note">Осматриваем землю…</div>}
-              {info && (
-                <>
-                  <dl class="found-facts">
-                    <dt>Под лагерем</dt>
-                    <dd>{LAND_RU[info.land]}</dd>
-                    <dt>Высота</dt>
-                    <dd>{Math.round(info.elevation)} м</dd>
-                    <dt>Уклон</dt>
-                    <dd>{Math.round(info.slope)}°</dd>
-                    <dt>Лес вокруг</dt>
-                    <dd>{pct(info.site.forest)}</dd>
-                    <dt>Вода вокруг</dt>
-                    <dd>{pct(info.site.water)}</dd>
-                    <dt>Камень, песок</dt>
-                    <dd>{pct(info.site.rock)}</dd>
-                  </dl>
-                  {notes.length > 0 && (
-                    <ul class="found-notes">
-                      {notes.map((n) => (
-                        <li key={n}>{n}</li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </div>
-            <div class="found-names" role="group" aria-label="Подходящие названия">
-              {names.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  class="chip-btn"
-                  aria-pressed={trimmed === n}
-                  onClick={() => {
-                    setName(n);
-                    input.current?.focus();
-                  }}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <input
-              ref={input}
-              type="text"
-              maxLength={40}
-              aria-label="Название поселения"
-              placeholder="Название поселения"
-              value={name}
-              onInput={(e) => setName((e.target as HTMLInputElement).value)}
-            />
-            <Button type="submit" variant="primary" disabled={!valid}>
-              Основать
-            </Button>
-          </form>
+              <div class="coords">
+                {point.lat.toFixed(4)}, {point.lng.toFixed(4)}
+              </div>
+              <div class="found-rule" aria-hidden="true" />
+              <div class="found-land" aria-live="polite">
+                {failed && <div class="found-note">Не удалось осмотреть землю: карта ещё грузится.</div>}
+                {!info && !failed && <div class="found-note">Осматриваем землю…</div>}
+                {info && (
+                  <>
+                    <dl class="found-facts">
+                      <dt>Под лагерем</dt>
+                      <dd>{LAND_RU[info.land]}</dd>
+                      <dt>Высота</dt>
+                      <dd>{Math.round(info.elevation)} м</dd>
+                      <dt>Уклон</dt>
+                      <dd>{Math.round(info.slope)}°</dd>
+                      <dt>Лес вокруг</dt>
+                      <dd>{pct(info.site.forest)}</dd>
+                      <dt>Вода вокруг</dt>
+                      <dd>{pct(info.site.water)}</dd>
+                      <dt>Камень, песок</dt>
+                      <dd>{pct(info.site.rock)}</dd>
+                    </dl>
+                    {notes.length > 0 && (
+                      <ul class="found-notes">
+                        {notes.map((n) => (
+                          <li key={n}>{n}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+              <div class="found-names" role="group" aria-label="Подходящие названия">
+                {names.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    class="chip-btn"
+                    aria-pressed={trimmed === n}
+                    onClick={() => {
+                      setName(n);
+                      input.current?.focus();
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <input
+                ref={input}
+                type="text"
+                maxLength={40}
+                aria-label="Название поселения"
+                placeholder="Название поселения"
+                value={name}
+                onInput={(e) => setName((e.target as HTMLInputElement).value)}
+              />
+              <Button type="submit" variant="primary" disabled={!valid}>
+                Основать
+              </Button>
+            </form>
+          </div>
         </section>
       )}
     </>

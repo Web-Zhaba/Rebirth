@@ -5,6 +5,7 @@ import { roadNet } from "./roadNetCache";
 import { servicePreviewIndex } from "./servicePreviewIndex";
 import { countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import { classPupils, schoolSeats } from "./school";
+import { learningFactor, MOOD_NEUTRAL, needsOf } from "./needs";
 import { finishedMonuments, monumentLand, monumentsNear } from "./monuments";
 import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
 
@@ -164,7 +165,9 @@ export function dailyServices(s: SimState): SimState {
   for (const r of Object.values(s.residents)) {
     const age = ageOf(r.born, now);
     const inClass = attending.has(r.id);
-    const school = inClass ? Math.min(100, r.school + learnPerDay(age >= SERVICE.schoolTo)) : r.school;
+    // A hungry, tired or unhappy pupil learns slower.
+    const pace = learnPerDay(age >= SERVICE.schoolTo) * learningFactor(s.households[r.household]?.mood ?? MOOD_NEUTRAL, needsOf(r));
+    const school = inClass ? Math.min(100, r.school + pace) : r.school;
     const next = school === r.school && inClass === !!r.inClass ? r : { ...r, school, literate: r.literate || school >= 100, inClass };
     if (next !== r) {
       if (residents === s.residents) residents = { ...residents };

@@ -17,6 +17,7 @@ import {
   MALE_NAMES,
   peopleStats,
   queryBuilding,
+  queryResident,
   SURNAMES,
   surnameFor,
   syncPeople,
@@ -339,6 +340,12 @@ describe("deaths", () => {
   });
   it("nobody dies on a failing draw", () => {
     expect(Object.keys(day(town([]), { rand: never, only: ["death"] }).residents)).toHaveLength(14);
+  });
+  it("starvation adds a daily chance of death on top of age", () => {
+    const s = custom(town(houses(1)), [{ home: 1, people: [{ age: 30 }, { age: 30 }] }]);
+    const hungry = { ...s, residents: Object.fromEntries(Object.values(s.residents).map((r) => [r.id, { ...r, needs: { food: 0, rest: 100, social: 100, warmth: 100 } }])) };
+    expect(kinds(day(hungry, { rand: () => 0.01, only: ["death"] })).filter((k) => k === "death")).toHaveLength(2);
+    expect(kinds(day(s, { rand: () => 0.01, only: ["death"] })).filter((k) => k === "death")).toHaveLength(0);
   });
 });
 
@@ -677,6 +684,11 @@ describe("query", () => {
     expect(queryBuilding(town(houses(1)), 1)).toEqual({ kind: "house", households: [], level: 1, landValue: 0, services: [], upgrading: false });
     expect(queryBuilding(town([]), 5)).toBeNull();
   });
+  it("queries one resident for the follow mode", () => {
+    const s = base();
+    expect(queryResident(s, 1)).toMatchObject({ kind: "resident", id: 1, name: "Иван Тестов", home: 1, job: 2, commute: 4.6, idle: false });
+    expect(queryResident(s, 999)).toBeNull();
+  });
 });
 
 describe("handler: persistence and query channel", () => {
@@ -737,5 +749,11 @@ describe("handler: persistence and query channel", () => {
     if (hit.data?.kind === "house") expect(hit.data.households[0].people).toHaveLength(s.households[1].members.length);
     await h.handle({ t: "query", id: 6, q: { type: "building", id: 999 } });
     expect(out[1]).toEqual({ t: "queryResult", id: 6, data: null });
+    const residentId = s.households[1].members[0];
+    await h.handle({ t: "query", id: 7, q: { type: "resident", id: residentId } });
+    const person = out[2] as Extract<FromWorker, { t: "queryResult" }>;
+    expect(person.data).toMatchObject({ kind: "resident", id: residentId, home: b.id });
+    await h.handle({ t: "query", id: 8, q: { type: "resident", id: 999 } });
+    expect(out[3]).toEqual({ t: "queryResult", id: 8, data: null });
   });
 });

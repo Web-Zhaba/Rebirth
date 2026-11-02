@@ -1,5 +1,5 @@
 import { cutOffEdges } from "../sim/roads";
-import type { EconomyStats, RoadGraph } from "../sim/types";
+import type { EconomyStats, NeedsStats, RoadGraph } from "../sim/types";
 
 // Pure helpers behind the top bar: number formats, the day phase, daily deltas and warnings.
 
@@ -40,12 +40,18 @@ export interface Warning {
 }
 
 // Problems worth a line in the bar. Always text next to an icon, never colour alone.
-export function warnings(args: { food: number; eco: EconomyStats; builders: number; queue: number; logs: number; building: number; weather?: string | null }): Warning[] {
-  const { food, eco, builders, queue, logs, building, weather } = args;
+export function warnings(args: { food: number; eco: EconomyStats; builders: number; queue: number; logs: number; building: number; weather?: string | null; needs?: NeedsStats }): Warning[] {
+  const { food, eco, builders, queue, logs, building, weather, needs } = args;
   const out: Warning[] = [];
   if (eco.foodPerDay > 0 && food < eco.foodPerDay) out.push({ id: "famine", text: "Голод: еда закончилась" });
   else if (eco.foodPerDay > 0 && eco.foodDays < LOW_FOOD_DAYS) out.push({ id: "lowfood", text: `Еды на ${Math.floor(eco.foodDays)} дн.` });
   else if (eco.foodPerDay > 0 && eco.outlook < 1) out.push({ id: "outlook", text: "Запасов на год не хватит" });
+  if (needs) {
+    if (needs.starving > 0) out.push({ id: "starving", text: `Голодают: ${needs.starving}` });
+    if (needs.tired > 0) out.push({ id: "tired", text: `Не высыпаются: ${needs.tired}` });
+    if (needs.lonely > 0) out.push({ id: "lonely", text: `Одиноки: ${needs.lonely}` });
+    if (needs.freezing > 0) out.push({ id: "freezing", text: `Мёрзнут: ${needs.freezing}` });
+  }
   if (weather) out.push({ id: "weather", text: weather });
   if (queue > 0 && builders === 0) out.push({ id: "nohands", text: "Некому строить" });
   if (building > 0 && logs < 0.05) out.push({ id: "nologs", text: "Не хватает брёвен" });

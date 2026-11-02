@@ -1,3 +1,5 @@
+import { mppAtZoom } from "../view/view";
+
 export interface ArticleMapLike {
   lat: number;
   lng: number;
@@ -9,6 +11,10 @@ export function articleMapTarget(a: ArticleMapLike): [number, number] | null {
   return [a.lng, a.lat];
 }
 
-export function articleMapZoom(current: number): number {
-  return Math.max(16.5, Math.min(18, current < 16.5 ? 16.5 : current));
+// Articles are brought to a useful scale: at least as close as old zoom 16.5, never closer than old zoom 18.
+const ARTICLE_MAX_MPP = mppAtZoom(16.5);
+const ARTICLE_MIN_MPP = mppAtZoom(18);
+
+export function articleMapMpp(currentMpp: number): number {
+  return Math.max(ARTICLE_MIN_MPP, Math.min(ARTICLE_MAX_MPP, currentMpp));
 }

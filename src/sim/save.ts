@@ -13,6 +13,7 @@ import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } 
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
 import { SERVICE } from "./services";
+import { isTradeOrder } from "./trade";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
 import type {
   Building,
@@ -25,6 +26,7 @@ import type {
   FieldWork,
   Household,
   Incoming,
+  Needs,
   PeopleState,
   ProdFlags,
   ProdState,
@@ -222,6 +224,14 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
 }
 
 const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+
+// Personal needs, 0..100. A missing or broken block (saves before the needs system) reads as fully satisfied.
+function parseNeeds(v: unknown): Needs | undefined {
+  if (!isRecord(v)) return undefined;
+  const keys = ["food", "rest", "social", "warmth"] as const;
+  if (!keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0 && (v[k] as number) <= 100)) return undefined;
+  return { food: v.food as number, rest: v.rest as number, social: v.social as number, warmth: v.warmth as number };
+}
 const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "event"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
@@ -249,6 +259,7 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     if (r.job !== null && !Number.isInteger(r.job)) return null;
     if (r.commute !== null && (!isNum(r.commute) || r.commute < 0)) return null;
     if (!nonNegInt(r.idleDays)) return null;
+    const needs = parseNeeds(r.needs);
     residents[id] = {
       id,
       first: r.first,
@@ -263,6 +274,7 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
       literate: r.literate === true,
       school: isNum(r.school) ? Math.min(100, Math.max(0, r.school)) : 0,
       ...(r.inClass === true ? { inClass: true } : {}),
+      ...(needs ? { needs } : {}),
     };
   }
   const households: Record<number, Household> = {};
@@ -348,7 +360,7 @@ function parseProd(v: unknown): ProdState {
   const f = v.flags;
   if (isRecord(f) && Number.isInteger(f.year) && isNum(f.rot) && f.rot >= 0) {
     const flag = (k: string) => f[k] === true;
-    const flags: ProdFlags = { ...emptyFlags(f.year as number), sowing: flag("sowing"), harvest: flag("harvest"), done: flag("done"), closed: flag("closed"), hungry: flag("hungry"), rot: f.rot };
+    const flags: ProdFlags = { ...emptyFlags(f.year as number), sowing: flag("sowing"), harvest: flag("harvest"), done: flag("done"), closed: flag("closed"), hungry: flag("hungry"), rot: f.rot, ...(f.starving === true ? { starving: true } : {}) };
     out.flags = flags;
   }
   out.today = numRecord(v.today);
@@ -356,6 +368,8 @@ function parseProd(v: unknown): ProdState {
   // Saves from before the orchard: a year with nothing counted.
   const o = v.orchard;
   if (isRecord(o) && Number.isInteger(o.year)) out.orchard = { year: o.year as number, frost: num(o.frost, 0, 400, 0), stress: num(o.stress, 0, 400, 0), days: num(o.days, 0, 400, 0), hot: num(o.hot, 0, 400, 0) };
+  const t = v.trade;
+  if (isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0) out.trade = { give: t.give, get: t.get, gave: t.gave, got: t.got };
   return out;
 }
 
@@ -374,6 +388,7 @@ function parseLevers(v: unknown): Levers {
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
   const j = v.jobs;
   if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
+  if (isTradeOrder(v.trade)) out.trade = { give: v.trade.give, get: v.trade.get };
   return out;
 }
 

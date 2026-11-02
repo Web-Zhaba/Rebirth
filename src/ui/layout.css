@@ -1,4 +1,4 @@
-/* Layout and access (PLAN-ui.md U8). Loaded after the component stylesheets, so it wins at equal specificity.
+﻿/* Layout and access (PLAN-ui.md U8). Loaded after the component stylesheets, so it wins at equal specificity.
 
    Breakpoints
      >= 1100 px   wide: left column, centre column and right slot side by side; full top bar.
@@ -73,7 +73,7 @@ button.event-card-pause-btn {
   outline-offset: -2px;
 }
 
-/* Reduced motion: no transitions or animations anywhere (the map camera jumps, see flyOrJump). */
+/* Reduced motion: no transitions or animations anywhere (the map camera jumps, see View.flyTo). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -87,7 +87,7 @@ button.event-card-pause-btn {
 
 /* ---- Compact top bar: the full one needs about 1260 px ---- */
 
-@media (max-width: 1299px) {
+@media (max-width: 1559px) {
   .topbar {
     gap: var(--sp-3);
     padding: 0 var(--sp-2);
@@ -333,7 +333,7 @@ button.event-card-pause-btn {
 html.screenshot-mode #ui {
   visibility: hidden;
 }
-html.screenshot-mode .maplibregl-ctrl-top-left,
-html.screenshot-mode .maplibregl-ctrl-top-right {
+html.screenshot-mode .engine-nav {
   display: none;
 }
+

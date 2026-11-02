@@ -1,0 +1,123 @@
+/* Motion вЂ” В«Р‘РµСЂРµСЃС‚Р° Рё РіСЂР°РјРѕС‚Р°В».
+   One authored moment per surface, never one identical entrance on everything: a panel arrives from the edge it
+   lives on, a toast from the side it is read from, an event card rises, a progress bar flows. Every rule is
+   transform/opacity or a paint property with no layout work, and nothing runs for a visitor who asked for less
+   motion (the whole block is gated on `no-preference`). */
+
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-1: 110ms; /* state flips: hover, press, selection */
+  --dur-2: 180ms; /* small surfaces arriving */
+  --dur-3: 240ms; /* sheets and cards arriving */
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 1. States flip instead of snapping. Paint properties only: no reflow, no repaint storms. */
+  .btn,
+  .icon-btn,
+  .tab,
+  .build-btn,
+  .chip-btn,
+  .notebook-tab,
+  .tr-f,
+  .tr-era,
+  .seg-btn,
+  .her-opt,
+  .row.is-clickable {
+    transition:
+      background-color var(--dur-1) var(--ease-out),
+      border-color var(--dur-1) var(--ease-out),
+      color var(--dur-1) var(--ease-out),
+      box-shadow var(--dur-1) var(--ease-out);
+  }
+
+  /* The caret and the focus ring stay instant; a slow ring reads as lag. */
+
+  /* 2. Progress flows rather than stepping. */
+  .bar > i,
+  .tf-now .bar > i,
+  .tech-now .bar > i {
+    transition: width var(--dur-3) linear;
+  }
+
+  /* 3. The right slot arrives from its own edge. */
+  .rs-panel {
+    animation: slot-in var(--dur-2) var(--ease-out) both;
+  }
+
+  @keyframes slot-in {
+    from {
+      opacity: 0;
+      transform: translateX(12px);
+    }
+  }
+
+  /* 4. The notebook page unfolds downward, because it grows out of the toggle above it. */
+  .notebook-panel {
+    animation: page-in var(--dur-2) var(--ease-out) both;
+    transform-origin: top right;
+  }
+
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scaleY(0.97);
+    }
+  }
+
+  /* 5. Toasts come in from the edge they are read from. */
+  .toast {
+    animation: toast-in var(--dur-2) var(--ease-out) both;
+  }
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+  }
+
+  /* 6. A decision card rises into the middle: it interrupts, so it moves more than a panel. */
+  .event-card {
+    animation: card-in var(--dur-3) var(--ease-out) both;
+  }
+
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.994);
+    }
+  }
+
+  /* 7. The research spread: the field darkens, then the sheet settles. */
+  .tech-screen {
+    animation: scrim-in var(--dur-2) ease-out both;
+  }
+
+  .tech-sheet {
+    animation: sheet-in var(--dur-3) var(--ease-out) both;
+  }
+
+  @keyframes scrim-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sheet-in {
+    from {
+      opacity: 0;
+      transform: scale(0.99) translateY(8px);
+    }
+  }
+
+  /* 8. Dialogs and the founding sheet settle on the same rhythm as a card. */
+  .dialog[open] {
+    animation: card-in var(--dur-3) var(--ease-out) both;
+  }
+
+  /* 10. The away card's list arrives a beat after the card itself, so the eye lands on the title first. */
+  .away .away-list {
+    animation: card-in var(--dur-3) var(--ease-out) 60ms both;
+  }
+}

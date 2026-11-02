@@ -2,7 +2,7 @@ import { FADE_FROM, FADE_TO } from "./constants";
 import type { CloudQuality } from "./settings";
 
 // Pure decisions of the cloud layer (PLAN-clouds.md sections 5 and 7): presets, target size, zoom fade and the
-// "must the ray-march run again" rule. No three.js, so the main chunk and the tests can import it.
+// "must the ray-march run again" rule.
 
 export interface CloudPreset {
   scale: number; // render target size relative to the drawing buffer
@@ -16,9 +16,6 @@ export const PRESETS: Record<CloudQuality, CloudPreset> = {
   medium: { scale: 0.5, steps: 48, lightSteps: 5, detail: true },
   high: { scale: 0.75, steps: 80, lightSteps: 6, detail: true },
 };
-
-// RGBA16F targets need EXT_color_buffer_float; without it the "high" preset (which relies on HDR accumulation) steps down.
-export const effectiveQuality = (q: CloudQuality, floatTargets: boolean): CloudQuality => (q === "high" && !floatTargets ? "medium" : q);
 
 export function targetSize(width: number, height: number, scale: number): { width: number; height: number } {
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
@@ -40,7 +37,7 @@ export const FLASH_FRAME_MS = 33; // while lightning flashes the march runs at m
 
 // What a march was made for. Two equal keys give the same picture.
 export interface MarchKey {
-  matrix: ArrayLike<number>; // main matrix of the view
+  matrix: ArrayLike<number>; // main matrix of the view (any length: the engine adds its eye position)
   width: number; // target size
   height: number;
   clock: number; // game minutes
@@ -56,7 +53,8 @@ export interface MadeMarch extends MarchKey {
 }
 
 const sameMatrix = (a: ArrayLike<number>, b: ArrayLike<number>) => {
-  for (let i = 0; i < 16; i++) if (a[i] !== b[i]) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
 };
 

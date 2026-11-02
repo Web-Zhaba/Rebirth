@@ -1,4 +1,5 @@
-/* Admin panel: a small floating card above the build bar, left. */
+/* World «Береста и грамота» — admin panel: a small bark card floating above the build bar, left. */
+
 .admin-panel {
   position: fixed;
   left: var(--sp-3);
@@ -8,21 +9,35 @@
   gap: var(--sp-2);
   width: min(300px, calc(100vw - 32px));
   padding: var(--sp-3);
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 78%, var(--paper-shade));
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
 }
 
 .admin-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px dotted var(--rule-dotted);
+  font-family: var(--font-display);
+  font-weight: 700;
 }
 
 .admin-x {
   border: 0;
   background: none;
-  font-size: 20px;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
   line-height: 1;
   cursor: pointer;
-  color: inherit;
+  color: var(--ink-2);
+}
+
+.admin-x:hover {
+  color: var(--bad);
 }
 
 .admin-row {
@@ -38,6 +53,6 @@
 }
 
 .admin-sub {
-  font-size: 12px;
-  opacity: 0.7;
+  font-size: var(--fs-sm);
+  color: var(--pencil);
 }

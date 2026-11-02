@@ -1,5 +1,5 @@
 import { play } from "../ui/sound";
-import type * as maplibregl from "maplibre-gl";
+import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect, untracked } from "@preact/signals";
 import { BUILDINGS, type BuildingTemplate } from "../sim/buildings";
 import { DIG } from "../sim/excavation";
@@ -12,17 +12,15 @@ import type { Site, ZoneCell } from "../sim/types";
 import { cellCorners } from "../sim/zones";
 import { buildingSet, frame, sendCmd, state, zones } from "../simClient";
 import { cachedSite, NO_SITE, siteAt } from "../world/site";
-import { PALETTE } from "../ui/palette";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, MIN_ZONE_ZOOM, PLACED_COLORS, placeReach, SITE_RADIUS, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
 const BUCKET = 16;
 const SAMPLE_DELAY_MS = 150; // the cursor must rest on a lot before its terrain is sampled
 const CIRCLE_STEPS = 64;
-const PENDING_COLOR = PALETTE.warn;
 
 type Pt = [number, number];
 const bucketKey = (bx: number, by: number) => bx * 65536 + by;
@@ -44,40 +42,17 @@ interface Verdict {
 }
 
 // Lot hover and placement of the six player-built buildings.
-export function attachPlaceTool(map: maplibregl.Map): void {
+export function attachPlaceTool(view: View): void {
   const label = document.createElement("div");
   label.className = "road-label";
   label.hidden = true;
-  map.getContainer().appendChild(label);
+  view.container.appendChild(label);
 
-  let ready = false;
   let cursor: { x: number; y: number } | null = null; // px
   let local: Pt | null = null; // m
   let busy = false;
+  let spaceDown = false;
   let timer = 0;
-
-  const source = (id: string) => map.getSource(id) as maplibregl.GeoJSONSource | undefined;
-
-  const setup = () => {
-    if (ready) return;
-    ready = true;
-    map.addSource("place-lot", { type: "geojson", data: empty() });
-    map.addSource("place-radius", { type: "geojson", data: empty() });
-    const color = ["case", ["get", "pending"], PENDING_COLOR, ["get", "ok"], PALETTE.ok, PALETTE.bad] as never;
-    map.addLayer({ id: "place-radius-fill", type: "fill", source: "place-radius", paint: { "fill-color": PALETTE.paperRaised, "fill-opacity": 0.25 } });
-    map.addLayer({
-      id: "place-radius-line",
-      type: "line",
-      source: "place-radius",
-      paint: { "line-color": PALETTE.ink2, "line-width": 1.5, "line-dasharray": [3, 2], "line-opacity": 0.7 },
-    });
-    map.addLayer({ id: "place-lot-fill", type: "fill", source: "place-lot", paint: { "fill-color": color, "fill-opacity": 0.45 } });
-    map.addLayer({ id: "place-lot-line", type: "line", source: "place-lot", paint: { "line-color": color, "line-width": 2 } });
-  };
-  const ensure = () => {
-    if (!ready && map.isStyleLoaded()) setup();
-    return ready;
-  };
 
   const setLabel = (text: string | null) => {
     if (text === null || !cursor) {
@@ -92,10 +67,8 @@ export function attachPlaceTool(map: maplibregl.Map): void {
   const clearOverlay = () => {
     clearTimeout(timer);
     timer = 0;
-    if (ready) {
-      source("place-lot")?.setData(empty());
-      source("place-radius")?.setData(empty());
-    }
+    view.overlay("place-lot").setData(empty());
+    view.overlay("place-radius").setData(empty());
     placeReach.value = null;
     setLabel(null);
   };
@@ -215,7 +188,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
 
   const draw = (id: PlaceTool, v: Verdict | null) => {
     const f = frame.value;
-    if (!ensure() || !f) return;
+    if (!f) return;
     // Services show the road edges they would reach from this lot (only when the lot is allowed).
     if (v && v.ok && v.front && isService(id)) {
       const cur = placeReach.value;
@@ -223,11 +196,11 @@ export function attachPlaceTool(map: maplibregl.Map): void {
       if (!cur || cur.x !== x || cur.y !== y) placeReach.value = { x, y, range: SERVICES[id].reach, color: SERVICES[id].color };
     } else if (placeReach.value) placeReach.value = null;
     if (!v) {
-      source("place-lot")?.setData(empty());
-      source("place-radius")?.setData(empty());
+      view.overlay("place-lot").setData(empty());
+      view.overlay("place-radius").setData(empty());
       return;
     }
-    source("place-lot")?.setData({
+    view.overlay("place-lot").setData({
       type: "FeatureCollection",
       features: [
         {
@@ -240,7 +213,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     // Circle of the site: woodcutter and fisher reach, and the fields a farmstead can work.
     const r = id === "gumno" ? FIELD.radius : id === "woodcutter" || id === "fisher" || id === "forager" ? v.radius : id === "dig" ? DIG.startRadius : undefined;
     if (r === undefined) {
-      source("place-radius")?.setData(empty());
+      view.overlay("place-radius").setData(empty());
       return;
     }
     const pts: Pt[] = [];
@@ -248,7 +221,7 @@ export function attachPlaceTool(map: maplibregl.Map): void {
       const a = (k / CIRCLE_STEPS) * 2 * Math.PI;
       pts.push([v.center[0] + r * Math.cos(a), v.center[1] + r * Math.sin(a)]);
     }
-    source("place-radius")?.setData({
+    view.overlay("place-radius").setData({
       type: "FeatureCollection",
       features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring(pts, f)] } }],
     });
@@ -257,36 +230,36 @@ export function attachPlaceTool(map: maplibregl.Map): void {
   function refresh(): void {
     const id = active();
     if (!id || !local) return;
-    if (map.getZoom() < MIN_ZONE_ZOOM) {
+    if (view.metersPerPixel() > ZONE_MAX_MPP) {
       draw(id, null);
       setLabel("Приблизьте карту");
       return;
     }
     const v = evaluate(id, local[0], local[1]);
     draw(id, v);
-    map.getCanvas().style.cursor = placementCursor(true, v ? (v.pending ? "pending" : v.ok ? "ok" : "bad") : "none");
+    view.canvas.style.cursor = placementCursor(true, v ? (v.pending ? "pending" : v.ok ? "ok" : "bad") : "none");
     setLabel(v ? v.text : "Здесь нет дороги");
   }
 
   // ----- events -----
-  const onMove = (e: maplibregl.MapMouseEvent) => {
-    cursor = { x: e.point.x, y: e.point.y };
+  const onMove = (e: ViewPointer) => {
+    cursor = { x: e.point[0], y: e.point[1] };
     if (!active()) return;
     const f = frame.value;
     if (!f) return;
-    local = f.toLocal(e.lngLat.lng, e.lngLat.lat);
+    local = f.toLocal(e.lngLat[0], e.lngLat[1]);
     refresh();
   };
 
-  const onClick = (e: maplibregl.MapMouseEvent) => {
+  const onClick = (e: ViewPointer) => {
     const id = active();
     const f = frame.value;
-    if (!id || !f || busy) return;
-    if (map.getZoom() < MIN_ZONE_ZOOM) {
+    if (!id || !f || busy || spaceDown) return;
+    if (view.metersPerPixel() > ZONE_MAX_MPP) {
       flash("Приблизьте карту");
       return;
     }
-    const [x, y] = f.toLocal(e.lngLat.lng, e.lngLat.lat);
+    const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
     local = [x, y];
     const v = evaluate(id, x, y);
     if (!v) {
@@ -320,24 +293,48 @@ export function attachPlaceTool(map: maplibregl.Map): void {
       });
   };
 
-  const onContext = (e: maplibregl.MapMouseEvent) => {
+  const onContext = (e: ViewPointer) => {
     if (!active()) return;
-    e.preventDefault();
-    e.originalEvent.preventDefault();
+    e.original.preventDefault();
     tool.value = null;
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
     const el = e.target as HTMLElement | null;
     if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+    if (e.key === " " && active()) {
+      e.preventDefault();
+      if (!spaceDown) {
+        spaceDown = true;
+        setSpacePan(true);
+        syncPan(view);
+      }
+      return;
+    }
     if (e.key === "Escape" && active()) tool.value = null;
   };
 
-  map.on("mousemove", onMove);
-  map.on("click", onClick);
-  map.on("contextmenu", onContext);
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (e.key !== " " || !spaceDown) return;
+    spaceDown = false;
+    setSpacePan(false);
+    syncPan(view);
+  };
+
+  const onBlur = () => {
+    if (!spaceDown) return;
+    spaceDown = false;
+    setSpacePan(false);
+    syncPan(view);
+  };
+
+  view.on("pointermove", onMove);
+  view.on("click", onClick);
+  view.on("contextmenu", onContext);
   window.addEventListener("keydown", onKeyDown);
-  map.getCanvas().addEventListener("mouseleave", () => {
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
+  view.canvas.addEventListener("pointerleave", () => {
     cursor = null;
     local = null;
     clearOverlay();
@@ -351,9 +348,14 @@ export function attachPlaceTool(map: maplibregl.Map): void {
     untracked(() => {
       clearOverlay();
       const id = active();
-      if (!id) map.getCanvas().style.cursor = placementCursor(false, "none");
+      if (!id && spaceDown) {
+        spaceDown = false;
+        setSpacePan(false);
+      }
+      syncPan(view);
+      if (!id) view.canvas.style.cursor = placementCursor(false, "none");
       else if (local) refresh();
-      else map.getCanvas().style.cursor = placementCursor(true, "pending");
+      else view.canvas.style.cursor = placementCursor(true, "pending");
     });
   });
 }

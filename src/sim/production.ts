@@ -1,4 +1,5 @@
-import { leverMood } from "./levers";
+import { leverMood, workHours } from "./levers";
+import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
 import { allocateLabor, BUILDINGS, CELLAR_CAP, FOUNDING_STOCK, foodCapacity, materialsOf, storageOf, UPGRADE, type Materials, type SiteLever } from "./buildings";
 import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
@@ -8,6 +9,7 @@ import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, SERVICE, serviceMood } from "./services";
+import { tradeDay } from "./trade";
 import { finishedMonuments, monumentMood, monumentsNear } from "./monuments";
 import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
 import { applyFrost } from "./weather";
@@ -84,21 +86,30 @@ const flagsFor = (f: ProdFlags, year: number): ProdFlags => (f.year === year ? f
 
 interface Workers {
   n: Map<number, number>; // workers per workplace id
-  lit: Map<number, number>; // their literacy, summed as shares (school / 100)
+  eff: Map<number, number>; // their working strength: needs and household mood, 1 for a content worker
+  lit: Map<number, number>; // their literacy, summed as shares (school / 100), weighted by the same strength
 }
-const workerCache = new WeakMap<object, Workers>();
+// Mood can change without the residents changing (an event choice), so the cache hangs on both objects.
+const workerCache = new WeakMap<object, WeakMap<object, Workers>>();
 
 // Jobs change only at the daily step, so this holds for a whole day.
-function workersByJob(residents: Record<number, Resident>): Workers {
-  const hit = workerCache.get(residents);
+function workersByJob(residents: Record<number, Resident>, households: Record<number, Household>): Workers {
+  let byHouseholds = workerCache.get(residents);
+  if (!byHouseholds) {
+    byHouseholds = new WeakMap();
+    workerCache.set(residents, byHouseholds);
+  }
+  const hit = byHouseholds.get(households);
   if (hit) return hit;
-  const w: Workers = { n: new Map(), lit: new Map() };
+  const w: Workers = { n: new Map(), eff: new Map(), lit: new Map() };
   for (const r of Object.values(residents)) {
     if (r.job === null) continue;
+    const strength = residentWorkFactor(r, households[r.household]?.mood ?? MOOD_NEUTRAL);
     w.n.set(r.job, (w.n.get(r.job) ?? 0) + 1);
-    w.lit.set(r.job, (w.lit.get(r.job) ?? 0) + r.school / 100);
+    w.eff.set(r.job, (w.eff.get(r.job) ?? 0) + strength);
+    w.lit.set(r.job, (w.lit.get(r.job) ?? 0) + (r.school / 100) * strength);
   }
-  workerCache.set(residents, w);
+  byHouseholds.set(households, w);
   return w;
 }
 
@@ -156,7 +167,7 @@ export function payMaterials(
 // `scale` is the share of work left after workers were drafted into the artel (see people.ts): one for all, or by priority.
 export function produceStep(s: SimState, dt: number, scale: number | readonly number[] = productionScales(s)): SimState {
   const cal = calendar(s.gameMinutes);
-  const workers = workersByJob(s.residents);
+  const workers = workersByJob(s.residents, s.households);
   const win = windowAt(s.gameMinutes);
   const stock = { ...s.stock };
   const today = { ...s.prod.today };
@@ -181,8 +192,9 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     if (b.state !== "active") continue;
     const n = workers.n.get(b.id) ?? 0;
     if (n === 0) continue;
-    // Literate hands make a workshop more productive.
-    const eff = b.zone === "craft" ? n + SERVICE.literateBoost * (workers.lit.get(b.id) ?? 0) : n;
+    // A hungry, tired or unhappy worker gives fewer hours; literate hands add to a workshop.
+    const strength = workers.eff.get(b.id) ?? n;
+    const eff = b.zone === "craft" ? strength + SERVICE.literateBoost * (workers.lit.get(b.id) ?? 0) : strength;
     const wf = workFactor(b.template, s.weather); // rain, frost, storms
     if (wf <= 0) continue;
     const h = eff * dt * wf * (b.zone === "craft" ? shopMul : 1) * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
@@ -380,13 +392,21 @@ export function dailyEconomy(s: SimState): SimState {
   // from a different one each day; each market worker then hands out to 20 households the market covers
   let shopSlots = 0;
   let marketSlots = 0;
+  let traders = 0; // working strength of the market workers
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
     if (!b || b.state !== "active") continue;
-    if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (SERVICE.literateBoost * r.school) / 100);
-    else if (b.template === "market") marketSlots += SERVICE.marketHouseholds;
+    const strength = residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
+    if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (SERVICE.literateBoost * r.school) / 100) * strength;
+    else if (b.template === "market") {
+      marketSlots += SERVICE.marketHouseholds * strength;
+      traders += strength;
+    }
   }
+  // the markets swap the ordered goods before the day's wares are handed out
+  const swap = tradeDay(stock, s.levers.trade, traders, cap - stock.food);
+  if (swap) Object.assign(stock, swap.stock);
   const ids = Object.keys(s.households).map(Number).sort((p, q) => p - q);
   const served = new Map<number, number>(); // household -> share of its need supplied
   const hand = (h: Household) => {
@@ -400,7 +420,7 @@ export function dailyEconomy(s: SimState): SimState {
     hand(s.households[ids[(k + dayOf(now)) % ids.length]]);
     slots--;
   }
-  slots = marketSlots;
+  slots = Math.floor(marketSlots + EPS);
   for (let k = 0; k < ids.length && slots > 0 && stock.wares > EPS; k++) {
     const h = s.households[ids[(k + dayOf(now)) % ids.length]];
     if (served.has(h.id) || h.home === null || !covers(s.coverage[h.home], "market")) continue;
@@ -423,11 +443,32 @@ export function dailyEconomy(s: SimState): SimState {
     if (cold.size > 0 && !Object.values(s.households).some((h) => h.cold)) events = say(events, now, "shortage", "Дров нет, люди мёрзнут");
   }
 
+  // Personal needs of the day that ended. Mood is coloured by the needs the day began with (the values on `s`), so a
+  // single daily step still uses the state it was called with; the fresh needs are what the next day works with.
+  const hours = workHours(s.levers).end - workHours(s.levers).start;
+  let residents = s.residents;
+  const gather = gatherHouses(s); // evening gatherings: a tavern in reach or a chapel
+  for (const r of Object.values(s.residents)) {
+    const h = s.households[r.household];
+    if (!h) continue;
+    const home = h.home !== null ? s.buildings[h.home] : undefined;
+    const day: NeedsDay = { now, fed, served: served.get(h.id) ?? 0, gather: h.home !== null && gather.has(h.home), cold: cold.has(h.id), hours };
+    if (residents === s.residents) residents = { ...residents };
+    residents[r.id] = { ...r, needs: needsAfterDay(r, h, home, day) };
+  }
+  const starving = starvingResidents(residents);
+  if (starving > 0 && !flags.starving) {
+    flags = { ...flags, starving: true };
+    events = say(events, now, "food", "Люди истощены: голод подрывает силы");
+  } else if (starving === 0 && flags.starving) {
+    const { starving: _starving, ...rest } = flags;
+    flags = rest;
+  }
+
   // mood
   const households: Record<number, Household> = {};
   const weatherMood = moodShift(s.weather);
   const idle = idleResidents(s);
-  const gather = gatherHouses(s); // evening gatherings: a tavern in reach or a chapel
   const monuments = finishedMonuments(s.buildings);
   for (const h of Object.values(s.households)) {
     let adults = 0;
@@ -447,7 +488,8 @@ export function dailyEconomy(s: SimState): SimState {
     });
     const home = h.home !== null ? s.buildings[h.home] : undefined;
     const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMood(monumentsNear(monuments, home.lot.cx, home.lot.cy)) : 0) : 0;
-    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0)));
+    const needMood = needMoodTerm(householdSatisfaction(h.members, s.residents));
+    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0) + needMood));
     const next: Household = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep };
     if (cold.has(h.id)) next.cold = true;
     else delete next.cold;
@@ -483,7 +525,7 @@ export function dailyEconomy(s: SimState): SimState {
     delete fields[Number(key)];
   }
 
-  return { ...s, stock, events, buildings, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard } };
+  return { ...s, stock, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard, ...(swap && s.levers.trade ? { trade: { ...s.levers.trade, gave: swap.gave, got: swap.got } } : {}) } };
 }
 
 // m3 of brushwood the idle adults gather in a day: only when a household is cold or the stock is below the day's
@@ -560,6 +602,7 @@ export function economyStats(s: SimState): EconomyStats {
     brushwood: brushwood(s, firewoodDaily(s.weather) * hs),
     outlook: foodOutlook(s),
     eveningWares: eveningRate(s),
+    ...(s.prod.trade ? { trade: s.prod.trade } : {}),
     fieldWork: fieldWork(s.weather),
     buildFactor: buildFactor(s.weather),
     firewood: firewoodDaily(s.weather) * hs,

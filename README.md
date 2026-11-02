@@ -130,7 +130,7 @@ Then it gives the player a summary of the time they missed.
 
 ## Under the map
 
-The interesting part of Rebirth is not that it uses a map library and a 3D library.
+The interesting part of Rebirth is not that it has its own 3D engine.
 
 It is the boundary between a planetary map and a local simulation.
 
@@ -142,15 +142,15 @@ It is the boundary between a planetary map and a local simulation.
                         Terrarium DEM
                              │
                              ▼
-                       MapLibre GL JS
-                  planet / camera / terrain
+                    Rebirth WebGPU engine
+          globe / camera / terrain / sky / water
                              │
                   local metric projection
                              │
               ┌──────────────┴──────────────┐
               │                             │
               ▼                             ▼
-         Three.js layers              Web Worker
+       engine game layers             Web Worker
       rendered settlement             simulation
               │                             │
       buildings / forest         roads / households
@@ -174,13 +174,13 @@ The main thread receives snapshots and focused query responses.
 
 That separation keeps the UI a view of the simulation instead of slowly turning the UI into the simulation.
 
-### The renderer is hybrid on purpose
+### One engine for the planet and the village
 
-**MapLibre GL JS** solves planetary geography, vector maps and camera behaviour.
+Since 0.2.0 Rebirth draws the world with its own **WebGPU** engine instead of MapLibre GL JS plus Three.js.
 
-**Three.js** owns game-specific 3D layers: buildings, vegetation, water, fields, residents, ruins and custom effects.
+The same engine owns the planet — globe, camera, level-of-detail terrain, vector map data, sky, clouds, weather, and water with waves and sky reflections — and the game layers: zones, roads, fields, buildings, forest, residents and ruins.
 
-Rebirth does not try to turn a cartographic engine into a game engine — or rebuild a globe renderer just to draw a village.
+One scene and one depth buffer: the settlement stands on the terrain instead of floating over a map. The heavy lifting runs on the GPU — the forest is scattered and culled in compute shaders, and whatever hills and houses hide is dropped with a Hi-Z pass.
 
 ### Balance is executable
 
@@ -204,17 +204,27 @@ It gives game balance something better than intuition:
 |---|---|
 | **Simulation** | TypeScript · Web Worker · IndexedDB |
 | **Interface** | Preact · @preact/signals |
-| **Earth** | MapLibre GL JS · OpenFreeMap · OpenStreetMap |
-| **3D world** | Three.js · Earcut |
+| **Engine** | Own · WebGPU · WGSL |
+| **Earth** | OpenFreeMap · OpenStreetMap · Earcut |
 | **Terrain** | Terrarium DEM / AWS Open Data |
 | **Search** | Photon |
 | **History** | Wikipedia / MediaWiki |
 | **Audio** | Web Audio API |
 | **Tooling** | Vite · Vitest |
+| **Platforms** | Vercel · Yandex Games |
+
+## Where to play
+
+Current version: **0.2.0** ([changelog](CHANGELOG.md)).
+
+- **In the browser:** [rebirth-ashy.vercel.app](https://rebirth-ashy.vercel.app/)
+- **Yandex Games:** in moderation
+
+Rebirth needs a desktop browser with **WebGPU**: a current Chrome, Edge or Yandex Browser. Without WebGPU the game explains why it cannot start.
 
 ## Build from source
 
-Requires **Node.js 18+** and npm.
+Requires **Node.js 20.19+** and npm.
 
 ```bash
 git clone https://github.com/Web-Zhaba/rebirth.git
@@ -231,6 +241,7 @@ npm run build     # typecheck + production build
 npm run preview   # preview production build
 npm test          # test suite
 npm run pace      # headless pacing simulation
+npm run build:yandex  # Yandex Games archive: rebirth-yandex.zip
 ```
 
 ## Controls
@@ -258,8 +269,7 @@ Rebirth could not exist without open geographic and cultural data.
 🔎 **Place search:** Photon by komoot  
 📚 **Article extracts:** Wikipedia, CC BY-SA 4.0  
 🎨 **Icons:** game-icons.net and Phosphor Icons  
-🔤 **Fonts:** PT Serif and PT Sans  
-🧭 **Map renderer:** MapLibre GL JS
+🔤 **Fonts:** PT Serif and PT Sans
 
 See [`CREDITS.md`](CREDITS.md) for the full attribution list.
 

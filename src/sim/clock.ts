@@ -13,6 +13,7 @@ import { settleLevers } from "./leverCmds";
 import { daySummary } from "./summary";
 import { dailyEconomy, payMaterials, produceStep, reportShortages, say } from "./production";
 import { isWorkHour, tolokaActive, workHours, type Levers } from "./levers";
+import { crewEfficiency } from "./needs";
 import { spendOnRoads } from "./roads";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
 import type { SimState } from "./types";
@@ -93,7 +94,7 @@ export function step(s: SimState): SimState {
     // On a толока every hand goes to its site, none to the roads.
     const toloka = tolokaActive(s.levers, s.gameMinutes);
     const bf = buildFactor(s.weather) * buildSpeedMul(s.progress); // rain, cold and storms cut the hours and the crew
-    const hours = (builderCount(s) * BASE_TICK * bf) / 60;
+    const hours = (builderCount(s) * BASE_TICK * bf * crewEfficiency(s)) / 60;
     const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock);
     const roadStock = r.stock ?? s.stock; // stone the roads took when work on them started
     roads = r.roads;

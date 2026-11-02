@@ -96,6 +96,10 @@ export function recordChronicle(prev: SimState, next: SimState): SimState {
     if (next.prod.flags.hungry) add("famine", "Еда закончилась: в поселении голод");
     else add("famineEnd", "Голод закончился");
   }
+  if (!!next.prod.flags.starving !== !!prev.prod.flags.starving) {
+    if (next.prod.flags.starving) add("starving", "Люди истощены: голод подрывает силы");
+    else add("starvingEnd", "Люди больше не истощены голодом");
+  }
 
   const year = calendar(at).year;
   if (year > calendar(prev.gameMinutes).year) add("year", `Наступил ${year}-й год`);

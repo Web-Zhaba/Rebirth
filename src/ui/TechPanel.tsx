@@ -1,3 +1,4 @@
+import { useState } from "preact/hooks";
 import { Icon } from "./Icon";
 import { Button, IconButton, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
@@ -12,90 +13,146 @@ const select = (id: string): void => {
   selectedTech.value = selectedTech.peek() === id ? null : id;
 };
 
-function Header({ v }: { v: TechView }) {
+type Filter = "all" | "available" | "locked" | "done";
+
+const FILTERS: [Filter, string][] = [
+  ["all", "Всё"],
+  ["available", "Доступно"],
+  ["locked", "Закрыто"],
+  ["done", "Изучено"],
+];
+
+// The tag a row carries: the state in one word, so the ledger reads top to bottom.
+function RowTag({ n }: { n: TechNode }) {
+  const text =
+    n.state === "available" ? "изучать" : n.state === "active" ? "идёт" : n.state === "queued" ? "в очереди" : n.state === "done" ? "изучено" : "закрыто";
+  return <span class={`tl-tag tl-${n.state}`}>{text}</span>;
+}
+
+function Row({ n }: { n: TechNode }) {
+  const sel = selectedTech.value === n.id;
+  const why =
+    n.state === "locked"
+      ? n.statusText
+      : n.opens.length > 0
+        ? `открывает: ${n.opens.slice(0, 2).join(", ")}`
+        : n.description;
   return (
-    <>
-      <div class="insp-head">
-        <span class="insp-ic">
-          <Icon name="scroll" size={28} />
+    <li>
+      <button
+        type="button"
+        class={`tl-row tl-${n.state}${sel ? " sel" : ""}`}
+        aria-pressed={sel}
+        onClick={() => select(n.id)}
+      >
+        <span class="tl-name">
+          {n.state === "done" && <Icon name="check" size={12} />}
+          {n.state === "locked" && <Icon name="lock" size={12} />}
+          {n.name}
         </span>
-        <div class="insp-title">
-          <h2>Наука</h2>
-          <span class="insp-sub">
-            Эпоха {eraLabel(v.era)} «{v.eraName}» · изучено {v.techsDone} из {v.techsTotal}
-          </span>
-        </div>
-        <IconButton icon="close" size={16} label="Закрыть" onClick={closePanel} />
-      </div>
-      <ul class="tech-speeds" aria-label="Скорость исследований по областям">
-        {v.speeds.map((s) => (
-          <li key={s.id} class={`tech-speed dom-${s.id}`}>
-            <span>{s.name}</span> <b>{speedText(s.speed)}</b>
-          </li>
-        ))}
-      </ul>
-    </>
+        <span class="tl-days">{n.state === "done" ? "—" : formatDays(n.days)}</span>
+        <RowTag n={n} />
+        <span class="tl-why">{why}</span>
+      </button>
+    </li>
   );
 }
 
-function Queue({ v }: { v: TechView }) {
-  const a = v.active;
+function Group({ title, count, available, dom, nodes }: { title: string; count: number; available: number; dom: string; nodes: TechNode[] }) {
+  if (nodes.length === 0) return null;
   return (
-    <section class="tech-queue" aria-label="Очередь исследований">
-      {a ? (
-        <div class="tech-now">
-          <div class="tech-now-row">
-            <button type="button" class="link tech-now-name" onClick={() => select(a.id)}>
-              Исследуется: {a.name}
-            </button>
-            <IconButton icon="close" size={14} label={`Отменить исследование: ${a.name}`} onClick={() => void cancelTech(a.id)} />
-          </div>
-          <ProgressBar value={a.share} label={`${a.name}: готово ${Math.floor(a.share * 100)} %`} />
-          <span class="tech-note">
-            {Math.floor(a.share * 100)} %, осталось {formatDays(a.days)}
-          </span>
-        </div>
-      ) : (
-        <p class="tech-idle" role="status">
-          Наука простаивает: выберите, что изучать.
-        </p>
-      )}
-      {v.queue.length > 0 && (
-        <ol class="tech-q-list" aria-label={`В очереди ${v.queue.length} из ${MAX_QUEUE}`}>
-          {v.queue.map(({ node, waits }) => (
-            <li key={node.id}>
-              <button type="button" class="link" onClick={() => select(node.id)}>
-                {node.name}
-              </button>
-              {waits && <span class="tech-note"> · ждёт: {waits}</span>}
-              <IconButton icon="close" size={14} label={`Убрать из очереди: ${node.name}`} onClick={() => void cancelTech(node.id)} />
-            </li>
-          ))}
-        </ol>
-      )}
+    <section class={`tl-group dom-${dom}`}>
+      <h3 class="tl-head">
+        <i class="tl-sw" />
+        {title}
+        <span class="tl-count">
+          {available > 0 ? `${available} доступно · ` : ""}
+          {count}
+        </span>
+      </h3>
+      <ul class="tl-list">
+        {nodes.map((n) => (
+          <Row key={n.id} n={n} />
+        ))}
+      </ul>
     </section>
   );
 }
 
-function Card({ n }: { n: TechNode }) {
+function Rail({
+  v,
+  era,
+  setEra,
+  filter,
+  setFilter,
+}: {
+  v: TechView;
+  era: number;
+  setEra: (e: number) => void;
+  filter: Filter;
+  setFilter: (f: Filter) => void;
+}) {
   return (
-    <section class={`tech-card dom-${n.domain}`} aria-label={`Технология: ${n.name}`}>
-      <div class="tech-card-head">
-        <h3>{n.name}</h3>
-        <span class="tech-note">Эпоха {eraLabel(n.era)}</span>
-        <IconButton icon="close" size={14} label="Скрыть карточку" onClick={() => (selectedTech.value = null)} />
+    <aside class="tech-rail" aria-label="Эпохи и области">
+      <h2 class="tr-cap">Эпохи</h2>
+      {v.lanes.map((l: TechLane) => {
+        const nodes = l.domains.flatMap((d) => d.nodes);
+        const done = nodes.filter((n) => n.state === "done").length;
+        const on = l.era === era;
+        return (
+          <button
+            key={l.era}
+            type="button"
+            class={`tr-era${on ? " sel" : ""}${l.open ? " on" : ""}`}
+            aria-pressed={on}
+            onClick={() => setEra(l.era)}
+          >
+            <span class="tr-era-t">
+              {eraLabel(l.era)} «{l.name}»
+            </span>
+            <span class="tr-era-s">{l.open ? `${done} из ${nodes.length}` : "пока закрыта"}</span>
+          </button>
+        );
+      })}
+      <h2 class="tr-cap">Области</h2>
+      {v.speeds.map((s) => (
+        <div key={s.id} class={`tr-dom dom-${s.id}`}>
+          <i class="tr-sw" />
+          <span>{s.name}</span>
+          <b>{speedText(s.speed)}</b>
+        </div>
+      ))}
+      <h2 class="tr-cap">Показывать</h2>
+      <div class="tr-filter">
+        {FILTERS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            class={`tr-f${filter === id ? " on" : ""}`}
+            aria-pressed={filter === id}
+            onClick={() => setFilter(id)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
-      <p>{n.description}</p>
-      <dl class="tech-facts">
+    </aside>
+  );
+}
+
+function Leaf({ n }: { n: TechNode }) {
+  return (
+    <aside class={`tech-leaf dom-${n.domain}`} aria-label={`Технология: ${n.name}`}>
+      <h2 class="tr-cap">Технология</h2>
+      <h3 class="tl-leaf-name">{n.name}</h3>
+      <p class="tl-leaf-text">{n.description}</p>
+      <dl class="tl-facts">
         <dt>Состояние</dt>
         <dd>{n.statusText}</dd>
         {n.state !== "done" && (
           <>
             <dt>Время</dt>
-            <dd>
-              {formatDays(n.days)}
-              {n.state === "active" ? " осталось" : ""} (базовое {n.baseDays} дн.)
-            </dd>
+            <dd>{formatDays(n.days)}</dd>
           </>
         )}
         {n.requires.length > 0 && (
@@ -114,12 +171,12 @@ function Card({ n }: { n: TechNode }) {
           <>
             <dt>Идея</dt>
             <dd>
-              «{n.insight.text}»: время короче на {Math.round(n.insight.cut * 100)} %
+              «{n.insight.text}»: короче на {Math.round(n.insight.cut * 100)} %
             </dd>
           </>
         )}
       </dl>
-      <div class="tech-actions">
+      <div class="tl-actions">
         {n.canStart && (
           <Button variant="primary" onClick={() => void startTech(n.id)}>
             Исследовать
@@ -132,69 +189,109 @@ function Card({ n }: { n: TechNode }) {
           </Button>
         )}
       </div>
-    </section>
+      <IconButton icon="close" size={14} label="Скрыть карточку" onClick={() => (selectedTech.value = null)} />
+    </aside>
   );
 }
 
-function Node({ n }: { n: TechNode }) {
-  return (
-    <li>
-      <button type="button" class={`tech-node tn-${n.state}`} aria-pressed={selectedTech.value === n.id} onClick={() => select(n.id)}>
-        <span class="tn-name">
-          {n.state === "done" && <Icon name="check" size={12} />}
-          {n.state === "locked" && <Icon name="lock" size={12} />}
-          {n.name}
-        </span>
-        <span class="tn-state">{n.statusText}</span>
-        {n.state === "active" && <span class="tn-bar" style={{ width: `${Math.floor(n.share * 100)}%` }} aria-hidden="true" />}
-      </button>
-    </li>
-  );
-}
-
-function Lane({ lane }: { lane: TechLane }) {
-  const c = lane.conditions;
-  return (
-    <section class={`tech-lane${lane.open ? "" : " tl-closed"}`} aria-label={`Эпоха ${eraLabel(lane.era)} «${lane.name}»`}>
-      <h3 class="tech-lane-head">
-        Эпоха {eraLabel(lane.era)} «{lane.name}»{!lane.open && <span class="tech-note"> · пока закрыта</span>}
-      </h3>
-      {c && (
-        <p class="tech-cond">
-          Откроется, когда: жители {Math.min(c.pop, c.popNeed)}/{c.popNeed}, технологии эпохи I {Math.min(c.techs, c.techsNeed)}/{c.techsNeed}.
-        </p>
-      )}
-      <div class="tech-cols">
-        {lane.domains.map((d) => (
-          <div key={d.id} class={`tech-col dom-${d.id}`}>
-            <h4>{d.name}</h4>
-            <ul>
-              {d.nodes.map((n) => (
-                <Node key={n.id} n={n} />
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// Science panel (right slot): research speed, the queue, the tech card and the tree by eras and domains.
+// Science as a full screen: era rail on the left, the era's register in the middle, the chosen tech on the right,
+// the queue along the foot. The tree is the register's order, not a diagram to pan around.
 export function TechPanel() {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [era, setEra] = useState<number | null>(null);
   const v = techView.value;
   if (rightPanel.value !== "tech" || !v) return null;
   const sel = selectedTech.value ? v.nodes.get(selectedTech.value) : undefined;
+
+  // The era in view: the player's pick, or the era they are actually in.
+  const shownEra = era ?? v.era;
+  const lane = v.lanes.find((l) => l.era === shownEra) ?? v.lanes[0];
+  const keep = (n: TechNode): boolean =>
+    filter === "all" || (filter === "available" ? n.state === "available" : filter === "locked" ? n.state === "locked" : n.state === "done");
+  const rank = (n: TechNode): number =>
+    n.state === "available" ? 0 : n.state === "active" ? 1 : n.state === "queued" ? 2 : n.state === "locked" ? 3 : 4;
+  const c = lane.conditions;
+  const shown = lane.domains.reduce((sum, d) => sum + d.nodes.filter(keep).length, 0);
+
   return (
-    <aside class="rs-panel tech-panel panel" id={SEMANTIC_IDS.techPanel} aria-label="Наука">
-      <Header v={v} />
-      <Queue v={v} />
-      {sel && <Card n={sel} />}
-      <div class="rs-body">
-        {v.lanes.map((l) => (
-          <Lane key={l.era} lane={l} />
-        ))}
+    <div class="tech-screen" id={SEMANTIC_IDS.techPanel} role="dialog" aria-modal="false" aria-label="Наука">
+      <div class="tech-sheet">
+        <header class="tech-head">
+          <h2 class="tech-title">Наука</h2>
+          <span class="tech-era-line">
+            Эпоха {eraLabel(v.era)} «{v.eraName}» · изучено {v.techsDone} из {v.techsTotal}
+          </span>
+          <IconButton icon="close" size={18} label="Закрыть" onClick={closePanel} />
+        </header>
+        <div class="tech-body">
+          <Rail v={v} era={shownEra} setEra={setEra} filter={filter} setFilter={setFilter} />
+          <div class="tech-ledger">
+            <div class="tl-era-head">
+              <span class="tl-era-title">
+                Эпоха {eraLabel(lane.era)} «{lane.name}»
+              </span>
+              <span class="tl-count">
+                {lane.open ? "идёт" : "закрыта"} · {shown} технол.
+              </span>
+            </div>
+            {c && !lane.open && (
+              <p class="tl-cond">
+                Откроется, когда: жители {Math.min(c.pop, c.popNeed)}/{c.popNeed}, технологии эпохи I{" "}
+                {Math.min(c.techs, c.techsNeed)}/{c.techsNeed}.
+              </p>
+            )}
+            {lane.domains.map((d) => {
+              const nodes = d.nodes.filter(keep).sort((x, y) => rank(x) - rank(y));
+              return (
+                <Group
+                  key={d.id}
+                  dom={d.id}
+                  title={d.name}
+                  count={d.nodes.length}
+                  available={d.nodes.filter((n) => n.state === "available").length}
+                  nodes={nodes}
+                />
+              );
+            })}
+            {shown === 0 && <p class="tl-empty">Здесь пока ничего нет.</p>}
+          </div>
+          {sel ? (
+            <Leaf n={sel} />
+          ) : (
+            <aside class="tech-leaf tech-leaf-empty">
+              <h2 class="tr-cap">Технология</h2>
+              <p class="tl-leaf-text">Выберите строку в реестре: здесь появятся время, предпосылки и то, что технология открывает.</p>
+            </aside>
+          )}
+        </div>
+        <footer class="tech-foot">
+          {v.active ? (
+            <div class="tf-now">
+              <button type="button" class="link tf-name" onClick={() => select(v.active!.id)}>
+                Исследуется: {v.active.name}
+              </button>
+              <ProgressBar value={v.active.share} label={`${v.active.name}: готово ${Math.floor(v.active.share * 100)} %`} />
+              <span class="tl-why">
+                {Math.floor(v.active.share * 100)} %, осталось {formatDays(v.active.days)}
+              </span>
+              <IconButton icon="close" size={14} label={`Отменить исследование: ${v.active.name}`} onClick={() => void cancelTech(v.active!.id)} />
+            </div>
+          ) : (
+            <p class="tf-idle" role="status">
+              Наука простаивает: выберите, что изучать.
+            </p>
+          )}
+          <div class="tf-queue">
+            <span class="tl-why">В очереди {v.queue.length} из {MAX_QUEUE}</span>
+            {v.queue.map(({ node }) => (
+              <span key={node.id} class="tf-chip">
+                {node.name}
+                <IconButton icon="close" size={12} label={`Убрать из очереди: ${node.name}`} onClick={() => void cancelTech(node.id)} />
+              </span>
+            ))}
+          </div>
+        </footer>
       </div>
-    </aside>
+    </div>
   );
 }

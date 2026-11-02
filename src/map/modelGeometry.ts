@@ -2,7 +2,7 @@ import { MODEL_COLORS } from "../ui/palette";
 
 // Shared geometry of the building models (heritageModels.ts for restored old buildings, townModels.ts for the town's own
 // buildings): ring in town-local metres -> triangle mesh in the same metres (x east, y north, z up). Pure maths, no GL and
-// no three.js; the layer (modelLayer.ts) projects the vertices onto the map.
+// the engine (view/engine/models.ts) projects the vertices onto the planet.
 //
 // Pipeline: the ring is cleaned (duplicates, vertex cap, self-intersection) and falls back to its oriented bounding box
 // when it is unusable. Walls are extruded from the ring; a roof is a height function over the oriented box frame (u along
@@ -20,7 +20,7 @@ export interface Model {
   facade: number[]; // s, len, top, pattern per vertex (see PATTERN)
   indices: number[];
   lift?: number[]; // per vertex: how far groundSeat.ts raised it onto the relief (the facade keeps the height above that)
-  smoke?: [number, number, number][]; // chimney tops (x, y, z in the model's metres, like positions): where smokeLayer.ts lets smoke out
+  smoke?: [number, number, number][]; // chimney tops (x, y, z in the model's metres, like positions): where the smoke comes out (view/engine/smoke.ts)
 }
 
 export const MAX_VERTS = 48; // rings with more vertices are simplified
@@ -265,12 +265,13 @@ export type TowerCap = "spire" | "onion" | "merlons";
 
 // ---- Surface patterns ----
 
-// What the layer's shader paints on a face (modelLayer.ts). A vertex's facade is (s, len, top, pattern): s and len are
+// What the shader paints on a face (engine/scene/townMesh.wgsl). A vertex's facade is (s, len, top, pattern): s and len are
 // the position along its wall and the wall's length in metres (windows are centred on the wall), `top` the height in
 // metres windows stay below.
-export const PATTERN = { plain: 0, house: 1, hall: 2, worship: 3, logs: 4, wide: 5, tower: 6, roof: 7, boards: 8, cabin: 9, track: 30, ruts: 31, cobbles: 32, deck: 33, ashlar: 34 } as const;
+export const PATTERN = { plain: 0, house: 1, hall: 2, worship: 3, logs: 4, wide: 5, tower: 6, roof: 7, boards: 8, cabin: 9, track: 30, ruts: 31, cobbles: 32, deck: 33, ashlar: 34, junctionRuts: 35, junctionCobbles: 36, junctionPlain: 37 } as const;
 // Road surfaces (30 and up, roadModels.ts) read the facade as (s along the road, offset across it, width, pattern); a
-// negative width marks a joint disc (no ruts).
+// negative width marks a joint disc (no ruts). 35..37 are the junction aprons (roadJunctions.ts): the same surfaces
+// without the shoulder line, which an apron carries as a 0..1 band in the s field instead.
 // Added to a wall pattern: a door at the middle of that wall (DOOR a plain one, GATE a wide double door).
 export const DOOR = 10;
 export const GATE = 20;
@@ -619,3 +620,4 @@ export function cylinder(mesh: Mesh, a: P3, b: P3, r: number, col: RGB, end: RGB
     }
   }
 }
+

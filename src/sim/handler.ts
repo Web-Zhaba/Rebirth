@@ -9,13 +9,13 @@ import { scarcity } from "./heritage";
 import { loseSite, restoreSite } from "./restore";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
-import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
+import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
-import { peopleStats, queryBuilding, syncPeople } from "./people";
+import { peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
@@ -157,9 +157,12 @@ export class Handler {
           this.post({ t: "loaded", save: toClientSave(save), migrated: false, away: null });
           return;
         }
-        case "query":
-          this.post({ t: "queryResult", id: msg.id, data: this.save && msg.q?.type === "building" ? inspect(this.save.sim, msg.q.id) : null });
+        case "query": {
+          const q = msg.q;
+          const data = !this.save || !q ? null : q.type === "building" ? inspect(this.save.sim, q.id) : queryResident(this.save.sim, q.id);
+          this.post({ t: "queryResult", id: msg.id, data });
           return;
+        }
         case "cmd":
           return await this.command(msg.id, msg.cmd);
         case "flush":
@@ -470,7 +473,7 @@ export class Handler {
         }
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
-      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff") {
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade") {
         const r =
           cmd.type === "setPriority" ? setPriority(sim, cmd.key)
           : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
@@ -479,6 +482,7 @@ export class Handler {
           : cmd.type === "setAdultSchool" ? setAdultSchool(sim, cmd.on)
           : cmd.type === "setJobPriority" ? setJobPriority(sim, cmd.group, cmd.priority)
           : cmd.type === "setStaff" ? setStaff(sim, cmd.id, cmd.staff)
+          : cmd.type === "setTrade" ? setTrade(sim, cmd.order)
           : callSettlers(sim);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };
@@ -493,7 +497,9 @@ export class Handler {
         if (cmd.option !== 0 && cmd.option !== 1) return reject("Некорректный ответ");
         this.save = { ...this.save, sim: resolveChoice(sim, cmd.option, false) };
         return await this.finishCommand(id);
-      } else if (cmd.type === "admin") {
+      } else if (import.meta.env.DEV && cmd.type === "admin") {
+        // Production builds ship no admin panel; there this branch is compiled out and the command falls through to
+        // the unknown-command rejection below, e.g. when sent from devtools.
         const op = cmd.op;
         if (typeof op !== "object" || op === null) return reject("Некорректная команда");
         if (op.k === "free") {

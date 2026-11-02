@@ -1,5 +1,6 @@
-/* Right slot (PLAN-ui.md section 5): the inspector and the town panel sit under the notebook button,
-   where the notebook page opens. Opaque paper, ink rules, hard shadow (panel kit class). */
+/* World «Береста и грамота» — the right slot: the inspector and the town panel, read as a bark sheet pinned to
+   the field. Rows are separated by lenticels; chips are tar-outlined tags; nothing is rounded. */
+
 .rs-panel {
   position: absolute;
   top: 220px;
@@ -11,11 +12,16 @@
   flex-direction: column;
   gap: var(--sp-2);
   font-size: var(--fs-sm);
-  background: var(--paper-raised);
+  background:
+    repeating-linear-gradient(0deg, rgba(31, 26, 19, 0.04) 0 1px, transparent 1px 20px),
+    linear-gradient(180deg, var(--paper-raised), var(--paper) 70%, var(--paper-shade));
+  border: var(--bw) solid var(--rule);
+  box-shadow: var(--shadow-panel);
   z-index: var(--z-panel);
+  scrollbar-color: var(--ink) var(--paper-shade);
 }
 
-/* Tabs wrap onto a second line instead of scrolling: a scroll bar on the strip is not part of the style. */
+/* Tabs wrap onto a second line instead of scrolling. The live tab is inked solid, like a build-bar course. */
 .rs-panel .tabs {
   flex-wrap: wrap;
   flex: none;
@@ -25,12 +31,25 @@
   flex: 1 1 auto;
   padding: var(--sp-1) 3px;
   font-size: var(--fs-sm);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.rs-panel .tab.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper-raised);
 }
 
 .insp-head {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  padding-bottom: var(--sp-2);
+  background-image: var(--lenticel);
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: 100% 2px;
 }
 
 .insp-ic {
@@ -38,8 +57,8 @@
   flex: none;
   padding: var(--sp-2);
   border: var(--bw) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--paper-shade);
+  border-radius: 0;
+  background: var(--paper-sunk);
 }
 
 .insp-title {
@@ -55,39 +74,47 @@
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--fs-lg);
+  font-weight: 800;
   line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
 }
 
 .insp-sub {
   color: var(--pencil);
 }
 
+/* A status tag: an ink stamp on bark, not a coloured pill. */
 .chip {
   display: inline-block;
   padding: 1px var(--sp-2);
   border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--paper-raised);
+  font-family: var(--font-display);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .chip-build {
   background: var(--warn-fill);
+  color: var(--warn-text);
 }
 
 .chip-ok {
   background: var(--ok-fill);
+  color: var(--ok-text);
 }
 
 .chip-warn {
   background: var(--info-fill);
+  color: var(--info);
 }
 
 .chip-bad {
   background: var(--bad-fill);
+  color: var(--bad);
 }
 
 .insp-block {
@@ -96,8 +123,8 @@
   gap: var(--sp-1);
   padding: var(--sp-2);
   border: var(--bw-hair) solid var(--rule-soft);
-  border-radius: var(--radius);
-  background: var(--paper);
+  border-radius: 0;
+  background: var(--paper-raised);
 }
 
 .insp-line {
@@ -108,6 +135,7 @@
 
 .insp-line .icon {
   align-self: center;
+  color: var(--ink-2);
 }
 
 .insp-label {
@@ -118,7 +146,8 @@
   margin-left: auto;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 
 .insp-bad .insp-value {
@@ -154,6 +183,8 @@
   margin: var(--sp-2) 0 0;
   font-family: var(--font-display);
   font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .rs-body {
@@ -169,7 +200,7 @@
 .rs-danger {
   margin-top: var(--sp-3);
   padding-top: var(--sp-2);
-  border-top: var(--bw-hair) solid var(--rule-soft);
+  border-top: 2px solid var(--ink);
 }
 
 .demand-card {
@@ -190,13 +221,14 @@
   width: 12px;
   height: 12px;
   border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }
 
 .demand-count {
   margin-left: auto;
   color: var(--pencil);
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 
 .rs-events {
@@ -239,10 +271,11 @@
   cursor: pointer;
 }
 
+/* Segmented control: tar-outlined blocks, the live one inked. */
 .seg {
   display: flex;
-  border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius);
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
   overflow: hidden;
   background: var(--paper-raised);
 }
@@ -276,7 +309,8 @@
 .seg-btn.on {
   background: var(--ink);
   color: var(--paper-raised);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 
 .seg-btn:focus-visible {
@@ -288,8 +322,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  padding: var(--sp-1) 0;
-  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
+  padding: var(--sp-1) 0 var(--sp-2);
+  background-image: var(--lenticel);
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: 100% 2px;
 }
 
 .job-head {
@@ -313,7 +350,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-
 .cell-coords {
   margin-top: var(--sp-1);
   padding: 2px 0;
@@ -321,7 +357,9 @@
   background: none;
   color: var(--info);
   font: inherit;
+  font-family: var(--font-display);
   font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   text-align: left;

@@ -1,5 +1,5 @@
-import { flyOrJump } from "../map/motion";
-import type * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
+import { atLeastAsClose, CLOSE_UP_MPP } from "../view/scale";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { frame, pendingChoice, sendCmd, setSpeed, speed } from "../simClient";
 import { play } from "./sound";
@@ -27,7 +27,7 @@ const hoursText = (h: number): string => {
 
 // An event with two choices (PLAN-pace.md section 10); every option states its effect. Unanswered, it resolves on its
 // own with the safe option when `until` passes. Enter picks the safe option while the focus is on the card itself.
-export function EventCard({ map }: { map: maplibregl.Map }) {
+export function EventCard({ view }: { view: View }) {
   const c = pendingChoice.value;
   const gm = useGameMinutes();
   const [autopause, setAutopause] = useState(readAutopause);
@@ -91,7 +91,7 @@ export function EventCard({ map }: { map: maplibregl.Map }) {
       </div>
       <p class="event-card-text">{c.text}</p>
       {pos && fl && (
-        <button class="link event-card-place" onClick={() => flyOrJump(map, { center: fl.toLngLat(pos[0], pos[1]), zoom: Math.max(map.getZoom(), 17) })}>
+        <button class="link event-card-place" onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}>
           <Icon name="find" size={14} /> Показать на карте
         </button>
       )}

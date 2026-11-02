@@ -1,26 +1,26 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type * as maplibregl from "maplibre-gl";
-import { flyOrJump, prefersReducedMotion } from "../map/motion";
-import { placeLabelsOn, togglePlaceLabels } from "../map/placeLabels";
+import { mppAtZoom, type View } from "../view/view";
+import { placeLabelsOn, togglePlaceLabels } from "../view/placeNames";
 import { MIN_QUERY, searchPlaces, type PlaceHit } from "../world/geocode";
 import { IconButton } from "./kit";
 import { Icon } from "./Icon";
 
 const DEBOUNCE_MS = 400; // Photon fair use: no request per keystroke
-const LOCATE_ZOOM = 13;
+const LOCATE_MPP = mppAtZoom(13); // old zoom 13
+const FIT_MIN_MPP = mppAtZoom(14); // a found area is never shown closer than old zoom 14
 
-// Point zoom when the hit has no extent.
-const pointZoom = (h: PlaceHit) => (h.kind === "город" ? 11 : h.kind === "страна" || h.kind === "регион" ? 6 : 14);
+// Scale when the hit has no extent (old zooms 11, 6 and 14).
+const pointMpp = (h: PlaceHit) => mppAtZoom(h.kind === "город" ? 11 : h.kind === "страна" || h.kind === "регион" ? 6 : 14);
 
-function flyTo(map: maplibregl.Map, h: PlaceHit) {
+function flyTo(view: View, h: PlaceHit) {
   if (h.bbox) {
     const [w, s, e, n] = h.bbox;
-    map.fitBounds([w, s, e, n], { padding: 60, maxZoom: 14, ...(prefersReducedMotion() && { duration: 0 }) });
-  } else flyOrJump(map, { center: [h.lng, h.lat], zoom: pointZoom(h) });
+    view.fitBounds([w, s, e, n], { padding: 60, minMpp: FIT_MIN_MPP });
+  } else view.flyTo({ center: [h.lng, h.lat], mpp: pointMpp(h) });
 }
 
 // Finding a spot before founding: search by name, the player's own location, old place names on the map.
-export function PlaceSearch({ map }: { map: maplibregl.Map }) {
+export function PlaceSearch({ view }: { view: View }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<PlaceHit[]>([]);
   const [active, setActive] = useState(0);
@@ -38,9 +38,9 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
     }
     const ctl = new AbortController();
     const t = setTimeout(() => {
-      const c = map.getCenter();
+      const [clng, clat] = view.camera().center;
       setBusy(true);
-      searchPlaces(text, { lng: c.lng, lat: c.lat }, ctl.signal).then(
+      searchPlaces(text, { lng: clng, lat: clat }, ctl.signal).then(
         (h) => {
           setHits(h);
           setActive(0);
@@ -61,10 +61,10 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
       clearTimeout(t);
       ctl.abort();
     };
-  }, [q, map]);
+  }, [q, view]);
 
   const pick = (h: PlaceHit) => {
-    flyTo(map, h);
+    flyTo(view, h);
     setQ(h.name);
     setOpen(false);
     input.current?.blur();
@@ -76,7 +76,7 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
     navigator.geolocation.getCurrentPosition(
       (p) => {
         setMsg("");
-        flyOrJump(map, { center: [p.coords.longitude, p.coords.latitude], zoom: LOCATE_ZOOM });
+        view.flyTo({ center: [p.coords.longitude, p.coords.latitude], mpp: LOCATE_MPP });
       },
       (e) => setMsg(e.code === e.PERMISSION_DENIED ? "Нет доступа к местоположению" : "Не удалось определить место"),
       { timeout: 15000, maximumAge: 600000 },
@@ -100,7 +100,7 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
 
   const showList = open && hits.length > 0;
   return (
-    <div class="panel place-search" role="search">
+    <div class="place-search" role="search">
       <div class="place-search-row">
         <label class="place-search-field">
           <Icon name="search" size={16} />
@@ -149,6 +149,9 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
               {h.where && <span class="place-hit-where">{h.where}</span>}
             </li>
           ))}
+          <li class="place-hit-credit" role="presentation">
+            Поиск: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>, {"\u00a9"} OpenStreetMap
+          </li>
         </ul>
       )}
       {(msg || busy) && (
@@ -156,9 +159,6 @@ export function PlaceSearch({ map }: { map: maplibregl.Map }) {
           {msg || "Ищем…"}
         </div>
       )}
-      <div class="place-search-credit">
-        Поиск: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>, {"\u00a9"} OpenStreetMap
-      </div>
     </div>
   );
 }

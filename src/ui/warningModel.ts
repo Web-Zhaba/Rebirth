@@ -18,7 +18,7 @@ export function warningAction(id: string): WarningAction {
     const service = id.slice("service:".length) as ServiceId;
     if (SERVICE_IDS.has(service)) return { overlay: service };
   }
-  return id === "famine" || id === "lowfood" || id === "outlook" || id === "nohands" || id === "nologs" ? "town" : null;
+  return id === "famine" || id === "lowfood" || id === "outlook" || id === "nohands" || id === "nologs" || id === "starving" || id === "tired" || id === "lonely" || id === "freezing" ? "town" : null;
 }
 
 export function serviceWarningText(name: string, uncovered: number): string {

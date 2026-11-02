@@ -218,6 +218,16 @@ describe("saving", () => {
     const back = parseSave(save({ ...s, realTime: NOW }), NOW + 1000);
     expect(back?.sim.levers).toEqual(s.levers);
   });
+  it("the market's trade order and yesterday's trade survive a round trip; a broken one is dropped", () => {
+    const s = world([site(1)]);
+    const trade = { give: "stone", get: "wares", gave: 25, got: 4.5 };
+    const back = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "wares" } }, prod: { ...s.prod, trade }, realTime: NOW }), NOW + 1000);
+    expect(back?.sim.levers.trade).toEqual({ give: "stone", get: "wares" });
+    expect(back?.sim.prod.trade).toEqual(trade);
+    const bad = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "stone" } }, prod: { ...s.prod, trade: { ...trade, get: "gold" } }, realTime: NOW }), NOW + 1000);
+    expect(bad?.sim.levers.trade).toBeNull();
+    expect(bad?.sim.prod.trade).toBeUndefined();
+  });
   it("old saves load with every lever off", () => {
     const { levers: _l, ...old } = world([site(1)]);
     expect(parseSave(save({ ...old, realTime: NOW }), NOW + 1000)?.sim.levers).toEqual(emptyLevers());

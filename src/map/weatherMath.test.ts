@@ -15,8 +15,8 @@ describe("snow cover", () => {
     expect(snowOpacity(0)).toBe(0);
     expect(snowOpacity(0.009)).toBe(0);
     expect(snowOpacity(0.01)).toBe(0);
-    expect(snowOpacity(0.4)).toBeCloseTo(0.5, 12);
-    expect(snowOpacity(1)).toBeCloseTo(0.5, 12);
+    expect(snowOpacity(0.4)).toBeCloseTo(0.78, 12);
+    expect(snowOpacity(1)).toBeCloseTo(0.78, 12);
   });
 
   it("rises smoothly and monotonically between the thresholds", () => {
@@ -24,11 +24,11 @@ describe("snow cover", () => {
     for (let m = 0.02; m <= 0.45; m += 0.01) {
       const cur = snowOpacity(m);
       expect(cur).toBeGreaterThanOrEqual(prev);
-      expect(cur).toBeLessThanOrEqual(0.5);
+      expect(cur).toBeLessThanOrEqual(0.78);
       prev = cur;
     }
     expect(snowOpacity(0.2)).toBeGreaterThan(0);
-    expect(snowOpacity(0.2)).toBeLessThan(0.5);
+    expect(snowOpacity(0.2)).toBeLessThan(0.78);
   });
 });
 
@@ -37,8 +37,8 @@ describe("ice cover", () => {
     expect(iceOpacity(0)).toBe(0);
     expect(iceOpacity(0.149)).toBe(0);
     expect(iceOpacity(0.15)).toBe(0);
-    expect(iceOpacity(0.8)).toBeCloseTo(0.55, 12);
-    expect(iceOpacity(1)).toBeCloseTo(0.55, 12);
+    expect(iceOpacity(0.8)).toBeCloseTo(0.8, 12);
+    expect(iceOpacity(1)).toBeCloseTo(0.8, 12);
   });
 
   it("rises smoothly and monotonically", () => {
@@ -46,11 +46,11 @@ describe("ice cover", () => {
     for (let v = 0.16; v <= 0.85; v += 0.01) {
       const cur = iceOpacity(v);
       expect(cur).toBeGreaterThanOrEqual(prev);
-      expect(cur).toBeLessThanOrEqual(0.55);
+      expect(cur).toBeLessThanOrEqual(0.8);
       prev = cur;
     }
     expect(iceOpacity(0.5)).toBeGreaterThan(0);
-    expect(iceOpacity(0.5)).toBeLessThan(0.55);
+    expect(iceOpacity(0.5)).toBeLessThan(0.8);
   });
 });
 

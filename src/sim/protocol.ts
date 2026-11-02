@@ -1,10 +1,11 @@
 import type { Speed } from "./clock";
-import type { Light, Trip } from "../map/lifeLayer";
+import type { Light, Trip } from "../map/life";
 import type { AdminOp } from "./admin";
 import type { Away } from "./away";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
-import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, RoadKind, SimSnapshot, RestoreMode, Site, StoredArticle, ZoneState, ZoneType } from "./types";
+import type { TradeOrder } from "./trade";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, SimSnapshot, RestoreMode, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
 export type { Away };
 
@@ -40,6 +41,7 @@ export type Cmd =
   | { type: "setRations"; rations: Rations }
   | { type: "setAdultSchool"; on: boolean }
   | { type: "callSettlers" }
+  | { type: "setTrade"; order: TradeOrder | null } // what the markets swap every day
   // Jobs: hiring priority of a job group (or of construction), and the staff limit of a workplace.
   | { type: "setJobPriority"; group: JobKey; priority: Priority }
   | { type: "setStaff"; id: number; staff: number }
@@ -66,7 +68,7 @@ export type ToWorker =
   | { t: "load"; legacy: string | null; now: number }
   | { t: "found"; city: City; now: number }
   | { t: "cmd"; id: number; cmd: Cmd }
-  | { t: "query"; id: number; q: { type: "building"; id: number } }
+  | { t: "query"; id: number; q: { type: "building"; id: number } | { type: "resident"; id: number } }
   | { t: "flush" }
   // Session setting, not saved: 0 = paused. `now` keeps paused wall time from being owed later.
   | { t: "speed"; speed: Speed; now: number }
@@ -88,7 +90,7 @@ export type FromWorker =
   // the summary of a catch-up after the tab was hidden (a catch-up at load reports it in "loaded")
   | { t: "away"; away: Away }
   | ({ t: "cmdResult"; id: number } & CmdResult)
-  | { t: "queryResult"; id: number; data: BuildingQuery | null }
+  | { t: "queryResult"; id: number; data: BuildingQuery | ResidentQuery | null }
   // cosmetic, once per game day, whenever the families on their way change, and on load, never during catch-up; not part of the sim state or saves
   | { t: "life"; day: number; trips: Trip[]; traffic: Record<number, number>; lights: Light[] }
   | { t: "resetDone" }

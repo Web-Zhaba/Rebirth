@@ -1,7 +1,6 @@
 import { signal } from "@preact/signals";
 
-// Player choices for the clouds (PLAN-clouds.md section 7), kept in localStorage. No three.js here: the layer bar and
-// the settings dialog import this from the main chunk.
+// Player choices for the clouds (PLAN-clouds.md section 7), kept in localStorage.
 
 export type CloudQuality = "low" | "medium" | "high";
 export const CLOUD_QUALITIES: CloudQuality[] = ["low", "medium", "high"];
@@ -51,22 +50,6 @@ export function toggleClouds(): void {
 export function setCloudQuality(q: CloudQuality): void {
   cloudQuality.value = q;
   write(QUALITY_KEY, q);
-}
-
-// Whether this device can draw the "high" preset (RGBA16F render targets). The dialog opens before three.js is loaded,
-// so this probes a throwaway WebGL2 context once; the layer re-checks with its own context and steps down to medium
-// if the probe was too optimistic (cloudQuality.ts effectiveQuality).
-let highProbe: boolean | null = null;
-export function highQualityAvailable(): boolean {
-  if (highProbe !== null) return highProbe;
-  try {
-    const gl = document.createElement("canvas").getContext("webgl2");
-    highProbe = !!gl && !!gl.getExtension("EXT_color_buffer_float");
-    gl?.getExtension("WEBGL_lose_context")?.loseContext();
-  } catch {
-    highProbe = false;
-  }
-  return highProbe;
 }
 
 // The weather site the clouds are drawn for (seed and phase from the snapshot); null before founding.

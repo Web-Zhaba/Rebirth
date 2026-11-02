@@ -1,4 +1,4 @@
-import type * as maplibregl from "maplibre-gl";
+import type { View } from "../view/view";
 import { techOf } from "../sim/tech";
 import type { City } from "../sim/types";
 import { state } from "../simClient";
@@ -39,18 +39,18 @@ function ResearchStatus() {
 
 // Full-width top bar, then persistent status and warnings on the left, builders' tasks in the bottom-right corner.
 // The town panel lives in the right slot (App).
-export function Hud({ city, map }: { city: City; map: maplibregl.Map }) {
+export function Hud({ city, view }: { city: City; view: View }) {
   return (
     <>
-      <TopBar city={city} map={map} />
+      <TopBar city={city} view={view} />
       <aside class="side-col" aria-label={LANDMARK_LABELS.status}>
         <ResearchStatus />
         <Warnings />
         <LeftPanel />
-        <EventCard map={map} />
-        <Toasts map={map} />
+        <EventCard view={view} />
+        <Toasts view={view} />
       </aside>
-      <BuilderTasks map={map} />
+      <BuilderTasks view={view} />
     </>
   );
 }
