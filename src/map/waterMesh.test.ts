@@ -37,6 +37,16 @@ describe("tileWater", () => {
     const edge = { rings: [ring([[0, 10], [50, 10], [50, 90], [0, 90]])] };
     expect(tileWater([edge], 100, id).shores.length / 4).toBe(3);
   });
+  it("links polygons that share an edge, not ones that only touch at a point", () => {
+    const lake = { rings: [ring([[10, 10], [50, 10], [50, 50], [10, 50]])] };
+    const river = { rings: [ring([[50, 20], [90, 20], [90, 40], [50, 40]])] }; // its mouth on the lake's east shore
+    const mouth = { rings: [ring([[50, 20], [50, 40], [90, 40], [90, 20]])] };
+    const corner = { rings: [ring([[50, 50], [70, 50], [70, 70], [50, 70]])] };
+    expect(tileWater([lake, corner], 100, id).links).toEqual([]);
+    const shared = { rings: [ring([[10, 10], [50, 10], [50, 20], [50, 40], [50, 50], [10, 50]])] }; // the mouth's corners on its ring
+    expect(tileWater([shared, river], 100, id).links).toEqual([0, 1]);
+    expect(tileWater([shared, corner, mouth], 100, id).links).toEqual([0, 2]);
+  });
   it("records where the tile cut a polygon, side by side", () => {
     expect(w.borders).toEqual([0, BORDER.east, 10, 90]);
     const edge = { rings: [ring([[0, 10], [50, 10], [50, 90], [0, 90]])] };

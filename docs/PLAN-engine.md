@@ -482,7 +482,9 @@ Parity against section 2, row by row:
     water by alpha (far edge, zoom-in) instead of into a flat fill; ice and snow on it come from `groundWeather`, the
     rain rings from the weather at the camera target (`EngineWeather.rain`). Fixed on the way: a lake cut by the z12
     tiles took a water level per piece, so the pieces met with a step (a light seam on the old map too); the tiles now
-    record where they cut a polygon (`waterMesh.ts tileWater borders`) and the pieces of one water share its level.
+    record where they cut a polygon (`waterMesh.ts tileWater borders`) and the pieces of one water share its level. The
+    same held where a river polygon runs into a lake polygon: polygons sharing an edge (two corners or more) are one
+    water too (`tileWater links`).
     The chunk frustum test places chunk centres exactly in the origin frame (the town's metres drift from it by
     hundreds of metres tens of kilometres out).
   - Fields (`engine/scene/fields.ts` + `fields.wgsl`, `view/engine/fields.ts`): the old 3D fields' mesh, calendar,

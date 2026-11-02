@@ -137,7 +137,7 @@ export function attachWater(engine: Engine, o: WaterOptions): void {
             const borders = w.borders.map((v, k) => (k % 4 >= 2 ? v / t.extent : v)); // runs as shares of the side
             return { ...w, borders, boxes: w.pieces.map(boxOf) };
           },
-          (): LandWater => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], tones: [], borders: [], boxes: [] }),
+          (): LandWater => ({ pieces: [], shores: [], pieceOf: [], shoreOf: [], tones: [], borders: [], links: [], boxes: [] }),
         )
         .then((w) => {
           if (tilesFor === tf) land.set(key, w);
@@ -205,15 +205,28 @@ export function attachWater(engine: Engine, o: WaterOptions): void {
     hs.sort((a, b) => a - b);
     return hs[hs.length >> 1];
   };
-  // The polygons that are one water with a polygon (tile key, index in the tile) across the edges the tiles cut it at,
-  // among the tiles under a box; null while one of them loads.
+  // The polygons that are one water with a polygon (tile key, index in the tile): across the edges the tiles cut it at
+  // and along the edges it shares with other water (a river into a lake), among the tiles under a box; null while one
+  // of them loads.
   const lakeOf = (tf: Frame, tile: string, poly: number, box: Box): { tile: string; poly: number }[] | null => {
     const allowed = new Set(tilesUnder(tf, box, NATURE_MAXZOOM).map(([a, b]) => `${a}/${b}`));
     const seen = new Set([`${tile}:${poly}`]);
     const out = [{ tile, poly }];
+    const add = (tile: string, poly: number) => {
+      const key = `${tile}:${poly}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ tile, poly });
+    };
     for (let q = 0; q < out.length; q++) {
       const m = out[q];
-      const b = land.get(m.tile)!.borders;
+      const own = land.get(m.tile)!;
+      // the polygons of its own tile it shares an edge with (a river running into a lake)
+      for (let k = 0; k < own.links.length; k += 2) {
+        if (own.links[k] === m.poly) add(m.tile, own.links[k + 1]);
+        else if (own.links[k + 1] === m.poly) add(m.tile, own.links[k]);
+      }
+      const b = own.borders;
       const [tx, ty] = m.tile.split("/").map(Number);
       for (let k = 0; k < b.length; k += 4) {
         if (b[k] !== m.poly) continue;
@@ -226,11 +239,7 @@ export function attachWater(engine: Engine, o: WaterOptions): void {
         if (!nt) return null;
         const nb = nt.borders;
         for (let j = 0; j < nb.length; j += 4) {
-          if (nb[j + 1] !== OPPOSITE[side] || nb[j + 2] >= b[k + 3] || nb[j + 3] <= b[k + 2]) continue;
-          const key = `${nk}:${nb[j]}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          out.push({ tile: nk, poly: nb[j] });
+          if (nb[j + 1] === OPPOSITE[side] && nb[j + 2] < b[k + 3] && nb[j + 3] > b[k + 2]) add(nk, nb[j]);
         }
       }
     }
@@ -238,7 +247,7 @@ export function attachWater(engine: Engine, o: WaterOptions): void {
   };
 
   // The water level of a polygon at a corner of the chunk grid: the median ground height of its own shore near the
-  // corner (its own: of the whole water the tiles cut it from, so the pieces meet level at the tile edges), the nearest
+  // corner (its own: of the whole water lakeOf finds, so the pieces meet level at tile edges and river mouths), the nearest
   // reach that has any, else of all its shore; a polygon with no shore near (the middle of a large lake) takes any shore
   // near the corner, else the ground there. null while tiles or ground load.
   const levelAt = (tf: Frame, tile: string, poly: number, ci: number, cj: number): number | null => {

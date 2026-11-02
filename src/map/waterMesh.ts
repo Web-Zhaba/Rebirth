@@ -19,6 +19,7 @@ export interface TileWater {
   shoreOf: number[]; // the polygon of each shore segment
   tones: number[]; // per shore segment: 0 bare ground .. 1 forest on the land behind it (tileWater's `tone`)
   borders: number[]; // where the tile cut a polygon: polygon, side (BORDER), from, to (tile units along that side) per run
+  links: number[]; // pairs of polygons that touch along an edge (a river running into a lake): one water
 }
 
 // The sides of a tile, as tileWater's `borders` name them; a run on one side meets the neighbour's run on OPPOSITE.
@@ -80,6 +81,7 @@ const area2 = (r: ArrayLike<number>) => {
 // sides of every shore segment.
 export function tileWater(polys: readonly { rings: number[][] }[], extent: number, toLocal: (tx: number, ty: number) => XY, tone?: (tx: number, ty: number) => number, probe = 0): TileWater {
   const pieces: XY[][] = [], shores: number[] = [], pieceOf: number[] = [], shoreOf: number[] = [], tones: number[] = [], borders: number[] = [];
+  const owners = new Map<string, Set<number>>(); // vertex -> the polygons it is a corner of
   const box: Box = [0, 0, extent, extent];
   // an edge along the tile's border or outside it on one side is where the tile cut the water, not a shore
   const cut = (ax: number, ay: number, bx: number, by: number) =>
@@ -95,6 +97,10 @@ export function tileWater(polys: readonly { rings: number[][] }[], extent: numbe
       if (s === sign) groups.push([r]);
       else groups[groups.length - 1]?.push(r);
       for (let i = 0; i < r.length; i += 2) {
+        const at = `${r[i]},${r[i + 1]}`;
+        const own = owners.get(at);
+        if (own) own.add(poly);
+        else owners.set(at, new Set([poly]));
         const j = (i + 2) % r.length;
         if (cut(r[i], r[i + 1], r[j], r[j + 1])) {
           // the run of the tile's side the polygon touches (its buffer outside the tile projected onto the side)
@@ -133,7 +139,20 @@ export function tileWater(polys: readonly { rings: number[][] }[], extent: numbe
     }
     groups = [];
   });
-  return { pieces, shores, pieceOf, shoreOf, tones, borders };
+  // polygons sharing two corners or more share an edge (one is enough for a point touch, which is not)
+  const shared = new Map<string, number>();
+  for (const own of owners.values()) {
+    if (own.size < 2) continue;
+    const list = [...own];
+    for (let a = 0; a < list.length; a++)
+      for (let b = a + 1; b < list.length; b++) {
+        const key = `${Math.min(list[a], list[b])},${Math.max(list[a], list[b])}`;
+        shared.set(key, (shared.get(key) ?? 0) + 1);
+      }
+  }
+  const links: number[] = [];
+  for (const [key, n] of shared) if (n >= 2) links.push(...key.split(",").map(Number));
+  return { pieces, shores, pieceOf, shoreOf, tones, borders, links };
 }
 
 // Nearest segment within `cap` of a point: segments binned in cells of `cap` over the region they are asked about.
