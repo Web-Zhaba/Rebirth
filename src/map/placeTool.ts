@@ -15,7 +15,7 @@ import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, SITE_RADIUS, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
 const BUCKET = 16;
@@ -51,6 +51,7 @@ export function attachPlaceTool(view: View): void {
   let cursor: { x: number; y: number } | null = null; // px
   let local: Pt | null = null; // m
   let busy = false;
+  let spaceDown = false;
   let timer = 0;
 
   const setLabel = (text: string | null) => {
@@ -253,7 +254,7 @@ export function attachPlaceTool(view: View): void {
   const onClick = (e: ViewPointer) => {
     const id = active();
     const f = frame.value;
-    if (!id || !f || busy) return;
+    if (!id || !f || busy || spaceDown) return;
     if (view.metersPerPixel() > ZONE_MAX_MPP) {
       flash("Приблизьте карту");
       return;
@@ -301,13 +302,38 @@ export function attachPlaceTool(view: View): void {
   const onKeyDown = (e: KeyboardEvent) => {
     const el = e.target as HTMLElement | null;
     if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+    if (e.key === " " && active()) {
+      e.preventDefault();
+      if (!spaceDown) {
+        spaceDown = true;
+        setSpacePan(true);
+        syncPan(view);
+      }
+      return;
+    }
     if (e.key === "Escape" && active()) tool.value = null;
+  };
+
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (e.key !== " " || !spaceDown) return;
+    spaceDown = false;
+    setSpacePan(false);
+    syncPan(view);
+  };
+
+  const onBlur = () => {
+    if (!spaceDown) return;
+    spaceDown = false;
+    setSpacePan(false);
+    syncPan(view);
   };
 
   view.on("mousemove", onMove);
   view.on("click", onClick);
   view.on("contextmenu", onContext);
   window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
   view.canvas.addEventListener("mouseleave", () => {
     cursor = null;
     local = null;
@@ -322,6 +348,11 @@ export function attachPlaceTool(view: View): void {
     untracked(() => {
       clearOverlay();
       const id = active();
+      if (!id && spaceDown) {
+        spaceDown = false;
+        setSpacePan(false);
+      }
+      syncPan(view);
       if (!id) view.canvas.style.cursor = placementCursor(false, "none");
       else if (local) refresh();
       else view.canvas.style.cursor = placementCursor(true, "pending");

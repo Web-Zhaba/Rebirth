@@ -9,8 +9,8 @@ export function mppToDistance(mpp: number, fovYDeg: number, heightPx: number): n
   return (mpp * Math.max(1, heightPx)) / (2 * Math.tan((fovYDeg * Math.PI) / 360));
 }
 
-// MapLibre's click tolerance: a press that moved this far (CSS px) is a drag, not a click.
-export const CLICK_TOLERANCE = 3;
+// Touchpad taps can drift a few CSS pixels between press and release; keep small movements clickable.
+export const CLICK_TOLERANCE = 6;
 
 export function isClick(down: readonly [number, number] | null, up: readonly [number, number], tolerance = CLICK_TOLERANCE): boolean {
   if (!down) return true; // no press seen (a synthetic click): let it through

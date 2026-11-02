@@ -12,13 +12,14 @@ describe("mpp <-> distance", () => {
 });
 
 describe("click vs drag", () => {
-  it("accepts a press that stayed within the tolerance", () => {
+  it("accepts small pointer drift such as a touchpad tap", () => {
     expect(isClick([10, 10], [10 + CLICK_TOLERANCE, 10])).toBe(true);
+    expect(isClick([10, 10], [15, 10])).toBe(true);
     expect(isClick([10, 10], [12, 12])).toBe(true);
   });
-  it("rejects a drag", () => {
-    expect(isClick([10, 10], [14, 10])).toBe(false);
-    expect(isClick([0, 0], [3, 3])).toBe(false);
+  it("rejects a deliberate drag beyond the click tolerance", () => {
+    expect(isClick([10, 10], [17, 10])).toBe(false);
+    expect(isClick([0, 0], [6, 6])).toBe(false);
   });
   it("lets a click without a press through", () => {
     expect(isClick(null, [5, 5])).toBe(true);

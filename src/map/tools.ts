@@ -75,16 +75,20 @@ export function flash(text: string): void {
 export const ZONE_MAX_MPP = mppAtZoom(15); // old MIN_ZONE_ZOOM 15
 export const ROAD_MAX_MPP = mppAtZoom(14); // old MIN_ROAD_ZOOM 14
 
-// Drawing tools own the drag: the map must not pan under them (Space pans temporarily).
+// Drawing and placement tools own map input; Space temporarily gives panning back to the camera.
 let panOff = false;
 let spaceHeld = false;
 export const setSpacePan = (on: boolean): void => {
   spaceHeld = on;
 };
+export function panLockedForTool(t: Tool | null, mpp: number, temporaryPan = false): boolean {
+  if (!t || temporaryPan) return false;
+  if (isRoadTool(t)) return mpp <= ROAD_MAX_MPP;
+  return (isBrushTool(t) || isPlaceTool(t)) && mpp <= ZONE_MAX_MPP;
+}
+
 export function syncPan(view: View): void {
-  const t = tool.value;
-  const mpp = view.metersPerPixel();
-  const want = !!t && !spaceHeld && (isRoadTool(t) ? mpp <= ROAD_MAX_MPP : isBrushTool(t) ? mpp <= ZONE_MAX_MPP : false);
+  const want = panLockedForTool(tool.value, view.metersPerPixel(), spaceHeld);
   if (want === panOff) return;
   panOff = want;
   view.setPanEnabled(!want);
