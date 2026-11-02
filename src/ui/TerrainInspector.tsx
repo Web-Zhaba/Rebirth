@@ -55,7 +55,7 @@ export function TerrainInspector({ view }: { view: View }) {
       seq++;
       setInfo(null);
     };
-    const off = view.on("mousemove", onMove);
+    const off = view.on("pointermove", onMove);
     view.canvas.addEventListener("mouseout", onOut);
     return () => {
       off();
