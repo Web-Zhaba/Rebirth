@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { XY } from "./modelGeometry";
-import { BORDER, bridgePiers, buildWaterChunk, clipBox, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Waterway } from "./waterMesh";
+import { BORDER, bridgePiers, buildWaterChunk, clipBox, interpolateWaterLevel, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Waterway } from "./waterMesh";
 
 const area = (p: XY[]) => Math.abs(p.reduce((a, [x, y], i) => a + x * p[(i + 1) % p.length][1] - p[(i + 1) % p.length][0] * y, 0)) / 2;
 const ring = (pts: XY[]) => pts.flat();
@@ -51,6 +51,19 @@ describe("tileWater", () => {
     expect(w.borders).toEqual([0, BORDER.east, 10, 90]);
     const edge = { rings: [ring([[0, 10], [50, 10], [50, 90], [0, 90]])] };
     expect(tileWater([edge], 100, id).borders).toEqual([0, BORDER.west, 10, 90]);
+  });
+});
+
+describe("interpolateWaterLevel", () => {
+  it("uses shore-derived corner levels instead of following terrain under water", () => {
+    // A raised bridge deck or DEM spike under a polygon must not pull the water surface up.
+    expect(interpolateWaterLevel(12, 16, 20, 24, 0.5, 0.5)).toBe(18);
+    expect(interpolateWaterLevel(5, 5, 5, 5, 0.25, 0.75)).toBe(5);
+  });
+
+  it("interpolates each of the four chunk corners", () => {
+    expect(interpolateWaterLevel(0, 10, 20, 30, 1, 0)).toBe(10);
+    expect(interpolateWaterLevel(0, 10, 20, 30, 0, 1)).toBe(20);
   });
 });
 

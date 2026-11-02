@@ -19,7 +19,7 @@ import { getLandTile, getWaterwayTile } from "../../world/tiles";
 import { motionTime, water3dOn } from "../../map/graphicsSettings";
 import { rgb, type XY } from "../../map/modelGeometry";
 import { roadChains } from "../../map/roadChains";
-import { BORDER, bridgePiers, buildWaterChunk, FLOW_REACH, nearestPiers, OPPOSITE, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Pier, type TileWater, type Waterway } from "../../map/waterMesh";
+import { BORDER, bridgePiers, buildWaterChunk, FLOW_REACH, interpolateWaterLevel, nearestPiers, OPPOSITE, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Pier, type TileWater, type Waterway } from "../../map/waterMesh";
 import { iceOpacity, WIND_DIR } from "../../map/weatherMath";
 import { weatherMapOn } from "../../map/weatherSettings";
 import { mppAtZoom, zoomAtMpp } from "../view";
@@ -332,15 +332,14 @@ export function attachWater(engine: Engine, o: WaterOptions): void {
       if (lv.some((h) => h === null)) return null;
       corners.set(pi, lv as number[]);
     }
-    const polyPts: XY[] = [];
-    for (let v = 0; v < c.ribbons; v++) polyPts.push([c.xy[v * 2], c.xy[v * 2 + 1]]);
-    const under = heights(tf, polyPts);
-    if (!under) return null;
+    // Polygon water is a level surface defined by its shore samples. Do not clamp it to the DEM underneath:
+    // elevation tiles can contain bridge decks/embankments or isolated spikes, which would otherwise lift the water
+    // mesh into visible hills. Narrow line-only streams below still follow the ground.
     for (let v = 0; v < c.ribbons; v++) {
       const [l00, l10, l01, l11] = corners.get(c.piece[v])!;
       const fx = Math.min(1, Math.max(0, (c.xy[v * 2] - box[0]) / SIZE));
       const fy = Math.min(1, Math.max(0, (c.xy[v * 2 + 1] - box[1]) / SIZE));
-      z[v] += Math.max(under[v], l00 * (1 - fx) * (1 - fy) + l10 * fx * (1 - fy) + l01 * (1 - fx) * fy + l11 * fx * fy);
+      z[v] += interpolateWaterLevel(l00, l10, l01, l11, fx, fy);
     }
     const centres: XY[] = [];
     for (let v = c.ribbons + 1; v < n; v += 3) centres.push([c.xy[v * 2], c.xy[v * 2 + 1]]);
