@@ -67,6 +67,9 @@ export function attachZoneTool(view: View): void {
   let cursor: { x: number; y: number } | null = null; // px
   let local: Pt | null = null; // m
   let spaceDown = false;
+  let activePointerId: number | null = null;
+  const activePointers = new Set<number>();
+  let multiPointer = false;
 
   // ----- cell lookup -----
   let indexFor: unknown = null;
@@ -183,7 +186,27 @@ export function attachZoneTool(view: View): void {
     }
   };
 
+  const cancelBrush = () => {
+    if (!dragging) return;
+    dragging = false;
+    strokeEnd = null;
+    painted = new Map();
+    paintPreview.value = dragBase.size > 0 ? new Map(dragBase) : null;
+  };
+
   const onDown = (e: ViewPointer) => {
+    if (e.pointerId === null) return;
+    if (activePointers.size === 0) multiPointer = false;
+    activePointers.add(e.pointerId);
+    if (activePointers.size > 1 || !e.isPrimary) {
+      multiPointer = true;
+      activePointerId = null;
+      cancelBrush();
+      hoverKeys.value = [];
+      setLabel(null);
+      return;
+    }
+    activePointerId = e.pointerId;
     const t = activeBrush();
     if (!t || e.original.button !== 0 || spaceDown || view.metersPerPixel() > ZONE_MAX_MPP) return;
     const b = brushAt(e, t);
@@ -233,7 +256,11 @@ export function attachZoneTool(view: View): void {
     paintPreview.value = new Map([...dragBase, ...painted]);
   };
 
-  const onUp = () => {
+  const onUp = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 0) multiPointer = false;
+    if (activePointerId !== e.pointerId) return;
+    activePointerId = null;
     if (!dragging) return;
     dragging = false;
     strokeEnd = null;
@@ -245,6 +272,14 @@ export function attachZoneTool(view: View): void {
       return;
     }
     send(keys, zone);
+  };
+
+  const onCancel = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 0) multiPointer = false;
+    if (activePointerId !== e.pointerId) return;
+    activePointerId = null;
+    cancelBrush();
   };
 
   // ----- field -----
@@ -381,6 +416,7 @@ export function attachZoneTool(view: View): void {
 
   // ----- events -----
   const onMove = (e: ViewPointer) => {
+    if (multiPointer || !e.isPrimary || (activePointerId !== null && e.pointerId !== activePointerId)) return;
     cursor = { x: e.point[0], y: e.point[1] };
     const t = tool.value;
     if (!t) return;
@@ -452,15 +488,39 @@ export function attachZoneTool(view: View): void {
     if (e.key === " ") releaseSpacePan();
   };
 
-  view.on("mousemove", onMove);
+  view.on("pointermove", onMove);
   view.on("click", onClick);
-  view.on("mousedown", onDown);
+  view.on("pointerdown", onDown);
+  // Track every canvas pointer, including a second finger placed over the sky.
+  // The View event above only dispatches when the ray hits the planet.
+  const trackPointerDown = (e: PointerEvent) => {
+    if (activePointers.size === 0) multiPointer = false;
+    activePointers.add(e.pointerId);
+    if (activePointers.size > 1 || !e.isPrimary) {
+      const wasMultiPointer = multiPointer;
+      multiPointer = true;
+      activePointerId = null;
+      if (!wasMultiPointer) {
+        cancelBrush();
+        hoverKeys.value = [];
+        setLabel(null);
+      }
+    }
+  };
+  view.canvas.addEventListener("pointerdown", trackPointerDown);
   view.on("contextmenu", onContext);
   view.on("move", () => syncPan(view));
-  window.addEventListener("mouseup", onUp);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", releaseSpacePan);
+  window.addEventListener("blur", () => {
+    activePointers.clear();
+    activePointerId = null;
+    multiPointer = false;
+    cancelBrush();
+    releaseSpacePan();
+  });
   view.canvas.addEventListener("mouseleave", () => {
     cursor = null;
     hoverKeys.value = [];

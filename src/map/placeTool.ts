@@ -328,7 +328,7 @@ export function attachPlaceTool(view: View): void {
     syncPan(view);
   };
 
-  view.on("mousemove", onMove);
+  view.on("pointermove", onMove);
   view.on("click", onClick);
   view.on("contextmenu", onContext);
   window.addEventListener("keydown", onKeyDown);

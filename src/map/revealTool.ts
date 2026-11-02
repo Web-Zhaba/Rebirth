@@ -24,7 +24,7 @@ export function attachRevealTool(view: View): void {
     view.overlay("reveal-disc").setData({ type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] });
   };
 
-  view.on("mousemove", (e) => {
+  view.on("pointermove", (e) => {
     const f = frame.value;
     if (revealRadius.value === null || !f) return;
     at = f.toLocal(e.lngLat[0], e.lngLat[1]);

@@ -118,7 +118,7 @@ export function attachBuildingPick(view: View): void {
     selectedBuilding.value = buildingAt(e.lngLat[0], e.lngLat[1]);
   });
   let pointer = false;
-  view.on("mousemove", (e) => {
+  view.on("pointermove", (e) => {
     const over = !tool.value && buildingAt(e.lngLat[0], e.lngLat[1]) !== null;
     if (over === pointer) return;
     pointer = over;
