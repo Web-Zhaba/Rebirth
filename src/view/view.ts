@@ -29,15 +29,18 @@ export interface CameraGoal {
 export interface ViewPointer {
   lngLat: LngLat; // ground under the pointer
   point: ScreenPoint;
-  original: MouseEvent;
+  original: MouseEvent; // PointerEvent for pointer input; MouseEvent for contextmenu
+  pointerId: number | null;
+  pointerType: string | null;
+  isPrimary: boolean;
 }
 
 export interface ViewEvents {
   click: ViewPointer;
   contextmenu: ViewPointer;
-  mousedown: ViewPointer;
-  mousemove: ViewPointer;
-  mouseup: ViewPointer;
+  pointerdown: ViewPointer;
+  pointermove: ViewPointer;
+  pointerup: ViewPointer;
   dragstart: void; // the player starts panning the camera
   move: void; // camera changed (every frame while it moves)
   moveend: void;
