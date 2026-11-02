@@ -2,6 +2,7 @@ import { buildView, clampState, defaultCamera, rayDir, type CameraState, type Ca
 import { pickGround } from "./camera/pick";
 import { transformPoint } from "./camera/projection";
 import { FrameUniforms, type Highlight } from "./frame/frameUniforms";
+import { motionTime } from "../map/graphicsSettings";
 import { HiZ } from "./frame/hiz";
 import { enuAt, geodeticToEcef, sub, type Geodetic, type Vec3 } from "./geo/ellipsoid";
 import { DEPTH_FORMAT, fitCanvas, initGpu, SAMPLE_COUNT, type Gpu, type RenderTarget } from "./gpu/device";
@@ -204,7 +205,7 @@ export class Engine {
     this.terrain.update(view);
     for (const d of this.drawables) d.update?.(view, this);
     const light = this.light(s);
-    this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: now / 1000, highlight: this.highlight });
+    this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: motionTime(), highlight: this.highlight });
 
     const encoder = device.createCommandEncoder({ label: "frame" });
     // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else

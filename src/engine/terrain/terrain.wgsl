@@ -342,6 +342,9 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     water = 1.0;
     albedo = vec3f(0.015, 0.05, 0.11);
   }
+  // Keep the original drape coverage for shoreline distance; later ice and map overlays can reduce open water.
+  let shoreCoverage = water;
+  let shoreSlope = fwidth(shoreCoverage);
   n = normalize(mix(n, up, water)); // water lies flat whatever the DEM says under it
 
   // The ordinary far-water mask shares the terrain mesh. Add procedural wave normals without creating another mesh.
@@ -413,6 +416,21 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   let alt = max(h, 0.0) * frame.params.x;
   c = applyAir(c, GROUND_AIR * opticalDepth(length(v.rel), frame.eye.w, alt), light);
   var out = toneMap(c) * cloudDim(cloudShade(v.rel, up, foot));
+
+  // A narrow, broken white foam rim on the water side of the drape mask. Estimate distance from the mask gradient
+  // in screen pixels, then convert it to metres using the terrain pixel footprint: no second texture or water mesh.
+  if (shoreSlope > 0.015 && water > 0.0) {
+    let shoreDistance = max(shoreCoverage - 0.5, 0.0) * foot / shoreSlope;
+    let foamWidth = max(4.0, foot * 1.35);
+    let foamFeather = max(1.0, foot * 0.55);
+    let foamBand = 1.0 - smoothstep(foamWidth - foamFeather, foamWidth + foamFeather, shoreDistance);
+    let foamP = waterMod(waterCoordinates(frame.eye.xyz + v.rel, up) * 0.055 + vec2f(frame.params.z * 0.035, -frame.params.z * 0.021), 8192.0);
+    let foamNoise = vnoise(foamP);
+    let foamBreakup = mix(0.58, 1.0, smoothstep(0.18, 0.78, foamNoise));
+    let foam = clamp(foamBand * foamBreakup * water, 0.0, 1.0);
+    out = mix(out, vec3f(0.82, 0.89, 0.91), foam);
+  }
+
   out = mix(out, frame.highlight.rgb, lit * frame.highlight.a);
   if (ov.a > 0.0) {
     let paint = pow(ov.rgb / ov.a, vec3f(1.0 / 2.2)) * mix(OVERLAY_NIGHT, 1.0, light);

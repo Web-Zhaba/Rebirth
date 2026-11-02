@@ -1,6 +1,6 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
-import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setSmoke3d, setWater3d, smoke3dOn, water3dOn } from "../map/graphicsSettings";
+import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setSmoke3d, smoke3dOn } from "../map/graphicsSettings";
 import { CLOUD_QUALITIES, cloudQuality, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
 import { Button, Dialog, Segmented, type SegmentOption } from "./kit";
@@ -49,10 +49,6 @@ export function SettingsDialog() {
         <label class="settings-row" title="Деревья в объёме вблизи; без них лес — плоская заливка">
           <input type="checkbox" checked={forest3dOn.value} onChange={(e) => setForest3d((e.target as HTMLInputElement).checked)} />
           <span>Объёмный лес</span>
-        </label>
-        <label class="settings-row" title="Рябь, отражения неба, блики и лёд вблизи; без неё вода — плоская заливка">
-          <input type="checkbox" checked={water3dOn.value} onChange={(e) => setWater3d((e.target as HTMLInputElement).checked)} />
-          <span>Объёмная вода</span>
         </label>
         <label class="settings-row" title="Борозды, всходы, жнивьё и снег на полях вблизи; без них поля — плоская заливка">
           <input type="checkbox" checked={fields3dOn.value} onChange={(e) => setFields3d((e.target as HTMLInputElement).checked)} />

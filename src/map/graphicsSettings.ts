@@ -25,8 +25,13 @@ function stored(key: string): { on: Signal<boolean>; set: (v: boolean) => void }
   return { on, set };
 }
 
+try {
+  localStorage.removeItem("rebirth.water3d");
+} catch {
+  /* no storage */
+}
+
 const forest = stored("rebirth.forest3d");
-const water = stored("rebirth.water3d");
 const fields = stored("rebirth.fields3d");
 const smoke = stored("rebirth.smoke3d");
 const motion = stored("rebirth.motion");
@@ -34,10 +39,6 @@ const motion = stored("rebirth.motion");
 // The 3D forest (view/engine/forest.ts); off, the forest is the drape's colour alone.
 export const forest3dOn = forest.on;
 export const setForest3d = forest.set;
-
-// The water surface (view/engine/water.ts); off, the water is the terrain's own.
-export const water3dOn = water.on;
-export const setWater3d = water.set;
 
 // The 3D farm fields (view/engine/fields.ts); off, the fields are the overlay's fill and furrows.
 export const fields3dOn = fields.on;

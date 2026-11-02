@@ -16,7 +16,7 @@ import { pointInRings } from "../../world/landcover";
 import { metersPerPixel } from "../../world/mercator";
 import { NATURE_MAXZOOM, WATERWAY_HALF_M, WATERWAY_ZOOM } from "../../world/nature";
 import { getLandTile, getWaterwayTile } from "../../world/tiles";
-import { motionTime, water3dOn } from "../../map/graphicsSettings";
+import { motionTime } from "../../map/graphicsSettings";
 import { rgb, type XY } from "../../map/modelGeometry";
 import { roadChains } from "../../map/roadChains";
 import { BORDER, bridgePiers, buildWaterChunk, FLOW_REACH, interpolateWaterLevel, nearestPiers, OPPOSITE, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Pier, type TileWater, type Waterway } from "../../map/waterMesh";
@@ -33,8 +33,8 @@ import { townLight } from "./townLight";
 // ground; streams lie on the ground along their line. Heights are the z11 DEM the rules and the near terrain read
 // (world/ground.ts), with the engine's exaggeration. Vertices go into the town origin's east/north/up frame in f64.
 
-const WATER_MPP = mppAtZoom(13); // the old WATER_FROM_ZOOM: closer than this the water is 3D
-const WATER_FULL_ZOOM = 13.6; // from here it no longer fades into the terrain's water
+const WATER_MPP = mppAtZoom(13); // automatically use detailed water near the camera
+const WATER_FULL_ZOOM = 13.6; // detailed water has fully replaced the terrain mask
 const SIZE = 800; // m, side of a chunk
 const CELLS = [20, 40, 160, 800]; // m per level of detail, nearest first (dividing SIZE: chunks of a level meet vertex to vertex)
 const LEVEL_TO = [1200, 4000, 12_000]; // m from the eye: the farthest each level reaches
@@ -394,7 +394,7 @@ export function attachWater(engine: Engine, o: WaterOptions): void {
   const update = (view: CameraView) => {
     const tf = frame.peek();
     const mpp = engine.metersPerPixel();
-    if (!tf || !water3dOn.peek() || mpp > WATER_MPP) {
+    if (!tf || mpp > WATER_MPP) {
       water.look = null;
       water.shown = [];
       return;
