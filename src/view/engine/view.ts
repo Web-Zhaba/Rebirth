@@ -114,13 +114,13 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
           dispatch(e);
         };
         canvas.addEventListener("pointerdown", onPointerDown);
-        canvas.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointermove", onPointerMove);
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerCancel);
         canvas.addEventListener("click", onClick);
         return () => {
           canvas.removeEventListener("pointerdown", onPointerDown);
-          canvas.removeEventListener("pointermove", onPointerMove);
+          window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
           window.removeEventListener("pointercancel", onPointerCancel);
           canvas.removeEventListener("click", onClick);
