@@ -17,6 +17,7 @@ export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
+export const isZoneTool = (t: Tool): t is ZoneTool => isBrushTool(t) || t === "field" || t === "clearing";
 export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
@@ -84,7 +85,7 @@ export const setSpacePan = (on: boolean): void => {
 export function panLockedForTool(t: Tool | null, mpp: number, temporaryPan = false): boolean {
   if (!t || temporaryPan) return false;
   if (isRoadTool(t)) return mpp <= ROAD_MAX_MPP;
-  return (isBrushTool(t) || isPlaceTool(t)) && mpp <= ZONE_MAX_MPP;
+  return (isZoneTool(t) || isPlaceTool(t)) && mpp <= ZONE_MAX_MPP;
 }
 
 export function syncPan(view: View): void {

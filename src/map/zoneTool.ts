@@ -385,6 +385,10 @@ export function attachZoneTool(view: View): void {
     const t = tool.value;
     if (!t) return;
     if (fieldActive()) {
+      if (spaceDown) {
+        setLabel(null);
+        return;
+      }
       const f = frame.value;
       if (!f) return;
       if (view.metersPerPixel() > FIELD_MAX_MPP) {
@@ -400,7 +404,7 @@ export function attachZoneTool(view: View): void {
   };
 
   const onClick = (e: ViewPointer) => {
-    if (fieldActive()) onFieldClick(e);
+    if (fieldActive() && !spaceDown) onFieldClick(e);
   };
 
   const onContext = (e: ViewPointer) => {
@@ -420,11 +424,14 @@ export function attachZoneTool(view: View): void {
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (typing(e)) return;
-    if (e.key === " " && activeBrush()) {
-      spaceDown = true;
-      hoverKeys.value = [];
-      setSpacePan(true);
-      syncPan(view);
+    if (e.key === " " && (fieldActive() || activeBrush())) {
+      e.preventDefault();
+      if (!spaceDown) {
+        spaceDown = true;
+        if (activeBrush()) hoverKeys.value = [];
+        setSpacePan(true);
+        syncPan(view);
+      }
       return;
     }
     if (!fieldActive() && !activeBrush()) return;
@@ -435,11 +442,14 @@ export function attachZoneTool(view: View): void {
       finishField();
     }
   };
-  const onKeyUp = (e: KeyboardEvent) => {
-    if (e.key !== " ") return;
+  const releaseSpacePan = () => {
+    if (!spaceDown) return;
     spaceDown = false;
     setSpacePan(false);
     syncPan(view);
+  };
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (e.key === " ") releaseSpacePan();
   };
 
   view.on("mousemove", onMove);
@@ -450,6 +460,7 @@ export function attachZoneTool(view: View): void {
   window.addEventListener("mouseup", onUp);
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", releaseSpacePan);
   view.canvas.addEventListener("mouseleave", () => {
     cursor = null;
     hoverKeys.value = [];
@@ -466,7 +477,7 @@ export function attachZoneTool(view: View): void {
     hoverKeys.value = [];
     resetField();
     busy = false;
-    if (!activeBrush()) spaceDown = false;
+    if (!fieldActive() && !activeBrush()) releaseSpacePan();
     if (inflight === 0) paintPreview.value = null;
     syncPan(view);
   });

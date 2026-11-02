@@ -15,9 +15,15 @@ describe("map pan ownership", () => {
     expect(panLockedForTool("well", ZONE_MAX_MPP * 2)).toBe(false);
   });
 
+  it("locks panning for polygon-based fields and clearings too", () => {
+    expect(panLockedForTool("field", ZONE_MAX_MPP / 2)).toBe(true);
+    expect(panLockedForTool("clearing", ZONE_MAX_MPP / 2)).toBe(true);
+  });
+
   it("preserves the existing road and zone-brush behaviour", () => {
     expect(panLockedForTool("path", ROAD_MAX_MPP / 2)).toBe(true);
     expect(panLockedForTool("res", ZONE_MAX_MPP / 2)).toBe(true);
+    expect(panLockedForTool("clear", ZONE_MAX_MPP / 2)).toBe(true);
     expect(panLockedForTool(null, ZONE_MAX_MPP / 2)).toBe(false);
   });
 });
