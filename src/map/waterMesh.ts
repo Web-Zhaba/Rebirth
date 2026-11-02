@@ -9,7 +9,7 @@ import type { XY } from "./modelGeometry";
 
 export type Box = [number, number, number, number]; // x0, y0, x1, y1
 export const SHORE_CAP = 60; // m: farther from the shore than this the water is simply deep
-export const FLOW_REACH = 150;
+export const FLOW_REACH = 150; // m: a polygon flows like the river line nearest to it within this
 
 /** Bilinear water level from shore-derived chunk-corner levels (north-west, north-east, south-west, south-east). */
 export function interpolateWaterLevel(nw: number, ne: number, sw: number, se: number, x: number, y: number): number {
@@ -17,7 +17,6 @@ export function interpolateWaterLevel(nw: number, ne: number, sw: number, se: nu
   const south = sw * (1 - x) + se * x;
   return north * (1 - y) + south * y;
 }
- // m: a polygon flows like the river line nearest to it within this
 
 // The water of one tile: convex pieces and the real shore (not the edges where the tile cut the polygons).
 export interface TileWater {
