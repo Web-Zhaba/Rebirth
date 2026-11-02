@@ -46,7 +46,8 @@ export function App({ view }: { view: View }) {
       {c && <HeritagePanel />}
       {c && <NotebookHost view={view} />}
       {c && <BuildBar />}
-      {c && <AdminPanel />}
+      {/* Cheats are a development tool: production builds drop the panel entirely. */}
+      {import.meta.env.DEV && c && <AdminPanel />}
       {/* A readout for a running town: on the first-launch screen it would sit on the founding sheet. */}
       {c && <FpsCounter />}
       <AwayNotice />

@@ -66,7 +66,7 @@ export function SettingsDialog() {
           <span>Качество облаков</span>
           <Segmented options={cloudOptions} value={cloudQuality.value} label="Качество облаков" onChange={setCloudQuality} />
         </div>
-        <Button onClick={() => { adminOpen.value = true; settingsOpen.value = false; }}>Админ-панель</Button>
+        {import.meta.env.DEV && <Button onClick={() => { adminOpen.value = true; settingsOpen.value = false; }}>Админ-панель</Button>}
       </div>
     </Dialog>
   );

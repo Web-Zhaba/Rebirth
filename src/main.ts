@@ -83,7 +83,7 @@ function start(view: View): void {
   attachRoadTool(view);
   attachZoneTool(view);
   attachPlaceTool(view);
-  attachRevealTool(view);
+  if (import.meta.env.DEV) attachRevealTool(view); // admin-only; production has no admin panel
   attachToolRepeat(view);
   let centred = false;
   effect(() => {

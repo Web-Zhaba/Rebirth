@@ -497,7 +497,9 @@ export class Handler {
         if (cmd.option !== 0 && cmd.option !== 1) return reject("Некорректный ответ");
         this.save = { ...this.save, sim: resolveChoice(sim, cmd.option, false) };
         return await this.finishCommand(id);
-      } else if (cmd.type === "admin") {
+      } else if (import.meta.env.DEV && cmd.type === "admin") {
+        // Production builds ship no admin panel; there this branch is compiled out and the command falls through to
+        // the unknown-command rejection below, e.g. when sent from devtools.
         const op = cmd.op;
         if (typeof op !== "object" || op === null) return reject("Некорректная команда");
         if (op.k === "free") {
