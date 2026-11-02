@@ -130,7 +130,7 @@ Rebirth сознательно отказывается от нескольки�
 
 ## Под картой
 
-Самое интересное в Rebirth — не тот факт, что здесь используются библиотека карт и 3D-движок.
+Самое интересное в Rebirth — не тот факт, что у игры свой 3D-движок.
 
 Интересна граница между картой планетарного масштаба и локальной симуляцией.
 
@@ -142,15 +142,15 @@ Rebirth сознательно отказывается от нескольки�
                         Terrarium DEM
                              │
                              ▼
-                       MapLibre GL JS
-                  planet / camera / terrain
+                    Rebirth WebGPU engine
+          globe / camera / terrain / sky / water
                              │
                   local metric projection
                              │
               ┌──────────────┴──────────────┐
               │                             │
               ▼                             ▼
-         Three.js layers              Web Worker
+       engine game layers             Web Worker
       rendered settlement             simulation
               │                             │
       buildings / forest         roads / households
@@ -174,13 +174,13 @@ Main thread получает snapshot'ы и точечные ответы на �
 
 Так UI остаётся представлением симуляции и не превращается постепенно в саму симуляцию.
 
-### Гибридный рендер — осознанное решение
+### Один движок для планеты и деревни
 
-**MapLibre GL JS** решает планетарную географию, векторную карту и поведение камеры.
+С версии 0.2.0 Rebirth рисует мир собственным движком на **WebGPU** вместо связки MapLibre GL JS + Three.js.
 
-**Three.js** отвечает за специфические игровые 3D-слои: здания, растительность, воду, поля, жителей, руины и эффекты.
+Один движок отвечает и за планету — глобус, камеру, рельеф с уровнями детализации, векторные данные карты, небо, облака, погоду, воду с волнами и отражением неба, — и за игровые слои: зоны, дороги, поля, здания, лес, жителей и руины.
 
-Rebirth не пытается превратить картографический движок в полноценный игровой — и не переписывает глобус с нуля только ради того, чтобы нарисовать деревню.
+Одна сцена и один буфер глубины: поселение стоит на рельефе, а не плавает поверх карты. Тяжёлая работа идёт на GPU — лес рассеивается и отсекается compute-шейдерами, а то, что закрыто холмами и домами, отбрасывается по Hi-Z.
 
 ### Баланс исполняется как код
 
@@ -204,17 +204,27 @@ Harness фиксирует первый дом, первую технологи�
 |---|---|
 | **Симуляция** | TypeScript · Web Worker · IndexedDB |
 | **Интерфейс** | Preact · @preact/signals |
-| **Земля** | MapLibre GL JS · OpenFreeMap · OpenStreetMap |
-| **3D-мир** | Three.js · Earcut |
+| **Движок** | Собственный · WebGPU · WGSL |
+| **Земля** | OpenFreeMap · OpenStreetMap · Earcut |
 | **Рельеф** | Terrarium DEM / AWS Open Data |
 | **Поиск** | Photon |
 | **История** | Wikipedia / MediaWiki |
 | **Звук** | Web Audio API |
 | **Инструменты** | Vite · Vitest |
+| **Площадки** | Vercel · Яндекс Игры |
+
+## Где играть
+
+Текущая версия — **0.2.0** ([список изменений](CHANGELOG.md)).
+
+- **В браузере:** [rebirth-ashy.vercel.app](https://rebirth-ashy.vercel.app/)
+- **Яндекс Игры:** на модерации
+
+Нужен компьютер и браузер с **WebGPU**: актуальные Chrome, Edge или Яндекс Браузер. Без WebGPU игра объясняет, почему не может запуститься.
 
 ## Запуск из исходников
 
-Нужны **Node.js 18+** и npm.
+Нужны **Node.js 20.19+** и npm.
 
 ```bash
 git clone https://github.com/Web-Zhaba/rebirth.git
@@ -231,6 +241,7 @@ npm run build     # typecheck + production build
 npm run preview   # preview production build
 npm test          # test suite
 npm run pace      # headless pacing simulation
+npm run build:yandex  # архив для Яндекс Игр: rebirth-yandex.zip
 ```
 
 ## Управление
@@ -258,8 +269,7 @@ Rebirth был бы невозможен без открытых географ�
 🔎 **Поиск мест:** Photon by komoot  
 📚 **Тексты статей:** Wikipedia, CC BY-SA 4.0  
 🎨 **Иконки:** game-icons.net и Phosphor Icons  
-🔤 **Шрифты:** PT Serif и PT Sans  
-🧭 **Картографический движок:** MapLibre GL JS
+🔤 **Шрифты:** PT Serif и PT Sans
 
 Полный список находится в [`CREDITS.md`](CREDITS.md).
 
