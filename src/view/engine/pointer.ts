@@ -30,10 +30,13 @@ export class PointerClickTracker {
     if (this.active.size === 0) this.reset();
   }
 
-  isClick(pointerId: number, point: readonly [number, number], tolerance = CLICK_TOLERANCE): boolean {
+  isClick(pointerId: number | null, point: readonly [number, number], tolerance = CLICK_TOLERANCE): boolean {
     if (this.multiPointer) return false;
-    const start = this.starts.get(pointerId);
-    this.starts.delete(pointerId);
+    const start = pointerId === null
+      ? (this.starts.size === 1 ? this.starts.values().next().value as readonly [number, number] | undefined : undefined)
+      : this.starts.get(pointerId);
+    if (pointerId === null) this.starts.clear();
+    else this.starts.delete(pointerId);
     return start !== undefined && isClick(start, point, tolerance);
   }
 
