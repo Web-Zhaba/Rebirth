@@ -13,6 +13,7 @@ import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } 
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
 import { SERVICE } from "./services";
+import { isTradeOrder } from "./trade";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
 import type {
   Building,
@@ -367,6 +368,8 @@ function parseProd(v: unknown): ProdState {
   // Saves from before the orchard: a year with nothing counted.
   const o = v.orchard;
   if (isRecord(o) && Number.isInteger(o.year)) out.orchard = { year: o.year as number, frost: num(o.frost, 0, 400, 0), stress: num(o.stress, 0, 400, 0), days: num(o.days, 0, 400, 0), hot: num(o.hot, 0, 400, 0) };
+  const t = v.trade;
+  if (isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0) out.trade = { give: t.give, get: t.get, gave: t.gave, got: t.got };
   return out;
 }
 
@@ -385,6 +388,7 @@ function parseLevers(v: unknown): Levers {
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
   const j = v.jobs;
   if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
+  if (isTradeOrder(v.trade)) out.trade = { give: v.trade.give, get: v.trade.get };
   return out;
 }
 

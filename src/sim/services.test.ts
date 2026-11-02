@@ -12,6 +12,8 @@ import { parseSave } from "./save";
 import { FIELD } from "./fields";
 import { covers, learnPerDay, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
 import { SCHOOL_SEATS } from "./school";
+import { setTrade } from "./leverCmds";
+import type { TradeOrder } from "./trade";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, Household, Resident, RoadGraph, SimState } from "./types";
 import { emptyZones, qkey, regenerateCells } from "./zones";
@@ -272,6 +274,49 @@ describe("market hand-out", () => {
     const s0 = mk();
     const s = withCoverage({ ...s0, residents: { ...s0.residents, 1: { ...s0.residents[1], job: null } } });
     expect(dailyEconomy({ ...s, gameMinutes: at(13) }).stock.wares).toBe(100);
+  });
+});
+
+describe("market trade", () => {
+  const mk = (order: TradeOrder | null, stock: Partial<SimState["stock"]> = {}) => {
+    const houses = Array.from({ length: 3 }, (_, i) => bld(10 + i, "izba", 100 + 10 * i));
+    const s = busy(folk(town([bld(1, "market", 0), ...houses]), [{ home: 10, adults: 2, job: 1 }, { home: 11, adults: 2 }, { home: 12, adults: 2 }]));
+    return withCoverage({ ...s, levers: { ...s.levers, trade: order }, stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 100, ...stock } });
+  };
+  it("a worker swaps up to a day's volume of the surplus, minus the margin", () => {
+    const s = mk({ give: "stone", get: "wares" }, { stone: 200 });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
+    // 150 points / 6 per tonne = 25 t go; each tonne is worth 6 x 0.75 / 25 pieces; the three households get 0.1 each
+    expect(d.stock.stone).toBeCloseTo(175);
+    expect(d.stock.wares).toBeCloseTo(100 + 25 * ((6 * 0.75) / 25) - 3 * 0.1);
+    expect(d.prod.trade).toMatchObject({ give: "stone", get: "wares", gave: 25 });
+    expect(economyStats(d).trade).toEqual(d.prod.trade);
+  });
+  it("gives nothing below the reserve and does not fill the barns past their capacity", () => {
+    const poor = dailyEconomy({ ...mk({ give: "stone", get: "wares" }, { stone: 15 }), gameMinutes: at(13) });
+    expect(poor.stock.stone).toBe(15);
+    expect(poor.prod.trade).toBeUndefined();
+    const full = dailyEconomy({ ...mk({ give: "stone", get: "food" }, { stone: 500, food: 2990 }), gameMinutes: at(13) });
+    expect(full.stock.food).toBeLessThanOrEqual(3000);
+    expect(full.prod.trade?.got).toBeGreaterThan(0);
+  });
+  it("an unstaffed market, or no order, swaps nothing", () => {
+    const s = mk({ give: "stone", get: "wares" }, { stone: 200 });
+    const idle = dailyEconomy({ ...s, residents: { ...s.residents, 1: { ...s.residents[1], job: null } }, gameMinutes: at(13) });
+    expect(idle.stock.stone).toBe(200);
+    expect(dailyEconomy({ ...mk(null, { stone: 200 }), gameMinutes: at(13) }).stock.stone).toBe(200);
+  });
+  it("the order is a lever: checked, kept in a save and stopped with null", () => {
+    const s = mk(null);
+    expect(setTrade(s, { give: "stone", get: "stone" } as TradeOrder)).toMatchObject({ ok: false });
+    expect(setTrade(s, { give: "gold", get: "stone" } as never)).toMatchObject({ ok: false });
+    const r = setTrade(s, { give: "logs", get: "food" });
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.sim.levers.trade).toEqual({ give: "logs", get: "food" });
+    expect(setTrade(r.sim, { give: "logs", get: "food" })).toEqual({ ok: true, sim: r.sim }); // same order: nothing changes
+    const stop = setTrade(r.sim, null);
+    if (!stop.ok) throw new Error(stop.reason);
+    expect(stop.sim.levers.trade).toBeNull();
   });
 });
 

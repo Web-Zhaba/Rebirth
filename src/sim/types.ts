@@ -290,6 +290,7 @@ export interface ProdState {
   today: Record<number, number>; // building id -> units made since 00:00 (kg of grain for a gumno)
   yesterday: Record<number, number>;
   orchard: OrchardYear; // what this year has done to the fruit trees (frost at the blossom, drought, heat)
+  trade?: { give: keyof Stock; get: keyof Stock; gave: number; got: number }; // what the markets swapped in the day that ended; absent when nothing moved
 }
 
 // Research and eras (PLAN-research.ru.md section 4; sim/tech.ts holds the tree, sim/research.ts the rules).
@@ -389,6 +390,7 @@ export interface EconomyStats {
   brushwood: number; // m3 of firewood a day the idle adults gather (only while the town is short of fuel)
   outlook: number; // 0..1, can the food last to the end of the next harvest window
   eveningWares: number; // pieces an hour the adults at home make at 19-22 (doubles in winter)
+  trade?: ProdState["trade"]; // what the markets swapped yesterday
   fieldWork: number; // share of the field work the weather allows right now (1 = calm)
   buildFactor: number; // share of the artel's hours the weather allows right now
   firewood: number; // m3 a day the households burn at today's cold

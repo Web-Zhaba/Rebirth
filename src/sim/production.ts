@@ -9,6 +9,7 @@ import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, SERVICE, serviceMood } from "./services";
+import { tradeDay } from "./trade";
 import { finishedMonuments, monumentMood, monumentsNear } from "./monuments";
 import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
 import { applyFrost } from "./weather";
@@ -391,14 +392,21 @@ export function dailyEconomy(s: SimState): SimState {
   // from a different one each day; each market worker then hands out to 20 households the market covers
   let shopSlots = 0;
   let marketSlots = 0;
+  let traders = 0; // working strength of the market workers
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
     if (!b || b.state !== "active") continue;
     const strength = residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
     if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (SERVICE.literateBoost * r.school) / 100) * strength;
-    else if (b.template === "market") marketSlots += SERVICE.marketHouseholds * strength;
+    else if (b.template === "market") {
+      marketSlots += SERVICE.marketHouseholds * strength;
+      traders += strength;
+    }
   }
+  // the markets swap the ordered goods before the day's wares are handed out
+  const swap = tradeDay(stock, s.levers.trade, traders, cap - stock.food);
+  if (swap) Object.assign(stock, swap.stock);
   const ids = Object.keys(s.households).map(Number).sort((p, q) => p - q);
   const served = new Map<number, number>(); // household -> share of its need supplied
   const hand = (h: Household) => {
@@ -517,7 +525,7 @@ export function dailyEconomy(s: SimState): SimState {
     delete fields[Number(key)];
   }
 
-  return { ...s, stock, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard } };
+  return { ...s, stock, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard, ...(swap && s.levers.trade ? { trade: { ...s.levers.trade, gave: swap.gave, got: swap.got } } : {}) } };
 }
 
 // m3 of brushwood the idle adults gather in a day: only when a household is cold or the stock is below the day's
@@ -594,6 +602,7 @@ export function economyStats(s: SimState): EconomyStats {
     brushwood: brushwood(s, firewoodDaily(s.weather) * hs),
     outlook: foodOutlook(s),
     eveningWares: eveningRate(s),
+    ...(s.prod.trade ? { trade: s.prod.trade } : {}),
     fieldWork: fieldWork(s.weather),
     buildFactor: buildFactor(s.weather),
     firewood: firewoodDaily(s.weather) * hs,

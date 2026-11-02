@@ -18,7 +18,8 @@ import { Icon } from "./Icon";
 import { act, InspectorHead, Line, num, plural, siteEta, SiteLevers } from "./InspectorParts";
 import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspectorModel";
 import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
-import { Button, Confirm, IconButton, ProgressBar } from "./kit";
+import { Button, Confirm, IconButton, ProgressBar, Segmented } from "./kit";
+import { TRADE, TRADE_GOODS, tradeCapacity, tradeRate, type TradeGood, type TradeOrder } from "../sim/trade";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
 import { duplicateTemplate } from "./actionModel";
@@ -168,6 +169,53 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
 
 const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
 
+const TRADE_LABEL: Record<TradeGood, string> = { food: "Еда", logs: "Брёвна", planks: "Доски", stone: "Камень", wares: "Товары" };
+const TRADE_OFF = { id: "none", label: "—", title: "Не меняем" } as const;
+
+// The town's trade order, shown in every market: one good given, one got, swapped each day by the market workers.
+function MarketTrade({ workers }: { workers: number }) {
+  const order = state.value?.levers.trade ?? null;
+  const last = state.value?.economy.trade;
+  const st = stock.value ?? EMPTY_STOCK;
+  const set = (o: TradeOrder | null) => act({ type: "setTrade", order: o });
+  const options = (skip: TradeGood | null) => TRADE_GOODS.map((g) => ({ id: g as string, label: TRADE_LABEL[g], title: OUTPUT[g].name, disabled: g === skip }));
+  const unit = (g: TradeGood) => OUTPUT[g].unit;
+  const surplus = order ? st[order.give] - TRADE.keep[order.give] : 0;
+  return (
+    <div class="prod">
+      <div class="people-title">Обмен</div>
+      <Segmented
+        label="Отдаём"
+        value={order?.give ?? TRADE_OFF.id}
+        options={[TRADE_OFF, ...options(null)]}
+        onChange={(id) => {
+          if (id === TRADE_OFF.id) return set(null);
+          const give = id as TradeGood;
+          set({ give, get: order && order.get !== give ? order.get : give === "wares" ? "food" : "wares" });
+        }}
+      />
+      {order && (
+        <>
+          <Segmented label="Получаем" value={order.get} options={options(order.give)} onChange={(id) => set({ give: order.give, get: id as TradeGood })} />
+          <div>
+            1 {unit(order.give)} = {num(tradeRate(order))} {unit(order.get)} · до {num(tradeCapacity(order, workers))} {unit(order.give)} в день
+          </div>
+          <div class="people-note">
+            Остаётся на складе: {num(TRADE.keep[order.give])} {unit(order.give)}. Обмен общий для всех рынков
+          </div>
+          {workers === 0 && <div class="prod-warn">Некому торговать: нужны работники рынка</div>}
+          {workers > 0 && surplus <= 0 && <div class="prod-warn">Излишков нет: всё, что есть, остаётся на складе</div>}
+          {last && (
+            <div>
+              Вчера: отдали {num(last.gave)} {unit(last.give)}, получили {num(last.got)} {unit(last.get)}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Inspector of the selected building (right slot).
 export function BuildingPanel() {
   const [confirming, setConfirming] = useState(false);
@@ -304,6 +352,7 @@ export function BuildingPanel() {
         </Line>
       )}
       {info?.kind === "workplace" && info.production && <Production template={b.template} p={info.production} />}
+      {b.template === "market" && b.state === "active" && info?.kind === "workplace" && <MarketTrade workers={info.workers.length} />}
       {info?.kind === "house" &&
         (info.households.length === 0 ? (
           <div class="people-note">Пока пустует</div>

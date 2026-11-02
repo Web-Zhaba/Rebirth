@@ -9,7 +9,7 @@ import { scarcity } from "./heritage";
 import { loseSite, restoreSite } from "./restore";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
-import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff } from "./leverCmds";
+import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
@@ -473,7 +473,7 @@ export class Handler {
         }
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
-      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff") {
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade") {
         const r =
           cmd.type === "setPriority" ? setPriority(sim, cmd.key)
           : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
@@ -482,6 +482,7 @@ export class Handler {
           : cmd.type === "setAdultSchool" ? setAdultSchool(sim, cmd.on)
           : cmd.type === "setJobPriority" ? setJobPriority(sim, cmd.group, cmd.priority)
           : cmd.type === "setStaff" ? setStaff(sim, cmd.id, cmd.staff)
+          : cmd.type === "setTrade" ? setTrade(sim, cmd.order)
           : callSettlers(sim);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };

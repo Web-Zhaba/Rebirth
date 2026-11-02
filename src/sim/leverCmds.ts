@@ -6,6 +6,7 @@ import { countResidents, isWorkplace, rebalanceJobs, vacantHouses } from "./peop
 import { say } from "./production";
 import { classPupils } from "./school";
 import { nextRandom } from "./rng";
+import { isTradeOrder, TRADE_NAME, type TradeOrder } from "./trade";
 import { calendar } from "./time";
 import type { SimState } from "./types";
 
@@ -78,6 +79,14 @@ export function setRations(s: SimState, rations: Rations): LeverResult {
   if (typeof rations !== "string" || !Object.hasOwn(RATIONS, rations)) return fail("Неизвестные нормы еды");
   if (s.levers.rations === rations) return { ok: true, sim: s };
   return done(set(s, { rations }), `Нормы еды: ${RATIONS[rations].name.toLowerCase()}`);
+}
+
+// What the markets swap every day; null stops the trade.
+export function setTrade(s: SimState, order: TradeOrder | null): LeverResult {
+  if (order !== null && !isTradeOrder(order)) return fail("Некорректный обмен");
+  const was = s.levers.trade;
+  if (was?.give === order?.give && was?.get === order?.get) return { ok: true, sim: s };
+  return done(set(s, { trade: order ? { give: order.give, get: order.get } : null }), order ? `Рынок меняет ${TRADE_NAME[order.give]} на ${TRADE_NAME[order.get]}` : "Обмен на рынке остановлен");
 }
 
 // Hiring priority of a job group (or of construction); the people are reassigned at once.
