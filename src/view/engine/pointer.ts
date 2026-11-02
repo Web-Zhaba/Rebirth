@@ -32,11 +32,19 @@ export class PointerClickTracker {
 
   isClick(pointerId: number | null, point: readonly [number, number], tolerance = CLICK_TOLERANCE): boolean {
     if (this.multiPointer) return false;
-    const start = pointerId === null
-      ? (this.starts.size === 1 ? this.starts.values().next().value as readonly [number, number] | undefined : undefined)
-      : this.starts.get(pointerId);
-    if (pointerId === null) this.starts.clear();
-    else this.starts.delete(pointerId);
+
+    if (pointerId === null) {
+      // Some browsers expose Pointer Events for down/up but still deliver click as MouseEvent.
+      // Older browsers expose no Pointer Events at all: with no recorded start, preserve native clicks.
+      const start = this.starts.size === 1
+        ? this.starts.values().next().value as readonly [number, number] | undefined
+        : undefined;
+      this.starts.clear();
+      return start === undefined || isClick(start, point, tolerance);
+    }
+
+    const start = this.starts.get(pointerId);
+    this.starts.delete(pointerId);
     return start !== undefined && isClick(start, point, tolerance);
   }
 
