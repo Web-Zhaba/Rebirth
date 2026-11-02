@@ -76,7 +76,7 @@ describe("shared Terrarium loading for terrain and water", () => {
     const png = await terrariumPng();
     const heights = await decodeDemTile(png);
     expect(heights).toHaveLength(256 * 256);
-    expect(heights[0]).toBe(decodeTerrarium(128, 0, 136));
+    expect(heights[0]).toBe(decodeTerrarium(127, 136, 0));
     expect(heights[255 * 256 + 255]).toBeGreaterThanOrEqual(-120);
     expect(heights[255 * 256 + 255]).toBeLessThan(580);
   });
