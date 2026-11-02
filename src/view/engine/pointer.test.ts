@@ -26,10 +26,15 @@ describe("PointerClickTracker", () => {
     expect(clicks.isClick(2, [80, 30])).toBe(false);
   });
 
-  it("supports a MouseEvent click fallback without a pointer id", () => {
+  it("supports a MouseEvent click fallback after a recorded pointer sequence", () => {
     const clicks = new PointerClickTracker();
     clicks.pointerDown(3, [10, 10]);
     clicks.pointerUp(3);
+    expect(clicks.isClick(null, [12, 12])).toBe(true);
+  });
+
+  it("allows native MouseEvent clicks when no Pointer Events are available", () => {
+    const clicks = new PointerClickTracker();
     expect(clicks.isClick(null, [12, 12])).toBe(true);
   });
 
