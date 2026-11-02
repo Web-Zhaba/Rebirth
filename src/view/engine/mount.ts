@@ -71,11 +71,11 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   const camera = createCameraControl(engine);
   const view = createEngineView(engine, camera, container);
   if (import.meta.env.DEV) keepCameraInHash(engine, view, camera);
-  if (o.life) attachLife(engine, view, o.life);
+  const town = attachModels(engine, { light: o.light, debug: o.debug3dModels });
+  if (o.life) attachLife(engine, view, town, o.life);
   attachGameLayers(engine);
   attachToolContext(engine);
   const weather = o.light && o.cloudSite ? attachWeather(engine, { clock: o.light.clock, site: o.cloudSite, weather: o.weather }) : null;
-  attachModels(engine, { light: o.light, debug: o.debug3dModels });
   attachFields(engine, { clock: o.light?.clock });
   attachWater(engine, { clock: o.light?.clock, weather: o.weather, rain: weather?.rain });
   const forest = attachForest(engine, { clock: o.light?.clock, weather: o.weather, snow: weather?.snowOnTrees });

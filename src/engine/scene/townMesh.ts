@@ -10,11 +10,15 @@ import townMeshWgsl from "./townMesh.wgsl?raw";
 // The town's models (docs/PLAN-engine.md N4): two indexed meshes in metres in the east/north/up frame of the town
 // origin, built by the game (view/engine/models.ts) from the same model builders the old map used. Roads first without
 // depth writes (ribbons of two chains overlap at a junction, equal depths would flicker), then the buildings, then the
-// window lights added on top; the old city's broken walls with the buildings while they are shown. Uniforms carry
-// the origin relative to the eye, so the meshes are camera-relative.
+// window lights added on top; the old city's broken walls with the buildings while they are shown; the townspeople's
+// figures (map/villagerModel.ts) last, a mesh the game rewrites several times a second. Uniforms carry the origin
+// relative to the eye, so the meshes are camera-relative.
 
 // Vertex: position 3, normal 3, colour 3, facade 4, height above own ground 1, lamp 1.
 export const TOWN_VERTEX_FLOATS = 15;
+
+// A figure's vertex: position 3, normal 3, colour 3 (villagerModel.ts).
+export const FIGURE_VERTEX_FLOATS = 9;
 
 export interface TownMeshData {
   vertices: Float32Array<ArrayBuffer>;
@@ -41,12 +45,14 @@ export class TownMesh implements Drawable {
   private roads: Mesh | null = null;
   private buildings: Mesh | null = null;
   private ruins: Mesh | null = null;
+  private figures: { buffer: GPUBuffer | null; capacity: number; vertices: number } = { buffer: null, capacity: 0, vertices: 0 };
   ruinsShown = false; // the old city's broken walls (setRuins), drawn with the buildings' pipeline while shown
   private uniform: GPUBuffer;
   private bindGroup: GPUBindGroup;
   private roadPipe: GPURenderPipeline;
   private buildingPipe: GPURenderPipeline;
   private lampPipe: GPURenderPipeline;
+  private figurePipe: GPURenderPipeline;
   private data = new Float32Array(28);
   look: TownLook = { sunStrength: 1, light: [-0.45, -0.55, 0.7], daylight: 1, lamps: [0, 0, 0] };
 
@@ -99,6 +105,28 @@ export class TownMesh implements Drawable {
     this.buildingPipe = pipe("town buildings", "fs", true);
     const add: GPUBlendState = { color: { srcFactor: "one", dstFactor: "one" }, alpha: { srcFactor: "one", dstFactor: "one" } };
     this.lampPipe = pipe("town lamps", "lampFs", false, add);
+    this.figurePipe = device.createRenderPipeline({
+      label: "town figures",
+      layout: pl,
+      vertex: {
+        module,
+        entryPoint: "figureVs",
+        buffers: [
+          {
+            arrayStride: FIGURE_VERTEX_FLOATS * f,
+            attributes: [
+              { shaderLocation: 0, offset: 0, format: "float32x3" },
+              { shaderLocation: 1, offset: 3 * f, format: "float32x3" },
+              { shaderLocation: 2, offset: 6 * f, format: "float32x3" },
+            ],
+          },
+        ],
+      },
+      fragment: { module, entryPoint: "figureFs", targets: [{ format: target.format }] },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: { format: target.depthFormat, depthWriteEnabled: true, depthCompare: "greater-equal" },
+      multisample: { count: target.sampleCount },
+    });
   }
 
   // The town origin (the founding point): every vertex is east/north/up metres from it, at height 0 on the ellipsoid.
@@ -118,6 +146,18 @@ export class TownMesh implements Drawable {
   setRuins(ruins: TownMeshData): void {
     this.free(this.ruins);
     this.ruins = this.upload(ruins, "town ruins");
+  }
+
+  // The figures to draw now, `vertices` of them from the start of `data` (the last ones are replaced).
+  setFigures(data: Float32Array<ArrayBuffer>, vertices: number): void {
+    const g = this.figures;
+    if (vertices > g.capacity) {
+      g.buffer?.destroy();
+      g.capacity = Math.max(1024, 2 ** Math.ceil(Math.log2(vertices)));
+      g.buffer = this.device.createBuffer({ label: "town figures", size: g.capacity * FIGURE_VERTEX_FLOATS * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    }
+    g.vertices = vertices;
+    if (vertices && g.buffer) this.device.queue.writeBuffer(g.buffer, 0, data, 0, vertices * FIGURE_VERTEX_FLOATS);
   }
 
   update(view: CameraView, _engine: Engine): void {
@@ -148,6 +188,12 @@ export class TownMesh implements Drawable {
     run(this.buildingPipe, this.buildings);
     if (this.ruinsShown) run(this.buildingPipe, this.ruins);
     if (Math.max(...this.look.lamps) >= 0.01) run(this.lampPipe, this.buildings);
+    const g = this.figures;
+    if (g.buffer && g.vertices) {
+      pass.setPipeline(this.figurePipe);
+      pass.setVertexBuffer(0, g.buffer);
+      pass.draw(g.vertices);
+    }
   }
 
   // Sun direction (ECEF) in the origin's east/north/up frame.

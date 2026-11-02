@@ -10,6 +10,8 @@ export interface Trip {
   depart: number; // game minute of the day
   speed: number; // m per game minute
   who?: number; // the resident a walker is (sim/life.ts); walkers only
+  sex?: "m" | "f"; // and their sex and age in years the day the trip was planned, for the figure; walkers only
+  age?: number;
   purpose?: "work" | "home" | "tavern"; // where a walker is heading; walkers only
 }
 export interface Light {
@@ -22,7 +24,8 @@ const DAY_MIN = 1440;
 const WORK_LIGHTS_END = 21;
 const TAVERN_LIGHTS = [18, 24];
 
-export function positionAt(trip: Trip, minuteOfDay: number): [number, number] | null {
+// Where a trip is at a minute of the day and which way it is heading there (a unit vector, local m).
+export function placeAt(trip: Trip, minuteOfDay: number): { at: [number, number]; dir: [number, number] } | null {
   const { pts, speed } = trip;
   if (pts.length < 2 || !(speed > 0)) return null;
   let total = 0;
@@ -32,18 +35,22 @@ export function positionAt(trip: Trip, minuteOfDay: number): [number, number] | 
   const dist = t * speed;
   if (dist > total) return null;
   let left = dist;
+  let dir: [number, number] = [0, 1];
   for (let i = 1; i < pts.length; i++) {
     const [x0, y0] = pts[i - 1];
     const [x1, y1] = pts[i];
     const seg = Math.hypot(x1 - x0, y1 - y0);
+    if (seg > 0) dir = [(x1 - x0) / seg, (y1 - y0) / seg];
     if (left <= seg) {
       const u = seg > 0 ? left / seg : 0;
-      return [x0 + (x1 - x0) * u, y0 + (y1 - y0) * u];
+      return { at: [x0 + (x1 - x0) * u, y0 + (y1 - y0) * u], dir };
     }
     left -= seg;
   }
-  return pts[pts.length - 1];
+  return { at: pts[pts.length - 1], dir };
 }
+
+export const positionAt = (trip: Trip, minuteOfDay: number): [number, number] | null => placeAt(trip, minuteOfDay)?.at ?? null;
 
 export function lightOpacity(kind: Light["kind"], hour: number): number {
   const h = ((hour % 24) + 24) % 24;

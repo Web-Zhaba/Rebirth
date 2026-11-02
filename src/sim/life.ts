@@ -4,7 +4,7 @@ import { EVENING } from "./evening";
 import { workHours } from "./levers";
 import { WORKSHOP_INPUT } from "./fields";
 import { polyLength, walkTo, type Walk } from "./paths";
-import { buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
+import { ageOf, buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
 import { residentMoveFactor } from "./needs";
 import { GOOD } from "./production";
 import { START_MINUTE_OF_DAY } from "./time";
@@ -148,6 +148,8 @@ export function computeLife(s: SimState, day = 0): LifeData {
     else groups.set(key, { spot: hl, items: [item] });
   }
   const routed: Commuter[] = [];
+  // what the figure of a walker needs of the resident: their sex and age today
+  const person = (id: number) => ({ who: id, sex: s.residents[id].sex, age: ageOf(s.residents[id].born, s.gameMinutes) });
   for (const { spot: from, items } of groups.values()) {
     const tree = spotTree(net, from, limit);
     for (const c of items) {
@@ -166,8 +168,8 @@ export function computeLife(s: SimState, day = 0): LifeData {
     // leaves within 06:00-07:00 but early enough to be at work by 07:00
     const out = TO_WORK + unit(c.id, 2) * Math.max(0, 60 - travel);
     const back = HOME_AT + unit(c.id, 3) * 60;
-    trips.push({ id: c.id * 2, kind: "walk", pts, depart: out, speed: c.speed, who: c.id, purpose: "work" });
-    trips.push({ id: c.id * 2 + 1, kind: "walk", pts: [...pts].reverse(), depart: back, speed: c.speed, who: c.id, purpose: "home" });
+    trips.push({ id: c.id * 2, kind: "walk", pts, depart: out, speed: c.speed, ...person(c.id), purpose: "work" });
+    trips.push({ id: c.id * 2 + 1, kind: "walk", pts: [...pts].reverse(), depart: back, speed: c.speed, ...person(c.id), purpose: "home" });
   }
 
   // evenings: up to MAX_GUESTS households from the homes within reach of each staffed tavern walk there at 19-21 and back at 21-22
@@ -193,8 +195,8 @@ export function computeLife(s: SimState, day = 0): LifeData {
       const out = workHours(s).end * 60 + unit(c.who, 6) * 90;
       const back = 21 * 60 + unit(c.who, 7) * 45;
       const speed = WALK_SPEED * residentMoveFactor(s.residents[c.who]);
-      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts, depart: out, speed, who: c.who, purpose: "tavern" });
-      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts: [...pts].reverse(), depart: back, speed, who: c.who, purpose: "home" });
+      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts, depart: out, speed, ...person(c.who), purpose: "tavern" });
+      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts: [...pts].reverse(), depart: back, speed, ...person(c.who), purpose: "home" });
       n++;
     }
   }

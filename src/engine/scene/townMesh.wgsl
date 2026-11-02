@@ -56,6 +56,33 @@ fn vs(v: VsIn) -> VsOut {
   return o;
 }
 
+// The townspeople (TownMesh.setFigures): flat-shaded figures with a colour per vertex, lit like the buildings' walls
+// and the ground around. Positions and normals are in the origin's east/north/up frame already.
+struct FigureOut {
+  @builtin(position) pos: vec4f,
+  @location(0) n: vec3f,
+  @location(1) c: vec3f,
+  @location(2) shade: f32,
+};
+
+@vertex
+fn figureVs(@location(0) pos: vec3f, @location(1) normal: vec3f, @location(2) colour: vec3f) -> FigureOut {
+  let rel = model.rel.xyz + model.e.xyz * pos.x + model.n.xyz * pos.y + model.u.xyz * pos.z;
+  var o: FigureOut;
+  o.pos = frame.viewProj * vec4f(rel, 1.0);
+  o.n = normal;
+  o.c = colour;
+  o.shade = cloudShade(rel, model.u.xyz, 0.0);
+  return o;
+}
+
+@fragment
+fn figureFs(v: FigureOut) -> @location(0) vec4f {
+  let d = max(dot(normalize(v.n), model.light.xyz), 0.0);
+  let k = mix(0.55, 1.0, d) * mix(0.88, 1.0, model.light.w);
+  return vec4f(v.c * k * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
+}
+
 // Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
 // metres along s and z; once windows get that small the grid turns into its average coverage. Returns (cover, id).
 fn windows(s: f32, len: f32, z: f32, top: f32, aw: f32, az: f32, floorH: f32, sill: f32, wh: f32, ww: f32, sp: f32) -> vec2f {

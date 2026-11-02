@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lightOpacity, positionAt, type Trip } from "./life";
+import { lightOpacity, placeAt, positionAt, type Trip } from "./life";
 
 const trip: Trip = {
   id: 1,
@@ -12,6 +12,16 @@ const trip: Trip = {
   depart: 600,
   speed: 10, // 150 m total -> 15 min
 };
+
+describe("placeAt", () => {
+  it("heads along the segment it is on, turning at the corner", () => {
+    expect(placeAt(trip, 605)!.dir).toEqual([1, 0]);
+    expect(placeAt(trip, 613)!.dir).toEqual([0, 1]);
+  });
+  it("keeps the last heading on arrival", () => {
+    expect(placeAt(trip, 615)!.dir).toEqual([0, 1]);
+  });
+});
 
 describe("positionAt", () => {
   it("is null before departure and after arrival", () => {

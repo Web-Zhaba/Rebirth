@@ -123,6 +123,7 @@ describe("walkers", () => {
     const w = walks(computeLife(s).trips);
     expect(w.length).toBeGreaterThan(0);
     for (const t of w) expect(typeof t.who).toBe("number");
+    for (const t of w) expect([t.sex, typeof t.age]).toEqual([s.residents[t.who!].sex, "number"]); // what the figure is drawn from
     expect(w.some((t) => t.purpose === "work")).toBe(true);
     expect(w.some((t) => t.purpose === "home")).toBe(true);
     expect(w.filter((t) => t.who === 1).length).toBeGreaterThan(0);

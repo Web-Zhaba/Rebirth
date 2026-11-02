@@ -37,7 +37,7 @@ export interface ModelOptions {
   debug?: boolean; // every model kind instead of the town (map/modelItems.ts demoModelItems)
 }
 
-export function attachModels(engine: Engine, opts: ModelOptions): void {
+export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
   const mesh = new TownMesh(engine.device, engine.target, engine.frameU.layout);
   engine.drawables.push(mesh);
   const items: ReadonlySignal<ModelItem[]> = opts.debug ? signal(demoModelItems()) : computed(() => [...buildingItems.value, ...roadItems.value]);
@@ -135,6 +135,7 @@ export function attachModels(engine: Engine, opts: ModelOptions): void {
       lamps: cal ? [lightOpacity("house", hour), lightOpacity("work", hour), lightOpacity("tavern", hour)] : [0, 0, 0],
     };
   });
+  return mesh;
 }
 
 // Model in town metres -> vertices in the origin's east/north/up frame (f64 maths, stored f32).
