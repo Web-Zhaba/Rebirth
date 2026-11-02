@@ -26,7 +26,7 @@ const chains = computed<RoadChain[] | null>(() => {
 });
 
 // What the model layer draws of the roads: every built chain, then the aprons where roads meet (roadJunctions.ts). The
-// aprons come last in the list, and the road mesh keeps that order (modelLayer.ts, one mesh drawn without depth writes),
+// aprons come last in the list, and the road mesh keeps that order (engine/scene/townMesh.ts, one mesh drawn without depth writes),
 // so an apron covers the ends of the ribbons it joins and the shoulder lines that would cross it. The same list comes
 // back while no built chain changed.
 let lastItems: ModelItem[] = [];

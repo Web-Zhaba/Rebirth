@@ -1,8 +1,8 @@
 import { TUNING } from "../../sim/weather";
 import { CLOUD_BASE_M, CLOUD_TOP_M, FADE_FROM, FADE_TO, GLOBE_EXAGGERATION } from "./constants";
-import { EARTH_RADIUS_M, localFrame, metresPerMercator, type LocalFrame, type Vec3 } from "../three/frame";
+import { EARTH_RADIUS_M, localFrame, type LocalFrame, type Vec3 } from "./sphere";
 
-// Pure maths of the ground-shadow layer (PLAN-clouds.md section 6), mirrored line by line in shadowShaders.ts. No three.js.
+// Pure maths of the ground-shadow layer (PLAN-clouds.md section 6), mirrored in sky/weather.wgsl (cloudShade).
 
 const RAD = Math.PI / 180;
 
@@ -72,9 +72,6 @@ export function localToDirection(f: LocalFrame, east: number, north: number, k =
   return [x / l, y / l, z / l];
 }
 
-// True metres of a mercator-local frame (metres at latitude lat0) at the origin's latitude.
-export const mercatorScaleK = (originLat: number, lat0: number): number => metresPerMercator(originLat) / metresPerMercator(lat0);
-
 // Drift of the kilometre noise, degrees of longitude per game day: the mid-latitude westerlies of weather.ts, one rate
 // for the whole globe. weather.ts shears the wind by latitude (trades vs westerlies), which is fine for 1000 km fronts but
 // would stretch kilometre-scale patches into east-west streaks within a few game days.
@@ -140,38 +137,4 @@ export function darkening(cover: number, type: number, noise: number, sun: numbe
   const patch = (detail * sstep(th - 0.12, th + 0.12, noise) + (1 - detail) * cover) * sstep(0.05, 0.3, cover);
   const thick = sstep(0.45, 0.95, cover);
   return sun * (SHADOW_MAX * type * patch + OVERCAST_MAX * thick);
-}
-
-// Camera ray of a pixel in a perspective view, built in double precision: origin `cam`, direction proportional to
-// `a + b * ndcX + c * ndcY` (forward-pointing, not normalised). Unprojecting each pixel with a Float32 copy of the inverse
-// matrix loses hundreds of metres on the globe; these three vectors are small and well conditioned. `inv` is the inverse of
-// the (globe) view-projection matrix, column-major.
-export interface RayBasis {
-  cam: Vec3;
-  a: Vec3;
-  b: Vec3;
-  c: Vec3;
-}
-
-export function rayBasis(inv: ArrayLike<number>): RayBasis | null {
-  // Camera: image of the clip-space point (0, 0, 1, 0), a perspective eye has w = 0.
-  const hw = inv[11];
-  if (!hw) return null;
-  const cam: Vec3 = [inv[8] / hw, inv[9] / hw, inv[10] / hw];
-  // u(x, y) = inv * (x, y, 0, 1); point = u.xyz / u.w; point - cam is proportional to hw * u.xyz - u.w * (h.xyz) with
-  // h = inv * (0, 0, 1, 0) (so cam = h.xyz / h.w), which is linear in (x, y).
-  const hx = inv[8], hy = inv[9], hz = inv[10];
-  const col = (k: number) => [inv[4 * k], inv[4 * k + 1], inv[4 * k + 2], inv[4 * k + 3]];
-  const lin = (u: number[]): Vec3 => [hw * u[0] - u[3] * hx, hw * u[1] - u[3] * hy, hw * u[2] - u[3] * hz];
-  const c0 = col(0), c1 = col(1), c3 = col(3);
-  const a = lin(c3); // x = y = 0 (z = 0, w = 1): column 3
-  const b = lin(c0);
-  const c = lin(c1);
-  // Forward sign: toward the point on the far plane.
-  const f = [inv[8] + inv[12], inv[9] + inv[13], inv[10] + inv[14], inv[11] + inv[15]]; // inv * (0, 0, 1, 1)
-  const fp: Vec3 = [f[0] / f[3], f[1] / f[3], f[2] / f[3]];
-  const d = (fp[0] - cam[0]) * a[0] + (fp[1] - cam[1]) * a[1] + (fp[2] - cam[2]) * a[2];
-  const sg = d < 0 ? -1 : 1;
-  const sc = (v: Vec3): Vec3 => [v[0] * sg, v[1] * sg, v[2] * sg];
-  return { cam, a: sc(a), b: sc(b), c: sc(c) };
 }

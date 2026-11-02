@@ -4,7 +4,8 @@ import { ecefToGeodetic, type Vec3 } from "../geo/ellipsoid";
 import { MAX_MERCATOR_LAT, tileKey } from "../geo/mercator";
 import { createShader } from "../gpu/wgsl";
 import { DEM_SIZE } from "../bake/terrarium";
-import { DRAPE_MAX_ZOOM } from "../bake/drape";
+import { DRAPE_MAX_ZOOM, DRAPE_SIZE } from "../bake/drape";
+import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
 import type { DrapeResponse } from "../bake/drapeWorker";
 import { demStream, TileStream } from "../stream/demStream";
 import { OVERLAY_LEVELS, type OverlayRaster } from "../overlay/overlayRaster";
@@ -21,7 +22,7 @@ import terrainWgsl from "./terrain.wgsl?raw";
 // draw. Lives on the main thread; DEM decoding is in the bake worker. Vertex blocks are built here: with separable trig
 // (nodeMesh.ts) a node costs ~20 us, so a worker round trip would not pay.
 
-export const EXAGGERATION = 1.6; // MapLibre relief (src/map/relief.ts RELIEF_EXAGGERATION)
+export const EXAGGERATION = 1.6; // the old MapLibre relief's
 
 const MAX_NODES = 4096; // chunk-table capacity per frame
 const SLOTS = 1024; // resident node vertex blocks
@@ -119,6 +120,7 @@ export class Terrain {
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d-array" } },
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, sampler: { type: "filtering" } },
         { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d-array" } },
+        { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "uint", viewDimension: "2d-array" } },
       ],
     });
     this.bindGroup = device.createBindGroup({
@@ -130,9 +132,11 @@ export class Terrain {
         { binding: 3, resource: this.drape.texture.createView({ dimension: "2d-array" }) },
         { binding: 4, resource: device.createSampler({ magFilter: "linear", minFilter: "linear", addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge" }) },
         { binding: 5, resource: overlay.texture.createView({ dimension: "2d-array" }) },
+        { binding: 6, resource: this.drape.cover.createView({ dimension: "2d-array" }) },
       ],
     });
-    const module = createShader(device, "terrain", terrainWgsl, { GRID });
+    const wet = COVER_TABLE.flatMap((c, i) => (c.key.startsWith("wetland") ? [i + 1] : []));
+    const module = createShader(device, "terrain", terrainWgsl, { GRID, DRAPE_SIZE, WOOD: coverIdOf("wood", ""), WET_LO: Math.min(...wet), WET_HI: Math.max(...wet) });
     this.pipeline = device.createRenderPipeline({
       label: "terrain",
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, layout] }),

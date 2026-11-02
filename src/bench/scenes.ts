@@ -1,14 +1,11 @@
-// Benchmark scenes shared by the MapLibre map and the new engine (docs/PLAN-engine.md, N0). A scene is a camera
-// path in engine-neutral terms: a target on the ground, the eye's distance to it, heading and pitch. MapLibre
-// gets it through `toMapLibre`, the engine uses it directly, so both render the same view.
-
-import { distanceToZoom } from "../view/maplibre/zoom";
+// Benchmark scenes of the engine (docs/PLAN-engine.md, N0). A scene is a camera path: a target on the ground, the eye's
+// distance to it, heading and pitch.
 
 export interface BenchCamera {
   lat: number;
   lng: number;
   distance: number; // m, eye to target
-  heading: number; // deg, clockwise from north (MapLibre bearing)
+  heading: number; // deg, clockwise from north
   pitch: number; // deg, 0 = looking straight down
 }
 
@@ -18,8 +15,6 @@ export interface BenchScene {
   seconds: number; // measured part of the path; a warm-up runs before it
   at(t: number): BenchCamera; // t in 0..1
 }
-
-export { distanceToZoom, EARTH_RADIUS, FOV_DEG, metersPerPixel, TILE_PX, zoomToDistance } from "../view/maplibre/zoom";
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -47,8 +42,4 @@ export const SCENES: readonly BenchScene[] = [
 // A town scene needs a founded town: built from its centre at run time.
 export function townScene(lat: number, lng: number): BenchScene {
   return { id: "town", label: "own town, orbit at 75°", seconds: 10, at: (t) => ({ lat, lng, distance: 1_200, heading: 360 * t, pitch: 75 }) };
-}
-
-export function toMapLibre(c: BenchCamera, heightPx: number): { center: [number, number]; zoom: number; bearing: number; pitch: number } {
-  return { center: [c.lng, c.lat], zoom: distanceToZoom(c.distance, c.lat, heightPx), bearing: c.heading, pitch: c.pitch };
 }

@@ -12,9 +12,8 @@ import { isBrushTool, tool, zonesShown } from "../../map/tools";
 import { cellsForKeys, indexCellsByKey } from "../../map/zoneCellIndex";
 import type { View } from "../view";
 
-// What the zone layer shows, for every renderer: zone cells, the brush grid and hover, fields, clearings and the field
-// being drawn, as GeoJSON in lng/lat. The MapLibre style (map/zoneLayer.ts) and the engine (view/engine/gameLayers.ts)
-// only decide how it looks.
+// What the zone layer shows: zone cells, the brush grid and hover, fields, clearings and the field being drawn, as
+// GeoJSON in lng/lat. The engine (view/engine/gameLayers.ts) only decides how it looks.
 
 // Unfinished clearing shown in the inspector.
 export const selectedClearing = signal<number | null>(null);

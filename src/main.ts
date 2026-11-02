@@ -11,9 +11,7 @@ import { attachToolRepeat } from "./map/tools";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load } from "./simClient";
-import { tryMountEngineView, wantsEngine } from "./view/engine/mount";
-import { mountMapLibreView, installDevHandles } from "./view/maplibre/mount";
-import type { MapLibreView } from "./view/maplibre/view";
+import { tryMountEngineView } from "./view/engine/mount";
 import type { View } from "./view/view";
 import { TOWN_START_MPP } from "./view/scale";
 import { attachArticleMarkers } from "./view/layers/articleMarkers";
@@ -38,47 +36,45 @@ const cloudSite = computed(() => {
   return w ? { seed: w.seed, phase: w.phase } : null;
 });
 const weatherNow = previewWeather(computed(() => state.value?.weather ?? null));
-// ?engine=next mounts the own WebGPU engine (src/view/engine) instead of MapLibre; it needs none of the renderer layers.
-const engineMount = wantsEngine() ? await tryMountEngineView({ container: "map", light: { ...sunLight, lng: computed(() => city.value?.lng ?? 0) }, weather: weatherNow, cloudSite, debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1", life: { trips: lifeTrips, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById } }) : null;
-const view: View = engineMount?.view ?? mountMapLibreView({
+// The map: the own WebGPU engine (src/view/engine). Without WebGPU it shows why instead, and the game does not start.
+const engineMount = await tryMountEngineView({
   container: "map",
-  frame,
-  gameClock,
-  mapClock,
-  sunLight,
+  light: { ...sunLight, lng: computed(() => city.value?.lng ?? 0) },
   weather: weatherNow,
   cloudSite,
-  life: { trips: lifeTrips, lights: lifeLights, gameMinPerSec, onWalker: followResidentById },
   debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1",
+  life: { trips: lifeTrips, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById },
 });
-// Picking what is on the map: clearings and old buildings first, so a building under the same click wins.
-attachClearingPick(view);
-attachSitePick(view);
-attachBuildingPick(view);
-attachBadges(view); // HTML badges above the buildings that need a look
-attachArticleMarkers(view); // the notebook's Wikipedia entries where they belong
-attachServiceReach(); // what a service reaches, and its coverage overlay while one is selected
-attachRoadTool(view);
-attachZoneTool(view);
-attachPlaceTool(view);
-attachRevealTool(view);
-attachToolRepeat(view);
-let centred = false;
-effect(() => {
-  const c = city.value;
-  if (c && !centred) {
-    centred = true;
-    if (!hasHash) view.jumpTo({ center: [c.lng, c.lat], mpp: TOWN_START_MPP });
+if (engineMount) start(engineMount.view);
+
+function start(view: View): void {
+  // Picking what is on the map: clearings and old buildings first, so a building under the same click wins.
+  attachClearingPick(view);
+  attachSitePick(view);
+  attachBuildingPick(view);
+  attachBadges(view); // HTML badges above the buildings that need a look
+  attachArticleMarkers(view); // the notebook's Wikipedia entries where they belong
+  attachServiceReach(); // what a service reaches, and its coverage overlay while one is selected
+  attachRoadTool(view);
+  attachZoneTool(view);
+  attachPlaceTool(view);
+  attachRevealTool(view);
+  attachToolRepeat(view);
+  let centred = false;
+  effect(() => {
+    const c = city.value;
+    if (c && !centred) {
+      centred = true;
+      if (!hasHash) view.jumpTo({ center: [c.lng, c.lat], mpp: TOWN_START_MPP });
+    }
+  });
+
+  render(h(App, { view }), document.getElementById("ui")!);
+  load();
+
+  // Handles for poking at the map and the sim from devtools during development. Use these instead of importing
+  // simClient again: a second module instance would start a second worker writing the same save.
+  if (import.meta.env.DEV) {
+    Object.assign(window, { simClient, __engine: engineMount });
   }
-});
-
-render(h(App, { view }), document.getElementById("ui")!);
-load();
-
-// Handles for poking at the map and the sim from devtools during development. Use these instead of importing
-// simClient again: a second module instance would start a second worker writing the same save.
-if (import.meta.env.DEV) {
-  Object.assign(window, { simClient });
-  if (engineMount) Object.assign(window, { __engine: engineMount });
-  else installDevHandles(view as MapLibreView);
 }

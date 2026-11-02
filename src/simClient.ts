@@ -1,5 +1,5 @@
 import { computed, effect, signal } from "@preact/signals";
-import type { Light, Trip } from "./map/lifeLayer";
+import type { Light, Trip } from "./map/life";
 import { BASE_TICK, clockAt, tickMs, type Speed } from "./sim/clock";
 import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";

@@ -1,4 +1,4 @@
-import { positionAt, type Trip } from "../map/lifeLayer";
+import { positionAt, type Trip } from "../map/life";
 import type { Building, ResidentQuery } from "../sim/types";
 
 // Where a building stands: the centroid of its footprint, in local metres.

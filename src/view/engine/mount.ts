@@ -7,17 +7,22 @@ import { defaultLight, SUN_INTENSITY } from "../../engine/engine";
 import { sunDirection } from "../../sim/weather";
 import type { View } from "../view";
 import type { WeatherState } from "../../sim/weather";
+import { attachToolContext } from "./context";
 import { attachGameLabels } from "./gameLabels";
 import { attachGameLayers } from "./gameLayers";
+import { attachFields } from "./fields";
 import { attachForest } from "./forest";
 import { attachLife, type LifeOptions } from "./life";
 import { attachModels } from "./models";
 import { attachPlaceLabels } from "./placeLabels";
 import { attachStatsHud } from "./statsHud";
 import { attachSmoke } from "./smoke";
+import { attachWater } from "./water";
 import { attachWeather } from "./weather";
 import type { CloudSite } from "../../map/clouds/settings";
+import { attachControls, credits } from "./controls";
 import { createEngineView } from "./view";
+import { mppAtZoom, zoomAtMpp } from "../view";
 
 export interface EngineMountOptions {
   container: string; // element id
@@ -65,56 +70,57 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
     };
   const camera = createCameraControl(engine);
   const view = createEngineView(engine, camera, container);
+  if (import.meta.env.DEV) keepCameraInHash(engine, view, camera);
   if (o.life) attachLife(engine, view, o.life);
   attachGameLayers(engine);
+  attachToolContext(engine);
   const weather = o.light && o.cloudSite ? attachWeather(engine, { clock: o.light.clock, site: o.cloudSite, weather: o.weather }) : null;
   attachModels(engine, { light: o.light, debug: o.debug3dModels });
+  attachFields(engine, { clock: o.light?.clock });
+  attachWater(engine, { clock: o.light?.clock, weather: o.weather, rain: weather?.rain });
   const forest = attachForest(engine, { clock: o.light?.clock, weather: o.weather, snow: weather?.snowOnTrees });
   attachSmoke(engine, { clock: o.light?.clock, weather: o.weather });
   attachPlaceLabels(engine, container);
   attachGameLabels(engine, container);
+  attachControls(engine, camera, container);
   container.append(credits());
   attachStatsHud(engine, container, forest);
   engine.start();
   return { view, engine, camera };
 }
 
-// Credits for the data the engine shows now (more as content kinds arrive), in the look of the compact attribution.
-function credits(): HTMLElement {
-  const el = document.createElement("div");
-  el.className = "engine-attrib";
-  el.innerHTML =
-    `Рельеф: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Mapzen Terrarium, AWS Open Data</a> | ` +
-    `<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ` +
-    `<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">&copy; OpenMapTiles</a> ` +
-    `<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; участники OpenStreetMap</a>`;
-  return el;
+// DEV: the camera in the URL hash (#zoom/lat/lng/heading/pitch, the old map's format), so a reload keeps the view.
+function keepCameraInHash(engine: Engine, view: View, camera: CameraControl): void {
+  const [zoom, lat, lng, heading, pitch] = location.hash.slice(1).split("/").map(Number);
+  if ([zoom, lat, lng].every(Number.isFinite)) view.jumpTo({ center: [lng, lat], mpp: mppAtZoom(zoom), heading: heading || 0, pitch: pitch || 0 });
+  camera.on("moveend", () => {
+    const s = engine.state;
+    const zoomNow = zoomAtMpp(engine.metersPerPixel());
+    history.replaceState(history.state, "", `#${zoomNow.toFixed(2)}/${s.lat.toFixed(5)}/${s.lng.toFixed(5)}/${s.heading.toFixed(1)}/${s.pitch.toFixed(0)}`);
+  });
 }
 
-// Which renderer to mount: `?engine=next` / `?engine=maplibre` is read once and remembered in localStorage.
-export function wantsEngine(): boolean {
-  let v: string | null = new URLSearchParams(location.search).get("engine");
-  try {
-    if (v === "next" || v === "maplibre") localStorage.setItem("engine", v);
-    else v = localStorage.getItem("engine");
-  } catch {
-    // storage blocked: the URL alone decides
-  }
-  return v === "next";
-}
-
-// Engine view, or null (with a message for the player and a log line) when WebGPU is not there.
+// The engine's view, or null when it cannot start: then a screen in place of the game says why (the game needs WebGPU,
+// docs/PLAN-engine.md 3.1) and the error goes to the log.
 export async function tryMountEngineView(o: EngineMountOptions): Promise<EngineMount | null> {
   try {
     return await mountEngineView(o);
   } catch (e) {
-    console.warn("[engine] falling back to MapLibre:", e);
-    const msg = document.createElement("div");
-    msg.setAttribute("role", "alert");
-    msg.className = "engine-fallback";
-    msg.textContent = (e instanceof WebGpuUnavailable ? "WebGPU недоступен в этом браузере" : "Не удалось запустить новый движок карты") + " — включена прежняя карта.";
-    document.body.append(msg);
-    setTimeout(() => msg.remove(), 8000);
+    console.error("[engine] cannot start:", e);
+    const box = document.createElement("div");
+    box.setAttribute("role", "alert");
+    box.className = "engine-unsupported";
+    const title = document.createElement("h1");
+    const text = document.createElement("p");
+    if (e instanceof WebGpuUnavailable) {
+      title.textContent = "Браузер не поддерживает WebGPU";
+      text.textContent = "Карта игры рисуется через WebGPU. Откройте игру в свежем Chrome, Edge или Safari.";
+    } else {
+      title.textContent = "Не удалось запустить карту";
+      text.textContent = "Видеокарта не смогла запустить карту игры. Обновите браузер или драйвер видеокарты и перезагрузите страницу.";
+    }
+    box.append(title, text);
+    document.body.append(box);
     return null;
   }
 }

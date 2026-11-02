@@ -9,7 +9,7 @@ import { addRoad, emptyRoads } from "./roads";
 import { START_MINUTE_OF_DAY, YEAR_MIN } from "./time";
 import type { Building, City, Household, Resident, RoadGraph, SimState, TerrainInfo } from "./types";
 import { emptyZones, qkey, regenerateCells } from "./zones";
-import type { Trip } from "../map/lifeLayer";
+import type { Trip } from "../map/life";
 
 const NOW = 1_800_000_000_000;
 const GM = 1080;

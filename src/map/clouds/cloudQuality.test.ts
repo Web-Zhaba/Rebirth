@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CUBE_SIZE, FADE_FROM, FADE_TO } from "./constants";
-import { cloudOpacity, effectiveQuality, FLASH_FRAME_MS, MARCH_CLOCK_MIN, needsMarch, PRESETS, smoothstep, targetSize, type MadeMarch } from "./cloudQuality";
+import { cloudOpacity, FLASH_FRAME_MS, MARCH_CLOCK_MIN, needsMarch, PRESETS, smoothstep, targetSize, type MadeMarch } from "./cloudQuality";
 
 describe("presets", () => {
   it("match the plan table", () => {
@@ -13,11 +13,6 @@ describe("presets", () => {
     expect(targetSize(1920, 1080, 0.5)).toEqual({ width: 960, height: 540 });
     expect(targetSize(1001, 7, 0.35)).toEqual({ width: 350, height: 2 });
     expect(targetSize(0, 0, 0.5)).toEqual({ width: 1, height: 1 });
-  });
-  it("steps high down to medium without float targets", () => {
-    expect(effectiveQuality("high", false)).toBe("medium");
-    expect(effectiveQuality("high", true)).toBe("high");
-    expect(effectiveQuality("low", false)).toBe("low");
   });
 });
 

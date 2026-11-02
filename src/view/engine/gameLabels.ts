@@ -9,8 +9,8 @@ import { lineLabelAnchor, pickLabels, rotatedExtent, wrapExtent, type LabelBox }
 import { labelSight } from "./labelSight";
 
 // The game's own map text on the engine, DOM over the canvas like the place names (placeLabels.ts), in the look and
-// gates of the old MapLibre symbol layers: the percent done of unfinished clearings (map/zoneLayer.ts) and, while the
-// old city is shown, the names of its notable buildings, named points and streets (map/ruinsLayer.ts, from zoom 15).
+// gates of the old MapLibre symbol layers: the percent done of unfinished clearings and, while the
+// old city is shown, the names of its notable buildings, named points and streets (from zoom 15).
 // Street names run along their line, one per street. Labels are placed in priority order without overlaps.
 
 type Kind = "clearing" | "name" | "poi" | "street";

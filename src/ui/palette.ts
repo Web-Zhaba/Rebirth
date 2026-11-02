@@ -173,7 +173,7 @@ export const TOWN_COLORS = {
   pit: ["#3a2a1c"],
 } as const;
 
-// Trees of the 3D forest (treeModels.ts, treeLayer.ts): bark and crowns, deciduous crowns by season. Map only.
+// Trees of the 3D forest (treeModels.ts): bark and crowns, deciduous crowns by season. Map only.
 export const TREE_COLORS = {
   bark: "#5b4632",
   birchBark: "#d9d4c4",
@@ -190,7 +190,7 @@ export const TREE_COLORS = {
   stone: "#8e8b82",
 } as const;
 
-// Farm fields of the 3D map (fieldLayer.ts): soil, the crop through the year, stubble, the grass of the headland and of
+// Farm fields of the 3D map (view/engine/fields.ts): soil, the crop through the year, stubble, the grass of the headland and of
 // fields no farm works. Map only.
 export const FIELD_COLORS = {
   soil: "#4d3b2b", // freshly ploughed

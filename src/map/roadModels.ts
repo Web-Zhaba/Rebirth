@@ -4,7 +4,7 @@ import { PALETTE } from "../ui/palette";
 import { Mesh, PATTERN, prism, rgb, shade, square, type Model, type RGB, type XY } from "./modelGeometry";
 
 // Models of built roads and bridges: a chain's centre line in town metres + its kind -> mesh in the same metres, on the
-// shared mesh of modelGeometry.ts (the layer, modelLayer.ts, draws them with the buildings).
+// shared mesh of modelGeometry.ts (the engine draws them with the buildings).
 //
 // Ground roads are ribbons just above the ground with round joints (discs) at sharp bends and at ends that go nowhere;
 // an end that meets another road gets none, the junction apron covers it (roadJunctions.ts). Cobbles are laid out in world

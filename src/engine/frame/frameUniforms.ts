@@ -9,7 +9,7 @@ registerWgsl("frame", frameWgsl);
 // Bind group 0 for every pass: the Frame uniform of frame.wgsl and the weather of sky/weather.wgsl (its textures are
 // replaced when the weather cubes change size or swap, so the group is rebuilt then).
 
-const FLOATS = 16 + 6 * 4;
+const FLOATS = 16 + 7 * 4;
 
 export interface FrameParams {
   sun: Vec3;
@@ -17,6 +17,17 @@ export interface FrameParams {
   exaggeration: number;
   lodTint: boolean;
   time: number;
+  highlight: Highlight | null;
+}
+
+// What the ground can be tinted by, for a tool that cares about it (the old map's context fills): its class from the
+// drape's cover and water.
+export const HIGHLIGHT = { wood: 1, water: 2, wetOrWater: 3 } as const;
+
+export interface Highlight {
+  mode: (typeof HIGHLIGHT)[keyof typeof HIGHLIGHT];
+  colour: Vec3; // display colour
+  opacity: number;
 }
 
 export class FrameUniforms {
@@ -74,7 +85,9 @@ export class FrameUniforms {
     d.set([v.right[0] * tx, v.right[1] * tx, v.right[2] * tx, 0], 24);
     d.set([v.up[0] * v.tanHalfY, v.up[1] * v.tanHalfY, v.up[2] * v.tanHalfY, 0], 28);
     d.set([v.forward[0], v.forward[1], v.forward[2], v.near], 32);
-    d.set([p.exaggeration, p.lodTint ? 1 : 0, p.time, 0], 36);
+    const h = p.highlight;
+    d.set([p.exaggeration, p.lodTint ? 1 : 0, p.time, h?.mode ?? 0], 36);
+    d.set(h ? [...h.colour, h.opacity] : [0, 0, 0, 0], 40);
     this.device.queue.writeBuffer(this.buffer, 0, d);
   }
 }

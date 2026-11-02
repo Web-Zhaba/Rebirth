@@ -1,17 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FOV_DEG, metersPerPixel, zoomToDistance } from "../maplibre/zoom";
 import { CLICK_TOLERANCE, distanceToMpp, isClick, markerTransform, mppToDistance } from "./scale";
 
 describe("mpp <-> distance", () => {
   it("round-trips", () => {
     expect(mppToDistance(distanceToMpp(12345, 36.87, 900), 36.87, 900)).toBeCloseTo(12345, 6);
-  });
-  it("agrees with MapLibre's zoom relation", () => {
-    const zoom = 14.3;
-    const lat = 55;
-    const h = 800;
-    const d = zoomToDistance(zoom, lat, h);
-    expect(distanceToMpp(d, FOV_DEG, h)).toBeCloseTo(metersPerPixel(zoom, lat), 6);
   });
   it("is linear in distance and survives a zero-height canvas", () => {
     expect(distanceToMpp(2000, 40, 600)).toBeCloseTo(2 * distanceToMpp(1000, 40, 600), 9);

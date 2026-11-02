@@ -1,6 +1,6 @@
 #include "frame"
 
-// Chimney smoke (scene/smoke.ts): a WGSL port of the old smoke layer (map/smokeLayer.ts). One instance per chimney
+// Chimney smoke (scene/smoke.ts): a WGSL port of the old smoke layer. One instance per chimney
 // near the eye, PUFFS camera-facing puffs each, every puff's life a pure function of the time, its index and the
 // chimney's hash: it rises, swells, bends downwind and fades. Chimneys are metres in the town origin's east/north/up
 // frame; `smoke.rel` is the origin minus the eye.

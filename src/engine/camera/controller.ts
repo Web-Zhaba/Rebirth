@@ -1,4 +1,4 @@
-import { trackpadCameraDelta, wheelIntent } from "../../map/trackpadModel";
+import { trackpadCameraDelta, wheelIntent } from "./trackpad";
 import type { Engine } from "../engine";
 import { buildView, clampState, rayDir, MAX_DISTANCE, MAX_PITCH, MIN_DISTANCE, type CameraState } from "./camera";
 import type { CameraControl, CameraEvents, CameraTarget } from "./cameraControl";

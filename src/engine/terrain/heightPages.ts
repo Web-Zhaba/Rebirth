@@ -10,8 +10,7 @@ import type { DemPage } from "../stream/demStream";
 // resident (patched in both directions on upload), else clamped from the edge. With the border, bilinear across a tile
 // edge is the exact global bilinear surface and two nodes meeting at the edge compute the same height. terrain.ts
 // clamps instead, so the rules and this surface differ only inside the half-pixel band along z11 tile edges (fix in
-// N2 by sampling across tiles in terrain.ts). Note src/map/relief.ts groundAt uses a corner convention (pixel i at i,
-// not i + 0.5): half a pixel shifted from both.
+// N2 by sampling across tiles in terrain.ts).
 
 export const DEM_MAX_ZOOM = 11; // MapLibre's terrain zoom (src/world/nature.ts TERRAIN_ZOOM); deeper nodes reuse z11
 const PINNED_ZOOM = 2; // z0-z2 (21 pages) are never evicted: the fallback of last resort

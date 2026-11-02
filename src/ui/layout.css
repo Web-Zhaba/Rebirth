@@ -333,8 +333,7 @@ button.event-card-pause-btn {
 html.screenshot-mode #ui {
   visibility: hidden;
 }
-html.screenshot-mode .maplibregl-ctrl-top-left,
-html.screenshot-mode .maplibregl-ctrl-top-right {
+html.screenshot-mode .engine-nav {
   display: none;
 }
 

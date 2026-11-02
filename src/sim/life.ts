@@ -1,4 +1,4 @@
-import type { Light, Trip } from "../map/lifeLayer";
+import type { Light, Trip } from "../map/life";
 import { BUILDINGS } from "./buildings";
 import { EVENING } from "./evening";
 import { workHours } from "./levers";

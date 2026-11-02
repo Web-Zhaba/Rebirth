@@ -8,11 +8,11 @@ import { groundRoadZ, roadSurface } from "./roadModels";
 // Road ribbons meet at the nodes of the graph, and every meeting leaves a seam: a chain's round joint puts a plain disc of
 // the road's colour over its neighbour, one road's shoulder line runs across the next road's surface, and ruts stop on a
 // straight cut. An apron replaces all of that with one flat surface: the union of the arms' strips around the node, cut
-// square at each arm's reach and at its first node, drawn after the ribbons (roadLayer.ts) so its rim, which follows the
+// square at each arm's reach and at its first node, drawn after the ribbons (view/layers/roads.ts) so its rim, which follows the
 // roads' own edges, is what the eye sees.
 // - The apron is painted as the dominant arm's road: its colour, and its ruts in its own cross-road coordinates, so they
 //   run straight through the junction and line up with its ribbons. A side road's ruts stop at the junction, as they do.
-// - The shoulder is a 0..1 band per vertex that the shader turns into the same falloff the ribbons use (modelLayer.ts).
+// - The shoulder is a 0..1 band per vertex that the shader turns into the same falloff the ribbons use (engine/scene/townMesh.wgsl).
 //   It is the nearest road's shoulder, so it follows the arm whose edge is nearest and stops where another road's surface
 //   takes the point over: no shoulder line runs across a mouth, while the rim meets every ribbon's own shoulder.
 // - A chain gets no round joint at an end that joins another road (roadModels.ts `joined`): the apron covers the cut.
@@ -122,7 +122,7 @@ export function junctionOutline(j: RoadJunction): XY[] {
 }
 
 // Where a point sits in the shoulder band of the nearest road that reaches it, as 0 (no darkening) .. 1 (the edge's
-// darkening): the shader turns this into the same falloff it paints on the ribbons (modelLayer.ts road()). Taking the
+// darkening): the shader turns this into the same falloff it paints on the ribbons (townMesh.wgsl road()). Taking the
 // nearest arm rather than the dominant one is what keeps a shoulder line from running across a junction's mouth: the
 // road whose edge is nearest owns the point, and at the mouth that is the joining road, which has no edge there. The
 // value is remapped per arm, so a path's wider band and a dirt road's narrow one both read as 0..1.

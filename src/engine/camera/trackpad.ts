@@ -9,7 +9,7 @@ export interface WheelLike {
 }
 
 // Pixel-mode wheel events with small deltas are how desktop browsers expose two-finger
-// trackpad movement. Pinch-to-zoom arrives with Ctrl/Meta and must stay with MapLibre.
+// trackpad movement. Pinch-to-zoom arrives with Ctrl/Meta and must stay a zoom.
 export function wheelIntent(e: WheelLike): WheelIntent {
   if (e.ctrlKey || e.metaKey) return "zoom";
   if (e.deltaMode !== 0) return "zoom";

@@ -1,8 +1,8 @@
 import type { OverlayLayer } from "../../engine/overlay/overlayRaster";
 import { PALETTE } from "../../ui/palette";
 
-// How the engine draws the game's tool overlays (view.ts OverlayId): the look of the MapLibre layers in
-// src/view/maplibre/overlays.ts, in the same order (later on top). Sources are the overlay ids.
+// How the engine draws the game's tool overlays (view.ts OverlayId): the look of the old map's layers, in their order
+// (later on top). Sources are the overlay ids.
 
 const placeColour = (p: Record<string, unknown>) => (p.pending ? PALETTE.warn : p.ok ? PALETTE.ok : PALETTE.bad);
 

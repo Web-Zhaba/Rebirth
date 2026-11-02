@@ -2,7 +2,7 @@ import { FADE_FROM, FADE_TO } from "./constants";
 import type { CloudQuality } from "./settings";
 
 // Pure decisions of the cloud layer (PLAN-clouds.md sections 5 and 7): presets, target size, zoom fade and the
-// "must the ray-march run again" rule. No three.js, so the main chunk and the tests can import it.
+// "must the ray-march run again" rule.
 
 export interface CloudPreset {
   scale: number; // render target size relative to the drawing buffer
@@ -16,9 +16,6 @@ export const PRESETS: Record<CloudQuality, CloudPreset> = {
   medium: { scale: 0.5, steps: 48, lightSteps: 5, detail: true },
   high: { scale: 0.75, steps: 80, lightSteps: 6, detail: true },
 };
-
-// RGBA16F targets need EXT_color_buffer_float; without it the "high" preset (which relies on HDR accumulation) steps down.
-export const effectiveQuality = (q: CloudQuality, floatTargets: boolean): CloudQuality => (q === "high" && !floatTargets ? "medium" : q);
 
 export function targetSize(width: number, height: number, scale: number): { width: number; height: number } {
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };

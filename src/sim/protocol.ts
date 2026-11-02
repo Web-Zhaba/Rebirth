@@ -1,5 +1,5 @@
 import type { Speed } from "./clock";
-import type { Light, Trip } from "../map/lifeLayer";
+import type { Light, Trip } from "../map/life";
 import type { AdminOp } from "./admin";
 import type { Away } from "./away";
 import type { JobKey, Priority } from "./buildings";

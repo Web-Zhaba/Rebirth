@@ -1,7 +1,6 @@
 // Pure scale and pointer maths of the engine View backend (no DOM, no GPU).
 
 // Metres per CSS pixel at the camera target for an eye distance: the vertical field of view spans the canvas height.
-// The same relation MapLibre's zoom implies (src/view/maplibre/zoom.ts).
 export function distanceToMpp(distance: number, fovYDeg: number, heightPx: number): number {
   return (2 * distance * Math.tan((fovYDeg * Math.PI) / 360)) / Math.max(1, heightPx);
 }

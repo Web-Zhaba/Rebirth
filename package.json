@@ -18,10 +18,8 @@
     "@mapbox/vector-tile": "^3.0.0",
     "@preact/signals": "^2.11.3",
     "earcut": "^3.2.4",
-    "maplibre-gl": "^6.16.0",
     "pbf": "^5.1.2",
-    "preact": "^11.0.2",
-    "three": "0.186.1"
+    "preact": "^11.0.2"
   },
   "devDependencies": {
     "@iconify-json/game-icons": "^1.2.4",
@@ -29,7 +27,6 @@
     "@svgr/core": "^8.1.0",
     "@svgr/plugin-jsx": "^8.1.0",
     "@types/geojson": "^7946.0.16",
-    "@types/three": "0.186.0",
     "@webgpu/types": "^0.1.74",
     "typescript": "^5.0.0",
     "unplugin-icons": "^24.0.0",

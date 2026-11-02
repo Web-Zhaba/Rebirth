@@ -4,7 +4,7 @@
 export type PlaceClass = "city" | "town" | "village" | "hamlet";
 export const PLACE_CLASSES: readonly PlaceClass[] = ["city", "town", "village", "hamlet"];
 
-// Same sizes as the old MapLibre symbol layer (map/style.ts).
+// Same sizes as the old MapLibre symbol layer.
 export const LABEL_PX: Record<PlaceClass, number> = { city: 15, town: 13.5, village: 12, hamlet: 11 };
 
 const EQUATOR = 2 * Math.PI * 6378137;

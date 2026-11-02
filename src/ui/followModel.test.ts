@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Trip } from "../map/lifeLayer";
+import type { Trip } from "../map/life";
 import type { Building, ResidentQuery } from "../sim/types";
 import { buildingCentre, followStatus, residentPoint, residentWalk } from "./followModel";
 

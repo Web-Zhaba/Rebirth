@@ -1,8 +1,7 @@
 // Vegetation over the land, shared by the renderers and the bake workers (docs/PLAN-engine.md N5): which landcover
 // classes carry trees or small details (bushes, reed clumps, boulders) and how densely, what the ruins' foundations
 // add, and how the tree kinds split by latitude. The engine's cover pages store an 8-bit class id per texel and the
-// scatter shader reads the shares from COVER_SHARES; the old CPU scatter (map/forest.ts) reads the same table, so both
-// grow the same things in the same places.
+// scatter shader reads the shares from COVER_SHARES.
 
 export const TREE_SPACING = 9; // m between candidate trees (treeScatter.ts SPACING)
 
@@ -22,7 +21,7 @@ export interface CoverClass {
   boulder: number;
 }
 
-// map/forest.ts MIXES as one table: the id a cover page stores (0 = no cover, ids 1..) and what grows there.
+// The old forest layer's MIXES as one table: the id a cover page stores (0 = no cover, ids 1..) and what grows there.
 // `coverIdOf` matches "class/subclass" exactly, then the bare class (the "" fallback).
 export const COVER_TABLE: readonly CoverClass[] = [
   { key: "wood", tree: true, bush: 0.04, reed: 0, boulder: 0 },
@@ -65,7 +64,7 @@ export function coverShares(id: number): CoverShares {
 type Share = { share: number; size: [number, number] };
 export type DetailMix = Partial<Record<DetailKind, Share>>;
 
-// The old scatter's share+size mix for a class (map/forest.ts), derived from the same table.
+// The old scatter's share+size mix for a class (the old forest layer's), derived from the same table.
 export function mixOfDetail(cls: string, sub: string): DetailMix | null {
   const id = coverIdOf(cls, sub);
   if (!id) return null;
@@ -77,7 +76,7 @@ export function mixOfDetail(cls: string, sub: string): DetailMix | null {
   return out;
 }
 
-// What the ruins' foundations add (map/forest.ts RUIN_MIX); the game mask paints this add id, the scatter adds the
+// What the ruins' foundations add (the old forest layer's RUIN_MIX); the game mask paints this add id, the scatter adds the
 // shares on top of the landcover's own.
 export const RUIN_ADD_ID = 1;
 export const RUIN_ADD: CoverShares = { tree: false, bush: 0.3, reed: 0, boulder: 0.35 };

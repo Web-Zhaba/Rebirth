@@ -11,7 +11,7 @@ import { enuAt, type Vec3 } from "../../engine/geo/ellipsoid";
 import { Forest, type ForestKind, type ForestMask } from "../../engine/scene/forest";
 import { sunStrength } from "../../map/clouds/shadowMath";
 import { oldWorld } from "../../map/excavation";
-import { motionTime } from "../../map/graphicsSettings";
+import { forest3dOn, motionTime } from "../../map/graphicsSettings";
 import { rgb } from "../../map/modelGeometry";
 import { buildTree, crownAt, KIND_INFO, leafOf, reedAt } from "../../map/treeModels";
 import { TREE_KINDS, TREES_FROM_ZOOM } from "../../map/treeScatter";
@@ -78,7 +78,7 @@ export function attachForest(engine: Engine, o: ForestOptions): Forest {
     const s = engine.state;
     const zoom = Math.log2(mppAtZoom(0, s.lat) / engine.metersPerPixel());
     const g = Math.min(1, Math.max(0, (zoom - TREES_FROM_ZOOM) / GROW_ZOOMS));
-    forest.grow = g * g * (3 - 2 * g);
+    forest.grow = forest3dOn.peek() ? g * g * (3 - 2 * g) : 0; // off in the settings: the drape's forest colour alone
     if (forest.grow <= 0) return;
 
     // Light: the engine's sun in the target's frame, blended towards a fixed light as it sets (as the town's models).

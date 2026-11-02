@@ -6,8 +6,7 @@ import type { Engine } from "../../engine/engine";
 import { enuAt, geodeticToEcef } from "../../engine/geo/ellipsoid";
 import { TOWN_VERTEX_FLOATS, TownMesh, type TownMeshData } from "../../engine/scene/townMesh";
 import { EXAGGERATION } from "../../engine/terrain/terrain";
-import { sunStrength } from "../../map/clouds/shadowMath";
-import { lightOpacity } from "../../map/lifeLayer";
+import { lightOpacity } from "../../map/life";
 import type { Model } from "../../map/modelGeometry";
 import { coverOf, demoModelItems, keyOf, lampOf, modelEmitters, quantise, seatedModelOf, type Emitter, type ModelItem } from "../../map/modelItems";
 import { ruinWallModel } from "../../map/ruinsGeometry";
@@ -16,6 +15,7 @@ import { roadItems } from "../layers/roads";
 import { ruinWallPieces } from "../layers/ruins";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { mppAtZoom } from "../view";
+import { townLight } from "./townLight";
 
 // The town's buildings and built roads on the engine (scene/townMesh.ts), from the same items and model builders as the
 // old three.js layer (map/modelItems.ts): each item's model is seated on the engine's ground, projected once into the
@@ -23,20 +23,14 @@ import { mppAtZoom } from "../view";
 // only the changed items. Lighting and the window lights follow the game clock every frame; the weather on them is the
 // engine's (sky/weather.wgsl).
 
-const FALLBACK_LIGHT: [number, number, number] = [-0.45, -0.55, 0.7];
 const RETRY_FRAMES = 20; // while the ground under the town is still streaming, look again this often
-const RUIN_WALL_MPP = mppAtZoom(14); // the old walls' extrusion minzoom (map/ruinsLayer.ts)
+const RUIN_WALL_MPP = mppAtZoom(14); // the old walls' extrusion minzoom
 
 interface Pack {
   v: Float32Array; // TOWN_VERTEX_FLOATS per vertex
   i: Uint32Array;
   smoke: [number, number, number][];
 }
-
-const norm = (v: [number, number, number]): [number, number, number] => {
-  const l = Math.hypot(v[0], v[1], v[2]) || 1;
-  return [v[0] / l, v[1] / l, v[2] / l];
-};
 
 export interface ModelOptions {
   light?: { clock: ReadonlySignal<number> };
@@ -130,18 +124,14 @@ export function attachModels(engine: Engine, opts: ModelOptions): void {
     const mpp = (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, engine.canvas.clientHeight);
     mesh.ruinsShown = (ruinsShown.peek() || ruinsAutoShown.peek()) && mpp <= RUIN_WALL_MPP;
     // Light: the engine's sun in the town frame, blended towards a fixed light as it sets (the old layer's look).
-    const sun = mesh.toLocal(engine.light(engine.state).sun);
-    const strength = sunStrength(sun[2]);
-    const fb = norm(FALLBACK_LIGHT);
-    const d = norm([sun[0], sun[1], Math.max(sun[2], 0.05)]);
-    const light = norm([fb[0] + (d[0] - fb[0]) * strength, fb[1] + (d[1] - fb[1]) * strength, fb[2] + (d[2] - fb[2]) * strength]);
+    const { light, strength, daylight } = townLight(mesh.toLocal(engine.light(engine.state).sun));
     const clock = opts.light?.clock.peek();
     const cal = clock === undefined ? null : calendar(clock);
     const hour = cal ? cal.hour + cal.minute / 60 : 12;
     mesh.look = {
       sunStrength: strength,
       light,
-      daylight: Math.min(1, Math.max(0, (sun[2] + 0.12) / 0.32)), // the terrain's terminator (atmosphere.wgsl sunLightAt)
+      daylight,
       lamps: cal ? [lightOpacity("house", hour), lightOpacity("work", hour), lightOpacity("tavern", hour)] : [0, 0, 0],
     };
   });

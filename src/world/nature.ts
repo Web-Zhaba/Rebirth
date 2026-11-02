@@ -1,4 +1,4 @@
-// Rules shared by the rendered map (map/style.ts) and the cell analysis (world/*),
+// Rules shared by the rendered map (the drape bake, engine/bake/drape.ts) and the cell analysis (world/*),
 // so what the player sees is exactly what the game uses.
 
 export const OMT_TILEJSON_URL = "https://tiles.openfreemap.org/planet";

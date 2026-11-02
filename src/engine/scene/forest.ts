@@ -1,4 +1,5 @@
 import type { CameraView } from "../camera/camera";
+import { frustumPlanes, sphereInView as inside } from "../camera/frustum";
 import type { Drawable, Engine } from "../engine";
 import { ecefToGeodetic, enuAt, type Vec3 } from "../geo/ellipsoid";
 import { lngLatToTile, tileToLngLat } from "../geo/mercator";
@@ -502,24 +503,4 @@ function pageUv(out: Float32Array, o: number, x: number, y: number, page: { z: n
   if (!page) return void out.set([0, 0, 1, 0], o);
   const k = 2 ** (SCATTER_ZOOM - page.z);
   out.set([(x - page.x * k) / k, (y - page.y * k) / k, 1 / k, 0], o);
-}
-
-type Plane = [number, number, number, number];
-
-// The view's side planes through the eye and its near plane, eye-relative, normals inward.
-export function frustumPlanes(v: CameraView): Plane[] {
-  const tx = v.tanHalfY * v.aspect;
-  const ty = v.tanHalfY;
-  const plane = (a: Vec3, s: number, b: Vec3): Plane => {
-    const p: Vec3 = [a[0] * s + b[0], a[1] * s + b[1], a[2] * s + b[2]];
-    const l = Math.hypot(p[0], p[1], p[2]);
-    return [p[0] / l, p[1] / l, p[2] / l, 0];
-  };
-  const neg = (a: Vec3): Vec3 => [-a[0], -a[1], -a[2]];
-  return [plane(v.forward, tx, v.right), plane(v.forward, tx, neg(v.right)), plane(v.forward, ty, v.up), plane(v.forward, ty, neg(v.up)), [...v.forward, -v.near]];
-}
-
-function inside(planes: readonly Plane[], c: Vec3, r: number): boolean {
-  for (const p of planes) if (p[0] * c[0] + p[1] * c[1] + p[2] * c[2] + p[3] < -r) return false;
-  return true;
 }

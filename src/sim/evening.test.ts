@@ -6,7 +6,7 @@ import { EVENING, eveningRate, eveningStep, gatherHouses } from "./evening";
 import { toSnapshot } from "./handler";
 import { emptyGrowth } from "./growth";
 import { computeLife } from "./life";
-import { lightOpacity } from "../map/lifeLayer";
+import { lightOpacity } from "../map/life";
 import { dailyEconomy } from "./production";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";

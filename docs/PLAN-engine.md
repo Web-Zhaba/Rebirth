@@ -1,6 +1,6 @@
 # Own render engine (replacing MapLibre)
 
-Status: proposal, 2026-11-01. Nothing here is implemented yet.
+Status: done through N8 (2026-11-02): the engine is the only renderer; N9 is later work.
 
 ## 1. Goal
 
@@ -181,7 +181,7 @@ Far world:
 
 ## 5. Milestones
 
-The new engine is built **next to** the current map, behind `?engine=next`, on its own canvas. MapLibre stays the
+The new engine was built **next to** the old map, behind `?engine=next`, on its own canvas; MapLibre stayed the
 default until N8. Each milestone ends with tests green, a benchmark run and a short "done" note in this file.
 
 **N0. Benchmarks and spike (go / no-go).**
@@ -456,6 +456,55 @@ Done (2026-11-01):
 
 **N8. Switch.** engine default; parity checklist against section 2; delete MapLibre, three.js, the old layers, the
 `maplibre` `view` backend, `reliefOrder`, dual-frame model buffers.
+
+Done (2026-11-02). The engine is the only map: `main.ts` mounts it; without WebGPU (or when the device fails) a screen
+in place of the game says why and the game does not start (`view/engine/mount.ts tryMountEngineView`, `.engine-unsupported`).
+
+Parity against section 2, row by row:
+
+- Globe and its blend: one ECEF scene (N2). Camera and input: the engine controller (N2); the trackpad model moved to
+  `engine/camera/trackpad.ts`; the old navigation control is `view/engine/controls.ts` (zoom in/out about the target,
+  a compass that turns with the map and back to north), in the old control's place and look. DEV keeps the camera in the
+  URL hash (`#zoom/lat/lng/heading/pitch`, the old format) and restores it on reload.
+- Terrain, hillshade, sky: N2/N3/N7. The «Рельеф» setting is gone: the relief is the ground the models stand on and the
+  rules read, there is no flat map to fall back to.
+- Nature base: the drape (N3). The tools' context fills (forest for woodcutters and clearings, water for fishers,
+  wetlands and water a quarry cannot stand on) are a ground highlight in the terrain shader: `Engine.highlight` (mode,
+  colour, opacity in the frame uniform, `frame/frameUniforms.ts HIGHLIGHT`) against the drape's water and the cover
+  pages' class ids (now bound to the terrain too), set from the tool by `view/engine/context.ts`, which also shows the
+  old city for digs (`ruinsAutoShown`, which no engine code set before).
+- Game 2D overlays: the overlay raster (N4). The night tint and the weather fills are the lighting and the ground
+  weather (N7).
+- 3D: models, forest, smoke, clouds and shadows (N4-N7), and now:
+  - Water surface (`engine/scene/water.ts` + `water.wgsl`, `view/engine/water.ts`): the old 3D water's chunks, levels,
+    shading, steam and pier foam, in the town origin's east/north/up frame, heights from the z11 DEM the rules read
+    (`world/ground.ts`, synchronous over cached tiles) with the engine's exaggeration. It fades into the terrain's own
+    water by alpha (far edge, zoom-in) instead of into a flat fill; ice and snow on it come from `groundWeather`, the
+    rain rings from the weather at the camera target (`EngineWeather.rain`). Fixed on the way: a lake cut by the z12
+    tiles took a water level per piece, so the pieces met with a step (a light seam on the old map too); the tiles now
+    record where they cut a polygon (`waterMesh.ts tileWater borders`) and the pieces of one water share its level.
+    The chunk frustum test places chunk centres exactly in the origin frame (the town's metres drift from it by
+    hundreds of metres tens of kilometres out).
+  - Fields (`engine/scene/fields.ts` + `fields.wgsl`, `view/engine/fields.ts`): the old 3D fields' mesh, calendar,
+    real work and look; snow and wetness from `groundWeather`.
+  - The forest and water settings now switch the engine's forest and water off (the smoke one already did).
+- Text and DOM markers: DOM (N3/N4). Picking: `pick`, `isWaterAt` from the drape (N2-N4).
+- Attribution: the credits fold behind an «i» on a narrow screen, like the compact attribution.
+
+Deleted: `maplibre-gl`, `three`, `@types/three`; `src/view/maplibre/` (backend, overlays, zoom conversions); every
+renderer layer in `src/map/` (`*Layer.ts`, `mapView`, `style`, `relief` with `reliefOrder` and its own ground sampler,
+`three/host` and `three/frame`, `modelBuffers` with the dual-frame vertices, `treeImpostor`, `chunkView`, the cloud
+layer, shadow layer and their shaders, `weatherTextures`); the MapLibre bench runner and its GL query ring; MapLibre
+CSS. Kept as pure modules: the geometry builders, `life.ts` (was `lifeLayer.ts`, the trips and lights model),
+`clouds/sphere.ts` (the cube's unit-sphere frame), `shadowMath` without the MapLibre ray basis. The cloud "high"
+quality no longer probes WebGL (WebGPU always renders rgba16float).
+
+Measured (RDNA4, Browser pane 784 x 846, town on a lake at 68°, forest and a field in view): GPU 1.4 ms, of it the
+water surface ~0.33 ms with ~30k triangles in ~230 chunks; CPU ~1.7 ms. Production bundle: one 742 kB main chunk
+(276 kB gzip), no map library.
+
+Not done: terrain edits (pads, cuts, pits; MapLibre had none either, the models still stand on their plinths);
+splitting the main chunk; the spike page `next.html` stays as a dev bench.
 
 **N9 (later).** Sun shadow maps (cascades) for buildings and trees; higher-res visual terrain detail beyond z11 that
 does not affect rules.

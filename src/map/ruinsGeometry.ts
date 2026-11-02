@@ -180,7 +180,7 @@ export function brokenWalls(ring: XY[], key: string, height = 6): { quad: XY[]; 
 
 // ---------- the broken walls as a 3D model (the engine; MapLibre extrudes the same quads itself) ----------
 
-// Colour of a wall piece by its height, the old fill-extrusion ramp (map/ruinsLayer.ts): the lowest pieces grown over
+// Colour of a wall piece by its height, the old fill-extrusion ramp : the lowest pieces grown over
 // with moss, waist-high ones bare, the best kept weathered stone.
 const WALL_STOPS: [number, string][] = [
   [0.1, mixHex(PALETTE.pencilFaint, TREE_COLORS.summer, 0.45)],

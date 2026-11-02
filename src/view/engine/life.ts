@@ -3,13 +3,13 @@ import { START_MINUTE_OF_DAY } from "../../sim/clock";
 import type { Engine } from "../../engine/engine";
 import { packColor } from "../../engine/overlay/geometry";
 import { colourBits, DOT_FLOATS, Dots, writeDot } from "../../engine/scene/dots";
-import { lightOpacity, positionAt, type Light, type Trip } from "../../map/lifeLayer";
+import { lightOpacity, positionAt, type Light, type Trip } from "../../map/life";
 import { tool } from "../../map/tools";
 import { MAP_ONLY, PALETTE } from "../../ui/palette";
 import type { Frame } from "../../world/frame";
 import { mppAtZoom, type View } from "../view";
 
-// Visible life on the engine (the old map's lifeLayer.ts): walkers and carts moving along their trips, the evening
+// Visible life on the engine (the old map's life layer): walkers and carts moving along their trips, the evening
 // glows of lit buildings, a click on a walker to follow that resident. Positions are recomputed ~20 times a second
 // from the cosmetic trips of the sim worker, extrapolating the game clock between snapshots.
 

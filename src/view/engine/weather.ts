@@ -26,9 +26,9 @@ import { climateGround, townShare, townWeather, wetness, type CubeWeather, type 
 // from the cloud worker (map/clouds/cloudData.ts) into the engine's weather textures, the per-frame weather uniform
 // (drift of the shadow noise, the town's snow, wet ground and ice), and the cloud volume of the globe views with its
 // zoom fade, march cache and lightning (the old cloud layer's decisions, map/clouds/cloudQuality.ts), and the rain or
-// snow falling around the eye near the town (the old map/precipLayer.ts).
+// snow falling around the eye near the town (as the old precipitation overlay).
 
-// Visual speed of the cloud noise drift relative to the sim wind (map/clouds/cloudLayer.ts DRIFT_SCALE).
+// Visual speed of the cloud noise drift relative to the sim wind (the old cloud layer's DRIFT_SCALE).
 const DRIFT_SCALE = 0.08;
 
 export interface WeatherOptions {
@@ -52,6 +52,7 @@ export interface EngineWeather {
   clouds: Clouds;
   precip: Precip;
   snowOnTrees: () => number; // 0..1 at the camera target
+  rain: () => number; // mm/h of rain (not snow) falling at the camera target, 0 while the weather is off the map
   override: WeatherOverride; // DEV
 }
 
@@ -70,6 +71,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
   let fadeAt = -1;
   const flashes = new Float32Array(FLASH_MAX * 4);
   let snowOnTrees = 0;
+  let rain = 0;
   const snowColour = srgb(TREE_COLORS.snow);
   const iceColour = srgb(PALETTE.mapIce);
 
@@ -220,6 +222,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
     snowOnTrees = here?.treeSnow ?? 0;
 
     // Rain and snow where the camera looks, at town scale.
+    rain = shown && here && !here.snowing ? here.precip : 0;
     const falling = shown && here && !reducedMotion ? here : null;
     const density = falling ? precipDensity(falling.precip) : 0;
     if (falling && density * precipVisibility(zoom) > 0.01) {
@@ -282,5 +285,5 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
   // The uniform writer goes first, so the cloud pass it decides is there for the clouds' own update.
   engine.drawables.push({ update, draw: () => {} }, precip, clouds);
   if (import.meta.env.DEV) Object.assign(window, { engineWeather: { override, clouds, info: () => ({ slots: slots.map((s) => ({ k: s.k, loaded: s.loaded })), fade, marches: clouds.marches }) } });
-  return { clouds, precip, override, snowOnTrees: () => snowOnTrees };
+  return { clouds, precip, override, snowOnTrees: () => snowOnTrees, rain: () => rain };
 }

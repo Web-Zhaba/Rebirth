@@ -11,8 +11,7 @@ import { overlay, OVERLAY_COLORS, tool, type Overlay } from "../../map/tools";
 import { buildBuildingSpatialIndex, buildingSpatialCandidates, type BuildingSpatialIndex } from "../../map/buildingHitIndex";
 import type { View } from "../view";
 
-// Buildings for every renderer: the model items (finished ones and building sites, map/modelLayer.ts and the engine's
-// models), the footprints as GeoJSON (planned lots, outlines) and picking a building with the pointer.
+// Buildings on the map: the model items (finished ones and building sites, the engine's models), the footprints as GeoJSON (planned lots, outlines) and picking a building with the pointer.
 
 // Building shown in the info panel.
 export const selectedBuilding = signal<number | null>(null);

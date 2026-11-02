@@ -274,12 +274,6 @@ button.warn-chip:hover {
   background: var(--paper-raised);
 }
 
-/* Map controls (zoom, compass, globe) sit under the bar. */
-.maplibregl-ctrl-top-left,
-.maplibregl-ctrl-top-right {
-  top: calc(var(--topbar-h) + 6px);
-}
-
 /* Layers: icon button group and legend, closed by a lenticel instead of a hairline. */
 .layerbar {
   display: flex;

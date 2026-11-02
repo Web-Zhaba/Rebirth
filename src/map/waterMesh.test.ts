@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { XY } from "./modelGeometry";
-import { bridgePiers, buildWaterChunk, clipBox, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Waterway } from "./waterMesh";
+import { BORDER, bridgePiers, buildWaterChunk, clipBox, nearestPiers, realShores, runsOutside, SHORE_CAP, steamStrength, tileWater, type Box, type Waterway } from "./waterMesh";
 
 const area = (p: XY[]) => Math.abs(p.reduce((a, [x, y], i) => a + x * p[(i + 1) % p.length][1] - p[(i + 1) % p.length][0] * y, 0)) / 2;
 const ring = (pts: XY[]) => pts.flat();
@@ -36,6 +36,11 @@ describe("tileWater", () => {
   it("leaves out an edge along the tile's border", () => {
     const edge = { rings: [ring([[0, 10], [50, 10], [50, 90], [0, 90]])] };
     expect(tileWater([edge], 100, id).shores.length / 4).toBe(3);
+  });
+  it("records where the tile cut a polygon, side by side", () => {
+    expect(w.borders).toEqual([0, BORDER.east, 10, 90]);
+    const edge = { rings: [ring([[0, 10], [50, 10], [50, 90], [0, 90]])] };
+    expect(tileWater([edge], 100, id).borders).toEqual([0, BORDER.west, 10, 90]);
   });
 });
 

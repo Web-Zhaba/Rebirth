@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { trackpadCameraDelta, wheelIntent } from "./trackpadModel";
+import { trackpadCameraDelta, wheelIntent } from "./trackpad";
 
 describe("trackpad wheel classification", () => {
   it("treats smooth pixel gestures as camera movement", () => {

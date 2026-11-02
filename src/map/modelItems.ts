@@ -3,14 +3,14 @@ import { BUILDINGS } from "../sim/buildings";
 import { isRoadKind } from "../sim/roads";
 import { TOWN_COLORS } from "../ui/palette";
 import { buildHeritageModel } from "./heritageModels";
-import type { Light } from "./lifeLayer";
+import type { Light } from "./life";
 import { buildScaffold, type Model, type XY } from "./modelGeometry";
 import { drapeRoad, seatBridge, seatBuilding, type Ground } from "./groundSeat";
 import { buildRoadModel } from "./roadModels";
 import { buildJunctionModel, type RoadJunction } from "./roadJunctions";
 import { buildTownModel } from "./townModels";
 
-// The town's models for every renderer (map/modelLayer.ts on MapLibre, view/engine/models.ts on the engine): what to
+// The town's models (view/engine/models.ts draws them): what to
 // draw (ModelItem), the model of each item on flat ground or seated on the relief, the cache key of everything that
 // shapes it, its window lights and the chimneys smoke rises from. No three.js here.
 
@@ -70,7 +70,7 @@ export function seatedModelOf(it: ModelItem, ground: Ground | null): Model {
 }
 
 export function modelOf(it: ModelItem): Model {
-  // roadLayer.ts always gives a junction item its arms; the style alone cannot carry them
+  // the road items always give a junction item its arms; the style alone cannot carry them
   if (it.style === "junction") return buildJunctionModel(it.junction!);
   if (it.style === "road") return buildRoadModel(it.ring, isRoadKind(it.kind) ? it.kind : "path", { start: it.ends?.[0], end: it.ends?.[1] });
   if (it.progress < 1) return buildScaffold(it.ring, it.height, it.progress);
@@ -78,8 +78,8 @@ export function modelOf(it: ModelItem): Model {
   return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading });
 }
 
-// A chimney top of a finished building (Model.smoke), town-local metres with the ground under it: what smokeLayer.ts
-// draws smoke over. lamp: the building is lived in or worked in (the item's lamp).
+// A chimney top of a finished building (Model.smoke), town-local metres with the ground under it: where the smoke
+// rises (view/engine/smoke.ts). lamp: the building is lived in or worked in (the item's lamp).
 export interface Emitter {
   id: string | number;
   kind: string;

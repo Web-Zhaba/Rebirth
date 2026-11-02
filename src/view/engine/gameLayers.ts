@@ -18,7 +18,7 @@ import { mppAtZoom } from "../view";
 import { TOOL_OVERLAYS } from "./overlayStyles";
 
 // The game's 2D map on the engine: zones, fields, clearings, roads and lots drawn into the overlay raster from the same
-// data the MapLibre layers show (view/layers/*), in their look and order (bottom first), the tool overlays on top.
+// data the old MapLibre layers showed (view/layers/*), in their look and order (bottom first), the tool overlays on top.
 // Their text (clearing percents, names of the old city) is DOM over the canvas: gameLabels.ts.
 
 type P = Record<string, unknown>;

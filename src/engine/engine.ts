@@ -1,7 +1,7 @@
 import { buildView, clampState, defaultCamera, rayDir, type CameraState, type CameraView } from "./camera/camera";
 import { pickGround } from "./camera/pick";
 import { transformPoint } from "./camera/projection";
-import { FrameUniforms } from "./frame/frameUniforms";
+import { FrameUniforms, type Highlight } from "./frame/frameUniforms";
 import { HiZ } from "./frame/hiz";
 import { enuAt, geodeticToEcef, sub, type Geodetic, type Vec3 } from "./geo/ellipsoid";
 import { DEPTH_FORMAT, fitCanvas, initGpu, SAMPLE_COUNT, type Gpu, type RenderTarget } from "./gpu/device";
@@ -59,6 +59,7 @@ export class Engine {
   readonly hiz: HiZ;
   light: (s: CameraState) => Light = defaultLight;
   lodTint = false;
+  highlight: Highlight | null = null; // a class of ground tinted for a tool (frame/frameUniforms.ts HIGHLIGHT)
   private readonly sky: Sky;
   private readonly frameListeners = new Set<(s: FrameSample) => void>();
   private readonly beforeFrameListeners = new Set<(now: number) => void>();
@@ -134,7 +135,7 @@ export class Engine {
 
   groundAt = (lat: number, lng: number): number | null => this.terrain.groundAt(lat, lng);
 
-  // Ground metres per CSS px at the camera target (the scale MapLibre's zoom implied, src/view/maplibre/zoom.ts).
+  // Ground metres per CSS px at the camera target (the scale a web map's zoom implies: view/view.ts mppAtZoom).
   metersPerPixel(): number {
     const s = this.state;
     return (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, this.canvas.clientHeight);
@@ -199,7 +200,7 @@ export class Engine {
     this.terrain.update(view);
     for (const d of this.drawables) d.update?.(view, this);
     const light = this.light(s);
-    this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: now / 1000 });
+    this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: now / 1000, highlight: this.highlight });
 
     const encoder = device.createCommandEncoder({ label: "frame" });
     // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else

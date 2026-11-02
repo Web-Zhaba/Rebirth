@@ -26,8 +26,13 @@ struct Node {
 @group(1) @binding(3) var drapes: texture_2d_array<f32>;
 @group(1) @binding(4) var drapeSampler: sampler;
 @group(1) @binding(5) var overlays: texture_2d_array<f32>;
+@group(1) @binding(6) var cover: texture_2d_array<u32>; // the drape pages' vegetation class ids (bake/drape.ts rasterCover)
 
 const GRID: u32 = ${GRID}u;
+const DRAPE_SIZE: i32 = ${DRAPE_SIZE};
+const WOOD: u32 = ${WOOD}u; // cover ids (world/forestMix.ts COVER_TABLE): the wood, the range of the wetlands
+const WET_LO: u32 = ${WET_LO}u;
+const WET_HI: u32 = ${WET_HI}u;
 const GRID_VERTS: u32 = GRID * GRID;
 const NO_PAGE: u32 = 0xffffffffu;
 const DEM: f32 = 256.0;
@@ -236,10 +241,17 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   albedo = mix(albedo, vec3f(0.33, 0.31, 0.29), smoothstep(28.0, 42.0, slope));
   albedo = mix(albedo, vec3f(0.85, 0.88, 0.92), smoothstep(2300.0, 2700.0, h) * (1.0 - smoothstep(45.0, 60.0, slope)));
   var water = 0.0;
+  var lit = 0.0; // how much of the ground the tool's highlight covers (frame.params.w, frame/frameUniforms.ts HIGHLIGHT)
   if (v.dlayer != NO_PAGE) {
     let d = textureSampleLevel(drapes, drapeSampler, v.duv, i32(v.dlayer), 0.0);
     albedo = d.rgb * DRAPE_GAIN;
     water = d.a;
+    let mode = u32(frame.params.w + 0.5);
+    if (mode != 0u) {
+      let id = textureLoad(cover, clamp(vec2i(v.duv * f32(DRAPE_SIZE)), vec2i(0), vec2i(DRAPE_SIZE - 1)), i32(v.dlayer), 0).r;
+      let wet = select(0.0, 1.0, id >= WET_LO && id <= WET_HI);
+      lit = select(select(max(wet, water), water, mode == 2u), select(0.0, 1.0, id == WOOD), mode == 1u);
+    }
   } else if (v.layer != NO_PAGE && h <= 0.0) {
     water = 1.0;
     albedo = vec3f(0.015, 0.05, 0.11);
@@ -293,6 +305,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   let alt = max(h, 0.0) * frame.params.x;
   c = applyAir(c, GROUND_AIR * opticalDepth(length(v.rel), frame.eye.w, alt), light);
   var out = toneMap(c) * cloudDim(cloudShade(v.rel, up, foot));
+  out = mix(out, frame.highlight.rgb, lit * frame.highlight.a);
   if (ov.a > 0.0) {
     let paint = pow(ov.rgb / ov.a, vec3f(1.0 / 2.2)) * mix(OVERLAY_NIGHT, 1.0, light);
     out = mix(out, paint, ov.a);

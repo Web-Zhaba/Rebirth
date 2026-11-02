@@ -8,7 +8,7 @@ import { FLASH_MAX } from "../../map/clouds/lightning";
 import { mixHex, PALETTE } from "../../ui/palette";
 import cloudsWgsl from "./clouds.wgsl?raw";
 
-// The cloud volume of the globe views (docs/PLAN-engine.md N7, port of map/clouds/cloudLayer.ts): `compute` ray-marches
+// The cloud volume of the globe views (docs/PLAN-engine.md N7, port of the old three.js cloud layer): `compute` ray-marches
 // the shell into a low-resolution target when the game says the picture changed, `draw` composites the cached target
 // over the frame after the sky. The game decides what to draw and when to march again (view/engine/weather.ts).
 

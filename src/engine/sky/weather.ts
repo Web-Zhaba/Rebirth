@@ -1,7 +1,7 @@
 import type { Vec3 } from "../geo/ellipsoid";
 import { registerWgsl } from "../gpu/wgsl";
 import { NOISE_TILE_M, OVERCAST_MAX, SHADOW_MAX, SUN_FULL_DEG, SUN_OFF_DEG } from "../../map/clouds/shadowMath";
-import { EARTH_RADIUS_M } from "../../map/three/frame";
+import { EARTH_RADIUS_M } from "../../map/clouds/sphere";
 import { BASE_SIZE, DETAIL_SIZE } from "../../map/clouds/noise3d";
 import { PALETTE } from "../../ui/palette";
 import weatherWgsl from "./weather.wgsl?raw";

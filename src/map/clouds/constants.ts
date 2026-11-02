@@ -1,6 +1,6 @@
 import type { CloudQuality } from "./settings";
 
-// Numbers the cloud volume and the ground shadows must agree on (PLAN-clouds.md sections 4-6). No three.js here.
+// Numbers the cloud volume and the ground shadows must agree on (PLAN-clouds.md sections 4-6).
 
 // Weather cube face size per quality; both layers must ask for the same size or they refill each other's cubes.
 export const CUBE_SIZE: Record<CloudQuality, number> = { low: 128, medium: 192, high: 192 };
@@ -17,9 +17,6 @@ export const FADE_TO = 6.5;
 
 // Time constant of the fade easing, ms: a wheel tick or a fly-to changes the zoom at once, the clouds follow smoothly.
 export const FADE_TAU_MS = 260;
-
-// MapLibre switches custom layers from the globe matrix to the mercator one at this zoom (measured by the spike).
-export const MERCATOR_ZOOM = 12;
 
 // Upper bounds of the ray-march loops (the presets choose within them).
 export const MAX_MARCH_STEPS = 80;

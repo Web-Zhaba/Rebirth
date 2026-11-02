@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lightOpacity, positionAt, type Trip } from "./lifeLayer";
+import { lightOpacity, positionAt, type Trip } from "./life";
 
 const trip: Trip = {
   id: 1,

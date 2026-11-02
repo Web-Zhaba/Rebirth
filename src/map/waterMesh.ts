@@ -1,7 +1,7 @@
 import earcut from "earcut";
 import type { XY } from "./modelGeometry";
 
-// Geometry of the 3D water (waterLayer.ts), all in town metres: the water polygons of the landcover tiles cut into
+// Geometry of the 3D water (view/engine/water.ts), all in town metres: the water polygons of the landcover tiles cut into
 // convex pieces, then per square chunk of the plane laid on a regular grid of cells (so the surface follows the relief
 // between its vertices, and neighbouring pieces share every vertex on their common edges: no cracks), with the
 // distance to the shore and the river's flow at every vertex. Streams and small rivers that exist only as lines become
@@ -18,7 +18,12 @@ export interface TileWater {
   pieceOf: number[]; // the polygon of each piece (its index in the tile)
   shoreOf: number[]; // the polygon of each shore segment
   tones: number[]; // per shore segment: 0 bare ground .. 1 forest on the land behind it (tileWater's `tone`)
+  borders: number[]; // where the tile cut a polygon: polygon, side (BORDER), from, to (tile units along that side) per run
 }
+
+// The sides of a tile, as tileWater's `borders` name them; a run on one side meets the neighbour's run on OPPOSITE.
+export const BORDER = { west: 0, east: 1, north: 2, south: 3 } as const;
+export const OPPOSITE = [1, 0, 3, 2];
 
 // A waterway line, its points in town metres and in the direction it flows.
 export interface Waterway {
@@ -74,7 +79,7 @@ const area2 = (r: ArrayLike<number>) => {
 // `tone(x, y)` (tile coordinates) says what the land is there (0 ground .. 1 forest), probed `probe` tile units to both
 // sides of every shore segment.
 export function tileWater(polys: readonly { rings: number[][] }[], extent: number, toLocal: (tx: number, ty: number) => XY, tone?: (tx: number, ty: number) => number, probe = 0): TileWater {
-  const pieces: XY[][] = [], shores: number[] = [], pieceOf: number[] = [], shoreOf: number[] = [], tones: number[] = [];
+  const pieces: XY[][] = [], shores: number[] = [], pieceOf: number[] = [], shoreOf: number[] = [], tones: number[] = [], borders: number[] = [];
   const box: Box = [0, 0, extent, extent];
   // an edge along the tile's border or outside it on one side is where the tile cut the water, not a shore
   const cut = (ax: number, ay: number, bx: number, by: number) =>
@@ -91,7 +96,19 @@ export function tileWater(polys: readonly { rings: number[][] }[], extent: numbe
       else groups[groups.length - 1]?.push(r);
       for (let i = 0; i < r.length; i += 2) {
         const j = (i + 2) % r.length;
-        if (cut(r[i], r[i + 1], r[j], r[j + 1])) continue;
+        if (cut(r[i], r[i + 1], r[j], r[j + 1])) {
+          // the run of the tile's side the polygon touches (its buffer outside the tile projected onto the side)
+          const [ax, ay, bx, by] = [r[i], r[i + 1], r[j], r[j + 1]];
+          const run = (side: number, a: number, b: number) => {
+            const lo = Math.max(0, Math.min(a, b)), hi = Math.min(extent, Math.max(a, b));
+            if (hi > lo) borders.push(poly, side, lo, hi);
+          };
+          if (ax <= 0 && bx <= 0) run(BORDER.west, ay, by);
+          else if (ax >= extent && bx >= extent) run(BORDER.east, ay, by);
+          else if (ay <= 0 && by <= 0) run(BORDER.north, ax, bx);
+          else run(BORDER.south, ax, bx);
+          continue;
+        }
         shores.push(...toLocal(r[i], r[i + 1]), ...toLocal(r[j], r[j + 1]));
         shoreOf.push(poly);
         if (tone) {
@@ -116,7 +133,7 @@ export function tileWater(polys: readonly { rings: number[][] }[], extent: numbe
     }
     groups = [];
   });
-  return { pieces, shores, pieceOf, shoreOf, tones };
+  return { pieces, shores, pieceOf, shoreOf, tones, borders };
 }
 
 // Nearest segment within `cap` of a point: segments binned in cells of `cap` over the region they are asked about.

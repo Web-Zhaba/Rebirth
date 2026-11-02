@@ -2,7 +2,7 @@
 #include "atmosphere"
 #include "weather"
 
-// The town's models (scene/townMesh.ts): a WGSL port of the three.js model layer's shaders (map/modelLayer.ts). Vertices
+// The town's models (scene/townMesh.ts): a WGSL port of the three.js model layer's shaders. Vertices
 // are metres in the east/north/up frame of the town origin; `model.rel` is the origin minus the eye (f64 on the CPU), so
 // positions stay camera-relative like everything else. Facade codes (modelGeometry.ts PATTERN) paint windows, doors,
 // log courses, boards and shingle rows on the buildings and the surfaces of roads; the lamp pass adds the lit windows.
