@@ -446,7 +446,9 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     let foamP = waterMod(foamWorld / foamCell + vec2f(frame.params.z * 0.012, -frame.params.z * 0.008), 8192.0);
     let foamNoise = vnoise(foamP);
     let foamBreakup = mix(0.82, 1.0, smoothstep(0.18, 0.82, foamNoise));
-    let foam = clamp(foamBand * foamBreakup * water, 0.0, 1.0);
+    // Foam is a close-range detail: fade it out as one screen pixel covers more than 8–20 metres.
+    let foamNear = 1.0 - smoothstep(8.0, 20.0, foot);
+    let foam = clamp(foamBand * foamBreakup * water * foamNear, 0.0, 1.0);
     out = mix(out, vec3f(0.86, 0.92, 0.94), foam);
   }
 
