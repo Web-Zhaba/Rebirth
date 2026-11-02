@@ -26,6 +26,13 @@ describe("PointerClickTracker", () => {
     expect(clicks.isClick(2, [80, 30])).toBe(false);
   });
 
+  it("supports a MouseEvent click fallback without a pointer id", () => {
+    const clicks = new PointerClickTracker();
+    clicks.pointerDown(3, [10, 10]);
+    clicks.pointerUp(3);
+    expect(clicks.isClick(null, [12, 12])).toBe(true);
+  });
+
   it("rejects a pointer that was cancelled", () => {
     const clicks = new PointerClickTracker();
     clicks.pointerDown(7, [10, 10]);
