@@ -124,6 +124,10 @@ export function attachBuildingPick(view: View): void {
     pointer = over;
     view.canvas.style.cursor = over ? "pointer" : "";
   });
+  view.canvas.addEventListener("pointerleave", () => {
+    pointer = false;
+    if (!tool.value) view.canvas.style.cursor = "";
+  });
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && selectedBuilding.value !== null && !tool.value) selectedBuilding.value = null;
   });

@@ -101,6 +101,7 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
       if (type === "click") {
         const clicks = new PointerClickTracker();
         const onPointerDown = (e: PointerEvent) => clicks.pointerDown(e.pointerId, local(e));
+        const onPointerMove = (e: PointerEvent) => clicks.pointerMove(e.pointerId, local(e));
         const onPointerUp = (e: PointerEvent) => clicks.pointerUp(e.pointerId);
         const onPointerCancel = (e: PointerEvent) => clicks.pointerCancel(e.pointerId);
         const onClick = (e: MouseEvent) => {
@@ -113,11 +114,13 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
           dispatch(e);
         };
         canvas.addEventListener("pointerdown", onPointerDown);
+        window.addEventListener("pointermove", onPointerMove);
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerCancel);
         canvas.addEventListener("click", onClick);
         return () => {
           canvas.removeEventListener("pointerdown", onPointerDown);
+          window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
           window.removeEventListener("pointercancel", onPointerCancel);
           canvas.removeEventListener("click", onClick);

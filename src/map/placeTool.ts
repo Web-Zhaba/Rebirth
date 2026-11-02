@@ -334,7 +334,7 @@ export function attachPlaceTool(view: View): void {
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", onBlur);
-  view.canvas.addEventListener("mouseleave", () => {
+  view.canvas.addEventListener("pointerleave", () => {
     cursor = null;
     local = null;
     clearOverlay();

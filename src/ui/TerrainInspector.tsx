@@ -56,10 +56,10 @@ export function TerrainInspector({ view }: { view: View }) {
       setInfo(null);
     };
     const off = view.on("pointermove", onMove);
-    view.canvas.addEventListener("mouseout", onOut);
+    view.canvas.addEventListener("pointerleave", onOut);
     return () => {
       off();
-      view.canvas.removeEventListener("mouseout", onOut);
+      view.canvas.removeEventListener("pointerleave", onOut);
     };
   }, [view]);
 
