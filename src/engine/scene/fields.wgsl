@@ -1,5 +1,6 @@
 #include "frame"
 #include "weather"
+#include "shadow"
 
 // The farm fields (scene/fields.ts): a WGSL port of the old 3D fields. Procedural, in metres along
 // and across the furrows (the longest edge of the field): ridges every ROW metres with a fake normal lit by the sun,
@@ -159,8 +160,9 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   let sunStr = fields.light.w;
   let slope = cos(ph) * 0.75 * amp * fade;
   let n = normalize(vec3f(-perp * slope, 1.0));
-  let shade = clamp(dot(n, fields.light.xyz) / max(fields.light.z, 0.25), 0.55, 1.35);
-  col *= shade * (1.0 - 0.22 * (1.0 - ridge) * amp * fade) * mix(0.86, 1.0, sunStr);
+  let lit = sunShadow(v.rel, fields.u.xyz);
+  let shade = mix(0.55, clamp(dot(n, fields.light.xyz) / max(fields.light.z, 0.25), 0.55, 1.35), lit);
+  col *= shadowInk(lit, 1.0) * shade * (1.0 - 0.22 * (1.0 - ridge) * amp * fade) * mix(0.86, 1.0, sunStr);
   // the ground's weather: snow settles in the furrows first and leaves the ridges standing out; wet ground darkens
   let gw = groundWeather(v.rel, v.m.z);
   let thr = 0.5 + 0.5 * sin(ph) * amp * fade;

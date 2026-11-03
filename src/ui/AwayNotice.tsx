@@ -102,18 +102,6 @@ export function AwayNotice() {
           </ul>
         </>
       )}
-      {a.choices.length > 0 && (
-        <details class="away-events">
-          <summary>
-            {L("События без вашего ответа", "Events without your answer")} <span class="away-events-count">{a.choices.length}</span>
-          </summary>
-          <ul class="away-chronicle">
-            {a.choices.map((t, i) => (
-              <li key={i}>{t}</li>
-            ))}
-          </ul>
-        </details>
-      )}
       {a.chronicle.length > 0 && (
         <details class="away-events">
           <summary>

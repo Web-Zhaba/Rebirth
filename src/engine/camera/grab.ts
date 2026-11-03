@@ -13,41 +13,34 @@ const wrapLng = (d: number): number => (d > 180 ? d - 360 : d < -180 ? d + 360 :
 
 // Move s.lat/s.lng so that the pixel (px, py) shows the ground point `grab`. A translation of the camera over the
 // ground moves the point under a pixel by about the same amount, so the fixed-point iteration converges in a step or
-// two on flat ground and in a few on the globe. Returns false when the pixel no longer sees the ground (the camera is
-// then left at the best state found).
+// two on flat ground and in a few on the globe. Where the ground under the pixel runs faster than the target (pitched
+// views, slopes) a full step overshoots; the step from the best state is then halved until it gets closer. Returns false
+// when the pixel never saw the ground or the error did not at least halve (the camera is left at the best state found).
 export function solveGrab(s: CameraState, grab: { lat: number; lng: number }, px: number, py: number, pick: PickFn, maxIter = 8, tolDeg = 1e-9): boolean {
   let best = { lat: s.lat, lng: s.lng };
   let bestErr = Infinity;
+  let firstErr = Infinity;
+  let step = { lat: 0, lng: 0 };
   for (let i = 0; i < maxIter; i++) {
     const q = pick(s, px, py);
-    if (!q) {
-      s.lat = best.lat;
-      s.lng = best.lng;
-      return bestErr < Infinity;
-    }
+    if (!q) break;
     const dLat = grab.lat - q.lat;
     const dLng = wrapLng(grab.lng - q.lng);
     const err = Math.hypot(dLat, dLng * Math.cos(q.lat * RAD));
+    if (i === 0) firstErr = err;
     if (err < bestErr) {
       bestErr = err;
       best = { lat: s.lat, lng: s.lng };
-    } else if (i > 0) {
-      // Overshoot: fall back to the best state with a smaller step.
-      s.lat = best.lat;
-      s.lng = best.lng;
-      s.lat += dLat * 0.5;
-      s.lng += dLng * 0.5;
-      clampState(s);
-      continue;
-    }
-    if (err < tolDeg) return true;
-    s.lat += dLat;
-    s.lng += dLng;
+      if (err < tolDeg) return true;
+      step = { lat: dLat, lng: dLng };
+    } else step = { lat: step.lat * 0.5, lng: step.lng * 0.5 };
+    s.lat = best.lat + step.lat;
+    s.lng = best.lng + step.lng;
     clampState(s);
   }
   s.lat = best.lat;
   s.lng = best.lng;
-  return true;
+  return bestErr < Infinity && bestErr <= 0.5 * firstErr;
 }
 
 // Scale the distance by `factor` and keep the ground point `grab` under the pixel.

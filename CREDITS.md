@@ -19,6 +19,7 @@ The in-game «Об игре» dialog (the info button at the right end of the to
 ## Map and text data
 
 - Map data: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL), served as vector tiles by [OpenFreeMap](https://openfreemap.org) in the [OpenMapTiles](https://www.openmaptiles.org/) schema (© OpenMapTiles).
+- Biomes: [RESOLVE Ecoregions 2017](https://ecoregions.appspot.com) (Dinerstein et al. 2017, "An Ecoregion-Based Approach to Protecting Half the Terrestrial Realm", BioScience), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); rasterised into `src/world/biomes.png` by `scripts/bake-biomes.mjs`.
 - Terrain: Mapzen / [AWS Open Data](https://registry.opendata.aws/terrain-tiles/) Terrain Tiles (Terrarium encoding). The map attribution strings are in `src/map/style.ts`.
 - Camera feel: the fly curve and camera defaults follow [MapLibre GL JS](https://maplibre.org) (BSD-3-Clause), which Rebirth used for rendering before its own WebGPU engine.
 - Place search before founding: [Photon](https://photon.komoot.io) by komoot, over OpenStreetMap data (© OpenStreetMap contributors, ODbL).

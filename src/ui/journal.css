@@ -650,12 +650,27 @@
     width: calc(100vw - 24px);
   }
 
+  /* The slip and the task line stop short of the map buttons in the right corner, or they would cover them. */
+  .place-search,
+  .found-task {
+    box-sizing: border-box;
+    width: calc(100vw - 24px - 56px);
+  }
+
   .found-task {
     top: 100px;
   }
 
   .found {
     bottom: 12px;
+  }
+
+  /* The map credits sit over the whole interface; in the corner they would cover the sheet's name field and button,
+     so while it is open they stand under the map buttons instead. */
+  body:has(.found) .engine-attrib {
+    top: calc(var(--topbar-h, 0px) + 152px);
+    right: var(--sp-2);
+    bottom: auto;
   }
 
   .found-sheet {

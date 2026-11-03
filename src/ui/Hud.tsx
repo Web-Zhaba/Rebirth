@@ -1,7 +1,6 @@
 import type { View } from "../view/view";
 import type { City } from "../sim/types";
 import { LeftPanel } from "./LeftPanel";
-import { EventCard } from "./EventCard";
 import { Toasts } from "./Toasts";
 import { TopBar, Warnings } from "./TopBar";
 import { BuilderTasks } from "./BuilderTasks";
@@ -16,7 +15,6 @@ export function Hud({ city, view }: { city: City; view: View }) {
       <aside class="side-col" aria-label={LANDMARK_LABELS.status}>
         <Warnings />
         <LeftPanel />
-        <EventCard view={view} />
         <Toasts view={view} />
       </aside>
       <BuilderTasks view={view} />

@@ -4,6 +4,7 @@ import { BUILDINGS } from "./buildings";
 import { demand, emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import {
+  rebalanceJobs,
   ageOf,
   builderCount,
   RATES,
@@ -175,6 +176,11 @@ describe("moving in", () => {
     expect(h.map((x) => x.home)).toEqual([1, 2, null, null]);
     expect(kinds(a)).toEqual(["movein", "movein"]);
     expect(vacantHouses(a.buildings, a.households)).toEqual([]);
+  });
+  it("leaves a house promised to a family on its way alone", () => {
+    const s = custom(town([building(1, "izba", 100), building(2, "izba", 200)]), [{ home: null, people: [{}] }, { home: null, people: [{}] }]);
+    const a = day({ ...s, incoming: [{ house: 1, arrive: s.gameMinutes + 600 }] });
+    expect(Object.values(a.households).map((h) => h.home).sort()).toEqual([2, null]);
   });
   it("a household that does not fit waits for a bigger house", () => {
     const big = custom(town([building(1, "izba", 100), building(2, "izba5", 200)]), [{ home: null, people: Array(6).fill({}) }]);
@@ -375,6 +381,10 @@ describe("marriage", () => {
     expect(a.residents[3].spouse).toBeNull();
     expect(kinds(a)).not.toContain("marriage");
   });
+  it("not into a house promised to a family on its way", () => {
+    const a = day({ ...pair([building(1, "izba", 100)]), incoming: [{ house: 1, arrive: MIDNIGHT + 600 }] }, { rand: always, only: ["marriage"] });
+    expect(a.residents[1].spouse).toBeNull();
+  });
   it("not when the draw fails or when they share a household", () => {
     expect(day(pair([building(1, "izba", 100)]), { rand: never, only: ["marriage"] }).residents[1].spouse).toBeNull();
     const together = custom(town([building(1, "izba", 100)]), [{ home: null, people: [{ sex: "m", age: 25 }, { sex: "f", age: 24 }] }]);
@@ -385,6 +395,14 @@ describe("marriage", () => {
 describe("jobs", () => {
   const adults = (n: number, home: number | null = 1): HSpec => ({ home, people: Array(n).fill({}) });
 
+  it("hires no one in class: a grown-up pupil keeps off work and leaves the place to another", () => {
+    const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400)]), [adults(4)]);
+    s.residents[1] = { ...s.residents[1], job: 2, inClass: true };
+    const a = rebalanceJobs(s);
+    expect(a.residents[1].job).toBeNull();
+    expect(Object.values(a.residents).filter((r) => r.job === 2).map((r) => r.id)).toEqual([2, 3, 4]);
+    expect(day(s).residents[1].job).toBeNull();
+  });
   it("assigns the nearest reachable workplace, then the next one when it is full", () => {
     const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "smithy", 1000)]), [adults(4)]);
     const a = day(s);

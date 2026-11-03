@@ -5,7 +5,6 @@ export const SEMANTIC_IDS = {
   townPanel: "town-panel",
   techPanel: "tech-panel",
   daySummaryTitle: "day-summary-title",
-  eventCardTitle: "event-card-title",
   buildingInspectorTitle: "building-inspector-title",
   clearingInspectorTitle: "clearing-inspector-title",
   heritageInspectorTitle: "heritage-inspector-title",

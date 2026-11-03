@@ -193,7 +193,6 @@ it("pacing harness", async () => {
         quietSince = now - T0;
       }
     }
-    if (st.pending) quietSince = now - T0;
     // planks are made when a sawpit has output (the houses may take them in the same tick, so the stock need not rise)
     const full = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
     if (Object.values(full.buildings).some((b) => b.template === "sawpit" && ((full.prod.today[b.id] ?? 0) > 0 || (full.prod.yesterday[b.id] ?? 0) > 0))) planksMade = true;

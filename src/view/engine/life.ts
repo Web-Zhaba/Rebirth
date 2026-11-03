@@ -25,6 +25,7 @@ const GLOW_M = { house: 5, work: 8, tavern: 12 } as const;
 const DOTS_MPP = mppAtZoom(13); // the old dots' minzoom
 const GLOWS_MPP = mppAtZoom(14);
 const HIT_PX = 10;
+const TOUCH_HIT_PX = 24; // a fingertip
 const FIGURES_MPP = mppAtZoom(17.5); // a 1.7 m figure is ~6 px tall: from here on it reads better than a dot
 const FIGURES_REACH = 0.8; // screens (of the larger side) around the camera target that get figures
 const RIGS_KEPT = 1500; // looks remembered before the cache starts over
@@ -167,18 +168,21 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     town.setFigures(figures, nv);
   });
 
-  // A click on a resident follows them (a larger hit target than the dot, as before).
+  // A click on a resident follows them (a larger hit target than the dot, as before). It takes the click: this handler
+  // is attached before the map picks, which leave a prevented click alone, so the building under them is not selected.
   if (o.onWalker)
     view.on("click", (e) => {
       if (tool.value) return;
       let best: number | null = null;
-      let bestD = HIT_PX;
+      let bestD = e.pointerType === "touch" ? TOUCH_HIT_PX : HIT_PX;
       for (const w of walkers) {
         const s = engine.project(w.lat, w.lng, w.h);
         if (!s) continue;
         const d = Math.hypot(s[0] - e.point[0], s[1] - e.point[1]);
         if (d < bestD) (bestD = d), (best = w.who);
       }
-      if (best !== null) o.onWalker!(best);
+      if (best === null) return;
+      e.original.preventDefault();
+      o.onWalker!(best);
     });
 }

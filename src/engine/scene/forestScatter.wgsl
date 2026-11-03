@@ -30,7 +30,7 @@ struct Job {
 
 struct Scatter {
   planes: array<vec4f, 5>, // view frustum (sides and near), eye-relative: inside when dot(n, p) + w >= -radius
-  up: vec4f,               // xyz unit up at the target, w candidates in all
+  up: vec4f,               // w candidates in all
   dims: vec4u,             // x jobs, y threads per dispatch row
   far: vec4f,              // reach per group (m)
   reach: vec4f,            // x full-density reach of trees, y of details, z grow 0..1, w terrain exaggeration
@@ -94,6 +94,15 @@ fn pageHeight(layer: u32, uv: vec2f) -> f32 {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
+// Screen bounds (ndc) of a sphere along one axis: `a` its centre's view-space offset on that axis, `w` its depth, `t`
+// the tangent of the half field of view there. Exact: the planes through the eye and that axis' perpendicular that
+// touch the sphere (the plain r / w under-reaches on the outer side off-axis).
+fn sphereSpan(a: f32, w: f32, r: f32, t: f32) -> vec2f {
+  let s = r * sqrt(max(a * a + w * w - r * r, 0.0));
+  let d = (w * w - r * r) * t;
+  return vec2f((a * w - s) / d, (a * w + s) / d);
+}
+
 fn visible(c: vec3f, r: f32) -> bool {
   for (var k = 0; k < 5; k++) {
     if (dot(sc.planes[k].xyz, c) + sc.planes[k].w < -r) {
@@ -115,11 +124,12 @@ fn occluded(c: vec3f, r: f32) -> bool {
   if (w - r <= sc.occl.x) {
     return false; // reaches the near plane
   }
-  let ndc = clip.xy / w;
-  let ext = vec2f(r / ((w - r) * sc.occl.y), r / ((w - r) * sc.occl.z)); // a slight overestimate off-axis
+  // clip.xy is the view-space offset over the tangent of the half fov (projection.ts)
+  let sx = sphereSpan(clip.x * sc.occl.y, w, r, sc.occl.y);
+  let sy = sphereSpan(clip.y * sc.occl.z, w, r, sc.occl.z);
   let size0 = sc.hizSize.xy;
-  let lo = vec2f(ndc.x - ext.x, -ndc.y - ext.y) * 0.5 + 0.5; // uv, y down
-  let hi = vec2f(ndc.x + ext.x, -ndc.y + ext.y) * 0.5 + 0.5;
+  let lo = vec2f(sx.x, -sy.y) * 0.5 + 0.5; // uv, y down
+  let hi = vec2f(sx.y, -sy.x) * 0.5 + 0.5;
   let p0 = vec2u(clamp(floor(lo * size0), vec2f(0.0), size0 - 1.0));
   let p1 = vec2u(clamp(floor(hi * size0), vec2f(0.0), size0 - 1.0));
   let span = max(p1.x - p0.x, p1.y - p0.y);
@@ -217,7 +227,9 @@ fn candidate(idx: u32) -> u32 {
   if (job.hLayer != NO_PAGE) {
     ground = max(pageHeight(job.hLayer, job.hPage.xy + uv * job.hPage.z), 0.0) * sc.reach.w;
   }
-  let p = job.corner + job.east * uv.x + job.south * uv.y + sc.up.xyz * (ground - sc.near.z);
+  // the tile's own up (east x south points down): the target's leans by the distance to it, metres at mountain heights
+  let up = normalize(cross(job.south, job.east));
+  let p = job.corner + job.east * uv.x + job.south * uv.y + up * (ground - sc.near.z);
   let d = length(p);
   let far = sc.far[g];
   if (d > far) {
@@ -245,7 +257,7 @@ fn candidate(idx: u32) -> u32 {
   if (size < 0.05) {
     return REJECTED;
   }
-  let centre = p + sc.up.xyz * (0.5 * size);
+  let centre = p + up * (0.5 * size);
   if (!visible(centre, 0.75 * size)) {
     return FRUSTUM;
   }

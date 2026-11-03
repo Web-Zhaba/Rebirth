@@ -42,6 +42,22 @@ describe("solveGrab", () => {
     expect(after.lng).toBeCloseTo(g2.lng, 4);
     expect(g).not.toBeNull();
   });
+
+  it("converges where the ground under the pixel runs 2.5 times faster than the target", () => {
+    // A full step overshoots by 1.5x: the solver has to damp the step from its best state, not flip direction.
+    const pick: PickFn = (st) => ({ lat: 47 + 2.5 * (st.lat - 47), lng: 11 + 2.5 * (st.lng - 11), h: 0 });
+    const s = cam({ lat: 47, lng: 11 });
+    expect(solveGrab(s, { lat: 47.01, lng: 11.02 }, 0, 0, pick, 30)).toBe(true);
+    expect(s.lat).toBeCloseTo(47.004, 6);
+    expect(s.lng).toBeCloseTo(11.008, 6);
+  });
+
+  it("reports failure when it cannot get closer", () => {
+    const pick: PickFn = (st) => ({ lat: 47 - 3 * (st.lat - 47), lng: 11, h: 0 }); // moves the wrong way
+    const s = cam({ lat: 47, lng: 11 });
+    expect(solveGrab(s, { lat: 47.01, lng: 11 }, 0, 0, pick)).toBe(false);
+    expect(s.lat).toBe(47);
+  });
 });
 
 describe("zoomAbout", () => {

@@ -31,7 +31,6 @@ export const HOTKEY_SECTIONS: HotkeySection[] = [
     title: L("Управление", "Controls"),
     rows: [
       { keys: ["Esc", L("ПКМ", "RMB")], desc: L("Отмена инструмента / разрыв дороги / закрыть панель", "Cancel tool / break the road / close the panel") },
-      { keys: ["Enter"], desc: L("Быстрый безопасный выбор в карточке события", "Quick safe choice on an event card") },
       { keys: ["F10"], desc: L("Скрыть / показать HUD (режим скриншота)", "Hide / show the HUD (screenshot mode)") },
       { keys: ["?"], desc: L("Открыть эту шпаргалку клавиш", "Open this shortcut sheet") },
     ],

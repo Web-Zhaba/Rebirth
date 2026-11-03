@@ -90,7 +90,7 @@ interface Workers {
   eff: Map<number, number>; // their working strength: needs and household mood, 1 for a content worker
   lit: Map<number, number>; // their literacy, summed as shares (school / 100), weighted by the same strength
 }
-// Mood can change without the residents changing (an event choice), so the cache hangs on both objects.
+// Mood can change without the residents changing, so the cache hangs on both objects.
 const workerCache = new WeakMap<object, WeakMap<object, Workers>>();
 
 // Jobs change only at the daily step, so this holds for a whole day.

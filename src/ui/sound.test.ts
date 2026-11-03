@@ -101,6 +101,5 @@ describe("sounds from new events", () => {
   it("maps only built and goal", () => {
     expect(soundFor("built")).toBe("finished");
     expect(soundFor("goal")).toBe("finished");
-    expect(soundFor("event")).toBeNull();
   });
 });

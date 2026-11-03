@@ -2,3 +2,5 @@ export const prefersReducedMotion = (): boolean => typeof matchMedia === "functi
 
 // Below the medium breakpoint (layout.css): collapsible panels start collapsed unless the player chose otherwise.
 export const compactScreen = (): boolean => typeof matchMedia === "function" && matchMedia("(max-width: 1099px)").matches;
+// A finger is the main input: no hover, no right button, no keyboard at hand.
+export const touchScreen = (): boolean => typeof matchMedia === "function" && matchMedia("(hover: none) and (pointer: coarse)").matches;

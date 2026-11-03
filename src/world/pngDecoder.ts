@@ -1,7 +1,8 @@
 // Byte-exact PNG decoding for elevation tiles. Do not use ImageBitmap/canvas here: colour conversion in
 // browser image pipelines can change encoded RGB channels, and Terrarium interprets those bytes as metres.
 //
-// Supported source formats are the 8-bit RGB and RGBA PNGs used by the Terrarium elevation tile set. PNG's five
+// Supported source formats are the 8-bit RGB and RGBA PNGs used by the Terrarium elevation tile set, and 8-bit
+// greyscale (the biome map, world/biomes.ts: class ids, expanded to R = G = B). PNG's five
 // per-row filters are reversed explicitly; IDAT's zlib stream is inflated by the standard Compression Streams API.
 
 export interface DecodedPng {
@@ -59,11 +60,11 @@ export async function decodePng(input: ArrayBuffer | Uint8Array): Promise<Decode
       const filter = bytes[dataAt + 11];
       const interlace = bytes[dataAt + 12];
       if (!width || !height || width * height > MAX_PIXELS) throw new Error("Invalid PNG dimensions");
-      if (bitDepth !== 8 || (colorType !== 2 && colorType !== 6)) {
-        throw new Error(`Unsupported Terrarium PNG format: bit depth ${bitDepth}, colour type ${colorType}`);
+      if (bitDepth !== 8 || (colorType !== 0 && colorType !== 2 && colorType !== 6)) {
+        throw new Error(`Unsupported PNG format: bit depth ${bitDepth}, colour type ${colorType}`);
       }
       if (compression !== 0 || filter !== 0 || interlace !== 0) throw new Error("Unsupported PNG encoding");
-      channels = colorType === 2 ? 3 : 4;
+      channels = colorType === 0 ? 1 : colorType === 2 ? 3 : 4;
       hasHeader = true;
     } else if (type === "IDAT") {
       if (!hasHeader || hasEnd) throw new Error("PNG image data is out of order");
@@ -118,9 +119,10 @@ export async function decodePng(input: ArrayBuffer | Uint8Array): Promise<Decode
 
   const rgba = new Uint8Array(width * height * 4);
   for (let pixel = 0, src = 0, dst = 0; pixel < width * height; pixel++, src += channels, dst += 4) {
+    const grey = channels === 1;
     rgba[dst] = raw[src];
-    rgba[dst + 1] = raw[src + 1];
-    rgba[dst + 2] = raw[src + 2];
+    rgba[dst + 1] = raw[grey ? src : src + 1];
+    rgba[dst + 2] = raw[grey ? src : src + 2];
     rgba[dst + 3] = channels === 4 ? raw[src + 3] : 255;
   }
   return { width, height, rgba };

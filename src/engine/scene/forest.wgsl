@@ -1,5 +1,6 @@
 #include "frame"
 #include "weather"
+#include "shadow"
 
 // The forest's trees and small details (scene/forest.ts), drawn from the scatter's instances (forestScatter.wgsl):
 // near ones as their models, far ones as impostors facing the camera (scene/treeAtlas.ts), both lit, recoloured with the
@@ -20,6 +21,7 @@ struct Forest {
   colA: array<vec4f, 6>,  // rgb the season's first crown colour, w impostor half side (tree heights)
   colB: array<vec4f, 6>,  // rgb the second (mixed per tree)
   base: array<vec4f, 6>,  // rgb the colour the crown was built with
+  shift: vec4f, // xyz the eye the instances were scattered for minus this frame's (the shadow pass draws last frame's)
 };
 
 @group(1) @binding(0) var<uniform> forest: Forest;
@@ -43,9 +45,13 @@ fn toLocal(v: vec3f) -> vec3f {
   return vec3f(dot(v, forest.e.xyz), dot(v, forest.n.xyz), dot(v, forest.u.xyz));
 }
 
+fn toEcef(v: vec3f) -> vec3f {
+  return forest.e.xyz * v.x + forest.n.xyz * v.y + forest.u.xyz * v.z;
+}
+
 // The old layer's shading: seasonal crowns recoloured (keeping their light and shade), darker low in the crown, snow
-// on what faces up, then the sun and the night.
-fn shade(colIn: vec3f, n: vec3f, crown: f32, h: f32, spot: f32, kind: u32, hash: f32, tone: f32) -> vec3f {
+// on what faces up, then the sun (`lit`: the sun's shadow, shadow.wgsl) and the night.
+fn shade(colIn: vec3f, n: vec3f, crown: f32, h: f32, spot: f32, kind: u32, hash: f32, tone: f32, lit: f32) -> vec3f {
   var col = colIn;
   let kp = forest.kinds[kind];
   if (crown > 0.5) {
@@ -57,8 +63,8 @@ fn shade(colIn: vec3f, n: vec3f, crown: f32, h: f32, spot: f32, kind: u32, hash:
     col = mix(col, forest.snow.rgb, kp.z * smoothstep(0.12, 0.45, n.z) * mix(0.35, 0.95, spot));
   }
   let d = max(dot(n, forest.light.xyz), 0.0);
-  let k = mix(0.55, 1.0, d) * mix(0.88, 1.0, forest.light.w);
-  return col * k * mix(NIGHT, vec3f(1.0), forest.params.x);
+  let k = mix(0.55, 1.0, d * lit) * mix(0.88, 1.0, forest.light.w);
+  return col * k * shadowInk(lit, d) * mix(NIGHT, vec3f(1.0), forest.params.x);
 }
 
 struct Inst {
@@ -74,10 +80,11 @@ struct MeshOut {
   @location(3) @interpolate(flat) info: vec4f, // x kind, y hash, z shade, w crown
   @location(4) h: f32,
   @location(5) cloud: f32, // cloud shadow at the tree (sky/weather.wgsl cloudShade)
+  @location(6) world: vec3f, // camera-relative
 };
 
-@vertex
-fn meshVs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) col: vec3f, @location(3) crown: f32, inst: Inst) -> MeshOut {
+// A model vertex placed: crown thinned when bare, turned, scaled, swayed, camera-relative.
+fn meshWorld(pos: vec3f, crown: f32, inst: Inst) -> vec3f {
   let kind = u32(inst.b.w + 0.5);
   let kp = forest.kinds[kind];
   let s = inst.a.w;
@@ -89,9 +96,18 @@ fn meshVs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) col: ve
   let sn = sin(inst.b.x);
   p = vec3f(c * p.x - sn * p.y, sn * p.x + c * p.y, p.z) * s;
   p = vec3f(p.xy + forest.wind.xy * forest.params.z * kp.y * gust(inst.b.y) * pos.z * pos.z * s * 0.03, p.z);
-  let world = inst.a.xyz + forest.e.xyz * p.x + forest.n.xyz * p.y + forest.u.xyz * p.z;
+  return inst.a.xyz + forest.e.xyz * p.x + forest.n.xyz * p.y + forest.u.xyz * p.z;
+}
+
+@vertex
+fn meshVs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) col: vec3f, @location(3) crown: f32, inst: Inst) -> MeshOut {
+  let world = meshWorld(pos, crown, inst);
+  let s = inst.a.w;
+  let c = cos(inst.b.x);
+  let sn = sin(inst.b.x);
   var o: MeshOut;
   o.pos = frame.viewProj * vec4f(world, 1.0);
+  o.world = world;
   o.c = col;
   o.n = vec3f(c * nrm.x - sn * nrm.y, sn * nrm.x + c * nrm.y, nrm.z);
   o.p = pos * s + inst.b.y * 17.0;
@@ -99,6 +115,13 @@ fn meshVs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) col: ve
   o.h = pos.z;
   o.cloud = cloudShade(inst.a.xyz, forest.u.xyz, 0.0);
   return o;
+}
+
+// The sun's shadow map pass (shadow/shadowMap.ts): the near models cast, from last frame's instances moved to this
+// frame's eye.
+@vertex
+fn meshShadowVs(@location(0) pos: vec3f, @location(3) crown: f32, inst: Inst) -> @builtin(position) vec4f {
+  return frame.shadowProj * vec4f(meshWorld(pos, crown, inst) + forest.shift.xyz, 1.0);
 }
 
 @fragment
@@ -109,7 +132,9 @@ fn meshFs(v: MeshOut) -> @location(0) vec4f {
     discard;
   }
   let spot = smoothstep(0.35, 0.65, cell(v.p * 1.6 + 3.1));
-  return vec4f(shade(v.c, normalize(v.n), v.info.w, v.h, spot, kind, v.info.y, v.info.z) * cloudDim(v.cloud), 1.0);
+  let n = normalize(v.n);
+  let lit = sunShadow(v.world, toEcef(n));
+  return vec4f(shade(v.c, n, v.info.w, v.h, spot, kind, v.info.y, v.info.z, lit) * cloudDim(v.cloud), 1.0);
 }
 
 struct ImpOut {
@@ -120,6 +145,7 @@ struct ImpOut {
   @location(3) up: vec3f, // the quad's up
   @location(4) @interpolate(flat) info: vec4f, // x kind, y hash, z shade, w mirrored (-1/1)
   @location(5) cloud: f32,
+  @location(6) world: vec3f, // camera-relative
 };
 
 @vertex
@@ -142,6 +168,7 @@ fn impostorVs(@builtin(vertex_index) vi: u32, inst: Inst) -> ImpOut {
   p += forest.e.xyz * sway.x + forest.n.xyz * sway.y;
   var o: ImpOut;
   o.pos = frame.viewProj * vec4f(inst.a.xyz + p, 1.0);
+  o.world = inst.a.xyz + p;
   o.uv = vec2f((view + 0.5 + 0.5 * q.x * flip) / VIEWS, 0.5 - 0.5 * q.y);
   o.f = toLocal(F);
   o.r = toLocal(R);
@@ -164,5 +191,6 @@ fn impostorFs(v: ImpOut) -> @location(0) vec4f {
   }
   let nv = (t.xy * 2.0 - 1.0) * vec2f(v.info.w, 1.0);
   let n = normalize(v.r * nv.x + v.up * nv.y + v.f * sqrt(max(0.0, 1.0 - dot(nv, nv))));
-  return vec4f(shade(a.rgb, n, crown, t.z, 0.5, kind, v.info.y, v.info.z) * cloudDim(v.cloud), cover);
+  let lit = sunShadow(v.world, toEcef(n));
+  return vec4f(shade(a.rgb, n, crown, t.z, 0.5, kind, v.info.y, v.info.z, lit) * cloudDim(v.cloud), cover);
 }

@@ -67,6 +67,29 @@ export function cameraAxes(s: CameraState): { eye: Vec3; target: Vec3; right: Ve
   return { eye, target, right, up, forward };
 }
 
+// The least height of the eye over the drawn ground under it (m).
+export const EYE_CLEARANCE = 2;
+
+// Tilts the camera up (less pitch) until the eye clears the drawn ground under it: on a slope rising behind the target
+// a pitched eye would otherwise sit inside the hill. Looking straight down the eye is `distance` (>= MIN_DISTANCE) above
+// the target, so pitch 0 always clears.
+export function liftEyeAboveGround(s: CameraState, groundAt: (lat: number, lng: number) => number | null): void {
+  const clear = (pitch: number): boolean => {
+    const g = ecefToGeodetic(cameraAxes({ ...s, pitch }).eye);
+    const ground = groundAt(g.lat, g.lng);
+    return ground === null || g.h - ground >= EYE_CLEARANCE;
+  };
+  if (s.pitch <= 0 || clear(s.pitch)) return;
+  let lo = 0;
+  let hi = s.pitch;
+  for (let i = 0; i < 12; i++) {
+    const mid = (lo + hi) / 2;
+    if (clear(mid)) lo = mid;
+    else hi = mid;
+  }
+  s.pitch = lo;
+}
+
 // Adaptive near plane: a small fraction of the height above ground keeps reversed-Z precision where the eye is,
 // never below 0.1 m so street level still resolves.
 export function nearPlane(eyeAboveGround: number): number {

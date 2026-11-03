@@ -1,6 +1,5 @@
 import { DIG, emptyFinds } from "./excavation";
 import { initialProgress, isUnlocked, zoneKey } from "./tech";
-import { FIRST_EVENT } from "./events";
 import { emptyLevers } from "./levers";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
@@ -38,7 +37,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "progress" | "pending" | "nextEvent" | "eventLast" | "weather"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -61,9 +60,6 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     summary: null,
     levers: emptyLevers(),
     progress: initialProgress(),
-    pending: null,
-    nextEvent: now + FIRST_EVENT,
-    eventLast: {},
     weather: emptyWeather(),
     ...f.people,
   };

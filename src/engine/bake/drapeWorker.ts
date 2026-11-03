@@ -1,10 +1,11 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
+import { loadBiomeMap, type BiomeMap } from "../../world/biomes";
 import { vectorTileUrl } from "../../world/tiles";
-import { coverBlocks, DRAPE_SIZE, packDrape, paintDrape, parseSource, rasterCover, sourceOf, type DrapeSource } from "./drape";
+import { biomeBase, coverBlocks, DRAPE_SIZE, packDrape, paintDrape, parseSource, rasterCover, sourceOf, type DrapeSource } from "./drape";
 
 // Drape bake job (bake/drape.ts): fetch the page's OpenMapTiles source tile (cached here: the 16 pages under a z12 tile
-// share it), paint colour and water mask, rasterise the vegetation cover, hand the pixels back transferred. Same request protocol as the DEM worker.
+// share it), paint the biome base, colour and water mask, rasterise the vegetation cover, hand the pixels back transferred. Same request protocol as the DEM worker.
 
 export type DrapeRequest = { type: "load"; id: number; z: number; x: number; y: number } | { type: "cancel"; id: number };
 
@@ -28,6 +29,11 @@ const sources = new Map<string, Promise<DrapeSource>>(); // insertion order = LR
 const jobs = new Map<number, AbortController>();
 const colour = new OffscreenCanvas(DRAPE_SIZE, DRAPE_SIZE).getContext("2d", { willReadFrequently: true })!;
 const water = new OffscreenCanvas(DRAPE_SIZE, DRAPE_SIZE).getContext("2d", { willReadFrequently: true })!;
+// Without the biome map (failed to load) pages fall back to the meadow fill rather than failing.
+const biomes: Promise<BiomeMap | null> = loadBiomeMap().catch((err) => {
+  console.error("[engine] biome map", err);
+  return null;
+});
 
 // Shared by the pages under one source tile, so it is not aborted with any one job; a cancelled job just drops its page.
 function source(z: number, x: number, y: number): Promise<DrapeSource> {
@@ -67,9 +73,10 @@ async function load(id: number, z: number, x: number, y: number): Promise<void> 
   jobs.set(id, abort);
   try {
     const s = sourceOf(z, x, y);
-    const src = await source(s.z, s.x, s.y);
+    const [src, map] = await Promise.all([source(s.z, s.x, s.y), biomes]);
     if (abort.signal.aborted) throw new DOMException("aborted", "AbortError");
-    paintDrape(colour, water, src, z, x, y);
+    const base = map && new ImageData(biomeBase(map, z, x, y), DRAPE_SIZE, DRAPE_SIZE);
+    paintDrape(colour, water, src, z, x, y, base);
     const mask = water.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data;
     const rgba = packDrape(colour.getImageData(0, 0, DRAPE_SIZE, DRAPE_SIZE).data, mask);
     const cover = rasterCover(src, z, x, y, mask);

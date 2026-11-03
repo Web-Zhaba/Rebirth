@@ -1,6 +1,7 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
-import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setSmoke3d, smoke3dOn } from "../map/graphicsSettings";
+import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setShadowQuality, setSmoke3d, SHADOW_QUALITIES, shadowQuality, smoke3dOn } from "../map/graphicsSettings";
+import type { ShadowQuality } from "../engine/shadow/shadowMap";
 import { CLOUD_QUALITIES, cloudQuality, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
 import { Button, Dialog, Segmented, type SegmentOption } from "./kit";
@@ -12,6 +13,12 @@ const CLOUD_LABELS: Record<CloudQuality, { label: string; title: string }> = {
   low: { label: L("Низкое", "Low"), title: L("Низкое", "Low") },
   medium: { label: L("Среднее", "Medium"), title: L("Среднее", "Medium") },
   high: { label: L("Высокое", "High"), title: L("Высокое", "High") },
+};
+
+const SHADOW_LABELS: Record<ShadowQuality, { label: string; title: string }> = {
+  off: { label: L("Нет", "Off"), title: L("Без теней", "No shadows") },
+  low: { label: L("Низкое", "Low"), title: L("Мягче и легче для слабой видеокарты", "Softer and lighter on a weak GPU") },
+  high: { label: L("Высокое", "High"), title: L("Чёткие тени", "Crisp shadows") },
 };
 
 const LANG_OPTIONS: SegmentOption<Lang>[] = [
@@ -26,6 +33,7 @@ export function SettingsDialog() {
   if (!settingsOpen.value) return null;
   const cloudOptions: SegmentOption<CloudQuality>[] = CLOUD_QUALITIES.map((q) => ({ id: q, ...CLOUD_LABELS[q] }));
   const pct = Math.round(soundVolume.value * 100);
+  const shadowOptions: SegmentOption<ShadowQuality>[] = SHADOW_QUALITIES.map((q) => ({ id: q, ...SHADOW_LABELS[q] }));
   return (
     <Dialog title={L("Настройки", "Settings")} class="settings" onClose={() => (settingsOpen.value = false)}>
       <div class="settings-body">
@@ -72,6 +80,10 @@ export function SettingsDialog() {
           <input type="checkbox" checked={motionOn.value} onChange={(e) => setMotion((e.target as HTMLInputElement).checked)} />
           <span>{L("Ветер и волны", "Wind and waves")}</span>
         </label>
+        <div class="settings-row" title={L("Тени домов и деревьев от солнца вблизи", "Sun shadows of buildings and trees up close")}>
+          <span>{L("Тени", "Shadows")}</span>
+          <Segmented options={shadowOptions} value={shadowQuality.value} label={L("Тени", "Shadows")} onChange={setShadowQuality} />
+        </div>
         <div class="settings-row">
           <span>{L("Качество облаков", "Cloud quality")}</span>
           <Segmented options={cloudOptions} value={cloudQuality.value} label={L("Качество облаков", "Cloud quality")} onChange={setCloudQuality} />

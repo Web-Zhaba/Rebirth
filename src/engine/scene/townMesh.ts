@@ -3,6 +3,7 @@ import type { Engine, Drawable } from "../engine";
 import { dot, enuAt, geodeticToEcef, type Vec3 } from "../geo/ellipsoid";
 import type { RenderTarget } from "../gpu/device";
 import { createShader } from "../gpu/wgsl";
+import { SHADOW_DEPTH } from "../shadow/shadowMap";
 import "../frame/frameUniforms";
 import "../sky/atmosphere";
 import townMeshWgsl from "./townMesh.wgsl?raw";
@@ -47,6 +48,8 @@ export class TownMesh implements Drawable {
   private ruins: Mesh | null = null;
   private figures: { buffer: GPUBuffer | null; capacity: number; vertices: number } = { buffer: null, capacity: 0, vertices: 0 };
   ruinsShown = false; // the old city's broken walls (setRuins), drawn with the buildings' pipeline while shown
+  private meshVersion = 0;
+  private shadowPipe: GPURenderPipeline;
   private uniform: GPUBuffer;
   private bindGroup: GPUBindGroup;
   private roadPipe: GPURenderPipeline;
@@ -105,6 +108,14 @@ export class TownMesh implements Drawable {
     this.buildingPipe = pipe("town buildings", "fs", true);
     const add: GPUBlendState = { color: { srcFactor: "one", dstFactor: "one" }, alpha: { srcFactor: "one", dstFactor: "one" } };
     this.lampPipe = pipe("town lamps", "lampFs", false, add);
+    // Into the sun's shadow map: positions only, depth only.
+    this.shadowPipe = device.createRenderPipeline({
+      label: "town shadow",
+      layout: pl,
+      vertex: { module, entryPoint: "shadowVs", buffers },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: SHADOW_DEPTH,
+    });
     this.figurePipe = device.createRenderPipeline({
       label: "town figures",
       layout: pl,
@@ -140,12 +151,19 @@ export class TownMesh implements Drawable {
     this.free(this.buildings);
     this.roads = this.upload(roads, "town roads");
     this.buildings = this.upload(buildings, "town buildings");
+    this.meshVersion++;
   }
 
   // The broken walls of the buried old city: a mesh of its own, so showing and hiding them rebuilds nothing.
   setRuins(ruins: TownMeshData): void {
     this.free(this.ruins);
     this.ruins = this.upload(ruins, "town ruins");
+    this.meshVersion++;
+  }
+
+  // What drawShadow draws: the buildings and the ruins while they are shown.
+  get shadowVersion(): number {
+    return this.meshVersion * 2 + (this.ruinsShown ? 1 : 0);
   }
 
   // The figures to draw now, `vertices` of them from the start of `data` (the last ones are replaced).
@@ -193,6 +211,19 @@ export class TownMesh implements Drawable {
       pass.setPipeline(this.figurePipe);
       pass.setVertexBuffer(0, g.buffer);
       pass.draw(g.vertices);
+    }
+  }
+
+  // Buildings and ruins cast; the roads lie flat and the figures move, so they only receive.
+  drawShadow(pass: GPURenderPassEncoder): void {
+    if (!this.origin) return;
+    pass.setBindGroup(1, this.bindGroup);
+    pass.setPipeline(this.shadowPipe);
+    for (const m of [this.buildings, this.ruinsShown ? this.ruins : null]) {
+      if (!m || !m.count) continue;
+      pass.setVertexBuffer(0, m.vertices);
+      pass.setIndexBuffer(m.indices, "uint32");
+      pass.drawIndexed(m.count);
     }
   }
 

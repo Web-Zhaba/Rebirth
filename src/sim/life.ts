@@ -4,7 +4,7 @@ import { EVENING } from "./evening";
 import { tolokaActive, workHours } from "./levers";
 import { idleWorkplaces, WORKSHOP_INPUT } from "./fields";
 import { polyLength, walkTo, type Walk } from "./paths";
-import { ageOf, buildNet, constructionWork, isAdultAge, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
+import { ageOf, buildingCentre, buildNet, constructionWork, isAdultAge, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
 import { residentMoveFactor } from "./needs";
 import { GOOD } from "./production";
 import { isCleared } from "./clearing";
@@ -27,11 +27,8 @@ export const MAX_CARTS = 6; // per producer per day
 export const CART_SPEED = 3000 / 60; // m per game minute, 3 km/h
 export const CART_RANGE = 6000; // m of road from the camp
 export const LOAD: Record<keyof Stock, number> = { logs: 5, planks: 2, stone: 3, food: 500, wares: 20 };
-export const TO_WORK = 6 * 60; // earliest departure to work (06:00)
-export const HOME_AT = 19 * 60; // earliest departure home (19:00)
-export const WORK_FROM = 7 * 60;
-export const WORK_TO = 19 * 60;
 export const MAX_GUESTS = 12; // evening walkers to one tavern
+const DAY_MIN = 1440;
 export const CAMP_CLEAR = 3; // m around the founding point the tent folk leave free
 export const CAMP_PER = 1.6; // m of camp radius per square root of its people
 // Workplaces worked in the open, where the workers show on the plot: the rest work indoors, out of sight.
@@ -39,15 +36,23 @@ export const OPEN_AIR: ReadonlySet<string> = new Set(["garden", "orchard", "apia
 const CART_ID0 = 2 ** 30;
 const EVENING_ID0 = 2 ** 29;
 
+// The day's timetable in game minutes of the day, from the work hours the levers set (07-19, 05-21 in the «Долгий
+// день»): walkers leave for work within the hour before it starts and head home within the hour after it ends.
+export interface Schedule {
+  toWork: number; // earliest departure to work
+  workFrom: number;
+  workTo: number;
+  homeAt: number; // earliest departure home
+}
+export function scheduleOf(l: Parameters<typeof workHours>[0]): Schedule {
+  const w = workHours(l);
+  return { toWork: (w.start - 1) * 60, workFrom: w.start * 60, workTo: w.end * 60, homeAt: w.end * 60 };
+}
+
 const round2 = (pts: [number, number][]): [number, number][] => pts.map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
 const centre = (b: Building): [number, number] => {
-  let x = 0;
-  let y = 0;
-  for (const p of b.footprint) {
-    x += p[0];
-    y += p[1];
-  }
-  return [Math.round((x / b.footprint.length) * 10) / 10, Math.round((y / b.footprint.length) * 10) / 10];
+  const [x, y] = buildingCentre(b);
+  return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
 };
 
 interface Commuter {
@@ -61,6 +66,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
   const trips: Trip[] = [];
   const traffic: Record<number, number> = {};
   const lights: Light[] = [];
+  const sch = scheduleOf(s);
 
   // lights: houses with a household (vacant ones stay dark), workplaces with at least one worker (a workshop
   // whose input is missing stays dark), taverns glow in the evening
@@ -82,7 +88,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
     const [x, y] = centre(b);
     lights.push({ id: b.id, x, y, kind: b.template === "tavern" ? "tavern" : "work" });
   }
-  const rests = restsOf(s);
+  const rests = restsOf(s, sch);
   if (net.adj.size === 0) return { day, trips, rests, traffic, lights };
 
   // door -> its spot on the net, once per building
@@ -134,7 +140,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
   const limit = MAX_COMMUTE * WALK_SPEED;
   const groups = new Map<string, { spot: Spot; items: { id: number; from: [number, number]; to: [number, number]; work: Spot; speed: number }[] }>();
   for (const r of Object.values(s.residents)) {
-    if (r.job === null) continue;
+    if (r.job === null || r.inClass) continue;
     const hh = s.households[r.household];
     const home = hh && hh.home !== null ? s.buildings[hh.home] : undefined;
     const work = s.buildings[r.job];
@@ -163,21 +169,28 @@ export function computeLife(s: SimState, day = 0): LifeData {
 
   // walkers: the MAX_WALKERS commuters with the lowest hash
   routed.sort((p, q) => unit(p.id, 1) - unit(q.id, 1) || p.id - q.id);
+  const homeBy = new Map<number, number>(); // walker -> minute of the day they are back home from work
   for (const c of routed.slice(0, MAX_WALKERS)) {
     const pts = c.pts;
     const travel = polyLength(pts) / c.speed;
-    // leaves within 06:00-07:00 but early enough to be at work by 07:00
-    const out = TO_WORK + unit(c.id, 2) * Math.max(0, 60 - travel);
-    const back = HOME_AT + unit(c.id, 3) * 60;
+    // leaves within the hour before work but early enough to be there when it starts
+    const out = sch.toWork + unit(c.id, 2) * Math.max(0, 60 - travel);
+    const back = sch.homeAt + unit(c.id, 3) * 60;
+    homeBy.set(c.id, back + travel);
     trips.push({ id: c.id * 2, kind: "walk", pts, depart: out, speed: c.speed, ...person(c.id), purpose: "work" });
     trips.push({ id: c.id * 2 + 1, kind: "walk", pts: [...pts].reverse(), depart: back, speed: c.speed, ...person(c.id), purpose: "home" });
   }
 
-  // evenings: up to MAX_GUESTS households from the homes within reach of each staffed tavern walk there at 19-21 and back at 21-22
+  // evenings: up to MAX_GUESTS households from the homes within reach of each staffed tavern send one adult there
+  // within 90 minutes of the end of work (once back from it), who stays 45-90 minutes and walks home
   let guest = 0;
   const taverns = Object.values(s.buildings).filter((b) => b.template === "tavern" && isWorkplace(b) && worked.has(b.id));
-  const homes = new Map<number, number>(); // house id -> an adult's id of its household, for the hash
-  for (const h of Object.values(s.households)) if (h.home !== null && h.members.length > 0 && !homes.has(h.home)) homes.set(h.home, h.members[0]);
+  const homes = new Map<number, number>(); // house id -> an adult of its household: the guest, and the hash
+  for (const h of Object.values(s.households)) {
+    if (h.home === null || homes.has(h.home)) continue;
+    const adult = h.members.find((m) => s.residents[m] && isAdultAge(ageOf(s.residents[m].born, s.gameMinutes)));
+    if (adult !== undefined) homes.set(h.home, adult);
+  }
   for (const t of taverns) {
     const tl = locate(t);
     if (!tl) continue;
@@ -192,12 +205,13 @@ export function computeLife(s: SimState, day = 0): LifeData {
       const walk = hl && walkTo(tree, tl, hl, EVENING.tavernReach);
       if (!hl || !walk) continue;
       const pts = round2(trail([...walk.nodes].reverse(), hl.at, tl.at, [lotFront(c.house), lotFront(t)]));
-      if (polyLength(pts) < 5) continue;
-      const out = workHours(s).end * 60 + unit(c.who, 6) * 90;
-      const back = 21 * 60 + unit(c.who, 7) * 45;
+      const len = polyLength(pts);
+      if (len < 5) continue;
       const speed = WALK_SPEED * residentMoveFactor(s.residents[c.who]);
-      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts, depart: out, speed, ...person(c.who), purpose: "tavern" });
-      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts: [...pts].reverse(), depart: back, speed, ...person(c.who), purpose: "home" });
+      const out = Math.max(sch.workTo + unit(c.who, 6) * 90, (homeBy.get(c.who) ?? 0) + 5);
+      const back = out + len / speed + 45 + unit(c.who, 7) * 45;
+      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts, depart: out % DAY_MIN, speed, ...person(c.who), purpose: "tavern" });
+      trips.push({ id: EVENING_ID0 + guest++, kind: "walk", pts: [...pts].reverse(), depart: back % DAY_MIN, speed, ...person(c.who), purpose: "home" });
       n++;
     }
   }
@@ -218,7 +232,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
       if (!l || !walk) continue;
       const pts = round2(trail([...walk.nodes].reverse(), l.at, camp.at, [lotFront(b), [0, 0]]));
       for (let k = 0; k < loads; k++) {
-        trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: WORK_FROM + ((k + 0.5) * (WORK_TO - WORK_FROM)) / loads, speed: CART_SPEED });
+        trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: sch.workFrom + ((k + 0.5) * (sch.workTo - sch.workFrom)) / loads, speed: CART_SPEED });
       }
     }
     // families on their way: a cart from the built node farthest from the camp to the promised house,
@@ -244,7 +258,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
 // founding point; at work in work hours when they have a job (and are not in class), on the plot when it is worked in
 // the open. The builders (the artel: adults without work, or whose workplace stands idle; everyone in a toloka) work
 // on the construction sites instead, each at one of them.
-function restsOf(s: SimState): Rest[] {
+function restsOf(s: SimState, sch: Schedule): Rest[] {
   const housed = (r: Resident) => {
     const hh = s.households[r.household];
     const b = hh && hh.home !== null ? s.buildings[hh.home] : undefined;
@@ -263,7 +277,7 @@ function restsOf(s: SimState): Rest[] {
     const job = r.job !== null && !r.inClass ? s.buildings[r.job] : undefined;
     const builder = sites.length > 0 && isAdultAge(age) && !r.inClass && (toloka || r.job === null || idle.has(r.job));
     const at = builder ? sites[Math.floor(unit(r.id, 30) * sites.length)](r.id) : isWorkplace(job) ? (OPEN_AIR.has(job.template) ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
-    const work = at !== undefined ? { at, from: WORK_FROM, to: WORK_TO } : undefined;
+    const work = at !== undefined ? { at, from: sch.workFrom, to: sch.workTo, ...(builder && { build: true }) } : undefined;
     return { who: r.id, sex: r.sex, age, home, ...(work && { work }) };
   });
 }

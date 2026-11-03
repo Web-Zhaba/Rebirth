@@ -1,9 +1,7 @@
-import { calendar } from "../sim/clock";
-import { isWorkHour } from "../sim/levers";
 import { START_MINUTE_OF_DAY } from "../sim/time";
-import { gameClock, gameNow, lifeTrips, state } from "../simClient";
+import { gameClock, gameNow, lifeRests, lifeTrips } from "../simClient";
 import { followed, followInfo, stopFollowing } from "./follow";
-import { followStatus, residentWalk } from "./followModel";
+import { followStatus, residentPlace } from "./followModel";
 import { Icon } from "./Icon";
 import { IconButton, Panel } from "./kit";
 import { NeedsBars } from "./NeedsBars";
@@ -17,9 +15,7 @@ export function FollowCard() {
   if (!target) return null;
   const now = gameNow();
   const minute = (((now + START_MINUTE_OF_DAY) % 1440) + 1440) % 1440;
-  const working = isWorkHour(calendar(now).hour, state.value?.levers);
-  const walk = residentWalk(lifeTrips.value, target.id, minute);
-  const status = followStatus(info, walk, working);
+  const status = followStatus(info, residentPlace(lifeTrips.value, lifeRests.value, target.id, minute));
   return (
     <Panel class={`follow-card follow-${status.key}`} role="status" aria-live="polite">
       <div class="follow-head">

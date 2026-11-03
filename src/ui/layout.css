@@ -770,28 +770,6 @@ button.link {
     max-height: calc(100vh - var(--topbar-h) - 64px - var(--bb-h));
   }
 
-  /* A pending event may not be cut off by the dock: the left column runs down to the foot over it, and the card
-     widens so its two choices stand side by side. */
-  .side-col:has(.event-card) {
-    z-index: calc(var(--z-panel) + 1);
-    width: min(440px, 54vw);
-    max-width: none;
-    max-height: calc(100vh - var(--topbar-h) - 16px);
-  }
-
-  .event-card {
-    align-self: stretch;
-  }
-
-  .event-card-options {
-    flex-direction: row;
-  }
-
-  .event-card-option {
-    flex: 1 1 0;
-    width: auto;
-  }
-
   /* The right slot as a side sheet from the band down to the foot, over the dock. */
   .rs-panel,
   .notebook .notebook-panel {
@@ -825,6 +803,31 @@ button.link {
 
   .cell-panel {
     bottom: calc(var(--bb-h) + 48px);
+  }
+}
+
+/* ======== Touch ======== */
+
+/* A fingertip needs about 44 px: the map buttons grow, and what sits below or beside them moves out of their way. */
+@media (pointer: coarse) {
+  .engine-nav button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .engine-attrib summary {
+    width: 32px;
+    height: 32px;
+  }
+
+  .notebook {
+    top: calc(var(--topbar-h) + 154px);
+  }
+}
+
+@media (pointer: coarse) and (max-width: 640px) {
+  .centre-col {
+    right: 60px; /* clear of the zoom buttons */
   }
 }
 

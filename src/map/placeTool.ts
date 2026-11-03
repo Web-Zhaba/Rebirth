@@ -54,6 +54,7 @@ export function attachPlaceTool(view: View): void {
   let busy = false;
   let spaceDown = false;
   let timer = 0;
+  let tapped: string | null = null; // touch: the lot the last tap previewed; a second tap on it places
 
   const setLabel = (text: string | null) => {
     if (text === null || !cursor) {
@@ -267,6 +268,17 @@ export function attachPlaceTool(view: View): void {
       flash(L("Здесь нет места вдоль дороги", "No room along the road here"));
       return;
     }
+    // A finger has no hover: the first tap shows the lot and its verdict, a second tap on the same lot places.
+    if (e.pointerType === "touch") {
+      const key = `${v.edge}:${v.side}:${v.i}`;
+      if (tapped !== key) {
+        tapped = key;
+        cursor = { x: e.point[0], y: e.point[1] };
+        refresh();
+        return;
+      }
+    }
+    tapped = null;
     if (!v.ok) {
       flash(v.text);
       return;
@@ -335,10 +347,17 @@ export function attachPlaceTool(view: View): void {
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", onBlur);
-  view.canvas.addEventListener("pointerleave", () => {
+  view.canvas.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "touch" && tapped) return; // a lifted finger: keep the lot its tap showed
     cursor = null;
     local = null;
     clearOverlay();
+  });
+
+  // Another tool forgets the lot a tap showed.
+  effect(() => {
+    void tool.value;
+    tapped = null;
   });
 
   // Tool switched, or the zones and buildings changed under the cursor: redo the preview.

@@ -77,11 +77,7 @@
     }
   }
 
-  /* 6. A decision card rises into the middle: it interrupts, so it moves more than a panel. */
-  .event-card {
-    animation: card-in var(--dur-3) var(--ease-out) both;
-  }
-
+  /* 6. Cards rise into place (used below). */
   @keyframes card-in {
     from {
       opacity: 0;

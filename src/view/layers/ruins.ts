@@ -97,7 +97,7 @@ export const ruinHints: ReadonlySignal<FeatureCollection> = computed(() => {
 export function attachSitePick(view: View): void {
   view.on("click", (e) => {
     const f = frame.value;
-    if (tool.value || !f) return;
+    if (tool.value || !f || e.original.defaultPrevented) return; // a resident took the click (view/engine/life.ts)
     const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
     const onBuilding = Object.values(buildings.value ?? {}).some((b) => pointInPolygon(x, y, b.footprint));
     selectedSite.value = onBuilding ? null : (typedAt(x, y, typedFoundations.value)?.id ?? null);

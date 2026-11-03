@@ -202,7 +202,7 @@ export function needsAfterDay(r: Resident, h: Household, home: Building | undefi
 }
 
 // The town's needs as the panel and the top bar show them.
-export function needsStats(residents: Record<number, Resident>, households?: Record<number, Household>, now?: number): NeedsStats {
+export function needsStats(residents: Record<number, Resident>, households: Record<number, Household>, now: number): NeedsStats {
   const avg: Needs = { food: 0, rest: 0, social: 0, warmth: 0 };
   let n = 0;
   let starving = 0;
@@ -222,11 +222,9 @@ export function needsStats(residents: Record<number, Resident>, households?: Rec
     if (needs.rest < NEEDS.warn.rest) tired++;
     if (needs.social < NEEDS.warn.social) lonely++;
     if (needs.warmth < NEEDS.warn.warmth) freezing++;
-    if (now !== undefined) {
-      const age = (now - r.born) / YEAR_MIN;
-      if (age < 16 || age >= 60 || r.inClass) continue;
-    }
-    work += residentWorkFactor(r, households?.[r.household]?.mood ?? MOOD_NEUTRAL);
+    const age = (now - r.born) / YEAR_MIN;
+    if (age < 16 || age >= 60 || r.inClass) continue;
+    work += residentWorkFactor(r, households[r.household]?.mood ?? MOOD_NEUTRAL);
     workers++;
   }
   return {

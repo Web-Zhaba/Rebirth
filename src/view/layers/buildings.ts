@@ -98,15 +98,31 @@ export const buildingShapes: ReadonlySignal<FeatureCollection> = computed(() => 
 });
 
 // Hit-test footprints in the town frame (an index, not the renderer: neither renderer can be asked reliably).
-function buildingAt(lng: number, lat: number): number | null {
+// `slop` (m): a miss also tries points that far around, nearer ring first, so a fingertip beside a house still finds it.
+const TOUCH_SLOP_PX = 16;
+const MAX_SLOP_M = 15;
+const PROBES = 8;
+function buildingAt(lng: number, lat: number, slop = 0): number | null {
   const list = buildings.value;
   const f = frame.value;
   if (!list || !f) return null;
   const [x, y] = f.toLocal(lng, lat);
   const index = hitIndexOf(list);
-  for (const id of buildingSpatialCandidates(index, x, y)) {
-    const b = list[id];
-    if (b && pointInPolygon(x, y, b.footprint)) return b.id;
+  const at = (px: number, py: number): number | null => {
+    for (const id of buildingSpatialCandidates(index, px, py)) {
+      const b = list[id];
+      if (b && pointInPolygon(px, py, b.footprint)) return b.id;
+    }
+    return null;
+  };
+  const hit = at(x, y);
+  if (hit !== null || slop <= 0) return hit;
+  for (const r of [slop / 2, slop]) {
+    for (let k = 0; k < PROBES; k++) {
+      const a = (k / PROBES) * Math.PI * 2;
+      const near = at(x + r * Math.cos(a), y + r * Math.sin(a));
+      if (near !== null) return near;
+    }
   }
   return null;
 }
@@ -114,8 +130,9 @@ function buildingAt(lng: number, lat: number): number | null {
 // Click selects a building while no tool is active; the pointer shows over one; Escape lets go.
 export function attachBuildingPick(view: View): void {
   view.on("click", (e) => {
-    if (tool.value) return;
-    selectedBuilding.value = buildingAt(e.lngLat[0], e.lngLat[1]);
+    if (tool.value || e.original.defaultPrevented) return; // a resident took the click (view/engine/life.ts)
+    const slop = e.pointerType === "touch" ? Math.min(MAX_SLOP_M, TOUCH_SLOP_PX * view.metersPerPixel()) : 0;
+    selectedBuilding.value = buildingAt(e.lngLat[0], e.lngLat[1], slop);
   });
   let pointer = false;
   view.on("pointermove", (e) => {

@@ -3,8 +3,10 @@ import type { CameraView } from "../camera/camera";
 import { ecefToGeodetic, type Vec3 } from "../geo/ellipsoid";
 import { MAX_MERCATOR_LAT, tileKey } from "../geo/mercator";
 import { createShader } from "../gpu/wgsl";
+import { SHADOW_DEPTH, type ShadowMap } from "../shadow/shadowMap";
 import { DEM_SIZE } from "../bake/terrarium";
 import { DRAPE_MAX_ZOOM, DRAPE_SIZE } from "../bake/drape";
+import { C } from "../../world/biome";
 import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
 import type { DrapeResponse } from "../bake/drapeWorker";
 import { demStream, TileStream } from "../stream/demStream";
@@ -26,6 +28,15 @@ export const EXAGGERATION = 1.6; // the old MapLibre relief's
 
 const MAX_NODES = 4096; // chunk-table capacity per frame
 const SLOTS = 1024; // resident node vertex blocks
+// An atlas colour as a linear WGSL vec3f literal, for the shader's compile-time constants.
+function linearVec3(hex: string): string {
+  const ch = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4).toFixed(4);
+  };
+  return `vec3f(${ch(1)}, ${ch(3)}, ${ch(5)})`;
+}
+
 const NODE_STRIDE = 40; // floats per chunk-table entry (160 B, struct Node in terrain.wgsl)
 export const NO_PAGE = 0xffffffff;
 const VERTEX_BUILDS_PER_FRAME = 64; // 64 x 35 KB ~ 2.2 MB
@@ -72,6 +83,8 @@ export class Terrain {
   private drapeZoom = new Uint8Array(MAX_NODES); // per selection index: the drape page zoom it may want
   private drapeGranted = new Set<number>();
   private pipeline: GPURenderPipeline;
+  private shadowPipeline: GPURenderPipeline;
+  private readonly rowBounds = new Float64Array(MAX_NODES * 4); // per drawn row: bounding sphere centre (ECEF), radius
   private bindGroup: GPUBindGroup;
   private nodeBuf: GPUBuffer;
   private vertBuf: GPUBuffer;
@@ -140,7 +153,8 @@ export class Terrain {
       ],
     });
     const wet = COVER_TABLE.flatMap((c, i) => (c.key.startsWith("wetland") ? [i + 1] : []));
-    const module = createShader(device, "terrain", terrainWgsl, { GRID, DRAPE_SIZE, WOOD: coverIdOf("wood", ""), WET_LO: Math.min(...wet), WET_HI: Math.max(...wet) });
+    const module = createShader(device, "terrain", terrainWgsl, { GRID, DRAPE_SIZE, WOOD: coverIdOf("wood", ""), WET_LO: Math.min(...wet), WET_HI: Math.max(...wet),
+      ALPINE: linearVec3(C.fell), ROCK: linearVec3(C.rock), SNOW: linearVec3(C.ice) });
     this.pipeline = device.createRenderPipeline({
       label: "terrain",
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, layout] }),
@@ -150,6 +164,13 @@ export class Terrain {
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: { format: target.depthFormat, depthWriteEnabled: true, depthCompare: "greater" },
       multisample: { count: target.sampleCount },
+    });
+    this.shadowPipeline = device.createRenderPipeline({
+      label: "terrain shadow",
+      layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, layout] }),
+      vertex: { module, entryPoint: "shadowVs" },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: SHADOW_DEPTH,
     });
   }
 
@@ -170,7 +191,8 @@ export class Terrain {
   // Water coverage 0..1 under a point from the drape pages, or null before any page covers it.
   waterAt = (lat: number, lng: number): number | null => this.drape.waterAt(lat, lng);
 
-  private ranges: HeightRanges = {
+  // Drawn (exaggerated) height ranges over tiles, from the finest resident page: the quadtree's bounds, the forest's tiles.
+  readonly ranges: HeightRanges = {
     source: (z, x, y) => this.pages.source(z, x, y),
     version: () => this.pages.version,
     range: (z, x, y) => {
@@ -341,6 +363,7 @@ export class Terrain {
           }
         }
       }
+      this.rowBounds.set([...node.center, node.radius], count * 4);
       count++;
       if (node.z > maxZ) maxZ = node.z;
       hash = (Math.imul(hash, 31) + node.x * 3 + node.y * 5 + node.z * 7 + (page ? page.z * 11 : 0) + (parent ? parent.z * 13 : 0)) | 0;
@@ -412,6 +435,31 @@ export class Terrain {
     pass.setBindGroup(1, this.bindGroup);
     pass.setIndexBuffer(this.indexBuf, "uint32");
     pass.drawIndexed(this.indexCount, this.drawCount);
+  }
+
+  // Into the sun's shadow map: only the drawn nodes that reach into it, in runs of neighbouring rows.
+  drawShadow(pass: GPURenderPassEncoder, shadow: ShadowMap): void {
+    if (!this.drawCount) return;
+    pass.setPipeline(this.shadowPipeline);
+    pass.setBindGroup(1, this.bindGroup);
+    pass.setIndexBuffer(this.indexBuf, "uint32");
+    const b = this.rowBounds;
+    const c: Vec3 = [0, 0, 0];
+    let start = -1;
+    for (let i = 0; i <= this.drawCount; i++) {
+      let on = false;
+      if (i < this.drawCount) {
+        c[0] = b[i * 4];
+        c[1] = b[i * 4 + 1];
+        c[2] = b[i * 4 + 2];
+        on = shadow.covers(c, b[i * 4 + 3]);
+      }
+      if (on && start < 0) start = i;
+      else if (!on && start >= 0) {
+        pass.drawIndexed(this.indexCount, i - start, 0, 0, start);
+        start = -1;
+      }
+    }
   }
 
   // Slot holding the node's vertices; builds them if needed (returns slot + SLOTS to flag a build), -1 if none.

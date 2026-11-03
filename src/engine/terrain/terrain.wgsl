@@ -1,6 +1,7 @@
 #include "frame"
 #include "atmosphere"
 #include "weather"
+#include "shadow"
 
 // Globe terrain: one instanced draw, an instance per selected quadtree node. Node i's chunk-table entry carries its
 // origin relative to the eye (f64 subtraction on the CPU, stored f32), its vertex slot, its height page and the page
@@ -33,6 +34,9 @@ const DRAPE_SIZE: i32 = ${DRAPE_SIZE};
 const WOOD: u32 = ${WOOD}u; // cover ids (world/forestMix.ts COVER_TABLE): the wood, the range of the wetlands
 const WET_LO: u32 = ${WET_LO}u;
 const WET_HI: u32 = ${WET_HI}u;
+const ALPINE = ${ALPINE}; // linear atlas colours of the height belts (world/biome.ts C.fell, C.rock, C.ice)
+const ROCK = ${ROCK};
+const SNOW = ${SNOW};
 const GRID_VERTS: u32 = GRID * GRID;
 const NO_PAGE: u32 = 0xffffffffu;
 const DEM: f32 = 256.0;
@@ -126,6 +130,16 @@ struct VsOut {
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut {
+  return vertex(vi, ii);
+}
+
+// The sun's shadow map pass (shadow/shadowMap.ts): the same surface, projected from the sun.
+@vertex
+fn shadowVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
+  return frame.shadowProj * vec4f(vertex(vi, ii).rel, 1.0);
+}
+
+fn vertex(vi: u32, ii: u32) -> VsOut {
   let node = nodes[ii];
   var g = vi;
   var skirt = 0.0;
@@ -224,6 +238,28 @@ fn surface(layer: u32, uv: vec2f, texM: f32, cosLat: f32) -> vec3f {
   return vec3f(h, (he - hw) / span, (hn - hs) / span); // page v grows south
 }
 
+// Mountains (docs/PLAN-biomes.md step 4), from the real height (m), the slope (deg) and |latitude| (deg): above the
+// treeline the land turns to alpine meadow, above the snowline to lasting snow (off the steepest faces); steep slopes
+// are bare rock at any height. The drape's biome colour holds below.
+fn treeline(lat: f32) -> f32 {
+  return 3900.0 * clamp((72.0 - lat) / 52.0, 0.0, 1.0); // ~3900 m in the tropics, ~1950 m at 46 deg, none past 72
+}
+
+fn snowline(lat: f32) -> f32 {
+  // every 10 deg from the equator: highest in the dry subtropics, down to sea level near the poles
+  var k = array<f32, 10>(5000.0, 5200.0, 5600.0, 5800.0, 4400.0, 2800.0, 2000.0, 1300.0, 400.0, 0.0);
+  let t = clamp(lat / 10.0, 0.0, 8.999);
+  let i = u32(t);
+  return mix(k[i], k[i + 1u], t - f32(i));
+}
+
+fn heightBelts(albedo: vec3f, h: f32, slope: f32, lat: f32, land: f32) -> vec3f {
+  var c = mix(albedo, ALPINE * DRAPE_GAIN, smoothstep(0.0, 300.0, h - treeline(lat)) * land);
+  c = mix(c, ROCK * DRAPE_GAIN, smoothstep(32.0, 42.0, slope) * land);
+  let snow = smoothstep(-150.0, 150.0, h - snowline(lat)) * (1.0 - smoothstep(45.0, 60.0, slope));
+  return mix(c, SNOW * SNOW_GAIN, snow * land);
+}
+
 @fragment
 fn fs(v: VsOut) -> @location(0) vec4f {
   let foot = length(fwidth(v.rel)); // ground width of the pixel (m); derivatives need uniform control flow
@@ -248,11 +284,8 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     n = normalize(up - east * s.y * ex - north * s.z * ex);
   }
 
-  // Albedo by height and slope (real metres, not exaggerated): lowland green, dry uplands, rock, snow, sea.
+  // Lowland green until the drape page arrives; the height belts below shape both.
   var albedo = vec3f(0.16, 0.27, 0.10);
-  albedo = mix(albedo, vec3f(0.30, 0.29, 0.19), smoothstep(600.0, 1800.0, h));
-  albedo = mix(albedo, vec3f(0.33, 0.31, 0.29), smoothstep(28.0, 42.0, slope));
-  albedo = mix(albedo, vec3f(0.85, 0.88, 0.92), smoothstep(2300.0, 2700.0, h) * (1.0 - smoothstep(45.0, 60.0, slope)));
   var water = 0.0;
   var lit = 0.0; // how much of the ground the tool's highlight covers (frame.params.w, frame/frameUniforms.ts HIGHLIGHT)
   if (v.dlayer != NO_PAGE) {
@@ -269,6 +302,8 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     water = 1.0;
     albedo = vec3f(0.015, 0.05, 0.11);
   }
+  albedo = heightBelts(albedo, h, slope, abs(degrees(asin(clamp(up.z, -1.0, 1.0)))), 1.0 - water);
+
   // Keep screen-space UV derivatives for a small shoreline-mask filter below; the source mask is only 256 texels wide.
   let maskDx = dpdx(v.duv);
   let maskDy = dpdy(v.duv);
@@ -306,7 +341,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   }
 
   let light = sunLightAt(up);
-  let sun = frame.sun.w * max(dot(n, frame.sun.xyz), 0.0);
+  let sun = frame.sun.w * max(dot(n, frame.sun.xyz), 0.0) * sunShadow(v.rel, n);
   let sky = 0.35 * (0.6 + 0.4 * dot(n, up)) * vec3f(0.55, 0.65, 0.85);
   var c = albedo * (vec3f(sun) + sky) * light;
   c += albedo * NIGHT_AMBIENT * (1.0 - light); // moon and starlight: the night side stays readable, not black

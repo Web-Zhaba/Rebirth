@@ -11,6 +11,9 @@ export function mppToDistance(mpp: number, fovYDeg: number, heightPx: number): n
 
 // Touchpad taps can drift a few CSS pixels between press and release; keep small movements clickable.
 export const CLICK_TOLERANCE = 6;
+// A finger drifts much more: browsers still call a touch a tap within about 15 px of where it landed.
+export const TOUCH_CLICK_TOLERANCE = 15;
+export const clickTolerance = (pointerType: string | null): number => (pointerType === "touch" ? TOUCH_CLICK_TOLERANCE : CLICK_TOLERANCE);
 
 export function isClick(down: readonly [number, number] | null, up: readonly [number, number], tolerance = CLICK_TOLERANCE): boolean {
   if (!down) return true; // no press seen (a synthetic click): let it through

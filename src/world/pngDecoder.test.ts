@@ -121,6 +121,6 @@ describe("byte-exact PNG decoding", () => {
     await expect(decodePng(new Uint8Array([1, 2, 3]))).rejects.toThrow("Invalid PNG signature");
     const png = new Uint8Array(await makePng(2, 2, 3, new Uint8Array(12), [0]));
     png[24] = 16;
-    await expect(decodePng(png)).rejects.toThrow("Unsupported Terrarium PNG format");
+    await expect(decodePng(png)).rejects.toThrow("Unsupported PNG format");
   });
 });

@@ -9,6 +9,8 @@ struct Frame {
   camF: vec4f,    // camera forward, w near plane (m)
   params: vec4f,  // x terrain exaggeration, y LOD tint on/off, z time (s), w what the ground highlights (HIGHLIGHT)
   highlight: vec4f, // rgb its display colour, a its opacity
+  shadowProj: mat4x4f, // camera-relative ECEF -> the sun's shadow map clip (shadow/shadowMath.ts shadowMatrix)
+  shadowData: vec4f, // x metres per shadow texel, y shadow strength 0..1 (0 = none), z 1 / map size
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
