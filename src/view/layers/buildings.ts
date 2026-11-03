@@ -114,7 +114,7 @@ function buildingAt(lng: number, lat: number): number | null {
 // Click selects a building while no tool is active; the pointer shows over one; Escape lets go.
 export function attachBuildingPick(view: View): void {
   view.on("click", (e) => {
-    if (tool.value) return;
+    if (tool.value || e.original.defaultPrevented) return; // a resident took the click (view/engine/life.ts)
     selectedBuilding.value = buildingAt(e.lngLat[0], e.lngLat[1]);
   });
   let pointer = false;

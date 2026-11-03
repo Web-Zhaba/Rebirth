@@ -21,7 +21,8 @@ export interface Rest {
   sex: "m" | "f";
   age: number; // years, the day it was planned
   home: [number, number] | null; // local m: a spot in the camp; null in their house
-  work?: { at: [number, number] | null; from: number; to: number }; // a spot on an open-air plot; hours in game minutes of the day
+  // a spot on an open-air plot or a building site (`build`); hours in game minutes of the day
+  work?: { at: [number, number] | null; from: number; to: number; build?: boolean };
 }
 export interface Light {
   id: number; // the building
@@ -67,28 +68,45 @@ export function placeAt(trip: Trip, minuteOfDay: number): { at: [number, number]
   return { at: pts[pts.length - 1], dir };
 }
 
-// Where a resident who is not on a walk stands at a minute of the day, which way they face (a unit vector) and whether
-// they are at work; null when they are indoors. With walks today (`walks`, theirs) they are where the one that ended
-// last took them (a tavern is indoors); without, the work hours decide.
-export function standAt(rest: Rest, walks: readonly Trip[], minuteOfDay: number): { at: [number, number]; dir: [number, number]; working: boolean } | null {
-  let where: Trip["purpose"] | undefined;
-  let since = Infinity;
-  for (const w of walks) {
-    if (w.pts.length < 2 || !(w.speed > 0)) continue;
-    let len = 0;
-    for (let i = 1; i < w.pts.length; i++) len += Math.hypot(w.pts[i][0] - w.pts[i - 1][0], w.pts[i][1] - w.pts[i - 1][1]);
-    const ago = (((minuteOfDay - w.depart - len / w.speed) % DAY_MIN) + DAY_MIN) % DAY_MIN;
-    if (ago < since) (since = ago), (where = w.purpose);
-  }
-  if (since === Infinity && rest.work) {
+export interface Whereabouts {
+  where: "work" | "site" | "home" | "tavern"; // a site: at work as a builder
+  at: [number, number] | null; // where they show; null indoors
+  last?: Trip; // the walk that took them there, if one did
+}
+
+// Where a resident who is not on a walk is at a minute of the day. Their walks of the day (`walks`, theirs) carry them
+// between places: without a walk to work (no commute drawn: a builder, a walker over the cap) the work hours put them
+// at work; otherwise they are where the walk that ended last took them (a tavern is indoors).
+export function whereAt(rest: Rest, walks: readonly Trip[], minuteOfDay: number): Whereabouts {
+  const m = ((minuteOfDay % DAY_MIN) + DAY_MIN) % DAY_MIN;
+  let where: Whereabouts["where"] = "home";
+  let last: Trip | undefined;
+  if (rest.work && !walks.some((w) => w.purpose === "work")) {
     const { from, to } = rest.work;
-    const m = ((minuteOfDay % DAY_MIN) + DAY_MIN) % DAY_MIN;
-    where = (from <= to ? m >= from && m < to : m >= from || m < to) ? "work" : "home";
+    if (from <= to ? m >= from && m < to : m >= from || m < to) where = "work";
+  }
+  if (where !== "work") {
+    let since = Infinity;
+    for (const w of walks) {
+      if (w.pts.length < 2 || !(w.speed > 0)) continue;
+      let len = 0;
+      for (let i = 1; i < w.pts.length; i++) len += Math.hypot(w.pts[i][0] - w.pts[i - 1][0], w.pts[i][1] - w.pts[i - 1][1]);
+      const ago = (((m - w.depart - len / w.speed) % DAY_MIN) + DAY_MIN) % DAY_MIN;
+      if (ago < since) (since = ago), (last = w), (where = w.purpose ?? "home");
+    }
   }
   const at = where === "work" ? (rest.work?.at ?? null) : where === "tavern" ? null : rest.home;
+  if (where === "work" && rest.work?.build) where = "site";
+  return last ? { where, at, last } : { where, at };
+}
+
+// Where a resident who is not on a walk stands at a minute of the day (see whereAt), which way they face (a unit
+// vector) and whether they are at work; null when they are indoors.
+export function standAt(rest: Rest, walks: readonly Trip[], minuteOfDay: number): { at: [number, number]; dir: [number, number]; working: boolean } | null {
+  const { where, at } = whereAt(rest, walks, minuteOfDay);
   if (!at) return null;
   const face = 2 * Math.PI * unit(rest.who, 13);
-  return { at, dir: [Math.cos(face), Math.sin(face)], working: where === "work" };
+  return { at, dir: [Math.cos(face), Math.sin(face)], working: where === "work" || where === "site" };
 }
 
 export const positionAt = (trip: Trip, minuteOfDay: number): [number, number] | null => placeAt(trip, minuteOfDay)?.at ?? null;

@@ -366,6 +366,19 @@ export function lotFront(b: Building): [number, number] {
   return [cx - vx * front, cy - vy * front];
 }
 
+// Where a building stands: the centroid of its footprint, in local metres.
+export function buildingCentre(b: Pick<Building, "footprint">): [number, number] {
+  const n = b.footprint.length;
+  if (n === 0) return [0, 0];
+  let x = 0;
+  let y = 0;
+  for (const p of b.footprint) {
+    x += p[0];
+    y += p[1];
+  }
+  return [x / n, y / n];
+}
+
 // ---------- buildings and houses ----------
 
 export const isFinishedHouse = (b: Building | undefined): b is Building => !!b && b.zone === "res" && b.state === "active";
@@ -667,7 +680,8 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     const origin = locate(-1, 0, 0);
     const groups: { spot: Spot; h: Household; adults: Resident[]; cands: JobCand[]; candMap: Map<number, number> }[] = [];
     for (const h of Object.values(w.households)) {
-      const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)));
+      // pupils in class do no work: they stay out of the hiring
+      const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)) && !r.inClass);
       if (adults.length === 0) continue;
       if (h.home === null) {
         for (const r of adults) lose(r);
@@ -831,8 +845,12 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
+  // houses promised to families on their way stay theirs
+  const promised = new Set(s.incoming.map((f) => f.house));
+  const freeHouses = () => vacantHouses(buildings, w.households).filter((id) => !promised.has(id));
+
   if (on("marriage")) {
-    const vacant = vacantHouses(buildings, w.households);
+    const vacant = freeHouses();
     if (vacant.length > 0) {
       const men: Resident[] = [];
       const women: Resident[] = [];
@@ -869,7 +887,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
   }
 
   {
-    const vacant = vacantHouses(buildings, w.households);
+    const vacant = freeHouses();
     for (const h of Object.values(w.households)) {
       if (h.home !== null || vacant.length === 0) continue;
       const i = vacant.findIndex((b) => houseCap(buildings[b]) >= h.members.length);

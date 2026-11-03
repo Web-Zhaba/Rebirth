@@ -100,8 +100,9 @@ export class Handler {
   private enriching: Promise<void> | null = null;
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
-  private lifeDay = Number.NaN; // game day the main thread has visual life for
-  private lifeIncoming: SimState["incoming"] | null = null; // families on their way it was drawn for
+  // What the main thread's visual life was drawn from: the game day, the families on their way, the residents (their
+  // jobs, homes and classes) and the levers (work hours, toloka); a change in any of them draws it anew.
+  private lifeFrom: { day: number } & Pick<SimState, "incoming" | "residents" | "levers"> | null = null;
   private speed: Speed = 1; // session setting
   private free = false; // admin: whatever is started finishes at once; session setting
   private hiddenAt: number | null = null; // wall time the tab was hidden
@@ -280,8 +281,7 @@ export class Handler {
     this.postedChronicle = save ? save.sim.chronicle : null;
     this.postedFinds = save ? save.sim.finds : null;
     this.postedArticles = save ? save.sim.articles : null;
-    this.lifeDay = Number.NaN;
-    this.lifeIncoming = null;
+    this.lifeFrom = null;
     this.speed = 1;
     this.free = false;
     this.hiddenAt = null;
@@ -320,9 +320,9 @@ export class Handler {
   private postLife(): void {
     if (!this.save) return;
     try {
+      const { incoming, residents, levers } = this.save.sim;
       const day = dayOf(this.save.sim.gameMinutes);
-      this.lifeDay = day;
-      this.lifeIncoming = this.save.sim.incoming;
+      this.lifeFrom = { day, incoming, residents, levers };
       const { trips, rests, traffic, lights } = computeLife(this.save.sim, day);
       this.post({ t: "life", day, trips, rests, traffic, lights });
     } catch (e) {
@@ -573,7 +573,8 @@ export class Handler {
     }
     this.save = { ...this.save, sim };
     this.postSnapshot();
-    if (dayOf(sim.gameMinutes) !== this.lifeDay || sim.incoming !== this.lifeIncoming) this.postLife();
+    const from = this.lifeFrom;
+    if (!from || dayOf(sim.gameMinutes) !== from.day || sim.incoming !== from.incoming || sim.residents !== from.residents || sim.levers !== from.levers) this.postLife();
     // Persist every few wall seconds, not every tick (commands and flush save as well).
     if (now - this.persistedAt >= PERSIST_MS) {
       this.persistedAt = now;

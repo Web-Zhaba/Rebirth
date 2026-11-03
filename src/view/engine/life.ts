@@ -167,7 +167,8 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     town.setFigures(figures, nv);
   });
 
-  // A click on a resident follows them (a larger hit target than the dot, as before).
+  // A click on a resident follows them (a larger hit target than the dot, as before). It takes the click: this handler
+  // is attached before the map picks, which leave a prevented click alone, so the building under them is not selected.
   if (o.onWalker)
     view.on("click", (e) => {
       if (tool.value) return;
@@ -179,6 +180,8 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
         const d = Math.hypot(s[0] - e.point[0], s[1] - e.point[1]);
         if (d < bestD) (bestD = d), (best = w.who);
       }
-      if (best !== null) o.onWalker!(best);
+      if (best === null) return;
+      e.original.preventDefault();
+      o.onWalker!(best);
     });
 }

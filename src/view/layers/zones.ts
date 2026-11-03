@@ -137,7 +137,7 @@ export const fieldDraftPoints: ReadonlySignal<FeatureCollection> = computed(() =
 // Click selects an unfinished clearing while no tool is active (a building under the click wins, see buildings.ts).
 export function attachClearingPick(view: View): void {
   view.on("click", (e) => {
-    if (tool.value) return;
+    if (tool.value || e.original.defaultPrevented) return; // a resident took the click (view/engine/life.ts)
     const f = frame.peek();
     const [x, y] = f ? f.toLocal(e.lngLat[0], e.lngLat[1]) : [0, 0];
     const hit = f ? state.peek()?.clearings.find((c) => !isCleared(c) && pointInPolygon(x, y, c.pts)) : undefined;

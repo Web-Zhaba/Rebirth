@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { BUILDINGS } from "./buildings";
 import { emptyGrowth } from "./growth";
 import { Handler, type Storage } from "./handler";
-import { CAMP_CLEAR, CART_SPEED, computeLife, HOME_AT, LOAD, MAX_CARTS, MAX_WALKERS, TO_WORK, WORK_FROM, WORK_TO } from "./life";
+import { CAMP_CLEAR, CART_SPEED, computeLife, LOAD, MAX_CARTS, MAX_WALKERS, scheduleOf } from "./life";
+import { emptyLevers } from "./levers";
 import { WALK_SPEED } from "./people";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
@@ -12,6 +13,8 @@ import { emptyZones, pointInPolygon, qkey, regenerateCells } from "./zones";
 import type { Trip } from "../map/life";
 
 const NOW = 1_800_000_000_000;
+// the normal workday: off to work at 06-07, at work 07-19, home from 19
+const { toWork: TO_WORK, workFrom: WORK_FROM, workTo: WORK_TO, homeAt: HOME_AT } = scheduleOf(emptyLevers());
 const GM = 1080;
 
 const lay = (g: RoadGraph, pts: [number, number][], labor = 0): RoadGraph => {
@@ -137,6 +140,23 @@ describe("walkers", () => {
     // all 400 commuters pass the last edge before the smithy, from every home
     expect(l.traffic[edgeBetween(s.roads, 2400, 2500)]).toBe(400);
   });
+  it("keep the work hours of the «Долгий день»: off at 04-05, home from 21:00", () => {
+    const bs = [building(1, "izba", 100), building(2, "smithy", 1000)];
+    const s = town(bs, [{ home: 1, jobs: [2] }]);
+    const long = { ...s, levers: { ...s.levers, strada: true } };
+    const w = walks(computeLife(long).trips);
+    const sch = scheduleOf(long);
+    expect(sch).toEqual({ toWork: 4 * 60, workFrom: 5 * 60, workTo: 21 * 60, homeAt: 21 * 60 });
+    expect(w.find((t) => t.purpose === "work")!.depart).toBeGreaterThanOrEqual(sch.toWork);
+    expect(w.find((t) => t.purpose === "work")!.depart).toBeLessThan(sch.workFrom);
+    expect(w.find((t) => t.purpose === "home")!.depart).toBeGreaterThanOrEqual(sch.homeAt);
+    expect(computeLife(long).rests[0].work).toEqual({ at: null, from: sch.workFrom, to: sch.workTo });
+  });
+  it("a pupil in class does not commute", () => {
+    const s = town([building(1, "izba", 100), building(2, "smithy", 1000)], [{ home: 1, jobs: [2] }]);
+    s.residents[1].inClass = true;
+    expect(walks(computeLife(s).trips)).toHaveLength(0);
+  });
   it("skips commuters without a finished home", () => {
     const bs = [building(1, "izba", 100), building(2, "izba", 200, 0, "building"), building(3, "smithy", 1000)];
     const s = town(bs, [{ home: 1, jobs: [3, null] }, { home: 2, jobs: [3] }, { home: null, jobs: [3] }]);
@@ -170,8 +190,10 @@ describe("rests", () => {
     const l = computeLife(s);
     const at = by(l, 1).work!.at!;
     expect(pointInPolygon(at[0], at[1], site.footprint)).toBe(true);
+    expect(by(l, 1).work!.build).toBe(true); // what the follow card calls a building site
     expect(by(l, 2).work).toBeUndefined();
     expect(by(l, 3).work!.at).toBeNull(); // the smith stays at the forge
+    expect(by(l, 3).work!.build).toBeUndefined();
     const done = computeLife({ ...s, buildings: { ...s.buildings, 2: { ...site, state: "active" } } });
     expect(by(done, 1).work).toBeUndefined();
   });

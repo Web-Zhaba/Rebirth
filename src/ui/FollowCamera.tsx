@@ -1,13 +1,11 @@
 import { TOWN_VIEW_MPP } from "../view/scale";
 import type { View } from "../view/view";
 import { useEffect } from "preact/hooks";
-import { calendar } from "../sim/clock";
-import { isWorkHour } from "../sim/levers";
 import { START_MINUTE_OF_DAY } from "../sim/time";
-import { frame, gameNow, lifeTrips, queryResident, state } from "../simClient";
+import { frame, gameNow, lifeRests, lifeTrips, queryResident, state } from "../simClient";
 import { tool } from "../map/tools";
 import { followed, followInfo, stopFollowing } from "./follow";
-import { residentPoint, residentWalk } from "./followModel";
+import { residentPlace, residentPoint } from "./followModel";
 import { PALETTE } from "./palette";
 
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
@@ -44,7 +42,6 @@ export function FollowCamera({ view }: { view: View }) {
 
   useEffect(() => {
     if (!target) return;
-    let alive = true;
     let raf = 0;
     let last = 0;
     let lastKey = "";
@@ -63,9 +60,8 @@ export function FollowCamera({ view }: { view: View }) {
       const gm = gameNow();
       const minute = (((gm + START_MINUTE_OF_DAY) % 1440) + 1440) % 1440;
       const info = followInfo.peek();
-      const walk = residentWalk(lifeTrips.peek(), target.id, minute);
-      const working = isWorkHour(calendar(gm).hour, st.levers);
-      const at = walk?.pos ?? (info ? residentPoint(info, working, st.buildings) : null);
+      const p = residentPlace(lifeTrips.peek(), lifeRests.peek(), target.id, minute);
+      const at = p.walk?.pos ?? (info ? residentPoint(info, p.place, st.buildings) : null);
       if (!at) return;
       const key = `${at[0].toFixed(1)},${at[1].toFixed(1)}`;
       if (key === lastKey) return;
@@ -83,7 +79,6 @@ export function FollowCamera({ view }: { view: View }) {
     raf = requestAnimationFrame(tick);
 
     return () => {
-      alive = false;
       cancelAnimationFrame(raf);
       offDrag();
       view.overlay("follow-target").setData(empty());

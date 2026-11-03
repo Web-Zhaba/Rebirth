@@ -8,7 +8,7 @@ import { CAMP, covers } from "./services";
 import { toSnapshot } from "./handler";
 import { emptyGrowth } from "./growth";
 import { computeLife } from "./life";
-import { lightOpacity } from "../map/life";
+import { lightOpacity, type Trip } from "../map/life";
 import { dailyEconomy } from "./production";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
@@ -260,6 +260,32 @@ describe("lights and walkers", () => {
     expect(lightOpacity("tavern", 20)).toBeGreaterThanOrEqual(0.5);
     expect(lightOpacity("tavern", 22)).toBeGreaterThan(0.8);
     expect(lightOpacity("tavern", 12)).toBe(0);
+  });
+  it("a guest leaves home after the commute, stays a while and walks back from the tavern, in the «Долгий день» too", () => {
+    const len = (t: Trip) => t.pts.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - t.pts[i][0], p[1] - t.pts[i][1]), 0);
+    for (const strada of [false, true]) {
+      const s = { ...s0(), levers: { ...s0().levers, strada } };
+      const trips = computeLife(s).trips;
+      const guests = trips.filter((t) => t.purpose === "tavern");
+      expect(guests.length, `strada ${strada}`).toBeGreaterThan(0);
+      for (const g of guests) {
+        expect(g.depart).toBeGreaterThanOrEqual((strada ? 21 : 19) * 60);
+        const back = trips.find((t) => t.id === g.id + 1)!;
+        expect([back.purpose, back.who]).toEqual(["home", g.who]);
+        const stay = (((back.depart - g.depart - len(g) / g.speed) % 1440) + 1440) % 1440;
+        expect(stay).toBeGreaterThanOrEqual(45 - 1e-6);
+        expect(stay).toBeLessThanOrEqual(90 + 1e-6);
+        const commute = trips.find((t) => t.id === g.who! * 2 + 1); // their walk home from work, if drawn
+        if (commute) expect(g.depart).toBeGreaterThanOrEqual(commute.depart + len(commute) / commute.speed);
+      }
+      expect(guests.some((g) => trips.some((t) => t.id === g.who! * 2 + 1)), "a commuter among the guests").toBe(true);
+    }
+  });
+  it("the guest of a household is a grown-up, never a child", () => {
+    const s = folk(town([bld(1, "tavern", 100), bld(2, "izba", 300)], at(SUMMER, 12)), [{ home: null, adults: 1, job: 1 }, { home: 2, adults: 1, kids: 1 }]);
+    s.households[2].members.reverse(); // the child first, as after a parent's death
+    const guests = computeLife(s).trips.filter((t) => t.purpose === "tavern");
+    expect(guests.map((t) => t.who)).toEqual([2]);
   });
 });
 

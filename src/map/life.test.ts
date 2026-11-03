@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lightOpacity, placeAt, positionAt, standAt, type Rest, type Trip } from "./life";
+import { lightOpacity, placeAt, positionAt, standAt, whereAt, type Rest, type Trip } from "./life";
 
 const trip: Trip = {
   id: 1,
@@ -91,6 +91,16 @@ describe("standAt", () => {
     expect(at(rest, [out, back], 200)).toEqual([5, 5]); // home since last evening
     expect(at(rest, [out, back], 1139)).toEqual([500, 0]); // past work hours, but not left yet
     expect(standAt(rest, [out, back, tavern], 1250)).toBeNull();
+  });
+  it("without a walk to work the hours put them at work, though they walk to the tavern in the evening", () => {
+    const builder: Rest = { ...rest, work: { at: [500, 0], from: 420, to: 1140, build: true } };
+    const tavern: Trip = { id: 16, kind: "walk", pts: [[0, 0], [100, 0]], depart: 1200, speed: 10, who: 7, purpose: "tavern" };
+    const home: Trip = { ...tavern, id: 17, pts: [[100, 0], [0, 0]], depart: 1290, purpose: "home" };
+    expect(whereAt(builder, [tavern, home], 600)).toEqual({ where: "site", at: [500, 0] });
+    expect(standAt(builder, [tavern, home], 600)!.working).toBe(true);
+    expect(whereAt(builder, [tavern, home], 1250)).toMatchObject({ where: "tavern", at: null, last: tavern });
+    expect(whereAt(builder, [tavern, home], 1350)).toMatchObject({ where: "home", at: [5, 5], last: home });
+    expect(whereAt(builder, [tavern, home], 300)).toMatchObject({ where: "home", at: [5, 5] }); // home since last night
   });
   it("the same resident always faces the same way", () => {
     expect(standAt(rest, [], 1200)).toEqual(standAt(rest, [], 1300));
