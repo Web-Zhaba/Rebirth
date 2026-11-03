@@ -162,6 +162,8 @@ const MAT_ICON: { key: keyof Materials; icon: IconName; unit: string }[] = [
 ];
 
 export const num = (n: number): string => decimal(String(Math.round(n * 10) / 10));
+// Road costs per metre are small (a path takes 0.04 person-hours a metre): they keep hundredths.
+const perMetre = (n: number): string => decimal(String(Math.round(n * 100) / 100));
 
 export function materialList(m: Materials): { icon: IconName; text: string }[] {
   return MAT_ICON.filter((x) => m[x.key] > 0).map((x) => ({ icon: x.icon, text: `${num(m[x.key])} ${x.unit}` }));
@@ -187,8 +189,8 @@ export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roa
     tool: t,
     label: toolLabel(t),
     purpose: (kind && KIND_PURPOSE[kind]) || PURPOSE[t],
-    labor: road ? L(`${num(road.labor)} чел.-ч на метр`, `${num(road.labor)} person-h per metre`) : b ? `${num(b.labor)} ${L("чел.-ч", "person-h")}` : null,
-    materials: b ? materialList(b.materials) : road?.stone ? [{ icon: "stone", text: L(`${num(road.stone)} т на метр`, `${num(road.stone)} t per metre`) }] : [],
+    labor: road ? L(`${perMetre(road.labor)} чел.-ч на метр`, `${perMetre(road.labor)} person-h per metre`) : b ? `${num(b.labor)} ${L("чел.-ч", "person-h")}` : null,
+    materials: b ? materialList(b.materials) : road?.stone ? [{ icon: "stone", text: L(`${perMetre(road.stone)} т на метр`, `${perMetre(road.stone)} t per metre`) }] : [],
     jobs: b && b.jobs > 0 ? b.jobs : null,
     site: (kind && KIND_SITE[kind]) || (SITE[t] ?? (b ? L("У построенной дороги, на свободных участках", "By a built road, on free plots") : L("На карте", "On the map"))),
     reach,
