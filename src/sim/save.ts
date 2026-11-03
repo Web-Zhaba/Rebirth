@@ -4,7 +4,6 @@ import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
-import { AUTO, parseEventLast, parsePending } from "./events";
 import { parseProgress } from "./research";
 import { migrateProgress } from "./tech";
 import { emptyLevers, type Levers } from "./levers";
@@ -232,7 +231,7 @@ function parseNeeds(v: unknown): Needs | undefined {
   if (!keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0 && (v[k] as number) <= 100)) return undefined;
   return { food: v.food as number, rest: v.rest as number, social: v.social as number, warmth: v.warmth as number };
 }
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "event"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -403,20 +402,13 @@ function parseSummary(v: unknown): DaySummary | null {
   return { at: v.at, lines };
 }
 
-// A pending choice written with the old vocabulary gets the universal words.
-function migratePending(p: ReturnType<typeof parsePending>): ReturnType<typeof parsePending> {
-  if (!p) return p;
-  const opt = (o: { label: string; effect: string }) => ({ label: migrateText(o.label), effect: migrateText(o.effect) });
-  return { ...p, title: migrateText(p.title), text: migrateText(p.text), options: [opt(p.options[0]), opt(p.options[1])] };
-}
-
 // Broken entries are dropped, never the whole chronicle.
 function parseChronicle(v: unknown): ChronicleEntry[] {
   if (!Array.isArray(v)) return [];
   const out: ChronicleEntry[] = [];
   for (const e of v) {
     if (!isRecord(e) || !isNum(e.at) || typeof e.kind !== "string" || typeof e.text !== "string") continue;
-    if (e.kind.startsWith("event:") && e.text.endsWith(AUTO)) continue; // routine an earlier version wrote here (now the feed only)
+    if (e.kind.startsWith("event:")) continue; // town events with choices, removed from the game
     out.push({ at: e.at, kind: e.kind, text: migrateText(e.text) });
   }
   return out.slice(-CHRONICLE_CAP);
@@ -520,9 +512,6 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.chronicle = parseChronicle(sim.chronicle);
   g.summary = parseSummary(sim.summary);
   g.levers = parseLevers(sim.levers);
-  g.pending = migratePending(parsePending(sim.pending));
-  g.eventLast = parseEventLast(sim.eventLast);
-  if (isNum(sim.nextEvent)) g.nextEvent = sim.nextEvent; // else the default of a fresh town: three game days from now
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   g.weather = parseWeather(sim.weather);

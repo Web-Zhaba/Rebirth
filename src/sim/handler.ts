@@ -4,7 +4,6 @@ import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed }
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
-import { resolveChoice } from "./events";
 import { scarcity } from "./heritage";
 import { loseSite, restoreSite } from "./restore";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
@@ -492,11 +491,6 @@ export class Handler {
         const r = cmd.type === "startResearch" ? startResearch(sim, cmd.techId) : cmd.type === "queueResearch" ? queueResearch(sim, cmd.techId) : cancelResearch(sim, cmd.techId);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };
-        return await this.finishCommand(id);
-      } else if (cmd.type === "choose") {
-        if (!sim.pending || sim.pending.id !== cmd.id) return reject(L("Это событие уже решено", "This event is already decided"));
-        if (cmd.option !== 0 && cmd.option !== 1) return reject(L("Некорректный ответ", "Invalid answer"));
-        this.save = { ...this.save, sim: resolveChoice(sim, cmd.option, false) };
         return await this.finishCommand(id);
       } else if (import.meta.env.DEV && cmd.type === "admin") {
         // Production builds ship no admin panel; there this branch is compiled out and the command falls through to

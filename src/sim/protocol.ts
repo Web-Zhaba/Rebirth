@@ -49,8 +49,6 @@ export type Cmd =
   | { type: "startResearch"; techId: string }
   | { type: "queueResearch"; techId: string }
   | { type: "cancelResearch"; techId: string }
-  // The answer to the pending event: its id and the option (0 or 1).
-  | { type: "choose"; id: string; option: 0 | 1 }
   // Admin panel cheats.
   | { type: "admin"; op: AdminOp }
   // Wikipedia articles found near the dig discs (validated, deduplicated by id and capped by the sim).

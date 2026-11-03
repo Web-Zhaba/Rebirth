@@ -8,7 +8,7 @@ import { emptyRoads } from "./roads";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, Field, Household, Resident, SimState } from "./types";
 import { CALM, emptyWeather, type Weather, type WeatherState } from "./weather";
-import { buildFactor, EFFECTS, fieldWork, firewoodDaily, floodRisk, foodNeedFactor, lightFrost, moodShift, mortalityFactor, spoilage, workFactor } from "./weatherEffects";
+import { buildFactor, EFFECTS, fieldWork, firewoodDaily, foodNeedFactor, moodShift, mortalityFactor, spoilage, workFactor } from "./weatherEffects";
 import { emptyZones } from "./zones";
 
 const SITE = { lat: 50, lng: 30, elev: 200, seed: 1, phase: 0 };
@@ -31,8 +31,6 @@ describe("calm state", () => {
     expect(spoilage(w, 0)).toBe(0);
     expect(moodShift(w)).toBe(0);
     expect(mortalityFactor(w, true)).toBe(1);
-    expect(floodRisk(w)).toBe(false);
-    expect(lightFrost(w)).toBe(false);
   });
   it("a mild day with a site is neutral too", () => {
     const w = wx({ now: { temp: 15 }, yesterday: day(10, 20) });
@@ -106,13 +104,6 @@ describe("factor tables", () => {
     expect(mortalityFactor(wx({ yesterday: day(-10) }), true)).toBeCloseTo(1.4);
     expect(mortalityFactor(wx({ yesterday: day(-40) }), true)).toBe(2);
     expect(mortalityFactor(wx({ yesterday: day(-10) }), undefined)).toBe(1);
-  });
-  it("events", () => {
-    expect(lightFrost(wx({ yesterday: day(-1.5) }))).toBe(true);
-    expect(lightFrost(wx({ yesterday: day(-5) }))).toBe(false);
-    expect(floodRisk(wx({ soil: 0.95, yesterday: day(8, 12, 10), day: day(5, 9, 8) }))).toBe(true);
-    expect(floodRisk(wx({ soil: 0.5, yesterday: day(8, 12, 10), day: day(5, 9, 8) }))).toBe(false);
-    expect(floodRisk(wx({ soil: 0.95, snowpack: 0.2, now: { temp: 8 } }))).toBe(true);
   });
 });
 

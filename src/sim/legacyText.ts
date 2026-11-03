@@ -1,4 +1,4 @@
-// Load-time migration of stored player-visible texts (chronicle, events, day summary, pending choice) that were written
+// Load-time migration of stored player-visible texts (chronicle, events, day summary) that were written
 // with the old folk vocabulary. Whole-word rules, applied top to bottom; phrases come before the single words they contain.
 // A rule is [pattern, replacement, caseSensitive?]: case-insensitive rules keep the capital letter of the match.
 

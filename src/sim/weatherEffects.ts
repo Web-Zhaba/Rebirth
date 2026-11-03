@@ -48,7 +48,6 @@ export const EFFECTS = {
   mood: { storm: -4, extreme: -4, mild: 2, hotAllDay: 26, coldAllDay: -12, mildFrom: 8, mildTo: 24 },
   frostFrom: -2, // °C, a night colder than this takes grain (see applyFrost)
   frostSown: 0.2, // share of the fields sown from which a frost matters
-  flood: { soil: 0.9, rain: 15, meltAbove: 4 }, // mm in two days; °C that melts the snow
 };
 
 const E = EFFECTS;
@@ -202,13 +201,3 @@ export function mortalityFactor(w: WeatherState, unheated: boolean | undefined):
 
 // A frost that the fields feel (the caller checks the window): the night minimum is below the limit.
 export const frostNight = (w: WeatherState): boolean => !!w.site && w.yesterday.min < E.frostFrom;
-
-// A light frost that does not trip applyFrost: the choice event may still ask what to do about it.
-export const lightFrost = (w: WeatherState): boolean => !!w.site && w.yesterday.min < -1 && w.yesterday.min >= E.frostFrom;
-
-// Saturated soil after heavy rain or fast melt.
-export function floodRisk(w: WeatherState): boolean {
-  if (!w.site) return false;
-  const F = E.flood;
-  return w.soil > F.soil && (w.yesterday.rain + w.day.rain >= F.rain || (w.snowpack > 0.02 && w.now.temp > F.meltAbove));
-}

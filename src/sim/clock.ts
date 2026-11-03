@@ -5,7 +5,6 @@ import { digDone, keepRevealed } from "./excavation";
 import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
 import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales, rebalanceJobs, syncPeople } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
-import { eventStep } from "./events";
 import { eraStep, researchStep } from "./research";
 import { completeRestorations } from "./restore";
 import { buildSpeedMul } from "./tech";
@@ -118,7 +117,7 @@ export function step(s: SimState): SimState {
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = eraStep(dailyServices(dailyStep(dailyEconomy(next)))); // a tick crossed 00:00
-  return recordChronicle(s, settleLevers(spawnBuildings(eventStep(immigrationStep(next, BASE_TICK)))));
+  return recordChronicle(s, settleLevers(spawnBuildings(immigrationStep(next, BASE_TICK))));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.
