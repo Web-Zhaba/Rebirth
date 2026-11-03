@@ -1,3 +1,4 @@
+import { L } from "../i18n";
 export interface CoveragePreview {
   houses: number;
   residents: number;
@@ -6,8 +7,8 @@ export interface CoveragePreview {
 }
 
 export function coveragePreviewText(p: CoveragePreview): string {
-  const base = `Охват: ${p.houses} домов · ${p.residents} жителей`;
-  return p.newHouses > 0 ? `${base} · новых: ${p.newHouses} домов, ${p.newResidents} жителей` : `${base} · новых нет`;
+  const base = L(`Охват: ${p.houses} домов · ${p.residents} жителей`, `Reach: ${p.houses} houses · ${p.residents} residents`);
+  return p.newHouses > 0 ? `${base} · ${L(`новых: ${p.newHouses} домов, ${p.newResidents} жителей`, `new: ${p.newHouses} houses, ${p.newResidents} residents`)}` : `${base} · ${L("новых нет", "none new")}`;
 }
 
 export function relationRadius(template: string, currentDigRadius: number | undefined): number | null {

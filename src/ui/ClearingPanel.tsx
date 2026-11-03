@@ -9,6 +9,7 @@ import { areaText, clearingView } from "./inspectorModel";
 import { Button, Confirm, ProgressBar } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { L } from "../i18n";
 
 // Inspector of an unfinished clearing (right slot). Its lever key is -id.
 export function ClearingPanel() {
@@ -31,31 +32,31 @@ export function ClearingPanel() {
   };
   return (
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.clearingInspectorTitle}>
-      <InspectorHead icon="clearing" title="Вырубка" chip={{ label: "рубят лес", tone: "build" }} onClose={closePanel} headingId={SEMANTIC_IDS.clearingInspectorTitle} />
+      <InspectorHead icon="clearing" title={L("Вырубка", "Clearing")} chip={{ label: L("рубят лес", "felling"), tone: "build" }} onClose={closePanel} headingId={SEMANTIC_IDS.clearingInspectorTitle} />
       <div class="insp-sub">
-        {areaText(c.area)} · лес {Math.round(c.forest * 100)} %
+        {areaText(c.area)} · {L("лес", "forest")} {Math.round(c.forest * 100)}{L(" %", "%")}
       </div>
       <div class="insp-block">
-        <ProgressBar big value={v.share} label="Вырубка" />
-        <Line icon="hourglass" label="Готово">
-          {Math.floor(v.share * 100)} % · осталось {num(v.remaining)} чел.-ч
+        <ProgressBar big value={v.share} label={L("Вырубка", "Clearing")} />
+        <Line icon="hourglass" label={L("Готово", "Done")}>
+          {Math.floor(v.share * 100)}{L(" % · осталось", "% · left")} {num(v.remaining)} {L("чел.-ч", "person-h")}
         </Line>
-        <Line icon="log" label="Брёвна">
-          {num(v.logsNow)} из {num(v.logsAll)} м³
+        <Line icon="log" label={L("Брёвна", "Logs")}>
+          {num(v.logsNow)} {L("из", "of")} {num(v.logsAll)} {L("м³", "m³")}
         </Line>
-        <Line label="Ждать">{siteEta(v.remaining, key) || "—"}</Line>
+        <Line label={L("Ждать", "Wait")}>{siteEta(v.remaining, key) || "—"}</Line>
         {queued && <div class="people-note">{queued}</div>}
         <SiteLevers siteKey={key} />
       </div>
-      <div class="people-note">Брёвна идут на склад, а земля станет лугом, когда работа закончится.</div>
+      <div class="people-note">{L("Брёвна идут на склад, а земля станет лугом, когда работа закончится.", "Logs go to the store, and the land turns into meadow once the work is done.")}</div>
       <div class="insp-actions">
-        <Button variant="danger" icon="trash" aria-label="Убрать вырубку" onClick={() => setConfirming(true)}>
-          Убрать вырубку
+        <Button variant="danger" icon="trash" aria-label={L("Убрать вырубку", "Remove clearing")} onClick={() => setConfirming(true)}>
+          {L("Убрать вырубку", "Remove clearing")}
         </Button>
       </div>
       {confirming && (
-        <Confirm title="Убрать вырубку?" okLabel="Убрать" onOk={onRemove} onCancel={() => setConfirming(false)}>
-          Работа остановится. Уже полученные брёвна останутся на складе, участок можно отметить заново.
+        <Confirm title={L("Убрать вырубку?", "Remove the clearing?")} okLabel={L("Убрать", "Remove")} onOk={onRemove} onCancel={() => setConfirming(false)}>
+          {L("Работа остановится. Уже полученные брёвна останутся на складе, участок можно отметить заново.", "Work stops. Logs already cut stay in the store; you can mark the area again.")}
         </Confirm>
       )}
     </aside>

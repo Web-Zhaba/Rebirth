@@ -1,5 +1,6 @@
 import type { DomainId } from "./domains";
 import type { ProgressState, RoadKind, SimState } from "./types";
+import { L } from "../i18n";
 
 // The technology tree and the eras (PLAN-research.ru.md sections 4-6, 9). Static: none of it is saved, only
 // `SimState.progress` (the ids of what is researched). sim/research.ts holds the rules that move it.
@@ -36,8 +37,8 @@ export interface InsightDef {
 }
 
 export const ERAS: { id: number; name: string }[] = [
-  { id: 1, name: "Поселение" },
-  { id: 2, name: "Деревня" },
+  { id: 1, name: L("Поселение", "Settlement") },
+  { id: 2, name: L("Деревня", "Village") },
 ];
 export const eraName = (era: number): string => ERAS.find((e) => e.id === era)?.name ?? "";
 export const MAX_ERA = ERAS.length;
@@ -50,43 +51,43 @@ export const MAX_QUEUE = 3;
 // Chain order of the tree = the order of the plan table.
 export const TECHS: TechDef[] = [
   // ----- era I «Поселение» -----
-  { id: "carpentry", era: 1, domain: "build", name: "Плотницкое дело", days: 3, requires: [], unlocks: ["sawpit"], description: "Пилить брёвна на доски: лесопилка." },
-  { id: "storage", era: 1, domain: "farm", name: "Хранение запасов", days: 3, requires: [], unlocks: ["barn"], description: "Склады для зерна и припасов." },
-  { id: "foraging", era: 1, domain: "farm", name: "Лесной промысел", days: 3, requires: [], unlocks: ["hunter", "forager"], description: "Охота и сбор в лесу." },
-  { id: "stonework", era: 1, domain: "build", name: "Работа с камнем", days: 9, requires: ["carpentry"], unlocks: ["quarry"], description: "Добыча и обработка камня: карьер." },
-  { id: "crafts", era: 1, domain: "craft", name: "Ремёсла", days: 9, requires: ["carpentry"], unlocks: ["zone:craft"], description: "Мастерские: ремесленная зона." },
-  { id: "fishing", era: 1, domain: "farm", name: "Рыболовство", days: 9, requires: [], unlocks: ["fisher"], description: "Лов рыбы: рыболовный причал." },
-  { id: "gardening", era: 1, domain: "farm", name: "Огородничество", days: 9, requires: ["storage"], unlocks: ["garden"], description: "Грядки у дома: огород." },
-  { id: "trade", era: 1, domain: "trade", name: "Торговля", days: 15, requires: ["crafts"], unlocks: ["zone:trade", "market"], description: "Обмен с соседями: торговая зона и рынок." },
-  { id: "orchards", era: 1, domain: "farm", name: "Садоводство", days: 15, requires: ["gardening"], unlocks: ["orchard"], description: "Плодовые деревья: сад." },
-  { id: "faith", era: 1, domain: "care", name: "Общие обряды", days: 15, requires: ["stonework"], unlocks: ["chapel"], description: "Место для общих собраний и обрядов: храм." },
-  { id: "threefield", era: 1, domain: "farm", name: "Трёхполье", days: 15, requires: ["gardening"], unlocks: [], modifiers: { fieldYield: 0.1 }, description: "Севооборот: урожай полей выше на 10 %." },
-  { id: "healing", era: 1, domain: "care", name: "Врачевание", days: 21, requires: ["faith"], unlocks: ["healer"], description: "Уход за больными: лечебница." },
-  { id: "housing", era: 1, domain: "build", name: "Просторное жильё", days: 21, requires: ["crafts", "stonework"], unlocks: ["upgrade"], description: "Дома можно расширять." },
-  { id: "guildwork", era: 1, domain: "craft", name: "Цеховое дело", days: 21, requires: ["crafts", "trade"], unlocks: [], modifiers: { workshopOutput: 0.1 }, description: "Мастера делятся приёмами: выработка мастерских выше на 10 %." },
-  { id: "joinery", era: 1, domain: "build", name: "Столярное дело", days: 21, requires: ["housing"], unlocks: [], modifiers: { buildSpeed: 0.1, bridgeSpan: { bridge: 15 } }, description: "Стройка быстрее на 10 %, свайный мост перекрывает на 15 м больше." },
+  { id: "carpentry", era: 1, domain: "build", name: L("Плотницкое дело", "Carpentry"), days: 3, requires: [], unlocks: ["sawpit"], description: L("Пилить брёвна на доски: лесопилка.", "Saw logs into planks: sawmill.") },
+  { id: "storage", era: 1, domain: "farm", name: L("Хранение запасов", "Storing supplies"), days: 3, requires: [], unlocks: ["barn"], description: L("Склады для зерна и припасов.", "Stores for grain and provisions.") },
+  { id: "foraging", era: 1, domain: "farm", name: L("Лесной промысел", "Forest craft"), days: 3, requires: [], unlocks: ["hunter", "forager"], description: L("Охота и сбор в лесу.", "Hunting and foraging in the forest.") },
+  { id: "stonework", era: 1, domain: "build", name: L("Работа с камнем", "Stonework"), days: 9, requires: ["carpentry"], unlocks: ["quarry"], description: L("Добыча и обработка камня: карьер.", "Quarrying and dressing stone: quarry.") },
+  { id: "crafts", era: 1, domain: "craft", name: L("Ремёсла", "Crafts"), days: 9, requires: ["carpentry"], unlocks: ["zone:craft"], description: L("Мастерские: ремесленная зона.", "Workshops: the craft zone.") },
+  { id: "fishing", era: 1, domain: "farm", name: L("Рыболовство", "Fishing"), days: 9, requires: [], unlocks: ["fisher"], description: L("Лов рыбы: рыболовный причал.", "Catching fish: fishing pier.") },
+  { id: "gardening", era: 1, domain: "farm", name: L("Огородничество", "Gardening"), days: 9, requires: ["storage"], unlocks: ["garden"], description: L("Грядки у дома: огород.", "Beds by the house: vegetable garden.") },
+  { id: "trade", era: 1, domain: "trade", name: L("Торговля", "Trade"), days: 15, requires: ["crafts"], unlocks: ["zone:trade", "market"], description: L("Обмен с соседями: торговая зона и рынок.", "Exchange with neighbours: the trade zone and the market.") },
+  { id: "orchards", era: 1, domain: "farm", name: L("Садоводство", "Orcharding"), days: 15, requires: ["gardening"], unlocks: ["orchard"], description: L("Плодовые деревья: сад.", "Fruit trees: orchard.") },
+  { id: "faith", era: 1, domain: "care", name: L("Общие обряды", "Shared rites"), days: 15, requires: ["stonework"], unlocks: ["chapel"], description: L("Место для общих собраний и обрядов: храм.", "A place for gatherings and rites: temple.") },
+  { id: "threefield", era: 1, domain: "farm", name: L("Трёхполье", "Three-field rotation"), days: 15, requires: ["gardening"], unlocks: [], modifiers: { fieldYield: 0.1 }, description: L("Севооборот: урожай полей выше на 10 %.", "Crop rotation: field yield is 10% higher.") },
+  { id: "healing", era: 1, domain: "care", name: L("Врачевание", "Healing"), days: 21, requires: ["faith"], unlocks: ["healer"], description: L("Уход за больными: лечебница.", "Caring for the sick: infirmary.") },
+  { id: "housing", era: 1, domain: "build", name: L("Просторное жильё", "Spacious Housing"), days: 21, requires: ["crafts", "stonework"], unlocks: ["upgrade"], description: L("Дома можно расширять.", "Houses can be expanded.") },
+  { id: "guildwork", era: 1, domain: "craft", name: L("Цеховое дело", "Guild work"), days: 21, requires: ["crafts", "trade"], unlocks: [], modifiers: { workshopOutput: 0.1 }, description: L("Мастера делятся приёмами: выработка мастерских выше на 10 %.", "Masters share their methods: workshop output is 10% higher.") },
+  { id: "joinery", era: 1, domain: "build", name: L("Столярное дело", "Joinery"), days: 21, requires: ["housing"], unlocks: [], modifiers: { buildSpeed: 0.1, bridgeSpan: { bridge: 15 } }, description: L("Стройка быстрее на 10 %, свайный мост перекрывает на 15 м больше.", "Building is 10% faster; a pile bridge spans 15 m more.") },
   // ----- era II «Деревня» -----
-  { id: "paving", era: 2, domain: "build", name: "Мощение", days: 24, requires: ["stonework"], unlocks: ["road:stone"], description: "Каменная дорога: берёт уклон круче грунтовой." },
-  { id: "stonebridge", era: 2, domain: "build", name: "Каменные мосты", days: 30, requires: ["paving"], unlocks: ["road:stonebridge"], description: "Каменный мост через воду." },
-  { id: "trusses", era: 2, domain: "build", name: "Стропильные фермы", days: 30, requires: ["stonebridge", "joinery"], unlocks: [], modifiers: { bridgeSpan: { bridge: 15, stonebridge: 40 } }, description: "Мосты перекрывают больший пролёт: свайный +15 м, каменный +40 м." },
-  { id: "cellars", era: 2, domain: "farm", name: "Погреба", days: 18, requires: ["storage"], unlocks: ["cellar"], description: "Запасы хранятся дольше: погреб." },
-  { id: "beekeeping", era: 2, domain: "farm", name: "Пчеловодство", days: 18, requires: ["orchards"], unlocks: ["apiary"], description: "Мёд и воск: пасека." },
-  { id: "letters", era: 2, domain: "learn", name: "Грамота", days: 24, requires: ["faith"], unlocks: ["school"], description: "Учить детей чтению и счёту: школа." },
+  { id: "paving", era: 2, domain: "build", name: L("Мощение", "Paving"), days: 24, requires: ["stonework"], unlocks: ["road:stone"], description: L("Каменная дорога: берёт уклон круче грунтовой.", "Stone road: handles steeper slopes than a dirt road.") },
+  { id: "stonebridge", era: 2, domain: "build", name: L("Каменные мосты", "Stone bridges"), days: 30, requires: ["paving"], unlocks: ["road:stonebridge"], description: L("Каменный мост через воду.", "A stone bridge across water.") },
+  { id: "trusses", era: 2, domain: "build", name: L("Стропильные фермы", "Roof trusses"), days: 30, requires: ["stonebridge", "joinery"], unlocks: [], modifiers: { bridgeSpan: { bridge: 15, stonebridge: 40 } }, description: L("Мосты перекрывают больший пролёт: свайный +15 м, каменный +40 м.", "Bridges span farther: pile +15 m, stone +40 m.") },
+  { id: "cellars", era: 2, domain: "farm", name: L("Погреба", "Cellars"), days: 18, requires: ["storage"], unlocks: ["cellar"], description: L("Запасы хранятся дольше: погреб.", "Supplies keep longer: cellar.") },
+  { id: "beekeeping", era: 2, domain: "farm", name: L("Пчеловодство", "Beekeeping"), days: 18, requires: ["orchards"], unlocks: ["apiary"], description: L("Мёд и воск: пасека.", "Honey and wax: apiary.") },
+  { id: "letters", era: 2, domain: "learn", name: L("Грамота", "Literacy"), days: 24, requires: ["faith"], unlocks: ["school"], description: L("Учить детей чтению и счёту: школа.", "Teach children to read and count: school.") },
 ];
 
 export const INSIGHTS: InsightDef[] = [
-  { id: "carpenter-corner", domain: "build", tech: "carpentry", cut: 0.4, text: "Плотницкий угол" },
-  { id: "masonry", domain: "build", tech: "stonework", cut: 0.3, text: "Каменная кладка" },
-  { id: "dry-barn", domain: "farm", tech: "storage", cut: 0.4, text: "Сухой амбар" },
-  { id: "grafting", domain: "farm", tech: "orchards", cut: 0.3, text: "Привой" },
-  { id: "one-roof", domain: "craft", tech: "crafts", cut: 0.3, text: "Мастерская под одной крышей" },
-  { id: "firing", domain: "craft", tech: "guildwork", cut: 0.3, text: "Обжиг" },
-  { id: "fair-row", domain: "trade", tech: "trade", cut: 0.3, text: "Ярмарочный ряд" },
-  { id: "ledger", domain: "trade", tech: "guildwork", cut: 0.3, text: "Счётная книга" },
-  { id: "primer", domain: "learn", tech: "letters", cut: 0.4, text: "Азбука" },
-  { id: "bookmaking", domain: "learn", tech: null, cut: 0, speed: 0.1, text: "Книжное дело" },
-  { id: "vault", domain: "care", tech: "faith", cut: 0.3, text: "Свод" },
-  { id: "herbal", domain: "care", tech: "healing", cut: 0.3, text: "Травник" },
+  { id: "carpenter-corner", domain: "build", tech: "carpentry", cut: 0.4, text: L("Плотницкий угол", "The carpenter’s corner joint") },
+  { id: "masonry", domain: "build", tech: "stonework", cut: 0.3, text: L("Каменная кладка", "Stone masonry") },
+  { id: "dry-barn", domain: "farm", tech: "storage", cut: 0.4, text: L("Сухой амбар", "The dry barn") },
+  { id: "grafting", domain: "farm", tech: "orchards", cut: 0.3, text: L("Привой", "Grafting") },
+  { id: "one-roof", domain: "craft", tech: "crafts", cut: 0.3, text: L("Мастерская под одной крышей", "A workshop under one roof") },
+  { id: "firing", domain: "craft", tech: "guildwork", cut: 0.3, text: L("Обжиг", "Kiln firing") },
+  { id: "fair-row", domain: "trade", tech: "trade", cut: 0.3, text: L("Ярмарочный ряд", "The fair row") },
+  { id: "ledger", domain: "trade", tech: "guildwork", cut: 0.3, text: L("Счётная книга", "The ledger") },
+  { id: "primer", domain: "learn", tech: "letters", cut: 0.4, text: L("Азбука", "The primer") },
+  { id: "bookmaking", domain: "learn", tech: null, cut: 0, speed: 0.1, text: L("Книжное дело", "Bookmaking") },
+  { id: "vault", domain: "care", tech: "faith", cut: 0.3, text: L("Свод", "The vault") },
+  { id: "herbal", domain: "care", tech: "healing", cut: 0.3, text: L("Травник", "The herbal") },
 ];
 
 export const TECH_BY_ID = new Map(TECHS.map((t) => [t.id, t]));
@@ -95,25 +96,25 @@ export const techOf = (id: string): TechDef | undefined => TECH_BY_ID.get(id);
 
 // What each unlock key is called in the reward lines.
 export const UNLOCK_NAME: Record<string, string> = {
-  sawpit: "лесопилка",
-  barn: "склад",
-  quarry: "карьер",
-  fisher: "рыболовный причал",
-  garden: "огород",
-  hunter: "охотничий пост",
-  cellar: "погреб",
-  forager: "сбор в лесу",
-  orchard: "сад",
-  apiary: "пасека",
-  market: "рынок",
-  chapel: "храм",
-  school: "школа",
-  healer: "лечебница",
-  "zone:craft": "ремесленная зона",
-  "zone:trade": "торговая зона",
-  upgrade: "расширение домов",
-  "road:stone": "каменная дорога",
-  "road:stonebridge": "каменный мост",
+  sawpit: L("лесопилка", "sawmill"),
+  barn: L("склад", "storehouse"),
+  quarry: L("карьер", "quarry"),
+  fisher: L("рыболовный причал", "fishing pier"),
+  garden: L("огород", "vegetable garden"),
+  hunter: L("охотничий пост", "hunting post"),
+  cellar: L("погреб", "cellar"),
+  forager: L("сбор в лесу", "forager"),
+  orchard: L("сад", "orchard"),
+  apiary: L("пасека", "apiary"),
+  market: L("рынок", "market"),
+  chapel: L("храм", "temple"),
+  school: L("школа", "school"),
+  healer: L("лечебница", "infirmary"),
+  "zone:craft": L("ремесленная зона", "craft zone"),
+  "zone:trade": L("торговая зона", "trade zone"),
+  upgrade: L("расширение домов", "house expansion"),
+  "road:stone": L("каменная дорога", "stone road"),
+  "road:stonebridge": L("каменный мост", "stone bridge"),
 };
 export const ALL_UNLOCKS = Object.keys(UNLOCK_NAME);
 
@@ -204,7 +205,7 @@ export function lockReason(s: { progress: Pick<ProgressState, "techs" | "era"> }
   const key = unlockKeyOf(tool);
   if (!key || isUnlocked(s.progress, key)) return null;
   const t = UNLOCK_TECH[key];
-  return t.era > s.progress.era ? `Эпоха ${t.era === 2 ? "II" : t.era}` : `Технология: ${t.name}`;
+  return t.era > s.progress.era ? `${L("Эпоха", "Era")} ${t.era === 2 ? "II" : t.era}` : `${L("Технология", "Technology")}: ${t.name}`;
 }
 
 // ---------- modifiers ----------

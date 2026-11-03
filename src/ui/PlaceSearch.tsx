@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { mppAtZoom, type View } from "../view/view";
 import { placeLabelsOn, togglePlaceLabels } from "../view/placeNames";
-import { MIN_QUERY, searchPlaces, type PlaceHit } from "../world/geocode";
+import { KIND_LABEL, MIN_QUERY, searchPlaces, type PlaceHit } from "../world/geocode";
 import { IconButton } from "./kit";
 import { Icon } from "./Icon";
+import { L } from "../i18n";
 
 const DEBOUNCE_MS = 400; // Photon fair use: no request per keystroke
 const LOCATE_MPP = mppAtZoom(13); // old zoom 13
 const FIT_MIN_MPP = mppAtZoom(14); // a found area is never shown closer than old zoom 14
 
 // Scale when the hit has no extent (old zooms 11, 6 and 14).
-const pointMpp = (h: PlaceHit) => mppAtZoom(h.kind === "город" ? 11 : h.kind === "страна" || h.kind === "регион" ? 6 : 14);
+const pointMpp = (h: PlaceHit) => mppAtZoom(h.kind === KIND_LABEL.city ? 11 : h.kind === KIND_LABEL.country || h.kind === KIND_LABEL.region ? 6 : 14);
 
 function flyTo(view: View, h: PlaceHit) {
   if (h.bbox) {
@@ -45,14 +46,14 @@ export function PlaceSearch({ view }: { view: View }) {
           setHits(h);
           setActive(0);
           setOpen(true);
-          setMsg(h.length ? "" : "Ничего не нашлось");
+          setMsg(h.length ? "" : L("Ничего не нашлось", "Nothing found"));
           setBusy(false);
         },
         (e) => {
           if (ctl.signal.aborted) return;
           console.warn("place search", e);
           setHits([]);
-          setMsg("Поиск недоступен, попробуйте позже");
+          setMsg(L("Поиск недоступен, попробуйте позже", "Search is unavailable, try again later"));
           setBusy(false);
         },
       );
@@ -71,14 +72,14 @@ export function PlaceSearch({ view }: { view: View }) {
   };
 
   const locate = () => {
-    if (!("geolocation" in navigator)) return setMsg("Браузер не умеет определять место");
-    setMsg("Определяем, где вы…");
+    if (!("geolocation" in navigator)) return setMsg(L("Браузер не умеет определять место", "This browser can’t detect your location"));
+    setMsg(L("Определяем, где вы…", "Finding where you are…"));
     navigator.geolocation.getCurrentPosition(
       (p) => {
         setMsg("");
         view.flyTo({ center: [p.coords.longitude, p.coords.latitude], mpp: LOCATE_MPP });
       },
-      (e) => setMsg(e.code === e.PERMISSION_DENIED ? "Нет доступа к местоположению" : "Не удалось определить место"),
+      (e) => setMsg(e.code === e.PERMISSION_DENIED ? L("Нет доступа к местоположению", "No access to your location") : L("Не удалось определить место", "Could not detect your location")),
       { timeout: 15000, maximumAge: 600000 },
     );
   };
@@ -109,12 +110,12 @@ export function PlaceSearch({ view }: { view: View }) {
             type="search"
             role="combobox"
             list={undefined}
-            aria-label="Найти место по названию"
+            aria-label={L("Найти место по названию", "Find a place by name")}
             aria-expanded={showList}
             aria-controls="place-hits"
             aria-activedescendant={showList ? `place-hit-${active}` : undefined}
             aria-autocomplete="list"
-            placeholder="Найти город или село"
+            placeholder={L("Найти город или село", "Find a town or village")}
             value={q}
             onInput={(e) => setQ((e.target as HTMLInputElement).value)}
             onKeyDown={onKey}
@@ -122,16 +123,16 @@ export function PlaceSearch({ view }: { view: View }) {
             onBlur={() => setOpen(false)}
           />
         </label>
-        <IconButton icon="locate" label="Где я" onClick={locate} />
+        <IconButton icon="locate" label={L("Где я", "Where am I")} onClick={locate} />
         <IconButton
           icon="placeNames"
-          label={placeLabelsOn.value ? "Скрыть названия на карте" : "Показать названия на карте"}
+          label={placeLabelsOn.value ? L("Скрыть названия на карте", "Hide names on the map") : L("Показать названия на карте", "Show names on the map")}
           aria-pressed={placeLabelsOn.value}
           onClick={togglePlaceLabels}
         />
       </div>
       {showList && (
-        <ul class="place-hits" id="place-hits" role="listbox" aria-label="Найденные места">
+        <ul class="place-hits" id="place-hits" role="listbox" aria-label={L("Найденные места", "Places found")}>
           {hits.map((h, i) => (
             <li
               key={`${h.lng},${h.lat},${h.name}`}
@@ -150,13 +151,13 @@ export function PlaceSearch({ view }: { view: View }) {
             </li>
           ))}
           <li class="place-hit-credit" role="presentation">
-            Поиск: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>, {"\u00a9"} OpenStreetMap
+            {L("Поиск:", "Search:")} <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>, {"\u00a9"} OpenStreetMap
           </li>
         </ul>
       )}
       {(msg || busy) && (
         <div class="place-search-msg" aria-live="polite">
-          {msg || "Ищем…"}
+          {msg || L("Ищем…", "Searching…")}
         </div>
       )}
     </div>

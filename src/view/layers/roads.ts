@@ -7,8 +7,9 @@ import type { ModelItem } from "../../map/modelItems";
 import { roadChains, type RoadChain, type RoadState } from "../../map/roadChains";
 import { roadJunctions } from "../../map/roadJunctions";
 
-// Roads for every renderer: chains of the graph by kind and state, the model items of the built ones (ribbons and the
-// aprons where roads meet) and every chain as a line in lng/lat for the 2D drawing.
+// Roads for every renderer: chains of the graph by kind and state, the model items of the built ones (3D ribbons and the
+// aprons where roads meet), and the chains still under construction as lines in lng/lat for the 2D drawing. Built roads
+// are drawn in 3D only.
 
 // State of every edge of the graph. Edges short of stone are not workable: they show as waiting. The stock is only
 // watched while some edge owes stone.
@@ -60,16 +61,19 @@ export const roadItems: ReadonlySignal<ModelItem[]> = computed(() => {
   return lastItems;
 });
 
-// Every chain as a line: `kind`, `w` (real width, m) and `state` (built, active, waiting, cut).
+// Chains under construction (active, waiting, cut) as lines: `kind`, `w` (real width, m) and `state`. Built chains are
+// 3D only, so they are left out.
 export const roadLines: ReadonlySignal<FeatureCollection> = computed(() => {
   const f = frame.value;
   const g = roads.value;
   const list = chains.value;
   if (!f || !g || !list) return { type: "FeatureCollection", features: [] };
-  const features: Feature[] = list.map((ch) => ({
-    type: "Feature",
-    properties: { id: ch.id, kind: ch.kind, w: ROAD_KINDS[ch.kind].width, state: ch.state },
-    geometry: { type: "LineString", coordinates: ch.nodes.map((id) => f.toLngLat(g.nodes[id].x, g.nodes[id].y)) },
-  }));
+  const features: Feature[] = list
+    .filter((ch) => ch.state !== "built")
+    .map((ch) => ({
+      type: "Feature",
+      properties: { id: ch.id, kind: ch.kind, w: ROAD_KINDS[ch.kind].width, state: ch.state },
+      geometry: { type: "LineString", coordinates: ch.nodes.map((id) => f.toLngLat(g.nodes[id].x, g.nodes[id].y)) },
+    }));
   return { type: "FeatureCollection", features };
 });

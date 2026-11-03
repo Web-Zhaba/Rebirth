@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { BUILDINGS } from "./buildings";
 import { emptyGrowth } from "./growth";
 import { Handler, type Storage } from "./handler";
-import { CART_SPEED, computeLife, HOME_AT, LOAD, MAX_CARTS, MAX_WALKERS, TO_WORK, WORK_FROM, WORK_TO } from "./life";
+import { CAMP_CLEAR, CART_SPEED, computeLife, HOME_AT, LOAD, MAX_CARTS, MAX_WALKERS, TO_WORK, WORK_FROM, WORK_TO } from "./life";
 import { WALK_SPEED } from "./people";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
 import { START_MINUTE_OF_DAY, YEAR_MIN } from "./time";
 import type { Building, City, Household, Resident, RoadGraph, SimState, TerrainInfo } from "./types";
-import { emptyZones, qkey, regenerateCells } from "./zones";
+import { emptyZones, pointInPolygon, qkey, regenerateCells } from "./zones";
 import type { Trip } from "../map/life";
 
 const NOW = 1_800_000_000_000;
@@ -141,6 +141,46 @@ describe("walkers", () => {
     const bs = [building(1, "izba", 100), building(2, "izba", 200, 0, "building"), building(3, "smithy", 1000)];
     const s = town(bs, [{ home: 1, jobs: [3, null] }, { home: 2, jobs: [3] }, { home: null, jobs: [3] }]);
     expect(walks(computeLife(s).trips)).toHaveLength(2);
+  });
+});
+
+describe("rests", () => {
+  it("every resident has one: indoors in a finished house, else in the camp; at work in work hours", () => {
+    const bs = [building(1, "izba", 100), building(2, "izba", 200, 0, "building"), building(3, "smithy", 1000), building(4, "garden", 1500)];
+    const s = town(bs, [{ home: 1, jobs: [3, null, 4] }, { home: 2, jobs: [null] }, { home: null, jobs: [null, null] }], emptyRoads());
+    const l = computeLife(s);
+    expect(l.trips).toHaveLength(0); // no roads, no walks, yet everyone is there
+    expect(l.rests.map((r) => r.who).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+    const by = (id: number) => l.rests.find((r) => r.who === id)!;
+    expect(by(1).home).toBeNull(); // in the house, out of sight
+    expect(by(1).work).toEqual({ at: null, from: WORK_FROM, to: WORK_TO }); // the smithy is worked indoors
+    expect(by(2).work!.at).not.toBeNull(); // jobless with a house going up: a builder on its site
+    expect([by(1).sex, typeof by(1).age]).toEqual(["m", "number"]);
+    for (const id of [4, 5, 6]) {
+      const d = Math.hypot(...by(id).home!);
+      expect(d).toBeGreaterThanOrEqual(CAMP_CLEAR - 0.01); // the unfinished house and the tents: about the camp, clear of its middle
+      expect(d).toBeLessThan(CAMP_CLEAR + 5);
+    }
+  });
+  it("builders work on the construction sites in work hours, the jobless rest only while there is none", () => {
+    const site = building(2, "izba", 300, 0, "building");
+    const s = town([building(1, "izba", 100), site, building(3, "smithy", 1000)], [{ home: 1, jobs: [null, null, 3] }], emptyRoads());
+    s.residents[2].born = GM - 5 * YEAR_MIN; // a child: no builder
+    const by = (l: ReturnType<typeof computeLife>, id: number) => l.rests.find((r) => r.who === id)!;
+    const l = computeLife(s);
+    const at = by(l, 1).work!.at!;
+    expect(pointInPolygon(at[0], at[1], site.footprint)).toBe(true);
+    expect(by(l, 2).work).toBeUndefined();
+    expect(by(l, 3).work!.at).toBeNull(); // the smith stays at the forge
+    const done = computeLife({ ...s, buildings: { ...s.buildings, 2: { ...site, state: "active" } } });
+    expect(by(done, 1).work).toBeUndefined();
+  });
+  it("open-air workers stand on their plot, each at a spot of their own", () => {
+    const bs = [building(1, "izba", 100), building(4, "garden", 1500)];
+    const s = town(bs, [{ home: 1, jobs: [4, 4, 4] }], emptyRoads());
+    const spots = computeLife(s).rests.map((r) => r.work!.at!);
+    for (const [x, y] of spots) expect(pointInPolygon(x, y, s.buildings[4].footprint)).toBe(true);
+    expect(new Set(spots.map((p) => p.join())).size).toBe(3);
   });
 });
 

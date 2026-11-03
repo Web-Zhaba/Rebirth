@@ -1,5 +1,6 @@
 import { positionAt, type Trip } from "../map/life";
 import type { Building, ResidentQuery } from "../sim/types";
+import { L } from "../i18n";
 
 // Where a building stands: the centroid of its footprint, in local metres.
 export function buildingCentre(b: Building): [number, number] {
@@ -32,16 +33,16 @@ export interface FollowStatus {
 
 // What the follow card says: where the resident is (or where they are heading), from the sim's own facts.
 export function followStatus(info: ResidentQuery | null, walk: { trip: Trip } | null, working: boolean): FollowStatus {
-  if (!info) return { key: "gone", text: "Больше не в поселении" };
+  if (!info) return { key: "gone", text: L("Больше не в поселении", "No longer in the settlement") };
   if (walk) {
     const key = walk.trip.purpose === "work" ? "walk" : walk.trip.purpose === "tavern" ? "tavern" : "home";
-    const text = walk.trip.purpose === "work" ? "Идёт на работу" : walk.trip.purpose === "tavern" ? "Идёт на вечерний сбор" : "Идёт домой";
+    const text = walk.trip.purpose === "work" ? L("Идёт на работу", "Going to work") : walk.trip.purpose === "tavern" ? L("Идёт на вечерний сбор", "Going to the evening gathering") : L("Идёт домой", "Going home");
     return { key, text, note: info.role };
   }
-  if (working && info.idle) return { key: "site", text: "На стройке", note: info.role };
-  if (working && info.job !== null) return { key: "work", text: "На работе", note: info.role };
-  if (info.home !== null) return { key: "home", text: "Дома", note: info.role };
-  return { key: "camp", text: "В лагере", note: info.role };
+  if (working && info.idle) return { key: "site", text: L("На стройке", "At a building site"), note: info.role };
+  if (working && info.job !== null) return { key: "work", text: L("На работе", "At work"), note: info.role };
+  if (info.home !== null) return { key: "home", text: L("Дома", "At home"), note: info.role };
+  return { key: "camp", text: L("В лагере", "In the camp"), note: info.role };
 }
 
 // Where to point the camera when the resident is not walking: the workplace during work hours, else home.

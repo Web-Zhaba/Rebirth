@@ -3,6 +3,7 @@ import type { Engine } from "../../engine/engine";
 import type { CameraControl, CameraTarget } from "../../engine/camera/cameraControl";
 import type { Camera, CameraGoal, LngLat, Overlay, OverlayId, ScreenPoint, View, ViewEvents, ViewMarker, ViewPointer } from "../view";
 import { distanceToMpp, markerTransform, mppToDistance, type MarkerAnchor } from "./scale";
+import { labelSight } from "./labelSight";
 import { PointerClickTracker } from "./pointer";
 
 // Same pin as MapLibre's default marker, tinted.
@@ -27,15 +28,22 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
     return [e.clientX - r.left, e.clientY - r.top];
   };
 
-  // Markers: DOM over the canvas, repositioned every frame.
+  // Markers: DOM over the canvas, repositioned every frame. Being DOM, the ground cannot cover them: one behind a hill
+  // is hidden by its line of sight, as labels are. Game chrome, so screenshot mode hides the layer (layout.css).
   const layer = document.createElement("div");
+  layer.className = "engine-markers";
   layer.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1";
   container.append(layer);
-  type Marker = { at: LngLat; holder: HTMLElement; anchor: MarkerAnchor };
+  type Marker = { key: string; at: LngLat; holder: HTMLElement; anchor: MarkerAnchor };
   const markers = new Set<Marker>();
+  const hidden = labelSight(engine);
+  let nextKey = 0;
   const place = (m: Marker) => {
-    const p = engine.project(m.at[1], m.at[0], engine.groundAt(m.at[1], m.at[0]) ?? 0);
-    if (!p) m.holder.style.display = "none";
+    const ground = engine.groundAt(m.at[1], m.at[0]) ?? 0;
+    const p = engine.project(m.at[1], m.at[0], ground);
+    // Only markers on screen ask for a line of sight: a ray costs, and one off screen is clipped by the layer anyway.
+    const off = !p || p[0] < 0 || p[1] < 0 || p[0] > canvas.clientWidth || p[1] > canvas.clientHeight;
+    if (!p || (!off && hidden(m.key, m.at[1], m.at[0], ground))) m.holder.style.display = "none";
     else {
       m.holder.style.display = "";
       m.holder.style.transform = markerTransform(p[0], p[1], m.anchor);
@@ -174,7 +182,7 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
         holder.innerHTML = pinSvg(opts.color);
       }
       layer.append(holder);
-      const m: Marker = { at, holder, anchor };
+      const m: Marker = { key: `m${nextKey++}`, at, holder, anchor };
       markers.add(m);
       place(m);
       return {

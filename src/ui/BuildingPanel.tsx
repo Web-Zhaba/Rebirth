@@ -26,18 +26,19 @@ import { duplicateTemplate } from "./actionModel";
 import { followResident } from "./follow";
 import { NeedsBars } from "./NeedsBars";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { decimal, L } from "../i18n";
 
 const REFRESH_MS = 4000;
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;
-const tons = (kg: number) => (Math.round(kg / 100) / 10).toString().replace(".", ",");
+const tons = (kg: number) => decimal((Math.round(kg / 100) / 10).toString());
 
-const MISSING: Record<string, string> = { "брёвна": "Нет брёвен", "брёвна (на уголь)": "Нет брёвен (на уголь)", "доски": "Нет досок" };
+const MISSING: Record<string, string> = { [L("брёвна", "logs")]: L("Нет брёвен", "No logs"), [L("брёвна (на уголь)", "logs (for charcoal)")]: L("Нет брёвен (на уголь)", "No logs (for charcoal)"), [L("доски", "planks")]: L("Нет досок", "No planks") };
 
 const MATERIALS: [keyof Materials, string, string][] = [
-  ["logs", "брёвна", "м³"],
-  ["planks", "доски", "м³"],
-  ["stone", "камень", "т"],
+  ["logs", L("брёвна", "logs"), L("м³", "m³")],
+  ["planks", L("доски", "planks"), L("м³", "m³")],
+  ["stone", L("камень", "stone"), L("т", "t")],
 ];
 
 // What a site under construction takes from the stock, and the hand-made hours its shortfall adds.
@@ -50,14 +51,14 @@ function SiteMaterials({ m, paid, hand, st }: { m: Materials | undefined; paid: 
   return (
     <div class="prod">
       <div>
-        {paid ? "Взято" : "Потребуется"}: {need}
+        {paid ? L("Взято", "Taken") : L("Потребуется", "Needed")}: {need}
       </div>
       {extra > 0 ? (
         <div class="prod-warn">
-          {paid ? "Не хватило на складе" : "Не хватает на складе"}: ещё {num(extra)} ч ручной работы
+          {paid ? L("Не хватило на складе", "The store fell short") : L("Не хватает на складе", "The store is short")}: {L(`ещё ${num(extra)} ч ручной работы`, `${num(extra)} more h of hand work`)}
         </div>
       ) : (
-        <div class="people-note">{paid ? "Хватило запасов склада" : "Запасов склада хватает"}</div>
+        <div class="people-note">{paid ? L("Хватило запасов склада", "The store had enough") : L("Запасов склада хватает", "The store has enough")}</div>
       )}
     </div>
   );
@@ -70,20 +71,20 @@ function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined 
   return (
     <div class="prod">
       <div>
-        Восстановленная постройка{site?.cls ? ` · ${kindName(site.cls)}` : ""}
+        {L("Восстановленная постройка", "Restored building")}{site?.cls ? ` · ${kindName(site.cls)}` : ""}
       </div>
-      <div>Назначение: {b.restoreMode === "working" ? `в деле (как «${BUILDINGS[b.template]?.name.toLowerCase()}»)` : "памятник"}</div>
+      <div>{L("Назначение:", "Purpose:")} {b.restoreMode === "working" ? L(`в деле (как «${BUILDINGS[b.template]?.name.toLowerCase()}»)`, `in use (as a ${BUILDINGS[b.template]?.name.toLowerCase()})`) : L("памятник", "monument")}</div>
       {domain && (
         <div class="people-note">
-          {w > 0 ? `Вклад в науку: +${num(w * SPEED.restored * 100)} % к скорости: ${domainName(domain)}` : `Область: ${domainName(domain)}; вклад появится, когда постройка будет готова`}
+          {w > 0 ? L(`Вклад в науку: +${num(w * SPEED.restored * 100)} % к скорости: ${domainName(domain)}`, `Research contribution: +${num(w * SPEED.restored * 100)}% speed: ${domainName(domain)}`) : L(`Область: ${domainName(domain)}; вклад появится, когда постройка будет готова`, `Field: ${domainName(domain)}; the contribution starts once the building is finished`)}
         </div>
       )}
-      {b.restoreMode === "monument" && b.state === "active" && <div class="people-note">Дома в 200 м довольнее, земля там дороже.</div>}
+      {b.restoreMode === "monument" && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
     </div>
   );
 }
 
-const moodWord = (m: number) => (m >= 75 ? "отличное" : m >= 55 ? "хорошее" : m >= 35 ? "неважное" : "плохое");
+const moodWord = (m: number) => (m >= 75 ? L("отличное", "excellent") : m >= 55 ? L("хорошее", "good") : m >= 35 ? L("неважное", "so-so") : L("плохое", "poor"));
 
 // Residents or workers of the selected building, fetched from the worker while the panel is open.
 // `bump` changes when something that moves the workers does (staff limit, priority), so the list is fetched again at once.
@@ -110,29 +111,29 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
   const site = p.site;
   return (
     <div class="prod">
-      {site && template === "woodcutter" && <div>Лес вокруг: {pct(site.forest)}</div>}
-      {site && template === "fisher" && <div>Вода рядом: {pct(site.water)}</div>}
-      {site && template === "forager" && <div>Лес вокруг: {pct(site.forest)}</div>}
-      {p.orchard && <div>{p.orchard.ripeDays > 0 ? `Деревья растут: ещё ${p.orchard.ripeDays} дн.` : `Урожай этого года: ${pct(p.orchard.quality)}`}</div>}
-      {p.storage !== undefined && <div>Склад: +{tons(p.storage)} т еды</div>}
+      {site && template === "woodcutter" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
+      {site && template === "fisher" && <div>{L("Вода рядом:", "Water nearby:")} {pct(site.water)}</div>}
+      {site && template === "forager" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
+      {p.orchard && <div>{p.orchard.ripeDays > 0 ? L(`Деревья растут: ещё ${p.orchard.ripeDays} дн.`, `Trees are growing: ${p.orchard.ripeDays} more d`) : L(`Урожай этого года: ${pct(p.orchard.quality)}`, `This year’s crop: ${pct(p.orchard.quality)}`)}</div>}
+      {p.storage !== undefined && <div>{L("Склад:", "Storage:")} +{tons(p.storage)} {L("т еды", "t of food")}</div>}
       {p.fields && (
         <div>
           {p.fields.count > 0 ? (
             <>
               <div>
-                Полей: {p.fields.count}, {num(p.fields.ha)} га
+                {L("Полей:", "Fields:")} {p.fields.count}, {num(p.fields.ha)} {L("га", "ha")}
               </div>
-              <div>Засеяно: {pct(p.fields.sown)}</div>
+              <div>{L("Засеяно:", "Sown:")} {pct(p.fields.sown)}</div>
               <div>
-                Сжато: {massText(p.fields.reaped)} из {massText(p.fields.expected)}
+                {L("Сжато:", "Reaped:")} {massText(p.fields.reaped)} {L("из", "of")} {massText(p.fields.expected)}
               </div>
             </>
           ) : (
-            <div class="people-note">Нет полей в радиусе 400 м</div>
+            <div class="people-note">{L("Нет полей в радиусе 400 м", "No fields within 400 m")}</div>
           )}
         </div>
       )}
-      {p.missing && <div class="prod-warn">{MISSING[p.missing] ?? `Нет: ${p.missing}`}</div>}
+      {p.missing && <div class="prod-warn">{MISSING[p.missing] ?? `${L("Нет", "Missing")}: ${p.missing}`}</div>}
     </div>
   );
 }
@@ -144,33 +145,33 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
   const set = (next: number) => act({ type: "setStaff", id, staff: next });
   return (
     <div class="staff">
-      <Line icon={JOB_ICON[group]} label={`Группа: ${JOB_NAMES[group]}`}>
-        приоритет {PRIORITY_LONG[priority].toLowerCase()}
+      <Line icon={JOB_ICON[group]} label={`${L("Группа", "Group")}: ${JOB_NAMES[group]}`}>
+        {L("приоритет", "priority")} {PRIORITY_LONG[priority].toLowerCase()}
       </Line>
       <div class="insp-line">
-        <span class="people-title">Работники</span>
-        <span class="staff-ctl" role="group" aria-label="Лимит найма">
-          <IconButton icon="minus" size={14} label="Меньше работников" disabled={limit <= 0} onClick={() => set(limit - 1)} />
+        <span class="people-title">{L("Работники", "Workers")}</span>
+        <span class="staff-ctl" role="group" aria-label={L("Лимит найма", "Hiring limit")}>
+          <IconButton icon="minus" size={14} label={L("Меньше работников", "Fewer workers")} disabled={limit <= 0} onClick={() => set(limit - 1)} />
           <b aria-live="polite">
-            {workers} из {limit}
+            {workers} {L("из", "of")} {limit}
           </b>
-          <IconButton icon="plus" size={14} label="Больше работников" disabled={limit >= jobs} onClick={() => set(limit + 1)} />
+          <IconButton icon="plus" size={14} label={L("Больше работников", "More workers")} disabled={limit >= jobs} onClick={() => set(limit + 1)} />
         </span>
       </div>
       {limit < jobs && (
         <div class="people-note">
-          Мест {jobs}, найм ограничен до {limit}
+          {L(`Мест ${jobs}, найм ограничен до ${limit}`, `${jobs} jobs, hiring limited to ${limit}`)}
         </div>
       )}
-      {priority === 0 && <div class="prod-warn">Найм закрыт: приоритет группы «Нет»</div>}
+      {priority === 0 && <div class="prod-warn">{L("Найм закрыт: приоритет группы «Нет»", "Hiring closed: group priority is “None”")}</div>}
     </div>
   );
 }
 
 const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
 
-const TRADE_LABEL: Record<TradeGood, string> = { food: "Еда", logs: "Брёвна", planks: "Доски", stone: "Камень", wares: "Товары" };
-const TRADE_OFF = { id: "none", label: "—", title: "Не меняем" } as const;
+const TRADE_LABEL: Record<TradeGood, string> = { food: L("Еда", "Food"), logs: L("Брёвна", "Logs"), planks: L("Доски", "Planks"), stone: L("Камень", "Stone"), wares: L("Товары", "Goods") };
+const TRADE_OFF = { id: "none", label: "—", title: L("Не меняем", "No trade") } as const;
 
 // The town's trade order, shown in every market: one good given, one got, swapped each day by the market workers.
 function MarketTrade({ workers }: { workers: number }) {
@@ -183,9 +184,9 @@ function MarketTrade({ workers }: { workers: number }) {
   const surplus = order ? st[order.give] - TRADE.keep[order.give] : 0;
   return (
     <div class="prod">
-      <div class="people-title">Обмен</div>
+      <div class="people-title">{L("Обмен", "Trade")}</div>
       <Segmented
-        label="Отдаём"
+        label={L("Отдаём", "We give")}
         value={order?.give ?? TRADE_OFF.id}
         options={[TRADE_OFF, ...options(null)]}
         onChange={(id) => {
@@ -196,18 +197,18 @@ function MarketTrade({ workers }: { workers: number }) {
       />
       {order && (
         <>
-          <Segmented label="Получаем" value={order.get} options={options(order.give)} onChange={(id) => set({ give: order.give, get: id as TradeGood })} />
+          <Segmented label={L("Получаем", "We get")} value={order.get} options={options(order.give)} onChange={(id) => set({ give: order.give, get: id as TradeGood })} />
           <div>
-            1 {unit(order.give)} = {num(tradeRate(order))} {unit(order.get)} · до {num(tradeCapacity(order, workers))} {unit(order.give)} в день
+            1 {unit(order.give)} = {num(tradeRate(order))} {unit(order.get)} · {L("до", "up to")} {num(tradeCapacity(order, workers))} {unit(order.give)} {L("в день", "a day")}
           </div>
           <div class="people-note">
-            Остаётся на складе: {num(TRADE.keep[order.give])} {unit(order.give)}. Обмен общий для всех рынков
+            {L("Остаётся на складе:", "Kept in store:")} {num(TRADE.keep[order.give])} {unit(order.give)}. {L("Обмен общий для всех рынков", "The trade is shared by all markets")}
           </div>
-          {workers === 0 && <div class="prod-warn">Некому торговать: нужны работники рынка</div>}
-          {workers > 0 && surplus <= 0 && <div class="prod-warn">Излишков нет: всё, что есть, остаётся на складе</div>}
+          {workers === 0 && <div class="prod-warn">{L("Некому торговать: нужны работники рынка", "No one to trade: the market needs workers")}</div>}
+          {workers > 0 && surplus <= 0 && <div class="prod-warn">{L("Излишков нет: всё, что есть, остаётся на складе", "No surplus: everything stays in store")}</div>}
           {last && (
             <div>
-              Вчера: отдали {num(last.gave)} {unit(last.give)}, получили {num(last.got)} {unit(last.get)}
+              {L("Вчера: отдали", "Yesterday: gave")} {num(last.gave)} {unit(last.give)}, {L("получили", "got")} {num(last.got)} {unit(last.get)}
             </div>
           )}
         </>
@@ -241,11 +242,11 @@ export function BuildingPanel() {
   const jobs = info?.kind === "workplace" ? info.capacity : t.jobs;
   const capacity =
     t.residents > 0
-      ? `Вмещает ${houseCapacity(b)} чел.`
+      ? L(`Вмещает ${houseCapacity(b)} чел.`, `Houses ${houseCapacity(b)} people`)
       : b.template === "gumno" && info?.kind !== "workplace"
-        ? "Места зависят от полей"
+        ? L("Места зависят от полей", "Jobs depend on the fields")
         : jobs > 0
-          ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест")}`
+          ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}`
           : null;
   const occupied = info?.kind === "house" ? info.households.some((h) => h.people.length > 0) : info?.kind === "workplace" && info.workers.length > 0;
   const duplicate = duplicateTemplate(b.template, b.siteId, PLACE_TOOLS);
@@ -268,35 +269,35 @@ export function BuildingPanel() {
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
       <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
       <div class="insp-sub">
-        {site ? `${Math.round(site.area)} м², высота ${b.height} м` : `${t.along} × ${t.deep} м, высота ${b.height} м`}
-        {b.zone === "res" && b.state === "active" ? ` · уровень ${b.level}` : ""}
+        {site ? L(`${Math.round(site.area)} м², высота ${b.height} м`, `${Math.round(site.area)} m², height ${b.height} m`) : L(`${t.along} × ${t.deep} м, высота ${b.height} м`, `${t.along} × ${t.deep} m, height ${b.height} m`)}
+        {b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level}` : ""}
       </div>
       {b.siteId && <Restored b={b} site={site} />}
-      {b.onRuins && <div class="people-note">{b.state === "active" ? "Стоит на старом фундаменте" : "Строится на старом фундаменте"}</div>}
+      {b.onRuins && <div class="people-note">{b.state === "active" ? L("Стоит на старом фундаменте", "Stands on an old foundation") : L("Строится на старом фундаменте", "Being built on an old foundation")}</div>}
       {left > 0 && (
         <div class="insp-block">
-          <ProgressBar big value={share} label={upgrading ? "Перестройка" : "Строительство"} />
-          <Line icon="hourglass" label={upgrading ? "Перестроено" : "Готово"}>
-            {Math.floor(share * 100)} % · осталось {num(left)} чел.-ч
+          <ProgressBar big value={share} label={upgrading ? L("Перестройка", "Rebuild") : L("Строительство", "Construction")} />
+          <Line icon="hourglass" label={upgrading ? L("Перестроено", "Rebuilt") : L("Готово", "Done")}>
+            {Math.floor(share * 100)}{L(" % · осталось", "% · left")} {num(left)} {L("чел.-ч", "person-h")}
           </Line>
-          <Line label="Ждать">{siteEta(left, b.id) || "—"}</Line>
+          <Line label={L("Ждать", "Wait")}>{siteEta(left, b.id) || "—"}</Line>
           {queued && <div class="people-note">{queued}</div>}
           <SiteLevers siteKey={b.id} />
         </div>
       )}
       {weatherBuild && (
-        <Line label="Стройка сегодня" tone={weatherBuild.pct <= 50 ? "bad" : "warn"}>
-          {weatherBuild.pct} %{weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
+        <Line label={L("Стройка сегодня", "Building today")} tone={weatherBuild.pct <= 50 ? "bad" : "warn"}>
+          {weatherBuild.pct}{L(" %", "%")}{weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
         </Line>
       )}
       {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} st={stock.value} />}
       {upgradeNote && (
         <div class="prod">
           {upgradeNote.length > 0 ? (
-            <div>Расширение до второго уровня: нет — {upgradeNote.join("; ")}</div>
+            <div>{L("Расширение до второго уровня: нет —", "Expansion to level two: no —")} {upgradeNote.join("; ")}</div>
           ) : (
             <div>
-              Расширение до второго уровня: условия выполнены, {b.streak} из {SERVICE.upgradeDays} дней подряд
+              {L(`Расширение до второго уровня: условия выполнены, ${b.streak} из ${SERVICE.upgradeDays} дней подряд`, `Expansion to level two: conditions met, ${b.streak} of ${SERVICE.upgradeDays} days in a row`)}
             </div>
           )}
         </div>
@@ -304,79 +305,79 @@ export function BuildingPanel() {
       {dig && (
         <div class="prod">
           <div>
-            Радиус вскрытия: {Math.round(dig.r)} м из {DIG.maxRadius} м
+            {L(`Радиус вскрытия: ${Math.round(dig.r)} м из ${DIG.maxRadius} м`, `Opened radius: ${Math.round(dig.r)} m of ${DIG.maxRadius} m`)}
           </div>
-          <div>Вскрыто: {Math.round(revealedArea(dig.r))} м²</div>
+          <div>{L("Вскрыто:", "Opened:")} {Math.round(revealedArea(dig.r))} {L("м²", "m²")}</div>
           <div>
-            Находки: {dig.foundations} {plural(dig.foundations, "фундамент", "фундамента", "фундаментов")}, {dig.pois}{" "}
-            {plural(dig.pois, "место", "места", "мест")}, {dig.streets} {plural(dig.streets, "улица", "улицы", "улиц")}
+            {L("Находки:", "Finds:")} {dig.foundations} {plural(dig.foundations, "фундамент", "фундамента", "фундаментов", "foundation")}, {dig.pois}{" "}
+            {plural(dig.pois, "место", "места", "мест", "place")}, {dig.streets} {plural(dig.streets, "улица", "улицы", "улиц", "street")}
           </div>
         </div>
       )}
       {info?.kind === "house" && (
         <>
-          <Line icon="person" label="Жители">
-            {residents} из {houseCapacity(b)}
+          <Line icon="person" label={L("Жители", "Residents")}>
+            {residents} {L("из", "of")} {houseCapacity(b)}
           </Line>
-          <Line icon="value" label="Стоимость земли">
+          <Line icon="value" label={L("Стоимость земли", "Land value")}>
             {info.landValue}
           </Line>
           <div class={info.services.length === 0 ? "people-note" : ""}>
-            Рядом: {info.services.length > 0 ? info.services.map((sid) => SERVICES[sid].name.toLowerCase()).join(", ") : "ничего из служб"}
+            {L("Рядом:", "Nearby:")} {info.services.length > 0 ? info.services.map((sid) => SERVICES[sid].name.toLowerCase()).join(", ") : L("ничего из служб", "no services")}
           </div>
-          {b.template === "izba" && b.level < 2 && !b.upgrade && b.streak > 0 && <div class="people-note">Хороших дней подряд: {b.streak} из 20</div>}
+          {b.template === "izba" && b.level < 2 && !b.upgrade && b.streak > 0 && <div class="people-note">{L("Хороших дней подряд:", "Good days in a row:")} {b.streak} {L("из", "of")} 20</div>}
         </>
       )}
       {info?.kind === "workplace" && info.service && (
         <>
           <div>
-            Охват {info.service.reach} м: {info.service.covered} из {info.service.houses} домов
+            {L(`Охват ${info.service.reach} м: ${info.service.covered} из ${info.service.houses} домов`, `Reach ${info.service.reach} m: ${info.service.covered} of ${info.service.houses} houses`)}
           </div>
           {info.service.id === "school" && (
             <div class="people-note">
-              Учеников: {info.service.pupils} из {info.service.seats} мест
+              {L(`Учеников: ${info.service.pupils} из ${info.service.seats} мест`, `Pupils: ${info.service.pupils} of ${info.service.seats} places`)}
             </div>
           )}
-          {!info.service.working && <div class="prod-warn">Не работает: нет работников</div>}
+          {!info.service.working && <div class="prod-warn">{L("Не работает: нет работников", "Not working: no workers")}</div>}
         </>
       )}
       {capacity && <div>{capacity}</div>}
       {weatherWork && (
-        <Line label="Работа сегодня" tone={weatherWork.pct <= 50 ? "bad" : "warn"}>
+        <Line label={L("Работа сегодня", "Work today")} tone={weatherWork.pct <= 50 ? "bad" : "warn"}>
           {weatherWork.pct} %{weatherWork.reason ? ` — ${weatherWork.reason}` : ""}
         </Line>
       )}
       {output && (
-        <Line icon={output.icon} label={`Делает: ${output.name}`}>
-          {b.template === "gumno" ? "вчера собрано" : "вчера"} {num(output.made)} {output.unit}
+        <Line icon={output.icon} label={`${L("Делает", "Makes")}: ${output.name}`}>
+          {b.template === "gumno" ? L("вчера собрано", "gathered yesterday") : L("вчера", "yesterday")} {num(output.made)} {output.unit}
         </Line>
       )}
       {info?.kind === "workplace" && info.production && <Production template={b.template} p={info.production} />}
       {b.template === "market" && b.state === "active" && info?.kind === "workplace" && <MarketTrade workers={info.workers.length} />}
       {info?.kind === "house" &&
         (info.households.length === 0 ? (
-          <div class="people-note">Пока пустует</div>
+          <div class="people-note">{L("Пока пустует", "Empty for now")}</div>
         ) : (
           info.households.map((h) => (
             <div class="people" key={h.id}>
-              <div class="people-title">Семья {familyGenitive(h.last)}</div>
+              <div class="people-title">{L(`Семья ${familyGenitive(h.last)}`, `The ${h.last} family`)}</div>
               <div class={h.mood < 35 ? "prod-warn" : "people-note"}>
-                Настроение: {moodWord(h.mood)} ({h.mood})
+                {L("Настроение:", "Mood:")} {moodWord(h.mood)} ({h.mood})
               </div>
               {h.people.map((p) => (
                 <div class="person" key={p.id}>
                   <div class="person-line">
-                    <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет")}
-                    <button type="button" class="link person-follow" title={`Следить за ${p.name}`} onClick={() => followResident(p.id, p.name)}>
-                      <Icon name="locate" size={13} /> следить
+                    <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет", "year")}
+                    <button type="button" class="link person-follow" title={`${L("Следить за", "Follow")} ${p.name}`} onClick={() => followResident(p.id, p.name)}>
+                      <Icon name="locate" size={13} /> {L("следить", "follow")}
                     </button>
                   </div>
                   <div class="person-role">
                     {p.role}
-                    {p.literate ? " · грамотный" : p.learn > 0 && ` · грамотность ${p.learn} %`}
+                    {p.literate ? L(" · грамотный", " · literate") : p.learn > 0 && L(` · грамотность ${p.learn} %`, ` · literacy ${p.learn}%`)}
                   </div>
                   {p.needs && <NeedsBars needs={p.needs} compact />}
-                  {p.problems && p.problems.length > 0 && <div class="prod-warn">Тяжело: {p.problems.join(", ")}</div>}
+                  {p.problems && p.problems.length > 0 && <div class="prod-warn">{L("Тяжело:", "Struggling:")} {p.problems.join(", ")}</div>}
                 </div>
               ))}
             </div>
@@ -384,22 +385,22 @@ export function BuildingPanel() {
         ))}
       {info?.kind === "workplace" && info.capacity > 0 && (
         <div class="people">
-          {group ? <StaffControl id={b.id} group={group} jobs={info.capacity} workers={info.workers.length} staff={b.staff} /> : <div class="people-title">Работники {info.workers.length} из {info.capacity}</div>}
+          {group ? <StaffControl id={b.id} group={group} jobs={info.capacity} workers={info.workers.length} staff={b.staff} /> : <div class="people-title">{L("Работники", "Workers")} {info.workers.length} {L("из", "of")} {info.capacity}</div>}
           {info.workers.map((w) => (
             <div class="person" key={w.id}>
               <div class="person-line">
-                <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет")}
-                <button type="button" class="link person-follow" title={`Следить за ${w.name}`} onClick={() => followResident(w.id, w.name)}>
-                  <Icon name="locate" size={13} /> следить
+                <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет", "year")}
+                <button type="button" class="link person-follow" title={`${L("Следить за", "Follow")} ${w.name}`} onClick={() => followResident(w.id, w.name)}>
+                  <Icon name="locate" size={13} /> {L("следить", "follow")}
                 </button>
               </div>
               <div class="person-role">
-                {w.idle && "сейчас на стройке (нет работы) · "}
-                {w.commute === null ? "дорога неизвестна" : `дорога ~${Math.round(w.commute)} мин`}
-                {typeof w.work === "number" && w.work < 0.95 ? ` · силы ${Math.round(w.work * 100)} %` : ""}
+                {w.idle && L("сейчас на стройке (нет работы) · ", "at a building site now (no job) · ")}
+                {w.commute === null ? L("дорога неизвестна", "commute unknown") : L(`дорога ~${Math.round(w.commute)} мин`, `commute ~${Math.round(w.commute)} min`)}
+                {typeof w.work === "number" && w.work < 0.95 ? L(` · силы ${Math.round(w.work * 100)} %`, ` · fitness ${Math.round(w.work * 100)}%`) : ""}
               </div>
               {w.needs && <NeedsBars needs={w.needs} compact />}
-              {w.problems && w.problems.length > 0 && <div class="prod-warn">Тяжело: {w.problems.join(", ")}</div>}
+              {w.problems && w.problems.length > 0 && <div class="prod-warn">{L("Тяжело:", "Struggling:")} {w.problems.join(", ")}</div>}
             </div>
           ))}
         </div>
@@ -407,17 +408,17 @@ export function BuildingPanel() {
       <div class="insp-actions">
         {duplicate && (
           <Button icon="plus" onClick={onDuplicate}>
-            Построить ещё
+            {L("Построить ещё", "Build another")}
           </Button>
         )}
-        <Button variant="danger" icon="trash" aria-label="Снести" onClick={() => setConfirming(true)}>
-          Снести
+        <Button variant="danger" icon="trash" aria-label={L("Снести", "Demolish")} onClick={() => setConfirming(true)}>
+          {L("Снести", "Demolish")}
         </Button>
       </div>
       {confirming && (
-        <Confirm title={`Снести: ${t.name}?`} okLabel="Снести" onOk={onDemolish} onCancel={() => setConfirming(false)}>
-          {b.siteId ? "Постройка будет утрачена навсегда: восстановить её снова нельзя. Полученные идеи останутся." : occupied ? (info?.kind === "house" ? "Здесь живут люди, они останутся без дома." : "Здесь работают люди, они останутся без места.") : "Здание будет снесено."}
-          {b.state !== "planned" && b.paid ? " Потраченные материалы не вернутся." : ""}
+        <Confirm title={`${L("Снести", "Demolish")}: ${t.name}?`} okLabel={L("Снести", "Demolish")} onOk={onDemolish} onCancel={() => setConfirming(false)}>
+          {b.siteId ? L("Постройка будет утрачена навсегда: восстановить её снова нельзя. Полученные идеи останутся.", "The building will be lost forever and cannot be restored again. Ideas already gained stay.") : occupied ? (info?.kind === "house" ? L("Здесь живут люди, они останутся без дома.", "People live here; they will be left homeless.") : L("Здесь работают люди, они останутся без места.", "People work here; they will lose their jobs.")) : L("Здание будет снесено.", "The building will be demolished.")}
+          {b.state !== "planned" && b.paid ? L(" Потраченные материалы не вернутся.", " Materials spent are not returned.") : ""}
         </Confirm>
       )}
     </aside>

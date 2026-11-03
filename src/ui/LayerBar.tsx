@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { IconButton } from "./kit";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { L } from "../i18n";
 
 const LAYER_ICON: Record<Overlay, IconName> = {
   none: "layerNone",
@@ -30,38 +31,38 @@ function Legend({ id }: { id: Overlay }) {
   if (id === "traffic") {
     const ramp = `linear-gradient(90deg, ${TRAFFIC_STOPS.map((s) => s.color).join(", ")})`;
     return (
-      <div class="legend" title="Жителей в день на участке дороги">
-        <span class="legend-what">Дороги:</span>
-        <span>мало</span>
+      <div class="legend" title={L("Жителей в день на участке дороги", "Residents per day on a road section")}>
+        <span class="legend-what">{L("Дороги:", "Roads:")}</span>
+        <span>{L("мало", "few")}</span>
         <span class="legend-ramp" style={{ background: ramp }} />
-        <span>много</span>
+        <span>{L("много", "many")}</span>
       </div>
     );
   }
   if (id === "value" || id === "mood") {
     return (
       <div class="legend">
-        <span class="legend-what">Дома:</span>
-        <span>{id === "value" ? "дешевле" : "хуже"}</span>
+        <span class="legend-what">{L("Дома:", "Houses:")}</span>
+        <span>{id === "value" ? L("дешевле", "cheaper") : L("хуже", "worse")}</span>
         <span class="legend-ramp" style={{ background: `linear-gradient(90deg, ${bad}, ${mid}, ${good})` }} />
-        <span>{id === "value" ? "дороже" : "лучше"}</span>
+        <span>{id === "value" ? L("дороже", "pricier") : L("лучше", "better")}</span>
         <span class="legend-key">
           <i class="legend-sw" style={{ background: neutral }} />
-          нет данных
+          {L("нет данных", "no data")}
         </span>
       </div>
     );
   }
   return (
     <div class="legend">
-      <span class="legend-what">Дома:</span>
+      <span class="legend-what">{L("Дома:", "Houses:")}</span>
       <span class="legend-key">
         <i class="legend-sw" style={{ background: good }} />
-        охвачены
+        {L("охвачены", "covered")}
       </span>
       <span class="legend-key">
         <i class="legend-sw" style={{ background: bad }} />
-        не охвачены
+        {L("не охвачены", "not covered")}
       </span>
     </div>
   );
@@ -95,23 +96,23 @@ export function LayerBar() {
     <div class="layerbar">
       <button class="layer-head" type="button" aria-expanded={!collapsed} aria-controls={SEMANTIC_IDS.layerControls} onClick={toggle}>
         <Icon name="layers" size={16} />
-        <span>Слои</span>
-        <b class="layer-name">{zonesShown.value ? "зоны" : active?.label}</b>
+        <span>{L("Слои", "Layers")}</span>
+        <b class="layer-name">{zonesShown.value ? L("зоны", "zones") : active?.label}</b>
         <Icon name={collapsed ? "caretDown" : "caretUp"} size={14} />
       </button>
       {!collapsed && (
         <>
-          <div class="layer-group" id={SEMANTIC_IDS.layerControls} role="toolbar" aria-label="Слои карты" aria-orientation="horizontal">
+          <div class="layer-group" id={SEMANTIC_IDS.layerControls} role="toolbar" aria-label={L("Слои карты", "Map layers")} aria-orientation="horizontal">
             {/* Native title tooltips: a CSS tooltip here overflows the scrolling left column and makes it jump. */}
             {OVERLAYS.map((o) => (
               <IconButton key={o.id} icon={LAYER_ICON[o.id]} label={o.label} aria-pressed={cur === o.id} onClick={() => setManualOverlay(o.id)} />
             ))}
             <span class="layer-sep" aria-hidden="true" />
-            <IconButton icon="layers" label="Зоны" aria-pressed={zonesShown.value} onClick={() => setManualZonesShown(!zonesShown.value)} />
-            <IconButton icon="placeNames" label="Старые названия" aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
-            <IconButton icon="dig" label="Старый город" aria-pressed={ruinsShown.value} onClick={toggleRuins} />
-            <IconButton icon="weatherRain" label="Погода на карте" aria-pressed={weatherMapOn.value} onClick={toggleWeatherMap} />
-            <IconButton icon="clouds" label="Облака" aria-pressed={cloudsOn.value} onClick={toggleClouds} />
+            <IconButton icon="layers" label={L("Зоны", "Zones")} aria-pressed={zonesShown.value} onClick={() => setManualZonesShown(!zonesShown.value)} />
+            <IconButton icon="placeNames" label={L("Старые названия", "Old names")} aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
+            <IconButton icon="dig" label={L("Старый город", "Old town")} aria-pressed={ruinsShown.value} onClick={toggleRuins} />
+            <IconButton icon="weatherRain" label={L("Погода на карте", "Weather on the map")} aria-pressed={weatherMapOn.value} onClick={toggleWeatherMap} />
+            <IconButton icon="clouds" label={L("Облака", "Clouds")} aria-pressed={cloudsOn.value} onClick={toggleClouds} />
           </div>
           <Legend id={cur} />
         </>

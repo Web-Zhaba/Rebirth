@@ -1,4 +1,5 @@
 import type { Building, Clearing, Stock, ZoneType } from "./types";
+import { L } from "../i18n";
 
 export interface Materials {
   logs: number; // m3
@@ -28,11 +29,11 @@ export const JOB_GROUPS = ["food", "materials", "crafts", "trade", "services"] a
 export type JobGroup = (typeof JOB_GROUPS)[number];
 export type JobKey = JobGroup | "build";
 export const JOB_KEYS: readonly JobKey[] = [...JOB_GROUPS, "build"];
-export const JOB_NAMES: Record<JobKey, string> = { food: "Еда", materials: "Материалы", crafts: "Ремёсла", trade: "Торговля", services: "Услуги", build: "Стройка" };
+export const JOB_NAMES: Record<JobKey, string> = { food: L("Еда", "Food"), materials: L("Материалы", "Materials"), crafts: L("Ремёсла", "Crafts"), trade: L("Торговля", "Trade"), services: L("Услуги", "Services"), build: L("Стройка", "Building") };
 
 // 0 none, 1 low, 2 normal (default), 3 high.
 export type Priority = 0 | 1 | 2 | 3;
-export const PRIORITY_NAMES: readonly string[] = ["Нет", "Низкий", "Обычный", "Высокий"];
+export const PRIORITY_NAMES: readonly string[] = [L("Нет", "None"), L("Низкий", "Low"), L("Обычный", "Normal"), L("Высокий", "High")];
 export const isPriority = (v: unknown): v is Priority => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 3;
 export const isJobKey = (v: unknown): v is JobKey => typeof v === "string" && (JOB_KEYS as readonly string[]).includes(v);
 
@@ -69,37 +70,37 @@ const T = (
 // izba should take about one game day of the founding party's work. Materials are m3 / m3 / t
 // (logs, planks, stone); the labor of placed buildings is not in the design table, chosen here.
 export const BUILDINGS: Record<string, BuildingTemplate> = {
-  izba: T("izba", "Дом", "res", 2, 3, 6, 7, 5, 26, 5, [15, 1.5, 1], null),
-  izba5: T("izba5", "Большой дом", "res", 2, 4, 7, 9, 6, 40, 7, [22, 2, 1.5], null),
-  smithy: T("smithy", "Кузница", "craft", 2, 2, 6, 5, 4, 90, 3, [10, 1, 5], "crafts"),
-  carpentry: T("carpentry", "Столярная мастерская", "craft", 2, 3, 8, 6, 5, 110, 4, [22, 3, 2], "crafts"),
-  pottery: T("pottery", "Гончарня", "craft", 2, 2, 6, 5, 4, 75, 3, [10, 1, 4], "crafts"),
-  shop: T("shop", "Магазин", "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1], "trade"),
-  tavern: T("tavern", "Таверна", "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8], "trade"),
-  gumno: T("gumno", "Ферма", "placed", 1, 2, 8, 10, 6, 50, 0, [16, 2, 2], "food"),
-  woodcutter: T("woodcutter", "Лесозаготовка", "placed", 1, 1, 4, 4, 3, 24, 2, [6, 0.5, 0], "materials"),
-  sawpit: T("sawpit", "Лесопилка", "placed", 1, 1, 6, 4, 3, 30, 2, [5, 1, 0], "materials"),
-  quarry: T("quarry", "Карьер", "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0], "materials"),
-  fisher: T("fisher", "Рыболовный причал", "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0], "food"),
-  barn: T("barn", "Склад", "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2], "services"),
+  izba: T("izba", L("Дом", "House"), "res", 2, 3, 6, 7, 5, 26, 5, [15, 1.5, 1], null),
+  izba5: T("izba5", L("Большой дом", "Large house"), "res", 2, 4, 7, 9, 6, 40, 7, [22, 2, 1.5], null),
+  smithy: T("smithy", L("Кузница", "Smithy"), "craft", 2, 2, 6, 5, 4, 90, 3, [10, 1, 5], "crafts"),
+  carpentry: T("carpentry", L("Столярная мастерская", "Carpentry workshop"), "craft", 2, 3, 8, 6, 5, 110, 4, [22, 3, 2], "crafts"),
+  pottery: T("pottery", L("Гончарня", "Pottery"), "craft", 2, 2, 6, 5, 4, 75, 3, [10, 1, 4], "crafts"),
+  shop: T("shop", L("Магазин", "Shop"), "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1], "trade"),
+  tavern: T("tavern", L("Таверна", "Tavern"), "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8], "trade"),
+  gumno: T("gumno", L("Ферма", "Farm"), "placed", 1, 2, 8, 10, 6, 50, 0, [16, 2, 2], "food"),
+  woodcutter: T("woodcutter", L("Лесозаготовка", "Woodcutter"), "placed", 1, 1, 4, 4, 3, 24, 2, [6, 0.5, 0], "materials"),
+  sawpit: T("sawpit", L("Лесопилка", "Sawmill"), "placed", 1, 1, 6, 4, 3, 30, 2, [5, 1, 0], "materials"),
+  quarry: T("quarry", L("Карьер", "Quarry"), "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0], "materials"),
+  fisher: T("fisher", L("Рыболовный причал", "Fishing pier"), "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0], "food"),
+  barn: T("barn", L("Амбар", "Barn"), "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2], "services"),
   // Services (PLAN.md section 9); labor and materials chosen here, like the placed buildings above.
-  well: T("well", "Колодец", "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3], "services"),
-  market: T("market", "Рынок", "placed", 2, 2, 12, 12, 4, 160, 4, [30, 6, 2], "trade"),
-  chapel: T("chapel", "Храм", "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6], "services"),
-  school: T("school", "Школа", "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3], "services"),
-  healer: T("healer", "Лечебница", "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1], "services"),
+  well: T("well", L("Колодец", "Well"), "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3], "services"),
+  market: T("market", L("Рынок", "Market"), "placed", 2, 2, 12, 12, 4, 160, 4, [30, 6, 2], "trade"),
+  chapel: T("chapel", L("Храм", "Temple"), "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6], "services"),
+  school: T("school", L("Школа", "School"), "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3], "services"),
+  healer: T("healer", L("Лечебница", "Infirmary"), "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1], "services"),
   // Food without fields (fields.ts FOOD_RATE): a kitchen garden by the houses, a hunter's hut.
-  garden: T("garden", "Огород", "placed", 1, 1, 3, 3, 1, 20, 3, [2, 0.5, 0], "food"),
-  hunter: T("hunter", "Охотничий пост", "placed", 1, 1, 4, 4, 3, 30, 2, [4, 1, 0], "food"),
+  garden: T("garden", L("Огород", "Vegetable garden"), "placed", 1, 1, 3, 3, 1, 20, 3, [2, 0.5, 0], "food"),
+  hunter: T("hunter", L("Охотничий пост", "Hunting post"), "placed", 1, 1, 4, 4, 3, 30, 2, [4, 1, 0], "food"),
   // Alternative food (fields.ts FOOD_RATE): picking in the forest, fruit trees, bees; and a cellar that keeps the stock.
-  forager: T("forager", "Сбор в лесу", "placed", 1, 1, 4, 4, 2, 24, 3, [2, 0.5, 0], "food"),
-  orchard: T("orchard", "Сад", "placed", 1, 2, 8, 10, 3, 60, 2, [4, 0.5, 0], "food"),
-  apiary: T("apiary", "Пасека", "placed", 1, 1, 4, 4, 2, 30, 1, [3, 1, 0], "food"),
-  cellar: T("cellar", "Погреб", "placed", 1, 1, 5, 5, 2, 70, 0, [10, 3, 4], "services"),
+  forager: T("forager", L("Сбор в лесу", "Forager"), "placed", 1, 1, 4, 4, 2, 24, 3, [2, 0.5, 0], "food"),
+  orchard: T("orchard", L("Сад", "Orchard"), "placed", 1, 2, 8, 10, 3, 60, 2, [4, 0.5, 0], "food"),
+  apiary: T("apiary", L("Пасека", "Apiary"), "placed", 1, 1, 4, 4, 2, 30, 1, [3, 1, 0], "food"),
+  cellar: T("cellar", L("Погреб", "Cellar"), "placed", 1, 1, 5, 5, 2, 70, 0, [10, 3, 4], "services"),
   // Excavation (PLAN.md section 12).
-  dig: T("dig", "Раскоп", "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0], "services"),
+  dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0], "services"),
   // A restored old building kept as a monument (sim/restore.ts): no jobs, no residents; its size, cost and shape come from the foundation.
-  restored: T("restored", "Памятник", "placed", 1, 1, 8, 8, 8, 100, 0, [10, 2, 3], null),
+  restored: T("restored", L("Памятник", "Monument"), "placed", 1, 1, 8, 8, 8, 100, 0, [10, 2, 3], null),
 };
 
 // Materials of a building: its own (a restored old building is priced by its area) or its template's.

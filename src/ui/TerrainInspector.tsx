@@ -3,15 +3,16 @@ import { formatCoordinates } from "./coordsModel";
 import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { landAt, nearRiver, type Land } from "../world/landcover";
 import { terrainAt } from "../world/terrain";
+import { L } from "../i18n";
 
 const LAND_RU: Record<Land, string> = {
-  water: "Вода",
-  forest: "Лес",
-  meadow: "Луг",
-  wetland: "Болото",
-  sand: "Песок",
-  rock: "Скалы",
-  ice: "Лёд",
+  water: L("Вода", "Water"),
+  forest: L("Лес", "Forest"),
+  meadow: L("Луг", "Meadow"),
+  wetland: L("Болото", "Marsh"),
+  sand: L("Песок", "Sand"),
+  rock: L("Скалы", "Rock"),
+  ice: L("Лёд", "Ice"),
 };
 
 interface Info {
@@ -78,13 +79,13 @@ export function TerrainInspector({ view }: { view: View }) {
 
   if (!info) return null;
   return (
-    <aside class="cell-panel panel" aria-label="Участок под курсором">
+    <aside class="cell-panel panel" aria-label={L("Участок под курсором", "Ground under the cursor")}>
       <div class="cell-land">{LAND_RU[info.land]}</div>
-      <div>Высота: {Math.round(info.elevation)} м</div>
-      <div>Уклон: {Math.round(info.slope)}°</div>
-      {info.river && <div>Река рядом</div>}
-      <button class="cell-coords" type="button" title="Скопировать координаты" onClick={copy}>
-        {copied ? "Скопировано" : coords}
+      <div>{L("Высота:", "Elevation:")} {Math.round(info.elevation)} {L("м", "m")}</div>
+      <div>{L("Уклон:", "Slope:")} {Math.round(info.slope)}°</div>
+      {info.river && <div>{L("Река рядом", "River nearby")}</div>}
+      <button class="cell-coords" type="button" title={L("Скопировать координаты", "Copy coordinates")} onClick={copy}>
+        {copied ? L("Скопировано", "Copied") : coords}
       </button>
     </aside>
   );

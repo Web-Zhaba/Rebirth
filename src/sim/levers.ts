@@ -1,6 +1,7 @@
 import { JOB_KEYS, type JobKey, type Priority } from "./buildings";
 import { dayStart } from "./time";
 import type { TradeOrder } from "./trade";
+import { L } from "../i18n";
 
 // Player levers (PLAN-pace.md section 8). All of them are off by default, so a town that never uses them behaves as before.
 
@@ -28,9 +29,9 @@ export const TOLOKA_COOLDOWN = 3 * 1440; // game minutes
 export const CALL = { food: 300, wares: 10, minMinutes: 360, maxMinutes: 1440 }; // cost of a call for settlers; arrival window
 
 export const RATIONS: Record<Rations, { name: string; food: number; mood: number }> = {
-  reduced: { name: "Урезанные", food: 0.75, mood: -10 },
-  normal: { name: "Обычные", food: 1, mood: 0 },
-  generous: { name: "Щедрые", food: 1.25, mood: 8 },
+  reduced: { name: L("Урезанные", "Reduced"), food: 0.75, mood: -10 },
+  normal: { name: L("Обычные", "Normal"), food: 1, mood: 0 },
+  generous: { name: L("Щедрые", "Generous"), food: 1.25, mood: 8 },
 };
 
 // Anything that may carry levers: the state itself (or a part of it), or the levers.

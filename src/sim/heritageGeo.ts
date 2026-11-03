@@ -4,6 +4,7 @@ import { distToEdge } from "./roads";
 import { lockReason } from "./tech";
 import type { Building, FoundFoundation, Finds, RestoreMode, RoadGraph, SimState } from "./types";
 import { CELL_SIZE, pointInPolygon } from "./zones";
+import { L } from "../i18n";
 
 // Geometry and checks of restoring an old building (PLAN-research.ru.md section 7). Pure; shared by the worker
 // (which enforces them) and the heritage panel (which shows the reasons).
@@ -140,26 +141,26 @@ export function cellSquare(c: { cx: number; cy: number; angle: number }): Pt[] {
   return ([[-h, -h], [h, -h], [h, h], [-h, h]] as Pt[]).map(([u, v]): Pt => [c.cx + ux * u - uy * v, c.cy + uy * u + ux * v]);
 }
 
-export const HERITAGE_TAKEN = "Здесь старая постройка: восстановите её или стройте рядом";
+export const HERITAGE_TAKEN = L("Здесь старая постройка: восстановите её или стройте рядом", "An old building stands here: restore it or build next to it");
 
 // Russian reason a site cannot be ordered in this mode now, or null. `mode` absent: only the checks of any mode.
 export function restoreBlocker(s: Pick<SimState, "finds" | "buildings" | "roads" | "progress">, siteId: string, mode?: RestoreMode): string | null {
   const f = s.finds.foundations.find((x) => x.id === siteId);
-  if (!f || !isHeritage(f)) return "Это не значимая постройка";
-  if (f.state === "restoring") return "Уже восстанавливается";
-  if (f.state === "restored") return "Уже восстановлена";
-  if (f.state === "lost") return "Постройка утрачена, восстановить нельзя";
+  if (!f || !isHeritage(f)) return L("Это не значимая постройка", "This is not a notable building");
+  if (f.state === "restoring") return L("Уже восстанавливается", "Already being restored");
+  if (f.state === "restored") return L("Уже восстановлена", "Already restored");
+  if (f.state === "lost") return L("Постройка утрачена, восстановить нельзя", "The building is lost and cannot be restored");
   if (mode === "working") {
     const tpl = workTemplate(f.cls);
-    if (!tpl) return "Эту постройку можно только сохранить как памятник";
+    if (!tpl) return L("Эту постройку можно только сохранить как памятник", "This building can only be kept as a monument");
     const t = BUILDINGS[tpl];
     const locked = lockReason(s, t.zone === "placed" ? tpl : t.zone);
-    if (locked) return `Назначение закрыто: ${locked.toLowerCase()}`;
+    if (locked) return L(`Назначение закрыто: ${locked.toLowerCase()}`, `Purpose locked: ${locked.toLowerCase()}`);
   }
   const ring = simplifyRing(f.ring);
-  for (const b of Object.values(s.buildings)) if (polysOverlap(ring, b.footprint)) return "Место занято зданием";
+  for (const b of Object.values(s.buildings)) if (polysOverlap(ring, b.footprint)) return L("Место занято зданием", "The spot is taken by a building");
   const door = ringDoor(ring, s.roads);
-  if (!door || door.dist > RESTORE.roadReach) return "Нужна дорога";
+  if (!door || door.dist > RESTORE.roadReach) return L("Нужна дорога", "Needs a road");
   return null;
 }
 

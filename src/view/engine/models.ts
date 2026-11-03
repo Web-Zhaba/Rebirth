@@ -26,6 +26,8 @@ import { townLight } from "./townLight";
 
 const RETRY_FRAMES = 20; // while the ground under the town is still streaming, look again this often
 const RUIN_WALL_MPP = mppAtZoom(14); // the old walls' extrusion minzoom
+const RUIN_CHUNK = 2000; // wall pieces built at a time
+const RUIN_BUDGET_MS = 6; // of a frame spent building the walls: a large old city has 100k pieces, over a second's work
 
 interface Pack {
   v: Float32Array; // TOWN_VERTEX_FLOATS per vertex
@@ -49,6 +51,7 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
   let wait = 0;
   let ruinsDirty = true;
   let ruinsWait = 0;
+  let ruinsJob: { tf: Frame; pieces: { quad: [number, number][]; h: number }[]; at: number; packs: Pack[]; frames: number } | null = null;
   const seat = new GroundSeat(engine);
   const ruinsSeat = new GroundSeat(engine);
 
@@ -63,19 +66,36 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
     ruinsDirty = true;
   });
 
-  // The old city's broken walls: one model of every piece, rebuilt when the revealed old world changes.
-  const rebuildRuins = (tf: Frame) => {
+  // The old city's broken walls: a model of every piece, rebuilt when the revealed old world changes. Built only while
+  // they are shown and only on the final ground (one build, not one per page as the ground sharpens), a slice per frame.
+  const startRuins = (tf: Frame) => {
     const list = ruinWallPieces.peek();
+    ruinsSeat.cover(coverOf(list).map(([x, y]) => latLng(tf, x, y)));
+    if (!ruinsSeat.settled()) return false;
+    ruinsJob = { tf, pieces: list.flatMap((f) => f.pieces ?? []), at: 0, packs: [], frames: 0 };
+    return true;
+  };
+  const stepRuins = () => {
+    const job = ruinsJob!;
+    const { tf, pieces } = job;
     const ground = (x: number, y: number) => {
       const [a, b] = tf.toLngLat(x, y);
-      return engine.groundAt(b, a);
+      return engine.groundAt(b, a) ?? 0;
     };
-    const cover = coverOf(list);
-    if (cover.some(([x, y]) => ground(x, y) === null)) return false;
-    ruinsSeat.seated(cover.map(([x, y]) => latLng(tf, x, y)));
-    const pieces = list.flatMap((f) => f.pieces ?? []);
-    mesh.setRuins(merge(pieces.length ? [projector(tf)(ruinWallModel(pieces, (x, y) => ground(x, y) ?? 0), 0)] : []));
-    return true;
+    const project = projector(tf);
+    const t0 = performance.now();
+    while (job.at < pieces.length && performance.now() - t0 < RUIN_BUDGET_MS) {
+      job.packs.push(project(ruinWallModel(pieces.slice(job.at, job.at + RUIN_CHUNK), ground), 0));
+      job.at += RUIN_CHUNK;
+    }
+    job.frames++;
+    if (job.at < pieces.length) return;
+    const t1 = performance.now();
+    mesh.setRuins(merge(job.packs));
+    ruinsSeat.seated();
+    ruinsJob = null;
+    const ms = performance.now() - t1;
+    if (import.meta.env.DEV && pieces.length > 10_000) console.info(`[models] ruins: ${pieces.length} pieces over ${job.frames} frames, last one ${Math.round(ms)} ms`);
   };
 
   const rebuild = (tf: Frame) => {
@@ -94,8 +114,12 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
     };
     const cover = coverOf(list);
     if (cover.some(([x, y]) => ground(x, y) === null)) return false;
-    if (seat.finer()) cache.clear(); // the cached models sit on coarser ground than has come since
-    seat.seated(cover.map(([x, y]) => latLng(tf, x, y)));
+    seat.cover(cover.map(([x, y]) => latLng(tf, x, y)));
+    const finer = seat.finer();
+    if (finer) cache.clear(); // the cached models sit on coarser ground than has come since
+    const t0 = performance.now();
+    let built = 0;
+    seat.seated();
     const project = projector(tf);
     const used = new Set<string>();
     const roads: Pack[] = [];
@@ -108,13 +132,15 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
       const k = keyOf(it, p, EXAGGERATION);
       used.add(k);
       let pack = cache.get(k);
-      if (!pack) cache.set(k, (pack = project(seatedModelOf({ ...it, progress: p }, seatAt), p >= 1 ? lampOf(it) : 0)));
+      if (!pack) cache.set(k, (pack = project(seatedModelOf({ ...it, progress: p }, seatAt), p >= 1 ? lampOf(it) : 0))), built++;
       (onRoad ? roads : buildings).push(pack);
       for (const [x, y, z] of pack.smoke) smoke.push({ id: it.id, kind: it.kind, style: it.style, lamp: it.lamp, x, y, z });
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
     mesh.setMeshes(merge(roads), merge(buildings));
     modelEmitters.value = smoke;
+    const ms = performance.now() - t0;
+    if (import.meta.env.DEV && ms > 100) console.info(`[models] rebuilt ${built} of ${list.length} in ${Math.round(ms)} ms${finer ? " (finer ground)" : ""}`);
     return true;
   };
 
@@ -133,13 +159,14 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
       if (rebuild(tf)) dirty = false;
       else wait = RETRY_FRAMES;
     }
-    if (tf && ruinsDirty && ruinsWait-- <= 0) {
-      if (rebuildRuins(tf)) ruinsDirty = false;
-      else ruinsWait = RETRY_FRAMES;
-    }
     const s = engine.state;
     const mpp = (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, engine.canvas.clientHeight);
     mesh.ruinsShown = (ruinsShown.peek() || ruinsAutoShown.peek()) && mpp <= RUIN_WALL_MPP;
+    if (tf && mesh.ruinsShown && ruinsDirty && ruinsWait-- <= 0) {
+      if (startRuins(tf)) ruinsDirty = false;
+      else ruinsWait = RETRY_FRAMES;
+    }
+    if (ruinsJob && mesh.ruinsShown) stepRuins();
     // Light: the engine's sun in the town frame, blended towards a fixed light as it sets (the old layer's look).
     const { light, strength, daylight } = townLight(mesh.toLocal(engine.light(engine.state).sun));
     const clock = opts.light?.clock.peek();
@@ -174,9 +201,8 @@ function projector(tf: Frame): (m: Model, lamp: number) => Pack {
       v[at] = dx * east[0] + dy * east[1] + dz * east[2];
       v[at + 1] = dx * north[0] + dy * north[1] + dz * north[2];
       v[at + 2] = dx * up[0] + dy * up[1] + dz * up[2];
-      v.set(m.normals.slice(k * 3, k * 3 + 3), at + 3);
-      v.set(m.colors.slice(k * 3, k * 3 + 3), at + 6);
-      v.set(m.facade.slice(k * 4, k * 4 + 4), at + 9);
+      for (let j = 0; j < 3; j++) (v[at + 3 + j] = m.normals[k * 3 + j]), (v[at + 6 + j] = m.colors[k * 3 + j]);
+      for (let j = 0; j < 4; j++) v[at + 9 + j] = m.facade[k * 4 + j];
       v[at + 13] = p[k * 3 + 2] - (m.lift?.[k] ?? 0);
       v[at + 14] = lamp;
     }

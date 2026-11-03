@@ -8,6 +8,7 @@ import type { IconName } from "./icons";
 import { IconButton, Panel } from "./kit";
 import { DAY_SUMMARY_MS, daySummaryRemaining } from "./daySummaryTimerModel";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { L } from "../i18n";
 
 const LINE_ICON: Record<SummaryLine["kind"], IconName> = { built: "craft", arrived: "res", born: "res", made: "gumno", problem: "warning" };
 
@@ -48,22 +49,22 @@ export function DaySummary({ view }: { view: View }) {
     <Panel class="day-summary" role="region" aria-labelledby={SEMANTIC_IDS.daySummaryTitle}>
       <div class="day-summary-head">
         <strong id={SEMANTIC_IDS.daySummaryTitle}>
-          <Icon name="night" size={18} /> Итоги дня
+          <Icon name="night" size={18} /> {L("Итоги дня", "Day summary")}
         </strong>
-        <IconButton icon="close" label="Закрыть" size={16} onClick={() => setClosed(summary.at)} />
+        <IconButton icon="close" label={L("Закрыть", "Close")} size={16} onClick={() => setClosed(summary.at)} />
       </div>
       <div
         class="day-summary-timer"
         role="progressbar"
-        aria-label="До автоматического закрытия"
+        aria-label={L("До автоматического закрытия", "Until it closes automatically")}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(remaining * 100)}
-        aria-valuetext={`Осталось ${(remaining * DAY_SUMMARY_MS / 1000).toFixed(1)} с`}
+        aria-valuetext={L(`Осталось ${(remaining * DAY_SUMMARY_MS / 1000).toFixed(1)} с`, `${(remaining * DAY_SUMMARY_MS / 1000).toFixed(1)} s left`)}
       >
         <span style={{ width: `${remaining * 100}%` }} />
       </div>
-      {summary.lines.length === 0 && <div>День прошёл тихо.</div>}
+      {summary.lines.length === 0 && <div>{L("День прошёл тихо.", "A quiet day.")}</div>}
       {summary.lines.map((l, i) => {
         const pos = l.pos;
         const body = (
@@ -75,7 +76,7 @@ export function DaySummary({ view }: { view: View }) {
           <button
             key={i}
             class="link day-summary-line"
-            title="Показать на карте"
+            title={L("Показать на карте", "Show on the map")}
             onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}
           >
             {body}

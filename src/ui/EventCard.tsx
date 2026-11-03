@@ -8,6 +8,7 @@ import { Button, Panel } from "./kit";
 import { hoursLeft } from "./toastModel";
 import { useGameMinutes } from "./useGameMinutes";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { L, plural } from "../i18n";
 
 const AUTOPAUSE_KEY = "rebirth.events.autopause";
 const readAutopause = (): boolean => {
@@ -20,9 +21,7 @@ const readAutopause = (): boolean => {
 };
 
 const hoursText = (h: number): string => {
-  const m = h % 100;
-  const w = m >= 11 && m <= 14 ? "часов" : h % 10 === 1 ? "час" : h % 10 >= 2 && h % 10 <= 4 ? "часа" : "часов";
-  return `${h} ${w}`;
+  return `${h} ${plural(h, "час", "часа", "часов", "hour")}`;
 };
 
 // An event with two choices (PLAN-pace.md section 10); every option states its effect. Unanswered, it resolves on its
@@ -81,36 +80,36 @@ export function EventCard({ view }: { view: View }) {
           <button
             class="event-card-pause-btn"
             type="button"
-            title={isPaused ? "Возобновить время (1×)" : "Поставить на паузу"}
+            title={isPaused ? L("Возобновить время (1×)", "Resume time (1×)") : L("Поставить на паузу", "Pause")}
             onClick={togglePause}
           >
             <Icon name={isPaused ? "play" : "pause"} size={14} />
-            <span>{isPaused ? "На паузе" : "Пауза"}</span>
+            <span>{isPaused ? L("На паузе", "Paused") : L("Пауза", "Pause")}</span>
           </button>
         </div>
       </div>
       <p class="event-card-text">{c.text}</p>
       {pos && fl && (
         <button class="link event-card-place" onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}>
-          <Icon name="find" size={14} /> Показать на карте
+          <Icon name="find" size={14} /> {L("Показать на карте", "Show on the map")}
         </button>
       )}
       {c.options.map((o, i) => (
         <Button key={i} variant={i === c.safe ? "default" : "primary"} class="event-card-option" onClick={() => choose(i)}>
           <strong>{o.label}</strong>
           <span class="event-card-effect">{o.effect}</span>
-          {i === c.safe && <span class="event-card-safe">решится так, если не выбрать</span>}
+          {i === c.safe && <span class="event-card-safe">{L("решится так, если не выбрать", "the outcome if you don’t choose")}</span>}
         </Button>
       ))}
       <div class="event-card-foot">
         <span class={`event-card-timer${isUrgent ? " urgent" : ""}`}>
-          <Icon name="hourglass" size={14} /> Решение через {hoursText(leftHours)}
+          <Icon name="hourglass" size={14} /> {L("Решение через", "Decides in")} {hoursText(leftHours)}
         </span>
-        <label class="event-card-autopause" title="Автоматически ставить симуляцию на паузу при появлении события">
+        <label class="event-card-autopause" title={L("Автоматически ставить симуляцию на паузу при появлении события", "Pause the simulation automatically when an event appears")}>
           <input type="checkbox" checked={autopause} onChange={toggleAutopause} />
-          <span>Автопауза</span>
+          <span>{L("Автопауза", "Auto-pause")}</span>
         </label>
-        <span class="event-card-key">Enter на карточке: «{c.options[c.safe].label}»</span>
+        <span class="event-card-key">{L("Enter на карточке:", "Enter on the card:")} «{c.options[c.safe].label}»</span>
       </div>
     </Panel>
   );

@@ -1,6 +1,7 @@
 import { VillagerPreview, type Actor } from "../debug/villagers";
 import { ACTIONS, buildRig, villagerLook, type Action, type Look, type Vec3 } from "../../map/villagerModel";
 import { fitCanvas, initGpu, WebGpuUnavailable, type Gpu } from "../gpu/device";
+import { L } from "../../i18n";
 
 // Villagers preview (dev page /villagers.html): a row of residents of different ages on a flat patch, each with a random
 // look from its seed (sex, stature by age, hair, clothes); one action for all. Drag to orbit, wheel to zoom.
@@ -69,7 +70,7 @@ async function main(): Promise<void> {
   try {
     gpu = await initGpu(canvas);
   } catch (e) {
-    const msg = e instanceof WebGpuUnavailable ? `WebGPU недоступен: ${e.message}` : String(e);
+    const msg = e instanceof WebGpuUnavailable ? L(`WebGPU недоступен: ${e.message}`, `WebGPU unavailable: ${e.message}`) : String(e);
     document.body.append(el("div", msg, "fail"));
     throw e;
   }

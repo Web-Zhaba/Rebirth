@@ -289,20 +289,3 @@
   vertical-align: text-bottom;
 }
 
-.wiki-map-marker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 25px;
-  height: 25px;
-  padding: 0;
-  border: var(--bw) solid var(--info);
-  border-radius: 0;
-  background: var(--paper-raised);
-  box-shadow: var(--shadow-hard-sm);
-  color: var(--info);
-  cursor: pointer;
-}
-.wiki-map-marker:hover {
-  background: var(--paper);
-}

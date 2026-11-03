@@ -52,6 +52,7 @@ export interface NodeInfo {
   hmin: number;
   hmax: number;
   sse: number; // screen-space error at the last selection that reached it (px per cell)
+  dist: number; // eye to the node's nearest point at that selection (m)
   kids: (NodeInfo | null)[] | null; // NodeCache.child links
   slot: number; // renderer's vertex slot hint (terrain.ts checks it is still this node's), -1 = none
   parent: NodeInfo | null;
@@ -186,6 +187,7 @@ function makeNode(key: number, z: number, x: number, y: number): NodeInfo {
     hmin: 0,
     hmax: 0,
     sse: 0,
+    dist: 0,
     kids: null,
     slot: -1,
     parent: null,
@@ -350,7 +352,8 @@ export function selectNodes(v: SelectView, cache: NodeCache, heights: HeightRang
     visited++;
     refreshBounds(node, heights, version);
     if (!inFrustum(node, v, sx, sy) || !aboveHorizon(node, v)) return;
-    const sse = (node.cell / Math.max(nodeDistance(node, v, e), near)) * k;
+    node.dist = nodeDistance(node, v, e);
+    const sse = (node.cell / Math.max(node.dist, near)) * k;
     node.sse = sse;
     const limit = prevSplit.has(node.key) ? opt.tau * MERGE : opt.tau;
     if (node.z < opt.maxZoom && sse > limit && nodes.length < opt.maxNodes) {

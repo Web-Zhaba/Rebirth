@@ -1,30 +1,30 @@
 import { effect } from "@preact/signals";
 import type { Engine } from "../../engine/engine";
 import { geodeticToEcef } from "../../engine/geo/ellipsoid";
-import { lngLatToTile, tileToLngLat } from "../../engine/geo/mercator";
-import { loadVector } from "../../world/tiles";
+import { lngLatToTile } from "../../engine/geo/mercator";
+import { vectorTileUrl } from "../../world/tiles";
 import { placeLabelsOn } from "../placeNames";
-import { LABEL_PX, labelPriority, labelTileZoom, pickLabels, PLACE_CLASSES, type LabelBox, type PlaceClass } from "./labelLayout";
+import { LABEL_PX, labelTileZoom, pickLabels, type LabelBox } from "./labelLayout";
 import { labelSight } from "./labelSight";
+import type { FromPlaceWorker, Place, ToPlaceWorker } from "./placeWorker";
+import { lang } from "../../i18n";
 
 // Old place names on the engine: DOM text over the canvas, faint like pencil notes in an atlas (the look of the old
 // MapLibre symbol layer). Names come from the OpenMapTiles `place` layer of the tiles around the camera target at the
 // zoom a web map would show (cities from afar, hamlets close up); every frame they are projected, the important ones
-// placed first and the rest dropped where they would overlap.
-
-interface Place {
-  key: string;
-  name: string;
-  cls: PlaceClass;
-  priority: number;
-  lng: number;
-  lat: number;
-}
+// placed first and the rest dropped where they would overlap. The tiles are read in a worker (placeWorker.ts).
 
 const RADIUS = 2; // tiles around the target's tile: a 5 x 5 block
 const CACHE = 96;
 const FAR = 6; // names farther from the eye than this many camera distances are dropped (the horizon of pitched views)
 const MARGIN = 40; // px beyond the canvas edge a label may still be placed from
+const KEEP_MS = 2000; // a name's node stays this long after it was last placed, then leaves the DOM
+
+interface LabelNode {
+  el: HTMLElement;
+  shown: boolean;
+  at: number; // when it was last placed
+}
 
 export function attachPlaceLabels(engine: Engine, container: HTMLElement): void {
   const layer = document.createElement("div");
@@ -34,28 +34,32 @@ export function attachPlaceLabels(engine: Engine, container: HTMLElement): void 
 
   const tiles = new Map<string, Place[] | Promise<void>>(); // insertion order = LRU order
   let shown: string[] = []; // tile keys whose names are drawn
-  const nodes = new Map<string, HTMLElement>();
+  // Only the names placed lately have nodes: a trip out to the planet and back met thousands, and restyling every one of
+  // them each frame stalled the page's style and layout for a tenth of a second at a time.
+  const nodes = new Map<string, LabelNode>();
   const widths = new Map<string, number>();
   const measure = document.createElement("canvas").getContext("2d")!;
 
+  const worker = new Worker(new URL("./placeWorker.ts", import.meta.url), { type: "module", name: lang });
+  const asked = new Map<number, (r: FromPlaceWorker) => void>();
+  let nextId = 1;
+  worker.onmessage = (e: MessageEvent<FromPlaceWorker>) => {
+    asked.get(e.data.id)?.(e.data);
+    asked.delete(e.data.id);
+  };
+  const read = (z: number, x: number, y: number): Promise<Place[]> =>
+    vectorTileUrl(z, x, y).then(
+      (url) =>
+        new Promise((resolve, reject) => {
+          const id = nextId++;
+          asked.set(id, (r) => (r.ok ? resolve(r.places) : reject(new Error(r.error))));
+          worker.postMessage({ id, url, z, x, y } satisfies ToPlaceWorker);
+        }),
+    );
+
   const load = (z: number, x: number, y: number, key: string) => {
-    const p = loadVector(z, x, y)
-      .then((vt) => {
-        const out: Place[] = [];
-        const l = vt?.layers.place;
-        for (let i = 0; l && i < l.length; i++) {
-          const f = l.feature(i);
-          const cls = f.properties.class as PlaceClass;
-          const name = (f.properties["name:ru"] ?? f.properties.name) as string | undefined;
-          if (f.type !== 1 || !PLACE_CLASSES.includes(cls) || !name) continue;
-          const pt = f.loadGeometry()[0]?.[0];
-          if (!pt || pt.x < 0 || pt.y < 0 || pt.x > l.extent || pt.y > l.extent) continue; // the buffer belongs to the neighbour
-          const ll = tileToLngLat(z, x, y, pt.x / l.extent, pt.y / l.extent);
-          const rank = Number(f.properties.rank ?? 99);
-          out.push({ key: `${name}|${ll.lng.toFixed(4)}|${ll.lat.toFixed(4)}`, name, cls, priority: labelPriority(cls, rank), lng: ll.lng, lat: ll.lat });
-        }
-        tiles.set(key, out);
-      })
+    const p = read(z, x, y)
+      .then((out) => void tiles.set(key, out))
       .catch(() => void tiles.delete(key)); // asked for again next frame
     tiles.set(key, p);
     while (tiles.size > CACHE) {
@@ -103,16 +107,17 @@ export function attachPlaceLabels(engine: Engine, container: HTMLElement): void 
   };
 
   const node = (p: Place) => {
-    let el = nodes.get(p.key);
-    if (!el) {
-      el = document.createElement("div");
+    let n = nodes.get(p.key);
+    if (!n) {
+      const el = document.createElement("div");
       el.className = "engine-place-label";
       el.textContent = p.name;
       el.style.fontSize = `${LABEL_PX[p.cls]}px`;
       layer.append(el);
-      nodes.set(p.key, el);
+      n = { el, shown: true, at: 0 };
+      nodes.set(p.key, n);
     }
-    return el;
+    return n;
   };
 
   effect(() => {
@@ -147,14 +152,17 @@ export function attachPlaceLabels(engine: Engine, container: HTMLElement): void 
         boxes.push({ x: s[0], y: s[1], w: width(p), h: LABEL_PX[p.cls] * 1.3, priority: p.priority });
       }
     }
-    const visible = new Set<string>();
+    const now = performance.now();
     for (const i of pickLabels(boxes)) {
-      const p = places[i];
-      const el = node(p);
-      el.style.transform = `translate(${boxes[i].x}px, ${boxes[i].y}px) translate(-50%, -50%)`;
-      el.style.display = "";
-      visible.add(p.key);
+      const n = node(places[i]);
+      n.el.style.transform = `translate(${boxes[i].x}px, ${boxes[i].y}px) translate(-50%, -50%)`;
+      if (!n.shown) (n.shown = true), (n.el.style.display = "");
+      n.at = now;
     }
-    for (const [k, el] of nodes) if (!visible.has(k)) el.style.display = "none";
+    for (const [k, n] of nodes) {
+      if (n.at === now) continue;
+      if (now - n.at > KEEP_MS) (n.el.remove(), nodes.delete(k), widths.delete(k));
+      else if (n.shown) (n.shown = false), (n.el.style.display = "none");
+    }
   });
 }

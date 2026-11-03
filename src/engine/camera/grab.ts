@@ -57,6 +57,30 @@ export function zoomAbout(s: CameraState, factor: number, grab: { lat: number; l
   if (grab) solveGrab(s, grab, px, py, pick);
 }
 
+const PAN_PROBE = 8; // px: panAboutCentre measures the centre's scale over this much and applies it to the whole step
+
+// Drag-pan by a pixel delta at the scale of the screen centre. Holding the ground under the cursor instead runs away
+// on a pitched view, where towards the horizon a pixel covers ever more ground and the same hand motion flings the
+// camera; the centre's scale is the same wherever the drag started. It is measured over a few pixels and applied
+// linearly, so a fast flick is not measured further up towards the horizon either.
+export function panAboutCentre(s: CameraState, dxPx: number, dyPx: number, widthPx: number, heightPx: number, pick: PickFn): void {
+  const len = Math.hypot(dxPx, dyPx);
+  if (len === 0) return;
+  const k = Math.min(1, PAN_PROBE / len);
+  const cx = widthPx / 2;
+  const cy = heightPx / 2;
+  const lat = s.lat;
+  const lng = s.lng;
+  const g = pick(s, cx, cy);
+  if (!g || !solveGrab(s, g, cx + dxPx * k, cy + dyPx * k, pick)) {
+    panByPixels(s, dxPx, dyPx, heightPx);
+    return;
+  }
+  s.lat = lat + (s.lat - lat) / k;
+  s.lng = lng + wrapLng(s.lng - lng) / k;
+  clampState(s);
+}
+
 // Fallback pan when no ground is under the cursor: move the target by a screen-space drag using metres per pixel at the
 // target. Pitch stretches the ground along the view direction, hence the 1/cos.
 export function panByPixels(s: CameraState, dxPx: number, dyPx: number, viewportH: number): void {

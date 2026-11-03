@@ -22,6 +22,7 @@ import type { CloudSite } from "../../map/clouds/settings";
 import { attachControls, credits } from "./controls";
 import { createEngineView } from "./view";
 import { mppAtZoom, zoomAtMpp } from "../view";
+import { L } from "../../i18n";
 
 export interface EngineMountOptions {
   container: string; // element id
@@ -111,11 +112,11 @@ export async function tryMountEngineView(o: EngineMountOptions): Promise<EngineM
     const title = document.createElement("h1");
     const text = document.createElement("p");
     if (e instanceof WebGpuUnavailable) {
-      title.textContent = "Браузер не поддерживает WebGPU";
-      text.textContent = "Карта игры рисуется через WebGPU. Откройте игру в свежем Chrome, Edge или Safari.";
+      title.textContent = L("Браузер не поддерживает WebGPU", "This browser does not support WebGPU");
+      text.textContent = L("Карта игры рисуется через WebGPU. Откройте игру в свежем Chrome, Edge или Safari.", "The game map is drawn with WebGPU. Open the game in an up-to-date Chrome, Edge or Safari.");
     } else {
-      title.textContent = "Не удалось запустить карту";
-      text.textContent = "Видеокарта не смогла запустить карту игры. Обновите браузер или драйвер видеокарты и перезагрузите страницу.";
+      title.textContent = L("Не удалось запустить карту", "Could not start the map");
+      text.textContent = L("Видеокарта не смогла запустить карту игры. Обновите браузер или драйвер видеокарты и перезагрузите страницу.", "The graphics card could not start the game map. Update your browser or graphics driver and reload the page.");
     }
     box.append(title, text);
     document.body.append(box);

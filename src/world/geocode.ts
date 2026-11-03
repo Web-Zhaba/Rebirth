@@ -1,8 +1,9 @@
+import { isEn, L } from "../i18n";
 // Place search: Photon (komoot) over OpenStreetMap, CORS open, no key. Only place=* objects (cities to hamlets).
 
 export interface PlaceHit {
   name: string;
-  kind: string; // Russian word for the place type, may be empty
+  kind: string; // word for the place type in the game language, may be empty
   where: string; // county, state, country
   lng: number;
   lat: number;
@@ -17,6 +18,7 @@ export function searchUrl(q: string, near?: { lng: number; lat: number }, limit 
   const u = new URL(API);
   u.searchParams.set("q", q.trim());
   u.searchParams.set("osm_tag", "place");
+  if (isEn) u.searchParams.set("lang", "en");
   u.searchParams.set("limit", String(limit));
   if (near) {
     u.searchParams.set("lat", near.lat.toFixed(3));
@@ -25,24 +27,29 @@ export function searchUrl(q: string, near?: { lng: number; lat: number }, limit 
   return u.toString();
 }
 
-const KIND_RU: Record<string, string> = {
-  city: "город",
-  town: "город",
-  village: "село",
-  hamlet: "деревня",
-  isolated_dwelling: "хутор",
-  farm: "хутор",
-  locality: "урочище",
-  suburb: "район",
-  quarter: "район",
-  neighbourhood: "район",
-  island: "остров",
-  islet: "остров",
-  state: "регион",
-  region: "регион",
-  province: "регион",
-  county: "округ",
-  country: "страна",
+const TOWN = L("город", "town");
+const FARM = L("хутор", "farmstead");
+const DISTRICT = L("район", "district");
+const ISLAND = L("остров", "island");
+const REGION = L("регион", "region");
+export const KIND_LABEL: Record<string, string> = {
+  city: TOWN,
+  town: TOWN,
+  village: L("село", "village"),
+  hamlet: L("деревня", "hamlet"),
+  isolated_dwelling: FARM,
+  farm: FARM,
+  locality: L("урочище", "locality"),
+  suburb: DISTRICT,
+  quarter: DISTRICT,
+  neighbourhood: DISTRICT,
+  island: ISLAND,
+  islet: ISLAND,
+  state: REGION,
+  region: REGION,
+  province: REGION,
+  county: L("округ", "county"),
+  country: L("страна", "country"),
 };
 
 export function parseSearch(json: unknown): PlaceHit[] {
@@ -54,7 +61,7 @@ export function parseSearch(json: unknown): PlaceHit[] {
     const c = f.geometry?.coordinates;
     if (typeof p.name !== "string" || !Array.isArray(c) || typeof c[0] !== "number" || typeof c[1] !== "number") continue;
     const where = [p.county, p.state, p.country].filter((v): v is string => typeof v === "string" && v !== p.name).join(", ");
-    const hit: PlaceHit = { name: p.name, kind: KIND_RU[String(p.osm_value)] ?? "", where, lng: c[0], lat: c[1] };
+    const hit: PlaceHit = { name: p.name, kind: KIND_LABEL[String(p.osm_value)] ?? "", where, lng: c[0], lat: c[1] };
     const e = p.extent; // Photon order: west, north, east, south
     if (Array.isArray(e) && e.length === 4 && e.every((v) => typeof v === "number")) {
       hit.bbox = [Math.min(e[0], e[2]), Math.min(e[1], e[3]), Math.max(e[0], e[2]), Math.max(e[1], e[3])];

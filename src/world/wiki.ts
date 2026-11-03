@@ -1,3 +1,4 @@
+import { lang as gameLang } from "../i18n";
 // Wikipedia client: geosearch + intro extracts. Text is CC BY-SA 4.0 (link back to the page).
 
 export type WikiLang = "ru" | "en";
@@ -87,12 +88,12 @@ export async function extracts(pageids: number[], lang: WikiLang): Promise<Map<n
   return out;
 }
 
-// ru first; en only when ru finds nothing. Deduplicated by (lang, pageid), nearest first.
+// The game language first; the other only when it finds nothing. Deduplicated by (lang, pageid), nearest first.
 export async function articlesNear(lat: number, lng: number, radiusM: number): Promise<WikiArticle[]> {
-  let lang: WikiLang = "ru";
+  let lang: WikiLang = gameLang;
   let hits = await geoArticles(lat, lng, radiusM, lang);
   if (!hits.length) {
-    lang = "en";
+    lang = gameLang === "ru" ? "en" : "ru";
     hits = await geoArticles(lat, lng, radiusM, lang);
   }
   const seen = new Set<number>();

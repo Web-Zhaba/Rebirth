@@ -1,5 +1,6 @@
 import { YEAR_DAYS } from "./time";
 import type { ServiceId } from "./types";
+import { L } from "../i18n";
 
 // Service tuning (design: PLAN.md section 9). Reach is road distance in metres.
 export interface ServiceInfo {
@@ -11,11 +12,11 @@ export interface ServiceInfo {
 }
 
 export const SERVICE_LIST: ServiceInfo[] = [
-  { id: "well", name: "Вода", reach: 150, mood: 8, color: "#4f86a8" },
-  { id: "market", name: "Рынок", reach: 800, mood: 5, color: "#c9803a" },
-  { id: "chapel", name: "Храм", reach: 1000, mood: 7, color: "#8e6bb0" },
-  { id: "school", name: "Школа", reach: 800, mood: 3, color: "#3f9a76" },
-  { id: "healer", name: "Лечебница", reach: 1000, mood: 2, color: "#c4504a" },
+  { id: "well", name: L("Вода", "Water"), reach: 150, mood: 8, color: "#4f86a8" },
+  { id: "market", name: L("Рынок", "Market"), reach: 800, mood: 5, color: "#c9803a" },
+  { id: "chapel", name: L("Храм", "Temple"), reach: 1000, mood: 7, color: "#8e6bb0" },
+  { id: "school", name: L("Школа", "School"), reach: 800, mood: 3, color: "#3f9a76" },
+  { id: "healer", name: L("Лечебница", "Infirmary"), reach: 1000, mood: 2, color: "#c4504a" },
 ];
 export const SERVICES = Object.fromEntries(SERVICE_LIST.map((s) => [s.id, s])) as Record<ServiceId, ServiceInfo>;
 export const SERVICE_IDS: ServiceId[] = SERVICE_LIST.map((s) => s.id);
@@ -40,6 +41,11 @@ export const SERVICE = {
 
 // Literacy progress of a resident (`school`, 0..100) per school day: the child's and the grown-up's pace.
 export const learnPerDay = (adult: boolean): number => 100 / (adult ? SERVICE.adultLiteracyDays : SERVICE.childLiteracyDays);
+
+// Key of the founding camp in `coverage` (building ids start at 1): the tent families live there, so the town's
+// services reach them from the camp at the founding point exactly as they reach a house.
+export const CAMP = 0;
+export const dwelling = (h: { home: number | null }): number => h.home ?? CAMP;
 
 const bit = (id: ServiceId): number => 1 << SERVICE_IDS.indexOf(id);
 export const covers = (mask: number | undefined, id: ServiceId): boolean => ((mask ?? 0) & bit(id)) !== 0;

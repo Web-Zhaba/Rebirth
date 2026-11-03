@@ -1,6 +1,7 @@
 import { BASE_TICK, tickMs, type Speed } from "./clock";
 import { calendar } from "./time";
 import { isWorkHour, type Levers } from "./levers";
+import { decimal, L } from "../i18n";
 
 const MAX_DAYS = 60;
 
@@ -32,8 +33,8 @@ export function etaRealMs(personHours: number, hands: number, gameMinutes: numbe
 // "~3 мин", "~40 с", "~2 ч".
 export function formatReal(ms: number): string {
   const s = Math.max(1, Math.round(ms / 1000));
-  if (s < 90) return `~${s} с`;
+  if (s < 90) return `~${s} ${L("с", "s")}`;
   const m = Math.round(s / 60);
-  if (m < 90) return `~${m} мин`;
-  return `~${Math.round((m / 60) * 10) / 10} ч`.replace(".", ",");
+  if (m < 90) return `~${m} ${L("мин", "min")}`;
+  return decimal(`~${Math.round((m / 60) * 10) / 10} ${L("ч", "h")}`);
 }

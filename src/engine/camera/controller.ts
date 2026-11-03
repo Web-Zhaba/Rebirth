@@ -5,7 +5,7 @@ import type { CameraControl, CameraEvents, CameraTarget } from "./cameraControl"
 import { easeFly, easeOutCubic } from "./ease";
 import { fitBounds as fitBoundsDistance } from "./fit";
 import { angleDelta, flyDuration, flyPath, groundDistance, slerpLatLng } from "./fly";
-import { panByPixels, rotateByPixels, solveGrab, zoomAbout, type PickFn } from "./grab";
+import { panAboutCentre, panByPixels, rotateByPixels, solveGrab, zoomAbout, type PickFn } from "./grab";
 import { inertiaStart, inertiaStep, PAN_INERTIA, ROTATE_INERTIA, VelocityTracker } from "./inertia";
 import { pickGround } from "./pick";
 import { wheelSmoothStep, wheelZoomOctaves } from "./wheel";
@@ -28,7 +28,6 @@ interface Drag {
   id: number;
   mode: "pan" | "rotate";
   touch: boolean;
-  grab: Grab;
   sx: number; // press position
   sy: number;
   x: number; // latest pointer position
@@ -47,7 +46,7 @@ interface Multi {
   angle: number; // rad, screen space (y down)
 }
 
-type Inertia = { kind: "pan"; grab: Grab; x: number; y: number; v: number[] } | { kind: "rotate"; v: number[] };
+type Inertia = { kind: "pan"; v: number[] } | { kind: "rotate"; v: number[] };
 
 interface Anim {
   t0: number | null;
@@ -89,10 +88,13 @@ export function createCameraControl(engine: Engine): CameraControl {
     return [e.clientX - r.left, e.clientY - r.top];
   };
 
-  // Ground under a pixel for a hypothetical camera state, built fresh (engine.view is the previous frame's).
+  // Ground under a pixel for a hypothetical camera state, built fresh (engine.view is the previous frame's). The target
+  // rides on the ground there, as the engine keeps it: held at its old height while it slides over a slope, a pitched
+  // view sees the ground under a pixel run several times further than the target moved, and the grab solve diverges.
   const pickAt: PickFn = (st, px, py) => {
     const [w, h] = size();
-    const v = buildView(st, w, h, engine.groundAt);
+    const g = engine.groundAt(st.lat, st.lng);
+    const v = buildView(g === null ? st : { ...st, h: g }, w, h, engine.groundAt);
     return pickGround(v.eye, rayDir(v, (px / w) * 2 - 1, 1 - (py / h) * 2), engine.groundAt);
   };
   // Ground under a pixel of what is on screen now.
@@ -212,8 +214,7 @@ export function createCameraControl(engine: Engine): CameraControl {
     if (!d.dirty) return;
     d.dirty = false;
     if (d.mode === "pan") {
-      if (d.grab) solveGrab(s, d.grab, d.x, d.y, pickAt);
-      else panByPixels(s, d.x - d.px, d.y - d.py, size()[1]);
+      panAboutCentre(s, d.x - d.px, d.y - d.py, ...size(), pickAt);
       d.px = d.x;
       d.py = d.y;
     } else {
@@ -251,8 +252,10 @@ export function createCameraControl(engine: Engine): CameraControl {
       s.distance *= Math.exp(dLog);
       s.heading -= dAngle / RAD;
       clampState(s);
-      if (m.grab) solveGrab(s, m.grab, cx, cy, pickAt);
-      else panByPixels(s, dcx, dcy, size()[1]);
+      // Pinch and twist about the fingers, the slide at the centre's scale (panAboutCentre), then hold on afresh.
+      if (m.grab) solveGrab(s, m.grab, m.cx, m.cy, pickAt);
+      panAboutCentre(s, dcx, dcy, ...size(), pickAt);
+      m.grab = grabFromState(cx, cy);
     }
     m.cx = cx;
     m.cy = cy;
@@ -267,6 +270,8 @@ export function createCameraControl(engine: Engine): CameraControl {
   const frame = (now: number): void => {
     const dt = lastNow ? Math.min(100, Math.max(0, now - lastNow)) : 16;
     lastNow = now;
+    // Moves solved with pickAt put the target on the ground: draw it there too, not easing in from the old height.
+    const solved = (drag?.started && drag.mode === "pan") || !!multi || !!wheel || inertia?.kind === "pan";
 
     if (drag?.started) {
       applyDrag(drag);
@@ -295,13 +300,7 @@ export function createCameraControl(engine: Engine): CameraControl {
       const spec = inertia.kind === "pan" ? PAN_INERTIA : ROTATE_INERTIA;
       const st = inertiaStep(inertia.v, dt, spec.deceleration);
       if (inertia.kind === "pan") {
-        inertia.x += st.delta[0];
-        inertia.y += st.delta[1];
-        if (inertia.grab) {
-          if (!solveGrab(s, inertia.grab, inertia.x, inertia.y, pickAt)) st.done = true;
-        } else {
-          panByPixels(s, st.delta[0], st.delta[1], size()[1]);
-        }
+        panAboutCentre(s, st.delta[0], st.delta[1], ...size(), pickAt);
       } else {
         s.heading += st.delta[0];
         s.pitch += st.delta[1];
@@ -311,6 +310,7 @@ export function createCameraControl(engine: Engine): CameraControl {
       inertia.v = st.v;
       if (st.done) inertia = null;
     }
+    if (solved) engine.snapToGround();
   };
 
   const idle = (): boolean => !drag?.started && !multi && !inertia && !anim && !wheel;
@@ -347,7 +347,7 @@ export function createCameraControl(engine: Engine): CameraControl {
       const now = performance.now();
       if (d.mode === "pan") {
         const v = inertiaStart(tracker.velocity(now, 2), PAN_INERTIA);
-        if (v) inertia = { kind: "pan", grab: d.grab, x: d.x, y: d.y, v };
+        if (v) inertia = { kind: "pan", v };
       } else {
         const v = inertiaStart(tracker.velocity(now, 2), ROTATE_INERTIA);
         if (v) inertia = { kind: "rotate", v };
@@ -360,7 +360,7 @@ export function createCameraControl(engine: Engine): CameraControl {
     cancelMotion();
     tracker.reset();
     rotAcc = { h: 0, p: 0 };
-    drag = { id, mode, touch, grab: mode === "pan" ? grabAt(x, y) : null, sx: x, sy: y, x, y, px: x, py: y, started: false, dirty: false };
+    drag = { id, mode, touch, sx: x, sy: y, x, y, px: x, py: y, started: false, dirty: false };
   };
 
   const onDown = (e: PointerEvent): void => {

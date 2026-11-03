@@ -280,6 +280,7 @@ button.toast-main:hover .toast-text {
   color: var(--ink);
   cursor: pointer;
   white-space: nowrap;
+  pointer-events: auto; /* the marker layer over the map lets clicks through */
 }
 .map-badge:hover {
   background: var(--paper);
@@ -592,4 +593,7 @@ button.toast-main:hover .toast-text {
 .map-badge-bad { background: var(--bad); color: var(--paper-raised); border-color: #05070c; }
 .map-badge-warn { background: var(--warn-fill); color: var(--warn-text); }
 .map-badge-build { background: var(--paper-raised); color: var(--ink); }
+.map-badge-article { background: var(--paper-raised); color: var(--info); border-color: var(--info); }
+.map-badge-in { display: inline-flex; align-items: center; gap: 3px; }
+.map-badge-text { display: inline-block; vertical-align: bottom; max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
 

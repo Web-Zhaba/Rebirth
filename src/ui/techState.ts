@@ -3,6 +3,7 @@ import { flash } from "../map/tools";
 import { sendCmd, state } from "../simClient";
 import { rightPanel } from "./panels";
 import { buildTechView, techBadge } from "./techModel";
+import { L } from "../i18n";
 
 // UI state of the science panel: the selected node and the number of researched techs the player has seen.
 
@@ -29,7 +30,7 @@ export const badge = computed(() => {
 
 async function run(cmd: "startResearch" | "queueResearch" | "cancelResearch", techId: string): Promise<void> {
   const r = await sendCmd({ type: cmd, techId });
-  if (!r.ok) flash(r.reason ?? "Не вышло");
+  if (!r.ok) flash(r.reason ?? L("Не вышло", "That didn't work"));
 }
 export const startTech = (id: string) => run("startResearch", id);
 export const queueTech = (id: string) => run("queueResearch", id);

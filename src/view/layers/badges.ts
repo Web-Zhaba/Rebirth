@@ -7,11 +7,12 @@ import { Icon } from "../../ui/Icon";
 import { badgeFor, type BadgeSpec } from "../../map/badgeModel";
 import { mppAtZoom, type View, type ViewMarker } from "../view";
 import { selectedBuilding } from "./buildings";
+import { L } from "../../i18n";
 
 // Small paper tags over buildings that need a look: construction progress, no workers, no input. HTML markers styled
 // with the UI tokens (.map-badge in feedback.css). Only for buildings in view, only when a badge applies, at most MAX.
 const MAX = 24;
-const MAX_MPP = mppAtZoom(15.5); // old MIN_ZOOM 15.5
+export const BADGE_MAX_MPP = mppAtZoom(15.5); // old MIN_ZOOM 15.5; further out map badges are hidden
 const REFRESH_MS = 1000; // snapshots come several times a second; badges change slowly
 const QUERY_MS = 8000; // staffing of a workplace is asked again after this long
 
@@ -49,7 +50,7 @@ export function attachBadges(view: View): void {
     last = Date.now();
     const all = buildings.peek();
     const fl = frame.peek();
-    if (!all || !fl || view.metersPerPixel() > MAX_MPP) {
+    if (!all || !fl || view.metersPerPixel() > BADGE_MAX_MPP) {
       for (const id of [...shown.keys()]) drop(id);
       return;
     }
@@ -89,7 +90,7 @@ export function attachBadges(view: View): void {
       if (e.key !== key) {
         e.key = key;
         e.el.className = `map-badge map-badge-${spec.tone}`;
-        e.el.title = `${spec.title}. Открыть здание`;
+        e.el.title = `${spec.title}. ${L("Открыть здание", "Open building")}`;
         render(h("span", { class: "map-badge-in" }, h(Icon, { name: spec.icon, size: 12 }), spec.label), e.el);
       }
     }

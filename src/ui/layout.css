@@ -333,7 +333,8 @@ button.event-card-pause-btn {
 html.screenshot-mode #ui {
   visibility: hidden;
 }
-html.screenshot-mode .engine-nav {
+html.screenshot-mode .engine-nav,
+html.screenshot-mode .engine-markers {
   display: none;
 }
 

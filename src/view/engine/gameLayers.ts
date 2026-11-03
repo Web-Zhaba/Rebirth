@@ -11,8 +11,8 @@ import { campArea, cityPoint } from "../layers/city";
 import { serviceReach } from "../layers/reach";
 import { ruinFloors, ruinHints, ruinStreets, ruinTyped, ruinWalls } from "../layers/ruins";
 import { roadTraffic } from "../layers/traffic";
-import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { roadLines } from "../layers/roads";
+import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { clearings, fieldDraftPoints, fieldDraftShape, fields, zoneCells, zoneGrid, zoneHover } from "../layers/zones";
 import { mppAtZoom } from "../view";
 import { TOOL_OVERLAYS } from "./overlayStyles";
@@ -27,9 +27,6 @@ const ZONE_MPP = mppAtZoom(15); // the old zone layers' minzoom
 
 const roadColour = (p: P) =>
   ({ dirt: PALETTE.roadDirt, footbridge: PALETTE.roadBridge, bridge: PALETTE.roadBridge, stone: PALETTE.roadStone, stonebridge: PALETTE.roadStone })[p.kind as string] ?? PALETTE.roadPath;
-const roadEdge = (p: P) =>
-  ({ dirt: PALETTE.roadDirtEdge, footbridge: PALETTE.roadBridgeEdge, bridge: PALETTE.roadBridgeEdge, stone: PALETTE.roadStoneEdge, stonebridge: PALETTE.roadStoneEdge })[p.kind as string] ??
-  PALETTE.roadPathEdge;
 const width = (p: P) => Number(p.w ?? 3);
 
 // The traffic ramp of the old layer (tools.ts TRAFFIC_STOPS), interpolated linearly by commuters per day.
@@ -90,9 +87,7 @@ export const GAME_LAYERS: OverlayLayer[] = [
   // The camp area roads must start from, until the first road is built.
   { source: "camp", maxMpp: mppAtZoom(14), style: { kind: "fill", color: PALETTE.warn, opacity: 0.12 } },
   { source: "camp", maxMpp: mppAtZoom(14), style: { kind: "line", color: PALETTE.warn, widthPx: 1.5, dash: [3, 2] } },
-  // Roads at real width (a pixel at least); up close the 3D ribbons (models.ts) lie over the built ones.
-  { source: "roads", style: { kind: "line", color: roadEdge, widthM: (p) => width(p) + 1.2, widthPx: 2.5, filter: is("built") } },
-  { source: "roads", style: { kind: "line", color: roadColour, widthM: width, widthPx: 1, filter: is("built") } },
+  // Roads under construction as lines; built ones are 3D ribbons only (models.ts).
   { source: "roads", style: { kind: "line", color: roadColour, widthM: width, widthPx: 1, opacity: (p) => (p.state === "active" ? 0.7 : 0.4), dash: [2, 2], filter: (p) => p.state === "active" || p.state === "waiting" } },
   { source: "roads", style: { kind: "line", color: PALETTE.bad, widthM: width, widthPx: 3, opacity: 0.8, dash: [2, 1.5], filter: is("cut") } },
   // Lots: planned ones dashed; standing ones are 3D models (models.ts), a rebuild in progress is ringed.

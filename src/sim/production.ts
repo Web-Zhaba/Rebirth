@@ -8,13 +8,14 @@ import { buildingPriority } from "./jobs";
 import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
-import { covers, SERVICE, serviceMood } from "./services";
+import { covers, dwelling, SERVICE, serviceMood } from "./services";
 import { tradeDay } from "./trade";
 import { finishedMonuments, monumentMood, monumentsNear } from "./monuments";
 import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
 import { applyFrost } from "./weather";
 import { buildFactor, EFFECTS, emptyOrchard, fieldWork, firewoodDaily, frostNight, moodShift, orchardDay, orchardQuality, spoilage, workFactor } from "./weatherEffects";
 import type { Building, Clearing, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
+import { L } from "../i18n";
 
 // Building materials come PACE times faster than in history; food and wares do not.
 export const PACE = 4;
@@ -49,7 +50,7 @@ export function say(events: TownEvent[], at: number, kind: EventKind, text: stri
   return [...events, pos ? { at, kind, text, pos } : { at, kind, text }].slice(-MAX_EVENTS);
 }
 
-const SHORT_OF = { logs: "брёвен", planks: "досок", stone: "камня" } as const;
+const SHORT_OF = { logs: L("брёвен", "logs"), planks: L("досок", "planks"), stone: L("камня", "stone") } as const;
 
 // Notices for sites that were paid in this tick (`before` -> `after`, with the stock as it was before) and had to
 // make part of their materials by hand: one "shortage" per material per game day. Mirrors payMaterials' accounting.
@@ -69,7 +70,7 @@ export function reportShortages(before: Record<number, Building>, after: Record<
     for (const g of ["logs", "planks", "stone"] as const) {
       const need = !up && b.onRuins && g === "stone" ? 0 : m[g];
       if (hand && need > st[g]) {
-        const text = `Не хватает ${SHORT_OF[g]}: часть работы делают вручную`;
+        const text = L(`Не хватает ${SHORT_OF[g]}: часть работы делают вручную`, `Short of ${SHORT_OF[g]}: part of the work is done by hand`);
         if (!out.some((e) => e.kind === "shortage" && e.text === text && dayOf(e.at) === dayOf(now))) out = say(out, now, "shortage", text, [b.lot.cx, b.lot.cy]);
       }
       st[g] -= Math.min(st[g], need);
@@ -279,7 +280,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         if (win === "sowing") {
           if (!flags.sowing) {
             flags = { ...flags, sowing: true };
-            events = say(events, s.gameMinutes, "farm", "Начался сев", [b.lot.cx, b.lot.cy]);
+            events = say(events, s.gameMinutes, "farm", L("Начался сев", "Sowing has begun"), [b.lot.cx, b.lot.cy]);
           }
         } else {
           harvested = true;
@@ -288,7 +289,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
           made(b.id, kg);
           if (!flags.harvest) {
             flags = { ...flags, harvest: true };
-            events = say(events, s.gameMinutes, "farm", "Началась уборка урожая", [b.lot.cx, b.lot.cy]);
+            events = say(events, s.gameMinutes, "farm", L("Началась уборка урожая", "The harvest has begun"), [b.lot.cx, b.lot.cy]);
           }
         }
         break;
@@ -308,7 +309,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     }
     if (work.length > 0 && left <= 1e-6) {
       flags = { ...flags, done: true };
-      events = say(events, s.gameMinutes, "farm", `Урожай собран: ${massText(got)}`);
+      events = say(events, s.gameMinutes, "farm", L(`Урожай собран: ${massText(got)}`, `Harvest gathered: ${massText(got)}`));
     }
   }
   return { ...s, stock, events, buildings, prod: { ...s.prod, fields, today, flags } };
@@ -335,7 +336,8 @@ function nightFrost(s: SimState, events: TownEvent[]): { weather: SimState["weat
   if (next === w) return { weather: w, events };
   const standing = (crop: number) => s.zones.fields.reduce((m, f) => (assign.has(f.id) ? m + Math.max(0, expectedKg(f, workOf(s.prod.fields, f.id, cal.year), crop) - workOf(s.prod.fields, f.id, cal.year).reaped) : m), 0);
   const loss = standing(w.crop * fieldYieldMul(s.progress)) - standing(next.crop * fieldYieldMul(s.progress));
-  const text = `Заморозок: ночью ${Math.round(w.yesterday.min)} °C, урожай потерял ${Math.round((1 - next.frost / w.frost) * 100)} %${loss >= 1 ? ` (около ${massText(loss)} зерна)` : ""}`;
+  const pctLost = Math.round((1 - next.frost / w.frost) * 100);
+  const text = L(`Заморозок: ночью ${Math.round(w.yesterday.min)} °C, урожай потерял ${pctLost} %${loss >= 1 ? ` (около ${massText(loss)} зерна)` : ""}`, `Frost: ${Math.round(w.yesterday.min)} °C at night, the crop lost ${pctLost}%${loss >= 1 ? ` (about ${massText(loss)} of grain)` : ""}`);
   return { weather: next, events: say(events, s.gameMinutes, "farm", text) };
 }
 
@@ -367,7 +369,7 @@ export function dailyEconomy(s: SimState): SimState {
   const fed = need > 0 ? eaten / need : 1;
   if (fed < 1 - EPS && !flags.hungry) {
     flags = { ...flags, hungry: true };
-    events = say(events, now, "food", "Еда закончилась, люди голодают");
+    events = say(events, now, "food", L("Еда закончилась, люди голодают", "Food has run out, people are starving"));
   } else if (fed >= 1 - EPS && flags.hungry) flags = { ...flags, hungry: false };
   const cap = foodCapacity(s.buildings);
   // heat and damp spoil the stock; what lies in cellars and barns suffers less (cellars hold the best)
@@ -384,7 +386,7 @@ export function dailyEconomy(s: SimState): SimState {
     stock.food = cap;
   }
   if (flags.rot >= (s.weather.site ? EFFECTS.rotReport : 1)) {
-    events = say(events, now, "food", `Пропало ${Math.round(flags.rot)} кг еды: ${s.weather.site ? "жара, сырость, не хватает складов" : "не хватает складов"}`);
+    events = say(events, now, "food", L(`Пропало ${Math.round(flags.rot)} кг еды: ${s.weather.site ? "жара, сырость, не хватает складов" : "не хватает складов"}`, `${Math.round(flags.rot)} kg of food spoiled: ${s.weather.site ? "heat, damp, not enough storage" : "not enough storage"}`));
     flags = { ...flags, rot: 0 };
   }
 
@@ -423,7 +425,7 @@ export function dailyEconomy(s: SimState): SimState {
   slots = Math.floor(marketSlots + EPS);
   for (let k = 0; k < ids.length && slots > 0 && stock.wares > EPS; k++) {
     const h = s.households[ids[(k + dayOf(now)) % ids.length]];
-    if (served.has(h.id) || h.home === null || !covers(s.coverage[h.home], "market")) continue;
+    if (served.has(h.id) || !covers(s.coverage[dwelling(h)], "market")) continue;
     hand(h);
     slots--;
   }
@@ -440,7 +442,7 @@ export function dailyEconomy(s: SimState): SimState {
         cold.add(id);
       }
     }
-    if (cold.size > 0 && !Object.values(s.households).some((h) => h.cold)) events = say(events, now, "shortage", "Дров нет, люди мёрзнут");
+    if (cold.size > 0 && !Object.values(s.households).some((h) => h.cold)) events = say(events, now, "shortage", L("Дров нет, люди мёрзнут", "No firewood, people are freezing"));
   }
 
   // Personal needs of the day that ended. Mood is coloured by the needs the day began with (the values on `s`), so a
@@ -452,14 +454,14 @@ export function dailyEconomy(s: SimState): SimState {
     const h = s.households[r.household];
     if (!h) continue;
     const home = h.home !== null ? s.buildings[h.home] : undefined;
-    const day: NeedsDay = { now, fed, served: served.get(h.id) ?? 0, gather: h.home !== null && gather.has(h.home), cold: cold.has(h.id), hours };
+    const day: NeedsDay = { now, fed, served: served.get(h.id) ?? 0, gather: gather.has(dwelling(h)), cold: cold.has(h.id), hours };
     if (residents === s.residents) residents = { ...residents };
     residents[r.id] = { ...r, needs: needsAfterDay(r, h, home, day) };
   }
   const starving = starvingResidents(residents);
   if (starving > 0 && !flags.starving) {
     flags = { ...flags, starving: true };
-    events = say(events, now, "food", "Люди истощены: голод подрывает силы");
+    events = say(events, now, "food", L("Люди истощены: голод подрывает силы", "People are exhausted: hunger saps their strength"));
   } else if (starving === 0 && flags.starving) {
     const { starving: _starving, ...rest } = flags;
     flags = rest;
@@ -513,9 +515,9 @@ export function dailyEconomy(s: SimState): SimState {
     // Most of the grain in the barn counts as a harvest (the goal and the chronicle must not wait a year for the last sheaves).
     if (flags.harvest && !flags.done && got > 0 && lost <= HARVEST_OK * got) {
       flags = { ...flags, done: true };
-      events = say(events, now, "farm", `Урожай собран: ${massText(got)}`);
+      events = say(events, now, "farm", L(`Урожай собран: ${massText(got)}`, `Harvest gathered: ${massText(got)}`));
     }
-    if (lost >= 1) events = say(events, now, "farm", `Зерно осталось в поле и пропало: ${massText(lost)}`);
+    if (lost >= 1) events = say(events, now, "farm", L(`Зерно осталось в поле и пропало: ${massText(lost)}`, `Grain left in the field and was lost: ${massText(lost)}`));
   }
   // progress of fields that are gone or of earlier years is dropped
   const live = new Set(s.zones.fields.map((f) => f.id));
@@ -618,9 +620,9 @@ export function productionInfo(s: SimState, b: Building): ProductionInfo | undef
   if (b.site) info.site = b.site;
   if (storageOf(b.template)) info.storage = storageOf(b.template);
   if (b.template === "orchard") info.orchard = { ripeDays: b.ripe === undefined ? ORCHARD_YEARS * YEAR_DAYS : Math.max(0, Math.ceil((b.ripe - s.gameMinutes) / DAY_MIN)), quality: orchardQuality(s.prod.orchard) };
-  if (b.template === "sawpit" && s.stock.logs <= EPS) info.missing = "брёвна";
-  if (b.template === "smithy" && s.stock.logs <= EPS) info.missing = "брёвна (на уголь)";
-  if (b.template === "carpentry" && s.stock.planks <= EPS) info.missing = "доски";
+  if (b.template === "sawpit" && s.stock.logs <= EPS) info.missing = L("брёвна", "logs");
+  if (b.template === "smithy" && s.stock.logs <= EPS) info.missing = L("брёвна (на уголь)", "logs (for charcoal)");
+  if (b.template === "carpentry" && s.stock.planks <= EPS) info.missing = L("доски", "planks");
   if (b.template === "gumno") {
     const year = calendar(s.gameMinutes).year;
     const assign = assignFields(s.zones.fields, s.buildings);

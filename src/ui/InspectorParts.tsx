@@ -8,20 +8,16 @@ import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { siteHands, type Chip } from "./inspectorModel";
 import { Button, IconButton } from "./kit";
+import { decimal, L, plural } from "../i18n";
 
-export const num = (v: number) => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toString().replace(".", ",");
+export const num = (v: number) => decimal((v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toString());
 
-// Russian plural: one / few / many.
-export const plural = (n: number, one: string, few: string, many: string) => {
-  const m = n % 100;
-  if (m >= 11 && m <= 14) return many;
-  return n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many;
-};
+export { plural };
 
 // Fires a command and flashes the reason when the sim refuses it.
 export const act = (cmd: Parameters<typeof sendCmd>[0]) =>
   void sendCmd(cmd).then((r) => {
-    if (!r.ok) flash(r.reason ?? "Не удалось");
+    if (!r.ok) flash(r.reason ?? L("Не удалось", "Failed"));
   });
 
 // Time to finish `hours` of work at a site: real time at the current speed, with the hands one site can use.
@@ -31,10 +27,10 @@ export function siteEta(hours: number, key: number): string {
   if (!s || hours <= 0) return "";
   const toloka = !!s.levers.toloka && s.levers.toloka.site === key && gameClock.value < s.levers.toloka.until;
   const hands = siteHands(artelHands(), toloka);
-  if (hands <= 0) return "некому строить";
-  if (speed.value === 0) return `${num(hours / hands)} ч работы, время стоит`;
+  if (hands <= 0) return L("некому строить", "no one to build");
+  if (speed.value === 0) return L(`${num(hours / hands)} ч работы, время стоит`, `${num(hours / hands)} h of work, time is stopped`);
   const ms = etaRealMs(hours, hands, s.gameMinutes, speed.value, s.levers);
-  return Number.isFinite(ms) ? `${formatReal(ms)} (${hands} стр.)` : "очень долго";
+  return Number.isFinite(ms) ? `${formatReal(ms)} (${hands} ${L("стр.", "bld.")})` : L("очень долго", "very long");
 }
 
 export function InspectorHead({ icon, title, chip, onClose, headingId }: { icon: IconName; title: string; chip?: Chip; onClose: () => void; headingId?: string }) {
@@ -47,7 +43,7 @@ export function InspectorHead({ icon, title, chip, onClose, headingId }: { icon:
         <h2 id={headingId}>{title}</h2>
         {chip && <span class={`chip chip-${chip.tone}`}>{chip.label}</span>}
       </div>
-      <IconButton icon="close" size={16} label="Закрыть" onClick={onClose} />
+      <IconButton icon="close" size={16} label={L("Закрыть", "Close")} onClick={onClose} />
     </div>
   );
 }
@@ -64,7 +60,7 @@ export function Line({ icon, label, children, tone }: { icon?: IconName; label: 
 }
 
 // Game time to wait, in words: «3 ч», «2 дн.».
-const waitText = (min: number) => (min >= 1440 ? `${Math.ceil(min / 1440)} дн.` : `${Math.max(1, Math.ceil(min / 60))} ч`);
+const waitText = (min: number) => (min >= 1440 ? `${Math.ceil(min / 1440)} ${L("дн.", "d")}` : `${Math.max(1, Math.ceil(min / 60))} ${L("ч", "h")}`);
 
 // Levers for a site that still needs work: served first, and a толока (all adults come, production stands).
 export function SiteLevers({ siteKey }: { siteKey: number }) {
@@ -77,21 +73,21 @@ export function SiteLevers({ siteKey }: { siteKey: number }) {
     <div class="site-levers">
       <Button
         icon="flag"
-        aria-label="В первую очередь"
+        aria-label={L("В первую очередь", "Build first")}
         aria-pressed={first}
         variant={first ? "primary" : "default"}
         onClick={() => act({ type: "setPriority", key: first ? null : siteKey })}
       >
-        {first ? "Первая очередь: снять" : "В первую очередь"}
+        {first ? L("Первая очередь: снять", "Build first: cancel") : L("В первую очередь", "Build first")}
       </Button>
       <Button
         icon="crowd"
-        aria-label="Общий сбор"
-        title="Все взрослые идут на эту стройку до конца рабочего дня, прочие дела стоят"
+        aria-label={L("Общий сбор", "All hands")}
+        title={L("Все взрослые идут на эту стройку до конца рабочего дня, прочие дела стоят", "All adults work on this site until the end of the workday; everything else waits")}
         disabled={wait > 0 || running}
         onClick={() => act({ type: "callToloka", key: siteKey })}
       >
-        {running ? "Общий сбор идёт" : wait > 0 ? `Общий сбор (через ${waitText(wait)})` : "Общий сбор"}
+        {running ? L("Общий сбор идёт", "All hands in progress") : wait > 0 ? L(`Общий сбор (через ${waitText(wait)})`, `All hands (in ${waitText(wait)})`) : L("Общий сбор", "All hands")}
       </Button>
     </div>
   );

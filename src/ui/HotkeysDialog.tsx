@@ -1,13 +1,14 @@
 import { signal } from "@preact/signals";
 import { Dialog } from "./kit";
 import { HOTKEY_SECTIONS } from "./hotkeysModel";
+import { L } from "../i18n";
 
 export const hotkeysOpen = signal(false);
 
 export function HotkeysDialog() {
   if (!hotkeysOpen.value) return null;
   return (
-    <Dialog title="Горячие клавиши" class="hotkeys-dialog" onClose={() => (hotkeysOpen.value = false)}>
+    <Dialog title={L("Горячие клавиши", "Keyboard shortcuts")} class="hotkeys-dialog" onClose={() => (hotkeysOpen.value = false)}>
       <div class="hotkeys-body">
         {HOTKEY_SECTIONS.map((sec) => (
           <div key={sec.title} class="hotkeys-sec">

@@ -96,7 +96,8 @@ export function attachFields(engine: Engine, o: { clock?: ReadonlySignal<number>
     for (const { m } of parts) for (let v = 0; v < m.xy.length / 2; v++) at.push(tf.toLngLat(m.xy[v * 2], m.xy[v * 2 + 1]));
     const ground = at.map(([lng, lat]) => engine.groundAt(lat, lng));
     if (ground.some((h) => h === null)) return false;
-    seat.seated(at.map(([lng, lat]) => [lat, lng] as const));
+    seat.cover(at.map(([lng, lat]) => [lat, lng] as const));
+    seat.seated();
     const [lng0, lat0] = tf.toLngLat(0, 0);
     const or = geodeticToEcef(lat0, lng0, 0);
     const { east, north, up } = enuAt(lat0, lng0);

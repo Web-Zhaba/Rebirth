@@ -21,8 +21,12 @@ so an old town behaves as before until its first daily step.
 | `social` | Общение | 12 a day | +10 for a household with more than one member, +3 for wares, +6 for a tavern/chapel gathering, +2 for a school-age child |
 | `warmth` | Тепло | 40 a day in a household without firewood | 20 a day in a house, 12 in a tent |
 
-A baseline: a family in tents settles near 44 rest (mild fatigue) and loses 2 social a day (work and no
-market/gathering); a house with firewood and a market is stable. This is deliberate: early tents are survivable but
+Tent families live in the camp at the founding point, which the services reach like a house (`CAMP` in
+`coverage`, `dwelling(h)`): a staffed tavern within 600 m of road, a chapel or a market in reach gather and supply
+them too.
+
+A baseline: a family in tents settles near 44 rest (mild fatigue) and loses 2 social a day while no tavern, chapel or
+market reaches the camp; a house with firewood and a market is stable. This is deliberate: early tents are survivable but
 not comfortable, and winter without firewood is an emergency.
 
 ### Proposed, not built yet

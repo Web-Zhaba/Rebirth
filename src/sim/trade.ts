@@ -1,4 +1,5 @@
 import type { Stock } from "./types";
+import { L } from "../i18n";
 
 // Trade at the market (the town has no money): the player picks one good to give away and one to get, the market
 // workers swap them every day at fixed values minus a margin. Only what lies above the reserve is given.
@@ -6,7 +7,7 @@ import type { Stock } from "./types";
 export type TradeGood = keyof Stock;
 export const TRADE_GOODS: readonly TradeGood[] = ["food", "logs", "planks", "stone", "wares"];
 
-export const TRADE_NAME: Record<TradeGood, string> = { food: "еду", logs: "брёвна", planks: "доски", stone: "камень", wares: "товары" };
+export const TRADE_NAME: Record<TradeGood, string> = { food: L("еду", "food"), logs: L("брёвна", "logs"), planks: L("доски", "planks"), stone: L("камень", "stone"), wares: L("товары", "goods") };
 
 export interface TradeOrder {
   give: TradeGood;

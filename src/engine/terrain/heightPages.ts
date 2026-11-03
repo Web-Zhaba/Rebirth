@@ -39,6 +39,7 @@ export class HeightPages {
   readonly texture: GPUTexture;
   readonly layers: number;
   private pages = new Map<number, Page>();
+  private held = new Map<number, number>(); // DEM_MAX_ZOOM tile key -> holders: kept resident, CPU copy included
   private free: number[] = [];
   private cpuCount = 0;
   frame = 0;
@@ -123,6 +124,24 @@ export class HeightPages {
     return { min: lo, max: hi, z: p.z };
   }
 
+  // Keep the finest page of a tile resident with its CPU copy, whatever the camera does (terrain.ts also asks for it while
+  // it is missing): meshes seated on the CPU ground (view/engine/groundSeat.ts) are seated again whenever the ground
+  // under them gets finer, and pages coming and going with the camera re-seated the whole town on every trip out to the
+  // planet and back. Counted per holder.
+  hold(key: number): void {
+    this.held.set(key, (this.held.get(key) ?? 0) + 1);
+  }
+
+  release(key: number): void {
+    const n = (this.held.get(key) ?? 0) - 1;
+    if (n > 0) this.held.set(key, n);
+    else this.held.delete(key);
+  }
+
+  heldKeys(): IterableIterator<number> {
+    return this.held.keys();
+  }
+
   // Upload decoded pages; returns the ones that did not fit (every layer is in use this frame) for a later frame.
   upload(list: DemPage[]): DemPage[] {
     for (let n = 0; n < list.length; n++) {
@@ -184,7 +203,7 @@ export class HeightPages {
     if (l !== undefined) return l;
     let victim: Page | null = null;
     for (const p of this.pages.values()) {
-      if (p.z <= PINNED_ZOOM || p.lastUsed >= this.frame) continue;
+      if (p.z <= PINNED_ZOOM || p.lastUsed >= this.frame || this.held.has(p.key)) continue;
       if (!victim || p.lastUsed < victim.lastUsed) victim = p;
     }
     if (!victim) return -1;
@@ -198,7 +217,7 @@ export class HeightPages {
   private trimCpu(): void {
     while (this.cpuCount > CPU_COPIES) {
       let victim: Page | null = null;
-      for (const p of this.pages.values()) if (p.cpu && (!victim || p.lastUsed < victim.lastUsed || (p.lastUsed === victim.lastUsed && p.z < victim.z))) victim = p;
+      for (const p of this.pages.values()) if (p.cpu && !this.held.has(p.key) && (!victim || p.lastUsed < victim.lastUsed || (p.lastUsed === victim.lastUsed && p.z < victim.z))) victim = p;
       if (!victim) return;
       victim.cpu = null;
       this.cpuCount--;

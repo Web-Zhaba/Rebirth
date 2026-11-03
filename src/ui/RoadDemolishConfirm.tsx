@@ -4,6 +4,7 @@ import { roadDemolishRequest } from "../map/roadTool";
 import { flash } from "../map/tools";
 import { play } from "./sound";
 import { Confirm } from "./kit";
+import { L } from "../i18n";
 
 export function RoadDemolishConfirm() {
   const id = roadDemolishRequest.value;
@@ -17,13 +18,13 @@ export function RoadDemolishConfirm() {
   const remove = () => {
     close();
     void sendCmd({ type: "removeRoad", edgeId: id }).then((r) => {
-      if (!r.ok) flash(r.reason ?? "Не удалось снести");
+      if (!r.ok) flash(r.reason ?? L("Не удалось снести", "Could not demolish"));
       else play("place");
     });
   };
   return (
-    <Confirm title={`Снести: ${ROAD_KINDS[edge.kind].name}?`} okLabel="Снести" onOk={remove} onCancel={close}>
-      Построенный участок длиной {Math.round(edge.length)} м будет удалён. Потраченные материалы и работа не вернутся.
+    <Confirm title={L(`Снести: ${ROAD_KINDS[edge.kind].name}?`, `Demolish: ${ROAD_KINDS[edge.kind].name}?`)} okLabel={L("Снести", "Demolish")} onOk={remove} onCancel={close}>
+      {L(`Построенный участок длиной ${Math.round(edge.length)} м будет удалён. Потраченные материалы и работа не вернутся.`, `The built section, ${Math.round(edge.length)} m long, will be removed. Materials and work spent on it are not returned.`)}
     </Confirm>
   );
 }

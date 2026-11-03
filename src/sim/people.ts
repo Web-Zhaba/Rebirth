@@ -13,6 +13,7 @@ import { cropOf } from "./tech";
 import { foodNeedFactor, mortalityFactor, orchardQuality } from "./weatherEffects";
 import type { WeatherState } from "./weather";
 import { CELL_SIZE } from "./zones";
+import { isEn, L } from "../i18n";
 
 export const FOUNDERS = 14;
 export const ADULT_MIN = 16;
@@ -44,17 +45,38 @@ export const deathRate = (age: number): number => DEATH_BANDS.find(([max]) => ag
 
 // ---------- names ----------
 
-export const MALE_NAMES = [
+export const MALE_NAMES = isEn
+  ? [
+  "John", "Thomas", "Peter", "William", "Henry", "George", "David", "Samuel", "Edward", "Andrew",
+  "Simon", "Michael", "Timothy", "Jacob", "Matthew", "Owen", "Robert", "Lawrence", "Arthur", "Walter",
+  "Hugh", "Ralph", "Martin", "Nathan", "Frank", "Silas", "Isaac", "Abel",
+]
+  : [
   "Иван", "Фёдор", "Пётр", "Василий", "Степан", "Григорий", "Дмитрий", "Никита", "Алексей", "Андрей",
   "Семён", "Михаил", "Тимофей", "Яков", "Матвей", "Егор", "Кузьма", "Лаврентий", "Прохор", "Трофим",
   "Ермолай", "Артемий", "Макар", "Назар", "Ефим", "Силантий", "Игнат", "Харитон",
 ];
-export const FEMALE_NAMES = [
+export const FEMALE_NAMES = isEn
+  ? [
+  "Mary", "Agnes", "Alice", "Anna", "Edith", "Margaret", "Catherine", "Ellen", "Grace", "Martha",
+  "Dora", "Susan", "Rose", "Emma", "Ruth", "Clara", "Ada", "Lucy", "Esther", "Hannah",
+  "Elsie", "Barbara", "Sarah", "Irene", "Ivy", "Mabel", "Lydia",
+]
+  : [
   "Марья", "Аграфена", "Пелагея", "Анна", "Евдокия", "Прасковья", "Татьяна", "Ульяна", "Фекла", "Матрёна",
   "Дарья", "Ксения", "Акулина", "Домна", "Устинья", "Василиса", "Агафья", "Настасья", "Авдотья", "Аксинья",
   "Марфа", "Варвара", "Степанида", "Ирина", "Улита", "Федосья", "Лукерья",
 ];
-export const SURNAMES = [
+export const SURNAMES = isEn
+  ? [
+  "Smith", "Miller", "Baker", "Turner", "Carter", "Cooper", "Fletcher", "Mason", "Wright", "Walker",
+  "Fisher", "Hunter", "Thatcher", "Shepherd", "Taylor", "Weaver", "Porter", "Brooks", "Hill", "Wood",
+  "Field", "Marsh", "Ford", "Stone", "Green", "Bell", "Lane", "Moore", "Hayes", "Reed",
+  "Webb", "Hall", "Ward", "Price", "Dale", "Wells", "Grant", "Long", "Young", "Short",
+  "Glover", "Archer", "Sawyer", "Potter", "Gardner", "Chapman", "Harper", "Mills", "Banks", "Rivers",
+  "Gray", "Black", "White", "Brown",
+]
+  : [
   "Смирнов", "Кузнецов", "Попов", "Васильев", "Петров", "Соколов", "Михайлов", "Новиков", "Фёдоров", "Морозов",
   "Волков", "Алексеев", "Лебедев", "Семёнов", "Егоров", "Павлов", "Козлов", "Степанов", "Николаев", "Орлов",
   "Андреев", "Макаров", "Никитин", "Захаров", "Зайцев", "Соловьёв", "Борисов", "Яковлев", "Григорьев", "Романов",
@@ -565,7 +587,7 @@ export function killResident(s: SimState, id: number): SimState {
   const r = s.residents[id];
   if (!r) return s;
   const w = cloneW(s, s.gameMinutes);
-  say(w, "death", `${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`, homePos(s.buildings[s.households[r.household]?.home ?? -1]));
+  say(w, "death", L(`${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`, `${fullName(r)} died`), homePos(s.buildings[s.households[r.household]?.home ?? -1]));
   removePerson(w, w.residents[id]);
   return { ...s, residents: w.residents, households: w.households, events: w.events.slice(-MAX_EVENTS) };
 }
@@ -780,7 +802,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       const age = ageOf(r.born, now);
       // Starvation, exhaustion and cold add their own chance a day on top of the age table; a healer helps with those too.
       if (rand() < (deathRate(age) * care) / YEAR_DAYS + deathChanceFromNeeds(needsOf(r), age) * healer) {
-        say(w, "death", `${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`);
+        say(w, "death", L(`${r.sex === "m" ? "Умер" : "Умерла"} ${fullName(r)}`, `${fullName(r)} died`));
         removePerson(w, r);
       }
     }
@@ -803,7 +825,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
           const sex = rand() < 0.5 ? "m" : "f";
           const kid = addPerson(w, pick(sex === "m" ? MALE_NAMES : FEMALE_NAMES, rand), surnameFor(h.last, sex), sex, 0, h.id);
           h.members.push(kid.id);
-          say(w, "birth", `${sex === "m" ? "Родился" : "Родилась"} ${fullName(kid)}`);
+          say(w, "birth", L(`${sex === "m" ? "Родился" : "Родилась"} ${fullName(kid)}`, `${fullName(kid)} was born`));
         }
       }
     }
@@ -841,7 +863,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
         woman.spouse = man.id;
         woman.last = surnameFor(man.last, "f");
         pairs++;
-        say(w, "marriage", `Поженились ${fullName(man)} и ${fullName(woman)}`);
+        say(w, "marriage", L(`Поженились ${fullName(man)} и ${fullName(woman)}`, `${fullName(man)} and ${fullName(woman)} married`));
       }
     }
   }
@@ -853,7 +875,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       const i = vacant.findIndex((b) => houseCap(buildings[b]) >= h.members.length);
       if (i < 0) continue;
       h.home = vacant.splice(i, 1)[0];
-      say(w, "movein", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) заселилась в дом`, homePos(buildings[h.home]));
+      say(w, "movein", L(`Семья ${familyGenitive(h.last)} (${h.members.length} чел.) заселилась в дом`, `The ${h.last} family (${h.members.length} ${h.members.length === 1 ? "person" : "people"}) moved into a house`), homePos(buildings[h.home]));
     }
   }
 
@@ -867,7 +889,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       stock = { ...stock, food: stock.food * (1 - n / pop) };
       for (const m of h.members) delete w.residents[m];
       delete w.households[h.id];
-      say(w, "departure", `Семья ${familyGenitive(h.last)} (${n} чел.) покинула поселение`, homePos(buildings[h.home]));
+      say(w, "departure", L(`Семья ${familyGenitive(h.last)} (${n} чел.) покинула поселение`, `The ${h.last} family (${n} ${n === 1 ? "person" : "people"}) left the settlement`), homePos(buildings[h.home]));
     }
   }
 
@@ -934,7 +956,7 @@ export function immigrationStep(s: SimState, dt: number): SimState {
       const room = house === null ? 3 : Math.max(0, houseCap(s.buildings[house]) - 2);
       const kids = Math.floor(rand() * (Math.min(3, room) + 1));
       const h = makeFamily(wk, rand, 18, 45, kids, house);
-      say(wk, "arrival", `Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`, house === null ? undefined : homePos(s.buildings[house]));
+      say(wk, "arrival", L(`Семья ${familyGenitive(h.last)} (${h.members.length} чел.) приехала в поселение`, `The ${h.last} family (${h.members.length} ${h.members.length === 1 ? "person" : "people"}) arrived in the settlement`), house === null ? undefined : homePos(s.buildings[house]));
       let eat = 0;
       for (const m of h.members) eat += ageOf(wk.residents[m].born, now) < ADULT_MIN ? FOOD.child : FOOD.adult;
       stock = { ...stock, food: Math.min(foodCapacity(s.buildings), stock.food + eat * FOOD.immigrantDays) };
@@ -982,40 +1004,40 @@ export function syncPeople<T extends Pick<SimState, "buildings" | "residents" | 
 // ---------- inspector ----------
 
 const WORK_TEXT: Record<string, string> = {
-  smithy: "кузнец — Кузница",
-  carpentry: "столяр — Столярная мастерская",
-  pottery: "гончар — Гончарня",
-  shop: "работает в Магазине",
-  tavern: "работает в Таверне",
-  gumno: "фермер — Ферма",
-  woodcutter: "лесоруб",
-  garden: "работает в Огороде",
-  hunter: "охотник — Охотничий пост",
-  forager: "собирает в лесу",
-  orchard: "садовник — Сад",
-  apiary: "пасечник",
-  sawpit: "рабочий лесопилки",
-  quarry: "рабочий карьера",
-  fisher: "рыбак",
-  well: "работает у колодца",
-  market: "торгует на Рынке",
-  chapel: "служит в Храме",
-  school: "учитель — Школа",
-  healer: "врач",
-  dig: "землекоп — Раскоп",
+  smithy: L("кузнец — Кузница", "smith — Smithy"),
+  carpentry: L("столяр — Столярная мастерская", "carpenter — Carpentry workshop"),
+  pottery: L("гончар — Гончарня", "potter — Pottery"),
+  shop: L("работает в Магазине", "works at the Shop"),
+  tavern: L("работает в Таверне", "works at the Tavern"),
+  gumno: L("фермер — Ферма", "farmer — Farm"),
+  woodcutter: L("лесоруб", "woodcutter"),
+  garden: L("работает в Огороде", "works in the Vegetable garden"),
+  hunter: L("охотник — Охотничий пост", "hunter — Hunting post"),
+  forager: L("собирает в лесу", "forages in the forest"),
+  orchard: L("садовник — Сад", "gardener — Orchard"),
+  apiary: L("пасечник", "beekeeper"),
+  sawpit: L("рабочий лесопилки", "sawmill worker"),
+  quarry: L("рабочий карьера", "quarry worker"),
+  fisher: L("рыбак", "fisher"),
+  well: L("работает у колодца", "works at the well"),
+  market: L("торгует на Рынке", "trades at the Market"),
+  chapel: L("служит в Храме", "serves at the Temple"),
+  school: L("учитель — Школа", "teacher — School"),
+  healer: L("врач", "healer"),
+  dig: L("землекоп — Раскоп", "digger — Dig"),
 };
 
 function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: Set<number>): string {
-  if (age < ADULT_MIN) return r.inClass ? "школьник" : "ребёнок";
-  if (age >= ADULT_MAX) return r.sex === "m" ? "старик" : "старуха";
-  if (r.inClass) return "учится в школе";
-  if (r.job !== null && idle.has(r.job)) return work ? "на стройке" : "без работы";
+  if (age < ADULT_MIN) return r.inClass ? L("школьник", "pupil") : L("ребёнок", "child");
+  if (age >= ADULT_MAX) return r.sex === "m" ? L("старик", "old man") : L("старуха", "old woman");
+  if (r.inClass) return L("учится в школе", "studies at school");
+  if (r.job !== null && idle.has(r.job)) return work ? L("на стройке", "at a building site") : L("без работы", "without work");
   if (r.job !== null) {
     const b = s.buildings[r.job];
     const t = b && BUILDINGS[b.template];
-    if (b && t) return WORK_TEXT[t.id] ?? `работает — ${t.name}`;
+    if (b && t) return WORK_TEXT[t.id] ?? L(`работает — ${t.name}`, `works — ${t.name}`);
   }
-  return work ? "на стройке" : "без работы";
+  return work ? L("на стройке", "at a building site") : L("без работы", "without work");
 }
 
 export function queryBuilding(s: SimState, id: number): BuildingQuery | null {

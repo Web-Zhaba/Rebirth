@@ -35,7 +35,7 @@ export const newTally = (): Tally => ({ births: 0, deaths: 0, arrivals: 0, depar
 const GOOD: Record<string, keyof Stock> = { woodcutter: "logs", sawpit: "planks", quarry: "stone", fisher: "food", garden: "food", hunter: "food", forager: "food", orchard: "food", apiary: "food", gumno: "food", pottery: "wares", smithy: "wares", carpentry: "wares" };
 
 // "(5 чел.)" in the family events; one person when the text has no count.
-const people = (text: string): number => Number(/\((\d+) чел\./.exec(text)?.[1] ?? 1);
+const people = (text: string): number => Number(/\((\d+) (?:чел\.|people|person)/.exec(text)?.[1] ?? 1);
 
 // Adds what one step changed to the tally. Called with consecutive states.
 export function observe(t: Tally, prev: SimState, next: SimState): void {

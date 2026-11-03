@@ -1,5 +1,6 @@
 import { addChronicle } from "./chronicle";
 import type { Building, DigInfo, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
+import { decimal, L, plural } from "../i18n";
 
 // Excavation (PLAN.md section 12): dig sites reveal a growing disc of the buried old city.
 export const DIG = {
@@ -158,12 +159,7 @@ const typeOf = (f: { cls?: string; name?: string; height?: number }): Pick<Found
   return t;
 };
 
-const plural = (n: number, one: string, few: string, many: string): string => {
-  const m = n % 100;
-  if (m >= 11 && m <= 14) return many;
-  return n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many;
-};
-const tonnes = (t: number): string => (Math.round(t * 10) / 10).toString().replace(".", ",");
+const tonnes = (t: number): string => decimal((Math.round(t * 10) / 10).toString());
 
 export const salvagedStone = (area: number): number => Math.min(DIG.stoneCap, DIG.stonePerM2 * area);
 
@@ -173,22 +169,22 @@ export type RecordResult = { ok: true; sim: SimState } | { ok: false; reason: st
 // Returns the same state when nothing was new.
 export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   const bad = (reason: string): RecordResult => ({ ok: false, reason });
-  if (!isRec(cmd) || !Number.isInteger(cmd.digId)) return bad("Некорректные находки");
+  if (!isRec(cmd) || !Number.isInteger(cmd.digId)) return bad(L("Некорректные находки", "Invalid finds"));
   const dig = s.buildings[cmd.digId];
   const gone = !dig || !isDig(dig);
-  if (gone && !s.finds.revealed.some((d) => d.digId === cmd.digId)) return bad("Раскопа уже нет");
+  if (gone && !s.finds.revealed.some((d) => d.digId === cmd.digId)) return bad(L("Раскопа уже нет", "The dig is gone"));
   const { foundations, pois, streets } = cmd;
-  if (!Array.isArray(foundations) || !Array.isArray(pois) || !Array.isArray(streets)) return bad("Некорректные находки");
-  if (foundations.length > DIG.batch || pois.length > MAX_LIST || streets.length > MAX_LIST) return bad("Слишком много находок");
+  if (!Array.isArray(foundations) || !Array.isArray(pois) || !Array.isArray(streets)) return bad(L("Некорректные находки", "Invalid finds"));
+  if (foundations.length > DIG.batch || pois.length > MAX_LIST || streets.length > MAX_LIST) return bad(L("Слишком много находок", "Too many finds"));
   for (const f of foundations) {
-    if (!isRec(f) || !isStr(f.id, 200) || !finite(f.area) || f.area <= 0 || f.area > 1e7) return bad("Некорректный фундамент");
-    if (!Array.isArray(f.ring) || f.ring.length < 3 || f.ring.length > MAX_RING || !f.ring.every(isPt)) return bad("Некорректный фундамент");
-    if (!typeOk(f)) return bad("Некорректный фундамент");
+    if (!isRec(f) || !isStr(f.id, 200) || !finite(f.area) || f.area <= 0 || f.area > 1e7) return bad(L("Некорректный фундамент", "Invalid foundation"));
+    if (!Array.isArray(f.ring) || f.ring.length < 3 || f.ring.length > MAX_RING || !f.ring.every(isPt)) return bad(L("Некорректный фундамент", "Invalid foundation"));
+    if (!typeOk(f)) return bad(L("Некорректный фундамент", "Invalid foundation"));
   }
   for (const p of pois) {
-    if (!isRec(p) || !isStr(p.id, 200) || !isStr(p.name, 200) || typeof p.cls !== "string" || p.cls.length > 60 || !isPt([p.x, p.y])) return bad("Некорректное место");
+    if (!isRec(p) || !isStr(p.id, 200) || !isStr(p.name, 200) || typeof p.cls !== "string" || p.cls.length > 60 || !isPt([p.x, p.y])) return bad(L("Некорректное место", "Invalid place"));
   }
-  for (const t of streets) if (!isRec(t) || !isStr(t.id, 200) || !isStr(t.name, 200)) return bad("Некорректная улица");
+  for (const t of streets) if (!isRec(t) || !isStr(t.id, 200) || !isStr(t.name, 200)) return bad(L("Некорректная улица", "Invalid street"));
 
   const at = s.gameMinutes;
   const seenF = new Set(s.finds.foundations.map((f) => f.id));
@@ -202,7 +198,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     if (seenP.has(p.id)) continue;
     seenP.add(p.id);
     newPois.push({ id: p.id, name: p.name, kind: p.cls, digId: cmd.digId, at, x: r2(p.x), y: r2(p.y) });
-    chronicle = addChronicle(chronicle, at, "dig:poi", `Раскоп: найдено место «${p.name}»`);
+    chronicle = addChronicle(chronicle, at, "dig:poi", L(`Раскоп: найдено место «${p.name}»`, `Dig: found a place, “${p.name}”`));
   }
   const newStreets: FoundPlace[] = [];
   for (const t of streets) {
@@ -210,7 +206,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     seenS.add(t.id);
     seenName.add(t.name);
     newStreets.push({ id: t.id, name: t.name, kind: "street", digId: cmd.digId, at });
-    chronicle = addChronicle(chronicle, at, "dig:street", `Раскоп: найдена старая улица — ${t.name}`);
+    chronicle = addChronicle(chronicle, at, "dig:street", L(`Раскоп: найдена старая улица — ${t.name}`, `Dig: found an old street — ${t.name}`));
   }
   const newF: FoundFoundation[] = [];
   let stone = 0;
@@ -235,7 +231,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   if (newF.length > 0) {
     const n = newF.length;
     const word = n % 10 === 1 && n % 100 !== 11 ? `открыт ${n} фундамент` : `открыто ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`;
-    chronicle = addChronicle(chronicle, at, "dig:found", `Раскоп: ${word}, +${tonnes(stone)} т камня`);
+    chronicle = addChronicle(chronicle, at, "dig:found", L(`Раскоп: ${word}, +${tonnes(stone)} т камня`, `Dig: uncovered ${n} ${plural(n, "", "", "", "foundation")}, +${tonnes(stone)} t of stone`));
   }
   if (newF.length + newPois.length + newStreets.length + enriched === 0) return { ok: true, sim: s };
   return {

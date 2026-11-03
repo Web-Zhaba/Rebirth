@@ -8,6 +8,7 @@ import { flash } from "../map/tools";
 import { SEASON_NAMES, seasonPreview } from "../map/seasonPreview";
 import { sendCmd, setSpeed, speed } from "../simClient";
 import { Button } from "./kit";
+import { L } from "../i18n";
 
 export const adminOpen = signal(false);
 // Mirrors the worker's session flag; both start off after every load.
@@ -17,7 +18,7 @@ const RADII = [30, 100, 300, ADMIN.maxRadius];
 
 async function run(op: AdminOp): Promise<boolean> {
   const r = await sendCmd({ type: "admin", op });
-  if (!r.ok) flash(r.reason ?? "Не вышло");
+  if (!r.ok) flash(r.reason ?? L("Не вышло", "That didn't work"));
   return r.ok;
 }
 
@@ -40,36 +41,36 @@ export function AdminPanel() {
   if (!adminOpen.value) return null;
   const r = revealRadius.value;
   return (
-    <div class="panel admin-panel" role="region" aria-label="Админ-панель">
+    <div class="panel admin-panel" role="region" aria-label={L("Админ-панель", "Admin panel")}>
       <div class="admin-head">
-        <b>Админ-панель</b>
-        <button type="button" class="admin-x" aria-label="Закрыть" onClick={() => (adminOpen.value = false)}>
+        <b>{L("Админ-панель", "Admin panel")}</b>
+        <button type="button" class="admin-x" aria-label={L("Закрыть", "Close")} onClick={() => (adminOpen.value = false)}>
           ×
         </button>
       </div>
       <label class="admin-row">
         <input type="checkbox" checked={adminFree.value} onChange={(e) => void setFree((e.target as HTMLInputElement).checked)} />
-        <span>Строить бесплатно и сразу</span>
+        <span>{L("Строить бесплатно и сразу", "Build free and instantly")}</span>
       </label>
       <div class="admin-grid">
-        <Button onClick={() => void run({ k: "finish" })}>Достроить всё</Button>
-        <Button onClick={() => void run({ k: "stock" })}>+{ADMIN.grant} ресурсов</Button>
-        <Button onClick={() => void run({ k: "unlock" })}>Изучить всё</Button>
-        <Button onClick={() => void run({ k: "era" })}>Следующая эпоха</Button>
-        <Button onClick={() => setSpeed(speed.value === 4 ? 1 : 4)}>Скорость {speed.value === 4 ? "×1" : "×4"}</Button>
+        <Button onClick={() => void run({ k: "finish" })}>{L("Достроить всё", "Finish everything")}</Button>
+        <Button onClick={() => void run({ k: "stock" })}>+{ADMIN.grant} {L("ресурсов", "resources")}</Button>
+        <Button onClick={() => void run({ k: "unlock" })}>{L("Изучить всё", "Research everything")}</Button>
+        <Button onClick={() => void run({ k: "era" })}>{L("Следующая эпоха", "Next era")}</Button>
+        <Button onClick={() => setSpeed(speed.value === 4 ? 1 : 4)}>{L("Скорость", "Speed")} {speed.value === 4 ? "×1" : "×4"}</Button>
       </div>
-      <div class="admin-sub">Исследовать кликом по карте, радиус:</div>
+      <div class="admin-sub">{L("Исследовать кликом по карте, радиус:", "Reveal by clicking the map, radius:")}</div>
       <div class="admin-grid">
         {RADII.map((m) => (
           <Button key={m} variant={r === m ? "primary" : "default"} aria-pressed={r === m} onClick={() => (revealRadius.value = r === m ? null : m)}>
-            {m} м
+            {m} {L("м", "m")}
           </Button>
         ))}
       </div>
-      <div class="admin-sub">Сезон на карте (игра не меняется):</div>
+      <div class="admin-sub">{L("Сезон на карте (игра не меняется):", "Season on the map (the game is unchanged):")}</div>
       <div class="admin-grid">
         <Button variant={seasonPreview.value === null ? "primary" : "default"} aria-pressed={seasonPreview.value === null} onClick={() => (seasonPreview.value = null)}>
-          Как в игре
+          {L("Как в игре", "As in the game")}
         </Button>
         {SEASON_NAMES.map((name, k) => (
           <Button key={name} variant={seasonPreview.value === k ? "primary" : "default"} aria-pressed={seasonPreview.value === k} onClick={() => (seasonPreview.value = k)}>
@@ -77,7 +78,7 @@ export function AdminPanel() {
           </Button>
         ))}
       </div>
-      <div class="admin-sub">Открыть панель: клавиша ё / `</div>
+      <div class="admin-sub">{L("Открыть панель: клавиша ё / `", "Open the panel: the ` key")}</div>
     </div>
   );
 }

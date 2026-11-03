@@ -7,6 +7,7 @@ import { followStatus, residentWalk } from "./followModel";
 import { Icon } from "./Icon";
 import { IconButton, Panel } from "./kit";
 import { NeedsBars } from "./NeedsBars";
+import { L } from "../i18n";
 
 // Small card in the centre column while the camera follows one resident (src/ui/FollowCamera.tsx).
 export function FollowCard() {
@@ -25,13 +26,13 @@ export function FollowCard() {
         <strong>
           <Icon name="locate" size={16} /> {target.name}
         </strong>
-        <IconButton icon="close" label="Перестать следить" size={16} onClick={stopFollowing} />
+        <IconButton icon="close" label={L("Перестать следить", "Stop following")} size={16} onClick={stopFollowing} />
       </div>
       <div class="follow-status">{status.text}</div>
-      <div class="people-note">{info ? info.role : "Данных о жителе нет"}</div>
+      <div class="people-note">{info ? info.role : L("Данных о жителе нет", "No data on this resident")}</div>
       {info?.needs && <NeedsBars needs={info.needs} />}
-      {info?.problems && info.problems.length > 0 && <div class="prod-warn">Тяжело: {info.problems.join(", ")}</div>}
-      {typeof info?.work === "number" && info.work < 0.95 && <div class="people-note">Силы к работе: {Math.round(info.work * 100)} %</div>}
+      {info?.problems && info.problems.length > 0 && <div class="prod-warn">{L("Тяжело:", "Struggling:")} {info.problems.join(", ")}</div>}
+      {typeof info?.work === "number" && info.work < 0.95 && <div class="people-note">{L("Силы к работе:", "Fitness for work:")} {Math.round(info.work * 100)}{L(" %", "%")}</div>}
     </Panel>
   );
 }

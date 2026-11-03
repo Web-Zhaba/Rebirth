@@ -16,6 +16,7 @@ import { needsRoadDemolishConfirm } from "../ui/actionModel";
 import { arcPath, snapAngle, type Pt } from "./curve";
 import { restoreMissingPieces } from "./roadRestoreModel";
 import { flash, isRoadTool, roadKindOf, ROAD_MAX_MPP, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
+import { decimal, L } from "../i18n";
 
 
 export const roadDemolishRequest = signal<number | null>(null);
@@ -193,7 +194,7 @@ export function attachRoadTool(view: View): void {
   };
 
   const costText = (len: number, labor: number, stone = 0) =>
-    `${Math.round(len)} м · ${Math.round(labor)} чел.-ч${stone > 0 ? ` · камня ${Math.round(stone * 10) / 10} т`.replace(".", ",") : ""} · ${etaText(labor)}`;
+    `${Math.round(len)} ${L("м", "m")} · ${Math.round(labor)} ${L("чел.-ч", "person-h")}${stone > 0 ? ` · ${L("камня", "stone")} ${decimal(String(Math.round(stone * 10) / 10))} ${L("т", "t")}` : ""} · ${etaText(labor)}`;
   const spans = () => effectiveSpans(state.peek()?.progress);
 
   // Terrain sampling is throttled; results of superseded requests are dropped.
@@ -212,13 +213,13 @@ export function attachRoadTool(view: View): void {
           if (mine !== seq) return;
           const c = segmentCost(p, segmentKind(t, req.along), spans());
           const queued = queuedLabel(gameClock.peek(), state.peek()?.levers);
-          verdict = c.ok ? { ok: true, text: costText(p.length, c.labor, c.stone) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? "Нельзя" };
+          verdict = c.ok ? { ok: true, text: costText(p.length, c.labor, c.stone) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? L("Нельзя", "Not allowed") };
           drawPreview(req.pts);
           setLabel(verdict.text);
         })
         .catch(() => {
           if (mine !== seq) return;
-          verdict = { ok: false, text: "Нет данных о местности" };
+          verdict = { ok: false, text: L("Нет данных о местности", "No terrain data") };
           drawPreview(req.pts);
           setLabel(verdict.text);
         });
@@ -275,7 +276,7 @@ export function attachRoadTool(view: View): void {
     if (pts.length < 2) {
       seq++;
       pendingCost = null;
-      verdict = { ok: false, text: "Слишком коротко" };
+      verdict = { ok: false, text: L("Слишком коротко", "Too short") };
       drawPreview(pts);
       setLabel(verdict.text);
       return;
@@ -306,7 +307,7 @@ export function attachRoadTool(view: View): void {
       return;
     }
     if (pts.length < 2) {
-      flash("Слишком коротко");
+      flash(L("Слишком коротко", "Too short"));
       return;
     }
     const local = addRoad(g, pts, t, CURVE_SNAP_M, laborByLength(pts, 1));
@@ -321,7 +322,7 @@ export function attachRoadTool(view: View): void {
         const kind = segmentKind(t, along);
         const c = segmentCost(p, kind, spans());
         if (!c.ok) {
-          flash(c.reason ?? "Нельзя");
+          flash(c.reason ?? L("Нельзя", "Not allowed"));
           return false;
         }
         return sendCmd({
@@ -332,15 +333,15 @@ export function attachRoadTool(view: View): void {
           labor: laborByLength(pts, c.labor),
           span: c.span,
         }).then((res) => {
-          if (!res.ok) flash(res.reason ?? "Не удалось проложить");
+          if (!res.ok) flash(res.reason ?? L("Не удалось проложить", "Could not lay the road"));
           else if (cutOffEdges(local.graph).size > cutOffEdges(g).size) {
-            flash("Дорога не связана с лагерем — её не построят. Ведите её от лагеря или от готовой дороги");
+            flash(L("Дорога не связана с лагерем — её не построят. Ведите её от лагеря или от готовой дороги", "The road is not connected to the camp and won’t be built. Lead it from the camp or from a finished road"));
           } else play("place");
           return res.ok;
         });
       })
       .catch(() => {
-        flash("Нет данных о местности");
+        flash(L("Нет данных о местности", "No terrain data"));
         return false;
       })
       .then((ok) => {
@@ -376,11 +377,11 @@ export function attachRoadTool(view: View): void {
   const restoreText = (r: Restore): string => {
     if (!r.priced) return `${r.title} · …`;
     const ok = r.lines.filter((l) => l.ok);
-    if (ok.length === 0) return `${r.title} · ${r.reason ?? "Нельзя"}`;
+    if (ok.length === 0) return `${r.title} · ${r.reason ?? L("Нельзя", "Not allowed")}`;
     const len = ok.reduce((s, l) => s + lengthOf(l.pts), 0);
     const labor = ok.reduce((s, l) => s + l.labor, 0);
     const missing = r.lines.length - ok.length;
-    return `${r.title} · ${costText(len, labor)}${missing ? ` · не пройдёт участков: ${missing}` : ""} · клик — восстановить`;
+    return `${r.title} · ${costText(len, labor)}${missing ? ` · ${L("не пройдёт участков", "sections that won’t pass")}: ${missing}` : ""} · ${L("клик — восстановить", "click to restore")}`;
   };
 
   // The ends of the old streets, recomputed when a dig reveals more.
@@ -395,7 +396,7 @@ export function attachRoadTool(view: View): void {
       junctionsOf = all;
       junctions = streetJunctions(all);
     }
-    const r: Restore = { key, title: name ? `Улица «${name}»` : "Старая дорога", lines: [], priced: false, reason: null };
+    const r: Restore = { key, title: name ? L(`Улица «${name}»`, `${name} street`) : L("Старая дорога", "Old road"), lines: [], priced: false, reason: null };
     let hadGeometry = false;
     for (const w of ways) {
       const pts = roadLine(w.pts, MIN_SEGMENT, junctions);
@@ -412,7 +413,7 @@ export function attachRoadTool(view: View): void {
         r.lines.push({ pts: piece, cls: w.cls, kind, labor: 0, span: 0, ok: local.ok });
       }
     }
-    if (r.lines.length === 0) r.reason = hadGeometry ? "Улица уже восстановлена" : "Слишком коротко";
+    if (r.lines.length === 0) r.reason = hadGeometry ? L("Улица уже восстановлена", "The street is already restored") : L("Слишком коротко", "Too short");
     restore = r;
     drawRestore(r);
     void Promise.all(
@@ -427,11 +428,11 @@ export function attachRoadTool(view: View): void {
             l.span = c.span;
             if (!c.ok || lock) {
               l.ok = false;
-              if (!r.reason) r.reason = lock ?? c.reason ?? "Нельзя";
+              if (!r.reason) r.reason = lock ?? c.reason ?? L("Нельзя", "Not allowed");
             }
           } catch {
             l.ok = false;
-            if (!r.reason) r.reason = "Нет данных о местности";
+            if (!r.reason) r.reason = L("Нет данных о местности", "No terrain data");
           }
         }),
     ).then(() => {
@@ -448,7 +449,7 @@ export function attachRoadTool(view: View): void {
     const hit = snapToOldStreets({ x, y }, all, tol);
     if (!hit || hit.id === undefined) {
       if (restore) clearOverlay();
-      setLabel(all.length ? null : "Старых улиц пока нет: их открывают раскопки");
+      setLabel(all.length ? null : L("Старых улиц пока нет: их открывают раскопки", "No old streets yet: digs uncover them"));
       return;
     }
     const key = hit.name ? `name:${hit.name}` : `id:${hit.id}`;
@@ -463,7 +464,7 @@ export function attachRoadTool(view: View): void {
     if (!r || !r.priced || busy) return; // nothing under the cursor, or still pricing: a click does nothing
     const todo = r.lines.filter((l) => l.ok);
     if (todo.length === 0) {
-      flash(r.reason ?? "Нельзя");
+      flash(r.reason ?? L("Нельзя", "Not allowed"));
       return;
     }
     const before = roads.peek();
@@ -477,14 +478,14 @@ export function attachRoadTool(view: View): void {
         built++;
         const local = after && addRoad(after, l.pts, l.kind, CURVE_SNAP_M, laborByLength(l.pts, l.labor));
         if (local && local.ok) after = local.graph;
-      } else if (!reason) reason = res.reason ?? "Не удалось проложить";
+      } else if (!reason) reason = res.reason ?? L("Не удалось проложить", "Could not lay the road");
     }
     busy = false;
     if (restore === r) clearOverlay();
     if (built > 0) play("place");
-    if (reason) flash(built > 0 ? `Восстановлено участков: ${built} из ${todo.length}. ${reason}` : reason);
+    if (reason) flash(built > 0 ? L(`Восстановлено участков: ${built} из ${todo.length}. ${reason}`, `Sections restored: ${built} of ${todo.length}. ${reason}`) : reason);
     else if (before && after && cutOffEdges(after).size > cutOffEdges(before).size) {
-      flash("Улица не связана с лагерем — её не построят. Восстановите сначала улицу, что ведёт к лагерю или к готовой дороге");
+      flash(L("Улица не связана с лагерем — её не построят. Восстановите сначала улицу, что ведёт к лагерю или к готовой дороге", "The street is not connected to the camp and won’t be built. First restore a street leading to the camp or to a finished road"));
     }
     if (lastEvent) onMove(lastEvent);
   };
@@ -499,7 +500,7 @@ export function attachRoadTool(view: View): void {
     if (!ctx) return;
     if (view.metersPerPixel() > ROAD_MAX_MPP) {
       clearOverlay();
-      setLabel("Приблизьте карту");
+      setLabel(L("Приблизьте карту", "Zoom in on the map"));
       return;
     }
     const { f, g, x, y, tol } = ctx;
@@ -522,7 +523,7 @@ export function attachRoadTool(view: View): void {
         features: [line(f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y))],
       });
       const pct = edge.labor > 0 ? Math.floor((100 * edge.done) / edge.labor) : 100;
-      setLabel(`${ROAD_KINDS[edge.kind].name} · ${Math.round(edge.length)} м · ${pct >= 100 ? "построено" : `${pct} %`}${(edge.stone ?? 0) > (state.peek()?.stock.stone ?? Infinity) ? " · Нет камня" : ""}`);
+      setLabel(`${ROAD_KINDS[edge.kind].name} · ${Math.round(edge.length)} ${L("м", "m")} · ${pct >= 100 ? L("построено", "built") : `${pct}${L(" %", "%")}`}${(edge.stone ?? 0) > (state.peek()?.stock.stone ?? Infinity) ? L(" · Нет камня", " · No stone") : ""}`);
       return;
     }
     if (spaceDown) {
@@ -552,7 +553,7 @@ export function attachRoadTool(view: View): void {
     }
     const a = aim(e, ctx, start);
     angleHint = a.deg === null ? "" : `${a.deg}°`;
-    streetHint = a.name && a.old ? ` · по старой улице ${a.name}` : "";
+    streetHint = a.name && a.old ? L(` · по старой улице ${a.name}`, ` · along the old street ${a.name}`) : "";
     setSnap(a.snap, a.guide);
     if (!start) {
       setLabel(null);
@@ -587,7 +588,7 @@ export function attachRoadTool(view: View): void {
         return;
       }
       void sendCmd({ type: "removeRoad", edgeId: id }).then((r) => {
-        if (!r.ok) flash(r.reason ?? "Не удалось снести");
+        if (!r.ok) flash(r.reason ?? L("Не удалось снести", "Could not demolish"));
         else play("place");
       });
       return;

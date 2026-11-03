@@ -1,5 +1,5 @@
 import type { Speed } from "./clock";
-import type { Light, Trip } from "../map/life";
+import type { Light, Rest, Trip } from "../map/life";
 import type { AdminOp } from "./admin";
 import type { Away } from "./away";
 import type { JobKey, Priority } from "./buildings";
@@ -92,6 +92,6 @@ export type FromWorker =
   | ({ t: "cmdResult"; id: number } & CmdResult)
   | { t: "queryResult"; id: number; data: BuildingQuery | ResidentQuery | null }
   // cosmetic, once per game day, whenever the families on their way change, and on load, never during catch-up; not part of the sim state or saves
-  | { t: "life"; day: number; trips: Trip[]; traffic: Record<number, number>; lights: Light[] }
+  | { t: "life"; day: number; trips: Trip[]; rests: Rest[]; traffic: Record<number, number>; lights: Light[] }
   | { t: "resetDone" }
   | { t: "error"; message: string };

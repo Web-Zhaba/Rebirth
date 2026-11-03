@@ -4,17 +4,18 @@ import type { Engine } from "../../engine/engine";
 import { packColor } from "../../engine/overlay/geometry";
 import { colourBits, DOT_FLOATS, Dots, writeDot } from "../../engine/scene/dots";
 import { FIGURE_VERTEX_FLOATS, type TownMesh } from "../../engine/scene/townMesh";
-import { lightOpacity, placeAt, type Light, type Trip } from "../../map/life";
+import { lightOpacity, placeAt, standAt, type Light, type Rest, type Trip } from "../../map/life";
 import { tool } from "../../map/tools";
-import { buildRig, orient, poseOf, villagerLook, writeVillager, type Rig } from "../../map/villagerModel";
+import { buildRig, orient, poseOf, villagerLook, writeVillager, type Action, type Rig } from "../../map/villagerModel";
 import { MAP_ONLY, PALETTE } from "../../ui/palette";
 import type { Frame } from "../../world/frame";
 import { mppAtZoom, type View } from "../view";
 
-// Visible life on the engine (the old map's life layer): walkers and carts moving along their trips, the evening
-// glows of lit buildings, a click on a walker to follow that resident. Positions are recomputed ~20 times a second
-// from the cosmetic trips of the sim worker, extrapolating the game clock between snapshots. Close enough, the walkers
-// near the camera are figures (map/villagerModel.ts) instead of dots, redrawn every frame so their steps are smooth.
+// Visible life on the engine (the old map's life layer): walkers and carts moving along their trips, the residents
+// out of doors (in the camp, at open-air work) where they stay, the evening glows of lit buildings, a click
+// on a resident to follow them. Positions are recomputed ~20 times a second from the cosmetic trips and rests of the sim
+// worker, extrapolating the game clock between snapshots. Close enough, the residents near the camera are figures
+// (map/villagerModel.ts) instead of dots, redrawn every frame so their steps are smooth.
 
 const FRAME_MS = 50;
 const MAX_EXTRAP = 15; // game minutes the clock may run ahead of the last snapshot
@@ -31,6 +32,7 @@ const EQUATOR = 2 * Math.PI * 6378137;
 
 export interface LifeOptions {
   trips: ReadonlySignal<Trip[]>;
+  rests: ReadonlySignal<Rest[]>;
   lights: ReadonlySignal<Light[]>;
   gameMinutes: ReadonlySignal<number>;
   gameMinPerSec: () => number;
@@ -66,6 +68,10 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     }
     return rig;
   };
+  // Each resident's walks of the day, for where they stand off them.
+  let walksOf = new Map<number, Trip[]>();
+  let walksFrom: Trip[] | null = null;
+  const none: Trip[] = [];
   const cart = colourBits(packColor(MAP_ONLY.cart));
   const paper = colourBits(packColor(PALETTE.paperRaised));
 
@@ -103,46 +109,65 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     }
     dots.set(0, g, n);
 
-    // Walkers and carts on their trips; the walkers near the camera as figures.
+    // Walkers and carts on their trips, then those standing out of doors; the residents near the camera as figures.
     const trips = mpp <= DOTS_MPP ? o.trips.peek() : [];
+    const rests = mpp <= DOTS_MPP ? o.rests.peek() : [];
+    if (trips !== walksFrom) {
+      walksFrom = trips;
+      walksOf = new Map();
+      for (const trip of trips) if (trip.kind === "walk" && trip.who !== undefined) walksOf.set(trip.who, [...(walksOf.get(trip.who) ?? []), trip]);
+    }
     const cb = grow(1, trips.length);
-    const wb = grow(2, trips.length);
+    const wb = grow(2, trips.length + rests.length);
     let nc = 0;
     let nw = 0;
     walkers = [];
     const focus = close ? dots.local(engine.state.lat, engine.state.lng, 0) : null;
     const reach = FIGURES_REACH * mpp * Math.max(engine.canvas.clientWidth, engine.canvas.clientHeight);
-    const action = o.gameMinPerSec() > 0 ? "walk" : "idle";
+    const moving = o.gameMinPerSec() > 0;
     const seconds = now / 1000;
     let nv = 0;
+    const person = (who: number | undefined, sex: "m" | "f" | undefined, age: number | undefined, at: [number, number], dir: [number, number], action: Action) => {
+      const [lng, lat] = f.toLngLat(at[0], at[1]);
+      const g = ground(lat, lng);
+      const p = dots.local(lat, lng, g + 1);
+      if (who !== undefined) walkers.push({ who, lat, lng, h: g + 1 });
+      if (focus && who !== undefined && sex && age !== undefined && Math.hypot(p[0] - focus[0], p[1] - focus[1]) < reach) {
+        const rig = rigOf(who, sex, age);
+        if ((nv + rig.vertices) * FIGURE_VERTEX_FLOATS > figures.length) {
+          const bigger = new Float32Array(2 * Math.max(figures.length, (nv + rig.vertices) * FIGURE_VERTEX_FLOATS));
+          bigger.set(figures);
+          figures = bigger;
+        }
+        // The steps follow the wall clock, not the walker: at game speed the town crosses in seconds.
+        const pose = orient(poseOf(rig, moving ? action : "idle", seconds + who * 0.37), dir[0], dir[1]);
+        nv = writeVillager(rig, pose, [p[0], p[1], p[2] - 1], figures, nv * FIGURE_VERTEX_FLOATS) / FIGURE_VERTEX_FLOATS;
+      } else writeDot(wb, nw++, p[0], p[1], p[2], 1.5 + 2 * t, ink, paper, 0.8, null);
+    };
+    const walking = new Set<number>();
     for (const trip of trips) {
       const placed = placeAt(trip, minute);
       if (!placed) continue;
-      const [lng, lat] = f.toLngLat(placed.at[0], placed.at[1]);
-      const g = ground(lat, lng);
-      const p = dots.local(lat, lng, g + 1);
-      if (trip.kind === "cart") writeDot(cb, nc++, p[0], p[1], p[2], 2.5 + 3.5 * t, cart, paper, 0.8, null);
-      else {
-        if (trip.who !== undefined) walkers.push({ who: trip.who, lat, lng, h: g + 1 });
-        if (focus && trip.who !== undefined && trip.sex && trip.age !== undefined && Math.hypot(p[0] - focus[0], p[1] - focus[1]) < reach) {
-          const rig = rigOf(trip.who, trip.sex, trip.age);
-          if ((nv + rig.vertices) * FIGURE_VERTEX_FLOATS > figures.length) {
-            const bigger = new Float32Array(2 * Math.max(figures.length, (nv + rig.vertices) * FIGURE_VERTEX_FLOATS));
-            bigger.set(figures);
-            figures = bigger;
-          }
-          // The steps follow the wall clock, not the walker: at game speed the town crosses in seconds.
-          const pose = orient(poseOf(rig, action, seconds + trip.who * 0.37), placed.dir[0], placed.dir[1]);
-          nv = writeVillager(rig, pose, [p[0], p[1], p[2] - 1], figures, nv * FIGURE_VERTEX_FLOATS) / FIGURE_VERTEX_FLOATS;
-        } else writeDot(wb, nw++, p[0], p[1], p[2], 1.5 + 2 * t, ink, paper, 0.8, null);
+      if (trip.kind === "cart") {
+        const [lng, lat] = f.toLngLat(placed.at[0], placed.at[1]);
+        const p = dots.local(lat, lng, ground(lat, lng) + 1);
+        writeDot(cb, nc++, p[0], p[1], p[2], 2.5 + 3.5 * t, cart, paper, 0.8, null);
+      } else {
+        if (trip.who !== undefined) walking.add(trip.who);
+        person(trip.who, trip.sex, trip.age, placed.at, placed.dir, "walk");
       }
+    }
+    for (const r of rests) {
+      if (walking.has(r.who)) continue;
+      const s = standAt(r, walksOf.get(r.who) ?? none, minute);
+      if (s) person(r.who, r.sex, r.age, s.at, s.dir, s.working ? "work" : "idle");
     }
     dots.set(1, cb, nc);
     dots.set(2, wb, nw);
     town.setFigures(figures, nv);
   });
 
-  // A click on a walker follows that resident (a larger hit target than the dot, as before).
+  // A click on a resident follows them (a larger hit target than the dot, as before).
   if (o.onWalker)
     view.on("click", (e) => {
       if (tool.value) return;

@@ -20,20 +20,21 @@ import { amount, pad, roadQueue } from "./topbarModel";
 import { effectLines, weatherReason } from "./weatherModel";
 import { tabId, tabPanelId } from "./tabSemantics";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { decimal, L } from "../i18n";
 
 type Tab = "people" | "work" | "services" | "events" | "orders";
 
 const TABS: TabItem<Tab>[] = [
-  { id: "people", label: "Жители" },
-  { id: "work", label: "Работа" },
-  { id: "services", label: "Службы" },
-  { id: "events", label: "События" },
-  { id: "orders", label: "Приказы" },
+  { id: "people", label: L("Жители", "People") },
+  { id: "work", label: L("Работа", "Work") },
+  { id: "services", label: L("Службы", "Services") },
+  { id: "events", label: L("События", "Events") },
+  { id: "orders", label: L("Приказы", "Orders") },
 ];
 
 const tab = signal<Tab>("people");
 
-const families = (n: number) => plural(n, "семья", "семьи", "семей");
+const families = (n: number) => plural(n, "семья", "семьи", "семей", "family", "families");
 const PRIORITIES: Priority[] = [0, 1, 2, 3];
 const PRIORITY_OPTIONS = PRIORITIES.map((id) => ({ id, label: PRIORITY_SHORT[id], title: PRIORITY_LONG[id] }));
 
@@ -47,7 +48,7 @@ function JobRow({ k, text, hint }: { k: JobKey; text: string; hint?: string }) {
         <span>{JOB_NAMES[k]}</span>
         <span class="job-count">{text}</span>
       </div>
-      <Segmented options={PRIORITY_OPTIONS} value={value} label={`Приоритет: ${JOB_NAMES[k].toLowerCase()}`} onChange={(priority) => act({ type: "setJobPriority", group: k, priority })} />
+      <Segmented options={PRIORITY_OPTIONS} value={value} label={`${L("Приоритет", "Priority")}: ${JOB_NAMES[k].toLowerCase()}`} onChange={(priority) => act({ type: "setJobPriority", group: k, priority })} />
       {hint && <div class="people-note">{hint}</div>}
     </div>
   );
@@ -59,15 +60,15 @@ function JobsBlock() {
   const r = p?.jobs;
   if (!p || !r) return null;
   const notes = jobNotes(r);
-  const drafted = r.drafted > 0 ? `, из них ${r.drafted} сняты с работы` : "";
-  const floorHint = !r.construction ? "Строить пока нечего" : r.floor > 0 ? `Не меньше ${r.floor} ${plural(r.floor, "строителя", "строителей", "строителей")}${drafted}` : "Строят только те, у кого нет работы";
+  const drafted = r.drafted > 0 ? L(`, из них ${r.drafted} сняты с работы`, `, ${r.drafted} of them taken off their jobs`) : "";
+  const floorHint = !r.construction ? L("Строить пока нечего", "Nothing to build yet") : r.floor > 0 ? L(`Не меньше ${r.floor} ${plural(r.floor, "строителя", "строителей", "строителей")}${drafted}`, `At least ${r.floor} ${plural(r.floor, "", "", "", "builder")}${drafted}`) : L("Строят только те, у кого нет работы", "Only those without jobs build");
   return (
-    <div class="rs-list" role="group" aria-label="Приоритеты работ">
+    <div class="rs-list" role="group" aria-label={L("Приоритеты работ", "Work priorities")}>
       {JOB_GROUPS.map((k) => {
         const g = r.groups.find((x) => x.key === k)!;
-        return <JobRow key={k} k={k} text={`${g.workers} из ${g.places}${g.open > 0 ? `, свободно ${g.open}` : ""}`} />;
+        return <JobRow key={k} k={k} text={`${g.workers} ${L("из", "of")} ${g.places}${g.open > 0 ? `, ${L("свободно", "open")} ${g.open}` : ""}`} />;
       })}
-      <JobRow k="build" text={`строителей ${p.builders}`} hint={floorHint} />
+      <JobRow k="build" text={L(`строителей ${p.builders}`, `builders ${p.builders}`)} hint={floorHint} />
       {notes.map((n) => (
         <div class="people-note" key={n}>
           {n}
@@ -81,18 +82,18 @@ const RATION_IDS: Rations[] = ["reduced", "normal", "generous"];
 
 // Why a zone type is (not) growing, in words.
 const ADVICE: Record<GrowthWhy, string> = {
-  ok: "Растёт",
-  nozone: "Не растёт: нет размеченных участков",
-  demand: "Не растёт: нет спроса",
-  lots: "Не растёт: нет свободных участков у построенной дороги",
-  hands: "Не растёт: некому строить",
-  materials: "Растёт медленно: не хватает материалов, часть работы делают вручную",
+  ok: L("Растёт", "Growing"),
+  nozone: L("Не растёт: нет размеченных участков", "Not growing: no zoned plots"),
+  demand: L("Не растёт: нет спроса", "Not growing: no demand"),
+  lots: L("Не растёт: нет свободных участков у построенной дороги", "Not growing: no free plots along a built road"),
+  hands: L("Не растёт: некому строить", "Not growing: no one to build"),
+  materials: L("Растёт медленно: не хватает материалов, часть работы делают вручную", "Growing slowly: short of materials, part of the work is done by hand"),
 };
 
 const ZONES: { id: ZoneType; label: string }[] = [
-  { id: "res", label: "Жильё" },
-  { id: "craft", label: "Ремесло" },
-  { id: "trade", label: "Торговля" },
+  { id: "res", label: L("Жильё", "Housing") },
+  { id: "craft", label: L("Ремесло", "Crafts") },
+  { id: "trade", label: L("Торговля", "Trade") },
 ];
 
 function PeopleTab() {
@@ -102,42 +103,42 @@ function PeopleTab() {
   const log = events.value;
   const births = log.filter((e) => e.kind === "birth").length;
   const deaths = log.filter((e) => e.kind === "death").length;
-  if (!p) return <div class="people-note">Пока нет данных</div>;
+  if (!p) return <div class="people-note">{L("Пока нет данных", "No data yet")}</div>;
   return (
     <div class="rs-list">
-      <Line icon="person" label="Жителей">
-        {p.pop} (взрослых {p.adults}, детей {p.children})
+      <Line icon="person" label={L("Жителей", "Residents")}>
+        {p.pop} ({L("взрослых", "adults")} {p.adults}, {L("детей", "children")} {p.children})
       </Line>
-      <Line label="Семей">{p.households}</Line>
-      <Line icon="tent" label="В палатках">
+      <Line label={L("Семей", "Families")}>{p.households}</Line>
+      <Line icon="tent" label={L("В палатках", "In tents")}>
         {p.tents}
       </Line>
-      <Line label="В пути">{incomingCount.value > 0 ? `${incomingCount.value} ${families(incomingCount.value)}` : "никого"}</Line>
-      {sv && sv.houses > 0 && <Line label="Грамотные">{Math.round(sv.literate * 100)} % взрослых</Line>}
+      <Line label={L("В пути", "On the way")}>{incomingCount.value > 0 ? `${incomingCount.value} ${families(incomingCount.value)}` : L("никого", "no one")}</Line>
+      {sv && sv.houses > 0 && <Line label={L("Грамотные", "Literate")}>{Math.round(sv.literate * 100)}{L(" % взрослых", "% of adults")}</Line>}
       {eco && eco.avgMood > 0 && (
-        <Line icon="mood" label="Настроение">
-          {Math.round(eco.avgMood)} из 100
+        <Line icon="mood" label={L("Настроение", "Mood")}>
+          {Math.round(eco.avgMood)} {L("из", "of")} 100
         </Line>
       )}
-      <Line label="Сытость">
-        {Math.round(p.needs.avg.food)} из 100{p.needs.starving > 0 ? ` · голодают ${p.needs.starving}` : ""}
+      <Line label={L("Сытость", "Food")}>
+        {Math.round(p.needs.avg.food)} {L("из", "of")} 100{p.needs.starving > 0 ? ` · ${L("голодают", "starving")} ${p.needs.starving}` : ""}
       </Line>
-      <Line label="Отдых">
-        {Math.round(p.needs.avg.rest)} из 100{p.needs.tired > 0 ? ` · не высыпаются ${p.needs.tired}` : ""}
+      <Line label={L("Отдых", "Rest")}>
+        {Math.round(p.needs.avg.rest)} {L("из", "of")} 100{p.needs.tired > 0 ? ` · ${L("не высыпаются", "not sleeping enough")} ${p.needs.tired}` : ""}
       </Line>
-      <Line label="Общение">
-        {Math.round(p.needs.avg.social)} из 100{p.needs.lonely > 0 ? ` · одиноки ${p.needs.lonely}` : ""}
+      <Line label={L("Общение", "Company")}>
+        {Math.round(p.needs.avg.social)} {L("из", "of")} 100{p.needs.lonely > 0 ? ` · ${L("одиноки", "lonely")} ${p.needs.lonely}` : ""}
       </Line>
-      <Line label="Тепло">
-        {Math.round(p.needs.avg.warmth)} из 100{p.needs.freezing > 0 ? ` · мёрзнут ${p.needs.freezing}` : ""}
+      <Line label={L("Тепло", "Warmth")}>
+        {Math.round(p.needs.avg.warmth)} {L("из", "of")} 100{p.needs.freezing > 0 ? ` · ${L("мёрзнут", "freezing")} ${p.needs.freezing}` : ""}
       </Line>
-      <Line label="Силы к работе">{Math.round(p.needs.work * 100)} %</Line>
-      {sv && sv.houses > 0 && <Line label="Земля, в среднем">{Math.round(sv.avgLandValue)}</Line>}
-      {sv && sv.level2 > 0 && <Line label="Дома 2-го уровня">{sv.level2}</Line>}
-      <Line label="Рождений и смертей">
-        {births} и {deaths}
+      <Line label={L("Силы к работе", "Fitness for work")}>{Math.round(p.needs.work * 100)}{L(" %", "%")}</Line>
+      {sv && sv.houses > 0 && <Line label={L("Земля, в среднем", "Average land value")}>{Math.round(sv.avgLandValue)}</Line>}
+      {sv && sv.level2 > 0 && <Line label={L("Дома 2-го уровня", "Level 2 houses")}>{sv.level2}</Line>}
+      <Line label={L("Рождений и смертей", "Births and deaths")}>
+        {births} {L("и", "and")} {deaths}
       </Line>
-      <div class="people-note">Рождения и смерти считаются по последним записям журнала событий.</div>
+      <div class="people-note">{L("Рождения и смерти считаются по последним записям журнала событий.", "Births and deaths are counted from the latest entries of the event log.")}</div>
     </div>
   );
 }
@@ -150,14 +151,14 @@ function WeatherBlock() {
   const reason = weatherReason(ws);
   return (
     <>
-      <h3 class="rs-sub">Погода</h3>
+      <h3 class="rs-sub">{L("Погода", "Weather")}</h3>
       <div class="rs-list">
         {lines.map((l) => (
           <Line key={l.key} label={l.label} tone={l.tone}>
             {l.value}
           </Line>
         ))}
-        {reason && <div class="people-note">Сейчас: {reason}</div>}
+        {reason && <div class="people-note">{L("Сейчас:", "Now:")} {reason}</div>}
       </div>
     </>
   );
@@ -179,76 +180,76 @@ function WorkTab({ city, view }: { city: City; view: View }) {
   }
   let fieldLine: string | null = null;
   if (eco && eco.fields.assignedHa > 0) {
-    if (eco.fields.window === "sowing") fieldLine = `Сев: ${Math.round(eco.fields.sown * 100)} %`;
-    else if (eco.fields.window === "harvest") fieldLine = `Уборка урожая: ${massText(eco.fields.reaped)} из ${massText(eco.fields.expected)}`;
+    if (eco.fields.window === "sowing") fieldLine = L(`Сев: ${Math.round(eco.fields.sown * 100)} %`, `Sowing: ${Math.round(eco.fields.sown * 100)}%`);
+    else if (eco.fields.window === "harvest") fieldLine = L(`Уборка урожая: ${massText(eco.fields.reaped)} из ${massText(eco.fields.expected)}`, `Harvest: ${massText(eco.fields.reaped)} of ${massText(eco.fields.expected)}`);
   }
   const clearing = (state.value?.clearings ?? []).filter((c) => !isCleared(c));
   const clearLabor = clearing.reduce((a, c) => a + c.labor, 0);
   const clearLine =
     clearing.length > 0
-      ? `${Math.floor((clearing.reduce((a, c) => a + c.done, 0) / clearLabor) * 100)} %, брёвна +${amount(clearing.reduce((a, c) => a + (clearingLogs(c.area, c.forest) * c.done) / c.labor, 0))} из ${amount(clearing.reduce((a, c) => a + clearingLogs(c.area, c.forest), 0))} м³`
+      ? `${Math.floor((clearing.reduce((a, c) => a + c.done, 0) / clearLabor) * 100)}${L(" %, брёвна", "%, logs")} +${amount(clearing.reduce((a, c) => a + (clearingLogs(c.area, c.forest) * c.done) / c.labor, 0))} ${L("из", "of")} ${amount(clearing.reduce((a, c) => a + clearingLogs(c.area, c.forest), 0))} ${L("м³", "m³")}`
       : null;
-  if (!p) return <div class="people-note">Пока нет данных</div>;
+  if (!p) return <div class="people-note">{L("Пока нет данных", "No data yet")}</div>;
   return (
     <div class="rs-list">
       <JobsBlock />
       <WeatherBlock />
-      <h3 class="rs-sub">Занятость</h3>
-      <Line label="Работают">{p.employed}</Line>
-      <Line label="На стройке">{p.builders}</Line>
-      <Line label="Без работы">{p.unemployed}</Line>
-      {p.inClass > 0 && <Line label="В школе">{p.inClass}</Line>}
-      <Line label="Дорога на работу">{p.employed > 0 ? `~${Math.round(p.avgCommute)} мин` : "—"}</Line>
-      <Line label="Рабочий день">
+      <h3 class="rs-sub">{L("Занятость", "Employment")}</h3>
+      <Line label={L("Работают", "Working")}>{p.employed}</Line>
+      <Line label={L("На стройке", "Building")}>{p.builders}</Line>
+      <Line label={L("Без работы", "Without work")}>{p.unemployed}</Line>
+      {p.inClass > 0 && <Line label={L("В школе", "At school")}>{p.inClass}</Line>}
+      <Line label={L("Дорога на работу", "Commute")}>{p.employed > 0 ? `~${Math.round(p.avgCommute)} ${L("мин", "min")}` : "—"}</Line>
+      <Line label={L("Рабочий день", "Workday")}>
         {pad(hours.start)}–{pad(hours.end)}
       </Line>
       {queue > 0 && (
-        <Line label="Дороги в очереди">
-          {queue} {plural(queue, "участок", "участка", "участков")}, {p.builders > 0 ? `~${Math.ceil(remaining / p.builders)} ч работы` : "некому строить"}
+        <Line label={L("Дороги в очереди", "Roads queued")}>
+          {queue} {plural(queue, "участок", "участка", "участков", "section")}, {p.builders > 0 ? L(`~${Math.ceil(remaining / p.builders)} ч работы`, `~${Math.ceil(remaining / p.builders)} h of work`) : L("некому строить", "no one to build")}
         </Line>
       )}
-      {fieldLine && <Line icon="field" label="Поля">{fieldLine}</Line>}
-      {clearLine && <Line icon="clearing" label="Вырубка">{clearLine}</Line>}
+      {fieldLine && <Line icon="field" label={L("Поля", "Fields")}>{fieldLine}</Line>}
+      {clearLine && <Line icon="clearing" label={L("Вырубка", "Clearing")}>{clearLine}</Line>}
       {cut.size > 0 && (
         <div class="hud-warn rs-warn">
-          <Icon name="warning" size={16} /> Отрезано от лагеря: {cut.size} {plural(cut.size, "участок", "участка", "участков")} дорог. Их не построят: ведите дорогу от лагеря или от готовой дороги.{" "}
+          <Icon name="warning" size={16} /> {L("Отрезано от лагеря:", "Cut off from the camp:")} {cut.size} {plural(cut.size, "участок", "участка", "участков", "road section")}{L(" дорог. Их не построят: ведите дорогу от лагеря или от готовой дороги.", ". They won’t be built: lead a road from the camp or from a finished road.")}{" "}
           <button type="button" class="link" onClick={() => view.flyTo({ center: [city.lng, city.lat], mpp: atLeastAsClose(view.metersPerPixel(), TOWN_VIEW_MPP) })}>
-            К лагерю
+            {L("К лагерю", "To the camp")}
           </button>
         </div>
       )}
-      <h3 class="rs-sub">Спрос на новые здания</h3>
+      <h3 class="rs-sub">{L("Спрос на новые здания", "Demand for new buildings")}</h3>
       {ZONES.map((zn) => (
         <div class="demand-card" key={zn.id}>
           <div class="demand-head">
             <span class="demand-sw" style={{ background: ZONE_COLORS[zn.id] }} />
             <span>{zn.label}</span>
-            <span class="demand-count">{cnt[zn.id]} яч.</span>
+            <span class="demand-count">{cnt[zn.id]} {L("яч.", "cells")}</span>
           </div>
-          <ProgressBar value={Math.min(5, Math.max(0, dem[zn.id])) / 5} label={`Спрос: ${zn.label.toLowerCase()}`} />
+          <ProgressBar value={Math.min(5, Math.max(0, dem[zn.id])) / 5} label={`${L("Спрос", "Demand")}: ${zn.label.toLowerCase()}`} />
           <div class={p.growth?.[zn.id] && p.growth[zn.id] !== "ok" ? "prod-warn" : "people-note"}>{ADVICE[p.growth?.[zn.id] ?? "ok"]}</div>
         </div>
       ))}
-      <div class="people-note">Поля: {(fieldArea / 10000).toFixed(1).replace(".", ",")} га</div>
+      <div class="people-note">{L("Поля:", "Fields:")} {decimal((fieldArea / 10000).toFixed(1))} {L("га", "ha")}</div>
     </div>
   );
 }
 
 function ServicesTab() {
   const sv = services.value;
-  if (!sv || sv.houses === 0) return <div class="people-note">Служб пока нет: когда построят дома, здесь появится охват.</div>;
+  if (!sv || sv.houses === 0) return <div class="people-note">{L("Служб пока нет: когда построят дома, здесь появится охват.", "No services yet: coverage will show here once houses are built.")}</div>;
   return (
     <div class="rs-list">
-      <div class="people-note">Дома в охвате (из {sv.houses})</div>
+      <div class="people-note">{L("Дома в охвате (из", "Houses covered (of")} {sv.houses})</div>
       {SERVICE_LIST.map((s) => (
         <div class="demand-card" key={s.id}>
           <Line label={s.name}>
-            {sv.covered[s.id]} из {sv.houses}
+            {sv.covered[s.id]} {L("из", "of")} {sv.houses}
           </Line>
-          <ProgressBar value={sv.houses > 0 ? sv.covered[s.id] / sv.houses : 0} label={`Охват: ${s.name.toLowerCase()}`} />
+          <ProgressBar value={sv.houses > 0 ? sv.covered[s.id] / sv.houses : 0} label={`${L("Охват", "Coverage")}: ${s.name.toLowerCase()}`} />
         </div>
       ))}
-      <Line label="Грамотные">{Math.round(sv.literate * 100)} % взрослых</Line>
+      <Line label={L("Грамотные", "Literate")}>{Math.round(sv.literate * 100)}{L(" % взрослых", "% of adults")}</Line>
     </div>
   );
 }
@@ -256,7 +257,7 @@ function ServicesTab() {
 function EventsTab({ view }: { view: View }) {
   const list = events.value.slice().reverse();
   const fl = frame.value;
-  if (list.length === 0) return <div class="people-note">Пока тихо</div>;
+  if (list.length === 0) return <div class="people-note">{L("Пока тихо", "All quiet so far")}</div>;
   return (
     <ul class="rs-events">
       {list.map((e) => {
@@ -265,10 +266,10 @@ function EventsTab({ view }: { view: View }) {
         return (
           <li key={`${e.at}:${e.text}`}>
             <span class="event-at">
-              г{c.year} д{c.dayOfYear}
+              {L("г", "Y")}{c.year} {L("д", "D")}{c.dayOfYear}
             </span>{" "}
             {pos && fl ? (
-              <button type="button" class="link event-go" title="Показать на карте" onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}>
+              <button type="button" class="link event-go" title={L("Показать на карте", "Show on the map")} onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}>
                 {e.text}
               </button>
             ) : (
@@ -289,36 +290,36 @@ function OrdersTab() {
   if (!s || !lv) return null;
   const block = s.callBlock;
   return (
-    <div class="rs-list orders" role="group" aria-label="Приказы">
+    <div class="rs-list orders" role="group" aria-label={L("Приказы", "Orders")}>
       <div class="orders-row">
         <Button
-          aria-label="Долгий день"
+          aria-label={L("Долгий день", "Long day")}
           aria-pressed={lv.strada}
           variant={lv.strada ? "primary" : "default"}
-          title="Работа с 05 до 21 часа: на треть больше труда, но настроение ниже на 8"
+          title={L("Работа с 05 до 21 часа: на треть больше труда, но настроение ниже на 8", "Work from 05:00 to 21:00: a third more labour, but mood is 8 lower")}
           onClick={() => act({ type: "setSchedule", strada: !lv.strada })}
         >
-          {lv.strada ? "Долгий день: до 21:00" : "Обычный день: 07–19"}
+          {lv.strada ? L("Долгий день: до 21:00", "Long day: until 21:00") : L("Обычный день: 07–19", "Normal day: 07–19")}
         </Button>
         <Button
-          aria-label="Взрослые в школу"
+          aria-label={L("Взрослые в школу", "Adults to school")}
           aria-pressed={lv.adultSchool}
           variant={lv.adultSchool ? "primary" : "default"}
-          title="Неграмотные взрослые ходят в школу вместо работы, пока не выучатся. Места в школах ограничены: 30 на школу, сначала дети"
+          title={L("Неграмотные взрослые ходят в школу вместо работы, пока не выучатся. Места в школах ограничены: 30 на школу, сначала дети", "Illiterate adults go to school instead of work until they learn. School places are limited: 30 per school, children first")}
           onClick={() => act({ type: "setAdultSchool", on: !lv.adultSchool })}
         >
-          {lv.adultSchool ? "Взрослые учатся" : "Взрослые работают"}
+          {lv.adultSchool ? L("Взрослые учатся", "Adults study") : L("Взрослые работают", "Adults work")}
         </Button>
       </div>
-      <div class="orders-row" role="radiogroup" aria-label="Нормы еды">
+      <div class="orders-row" role="radiogroup" aria-label={L("Нормы еды", "Rations")}>
         {RATION_IDS.map((id) => (
           <Button
             key={id}
             role="radio"
             aria-checked={lv.rations === id}
-            aria-label={`Нормы еды: ${RATIONS[id].name.toLowerCase()}`}
+            aria-label={`${L("Нормы еды", "Rations")}: ${RATIONS[id].name.toLowerCase()}`}
             variant={lv.rations === id ? "primary" : "default"}
-            title={`Еда ${RATIONS[id].food * 100 - 100 > 0 ? "+" : ""}${Math.round(RATIONS[id].food * 100 - 100)} %, настроение ${RATIONS[id].mood > 0 ? "+" : ""}${RATIONS[id].mood}`}
+            title={`${L("Еда", "Food")} ${RATIONS[id].food * 100 - 100 > 0 ? "+" : ""}${Math.round(RATIONS[id].food * 100 - 100)}${L(" %, настроение", "%, mood")} ${RATIONS[id].mood > 0 ? "+" : ""}${RATIONS[id].mood}`}
             onClick={() => act({ type: "setRations", rations: id })}
           >
             {RATIONS[id].name}
@@ -326,20 +327,20 @@ function OrdersTab() {
         ))}
       </div>
       <div class="orders-row">
-        <Button aria-label="Призвать поселенцев" disabled={block !== null} onClick={() => act({ type: "callSettlers" })}>
-          Призвать поселенцев
+        <Button aria-label={L("Призвать поселенцев", "Call settlers")} disabled={block !== null} onClick={() => act({ type: "callSettlers" })}>
+          {L("Призвать поселенцев", "Call settlers")}
         </Button>
       </div>
-      <div class={block ? "people-note" : "hud-date"}>{block ?? `Стоит ${CALL.food} кг еды и ${CALL.wares} шт товаров`}</div>
+      <div class={block ? "people-note" : "hud-date"}>{block ?? L(`Стоит ${CALL.food} кг еды и ${CALL.wares} шт товаров`, `Costs ${CALL.food} kg of food and ${CALL.wares} goods`)}</div>
       <div class="rs-danger">
         <Button variant="danger" icon="trash" onClick={() => setConfirming(true)}>
-          Начать заново
+          {L("Начать заново", "Start over")}
         </Button>
       </div>
       {confirming && (
         <Confirm
-          title="Начать заново?"
-          okLabel="Удалить поселение"
+          title={L("Начать заново?", "Start over?")}
+          okLabel={L("Удалить поселение", "Delete the settlement")}
           onOk={() => {
             setConfirming(false);
             closePanel();
@@ -347,7 +348,7 @@ function OrdersTab() {
           }}
           onCancel={() => setConfirming(false)}
         >
-          Поселение и всё, что в нём построено, будет удалено. Вернуть его не получится.
+          {L("Поселение и всё, что в нём построено, будет удалено. Вернуть его не получится.", "The settlement and everything built in it will be deleted. It cannot be recovered.")}
         </Confirm>
       )}
     </div>
@@ -358,18 +359,18 @@ function OrdersTab() {
 export function TownPanel({ city, view }: { city: City; view: View }) {
   if (rightPanel.value !== "town") return null;
   return (
-    <aside class="rs-panel town-panel panel" id={SEMANTIC_IDS.townPanel} aria-label="Город">
+    <aside class="rs-panel town-panel panel" id={SEMANTIC_IDS.townPanel} aria-label={L("Город", "Town")}>
       <div class="insp-head">
         <span class="insp-ic">
           <Icon name="town" size={28} />
         </span>
         <div class="insp-title">
           <h2>{city.name}</h2>
-          <span class="insp-sub">Город</span>
+          <span class="insp-sub">{L("Город", "Town")}</span>
         </div>
-        <IconButton icon="close" size={16} label="Закрыть" onClick={closePanel} />
+        <IconButton icon="close" size={16} label={L("Закрыть", "Close")} onClick={closePanel} />
       </div>
-      <Tabs tabs={TABS} active={tab.value} onChange={(id) => (tab.value = id)} label="Разделы города" idPrefix="town" />
+      <Tabs tabs={TABS} active={tab.value} onChange={(id) => (tab.value = id)} label={L("Разделы города", "Town sections")} idPrefix="town" />
       <div class="rs-body" role="tabpanel" id={tabPanelId("town", tab.value)} aria-labelledby={tabId("town", tab.value)}>
         {tab.value === "people" && <PeopleTab />}
         {tab.value === "work" && <WorkTab city={city} view={view} />}

@@ -5,6 +5,7 @@ import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
 import { shouldRepeatTool } from "../ui/inputModel";
 import { storedChoice } from "../ui/preferenceModel";
 import { mppAtZoom, type View } from "../view/view";
+import { L } from "../i18n";
 
 // Road tools; a tool plus its material (see roadMaterial) picks the sim RoadKind. restore: rebuild a revealed old street as a whole.
 export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
@@ -39,19 +40,19 @@ export function attachToolRepeat(view: View): void {
 // Road drawing mode, shared by every road kind; kept between tools.
 export const roadMode = signal<RoadMode>("straight");
 export const ROAD_MODES: { id: RoadMode; label: string; title: string }[] = [
-  { id: "straight", label: "Прямая", title: "Прямая: протяните от начала до конца" },
-  { id: "arc", label: "Дуга", title: "Дуга: протяните начало и конец, затем движение мышью задаёт изгиб" },
+  { id: "straight", label: L("Прямая", "Straight"), title: L("Прямая: протяните от начала до конца", "Straight: drag from start to end") },
+  { id: "arc", label: L("Дуга", "Curve"), title: L("Дуга: протяните начало и конец, затем движение мышью задаёт изгиб", "Curve: drag start and end, then move the mouse to set the bend") },
 ];
 // Material of the road and bridge tools (tech upgrades change a tool, they do not add one): the sim kind each draws.
 export type MaterialTool = "dirt" | "bridge";
 export const ROAD_MATERIALS: Record<MaterialTool, { id: RoadKind; label: string; title: string }[]> = {
   dirt: [
-    { id: "dirt", label: "Грунт", title: "Грунтовая дорога" },
-    { id: "stone", label: "Камень", title: "Каменная дорога" },
+    { id: "dirt", label: L("Грунт", "Dirt"), title: L("Грунтовая дорога", "Dirt road") },
+    { id: "stone", label: L("Камень", "Stone"), title: L("Каменная дорога", "Stone road") },
   ],
   bridge: [
-    { id: "bridge", label: "Свайный", title: "Свайный мост" },
-    { id: "stonebridge", label: "Каменный", title: "Каменный мост" },
+    { id: "bridge", label: L("Свайный", "Pile"), title: L("Свайный мост", "Pile bridge") },
+    { id: "stonebridge", label: L("Каменный", "Stone"), title: L("Каменный мост", "Stone bridge") },
   ],
 };
 export const roadMaterial = signal<Record<MaterialTool, RoadKind>>({ dirt: "dirt", bridge: "bridge" });
@@ -105,15 +106,15 @@ export const PLACED_COLORS: Record<PlaceTool, string> = PLACED_BUILDING_COLORS;
 // Map overlay: houses tinted by coverage of one service, or by a value; or roads by commuter traffic.
 export type Overlay = "none" | ServiceId | "value" | "mood" | "traffic";
 export const OVERLAYS: { id: Overlay; label: string }[] = [
-  { id: "none", label: "нет" },
-  { id: "well", label: "вода (колодец)" },
-  { id: "market", label: "рынок" },
-  { id: "chapel", label: "храм" },
-  { id: "school", label: "школа" },
-  { id: "healer", label: "лечебница" },
-  { id: "value", label: "стоимость земли" },
-  { id: "mood", label: "настроение" },
-  { id: "traffic", label: "движение" },
+  { id: "none", label: L("нет", "none") },
+  { id: "well", label: L("вода (колодец)", "water (well)") },
+  { id: "market", label: L("рынок", "market") },
+  { id: "chapel", label: L("храм", "temple") },
+  { id: "school", label: L("школа", "school") },
+  { id: "healer", label: L("лечебница", "infirmary") },
+  { id: "value", label: L("стоимость земли", "land value") },
+  { id: "mood", label: L("настроение", "mood") },
+  { id: "traffic", label: L("движение", "traffic") },
 ];
 const OVERLAY_STORE = "rebirth.layers.overlay";
 const OVERLAY_IDS = OVERLAYS.map((o) => o.id);

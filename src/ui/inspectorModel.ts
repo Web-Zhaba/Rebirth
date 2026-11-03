@@ -2,6 +2,7 @@ import { BUILDINGS, CREW, remainingLabor } from "../sim/buildings";
 import type { Building, BuildingQuery, Clearing, Stock } from "../sim/types";
 import { clearingLogs } from "../sim/clearing";
 import type { IconName } from "./icons";
+import { decimal, L } from "../i18n";
 
 // Pure helpers behind the inspector: the status chip, icons and clearing numbers.
 
@@ -13,18 +14,18 @@ export interface Chip {
 
 // Which workplace has no workers, no input, and so on, from the data the worker returns.
 export function buildingStatus(b: Building, info: BuildingQuery | null, shortfall: boolean): Chip {
-  if (b.state === "planned") return shortfall ? { label: "ждёт материалов", tone: "warn" } : { label: "в очереди", tone: "build" };
-  if (b.state === "building") return { label: "строится", tone: "build" };
-  if (b.upgrade) return { label: "перестраивается", tone: "build" };
+  if (b.state === "planned") return shortfall ? { label: L("ждёт материалов", "awaiting materials"), tone: "warn" } : { label: L("в очереди", "queued"), tone: "build" };
+  if (b.state === "building") return { label: L("строится", "under construction"), tone: "build" };
+  if (b.upgrade) return { label: L("перестраивается", "rebuilding"), tone: "build" };
   if (info?.kind === "workplace") {
-    if (info.production?.missing) return { label: "нет сырья", tone: "bad" };
-    if (info.capacity > 0 && info.workers.length === 0) return { label: "нет работников", tone: "bad" };
-    if (info.service && !info.service.working) return { label: "нет работников", tone: "bad" };
+    if (info.production?.missing) return { label: L("нет сырья", "no input"), tone: "bad" };
+    if (info.capacity > 0 && info.workers.length === 0) return { label: L("нет работников", "no workers"), tone: "bad" };
+    if (info.service && !info.service.working) return { label: L("нет работников", "no workers"), tone: "bad" };
   }
-  if (info?.kind === "house" && info.households.length === 0) return { label: "пустует", tone: "warn" };
-  if (info?.kind === "house") return { label: "заселён", tone: "ok" };
-  if (b.restoreMode === "monument") return { label: "памятник", tone: "ok" };
-  return { label: b.template === "dig" ? "раскоп готов" : "работает", tone: "ok" };
+  if (info?.kind === "house" && info.households.length === 0) return { label: L("пустует", "empty"), tone: "warn" };
+  if (info?.kind === "house") return { label: L("заселён", "occupied"), tone: "ok" };
+  if (b.restoreMode === "monument") return { label: L("памятник", "monument"), tone: "ok" };
+  return { label: b.template === "dig" ? L("раскоп готов", "dig finished") : L("работает", "working"), tone: "ok" };
 }
 
 const CRAFT = new Set(["smithy", "carpentry", "pottery"]);
@@ -41,11 +42,11 @@ export function templateIcon(template: string): IconName {
 
 // What a workplace makes, in the nominative, with the icon of the good.
 export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: IconName }> = {
-  food: { name: "еда", unit: "кг", icon: "food" },
-  logs: { name: "брёвна", unit: "м³", icon: "log" },
-  planks: { name: "доски", unit: "м³", icon: "planks" },
-  stone: { name: "камень", unit: "т", icon: "stone" },
-  wares: { name: "товары", unit: "шт", icon: "wares" },
+  food: { name: L("еда", "food"), unit: L("кг", "kg"), icon: "food" },
+  logs: { name: L("брёвна", "logs"), unit: L("м³", "m³"), icon: "log" },
+  planks: { name: L("доски", "planks"), unit: L("м³", "m³"), icon: "planks" },
+  stone: { name: L("камень", "stone"), unit: L("т", "t"), icon: "stone" },
+  wares: { name: L("товары", "goods"), unit: L("шт", "pcs"), icon: "wares" },
 };
 
 // Hands one site can use at once (a толока lifts the limit).
@@ -68,4 +69,4 @@ export function clearingView(c: Clearing): ClearingView {
 }
 
 // Area as hectares with a comma: 12500 -> "1,3 га", 4000 -> "0,40 га".
-export const areaText = (m2: number): string => `${(m2 / 10000).toFixed(m2 < 10000 ? 2 : 1).replace(".", ",")} га`;
+export const areaText = (m2: number): string => `${decimal((m2 / 10000).toFixed(m2 < 10000 ? 2 : 1))} ${L("га", "ha")}`;
