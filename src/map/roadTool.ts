@@ -23,6 +23,7 @@ export const roadDemolishRequest = signal<number | null>(null);
 const SNAP_PX = 12;
 const PREVIEW_MS = 120;
 const DRAG_PX = 4; // screen pixels: beyond this a press is a drag, not a click
+const TOUCH_DRAG_PX = 15; // a finger drifts: the same slack the map gives a tap (view/engine/scale.ts)
 const ANGLE_STEP_DEG = 15;
 const CURVE_SNAP_M = 1; // curve ends are already resolved; interior points must not jump onto nearby roads
 
@@ -124,6 +125,9 @@ export function attachRoadTool(view: View): void {
   let pressSnap: Snap | null = null; // where the drag began
   let pressOld: OldRef | null = null;
   let suppressClick = false; // swallow the click MapLibre fires after a drag
+  let bending = false; // arc mode: the pointer is down to bend the arc; its release lays it once it has moved
+  let bendMoved = false;
+  let touchInput = false; // the last press was a finger: no hover, no right button, no Esc
   let spaceDown = false;
   let shiftDown = false;
   let restore: Restore | null = null;
@@ -296,7 +300,10 @@ export function attachRoadTool(view: View): void {
   };
 
   // Sends the segment and, when it is built, continues the chain from its end.
+  // A finger has no hover preview and no right button or Esc to end a chain, so on touch each road stands alone:
+  // a stray tap must not lay another road from the last end.
   const commitPath = (pts: Pt[], target: Snap, old: OldRef | null) => {
+    const chain = !touchInput;
     const f = frame.value;
     const g = roads.value;
     const t = drawT();
@@ -347,8 +354,14 @@ export function attachRoadTool(view: View): void {
       .then((ok) => {
         busy = false;
         if (ok) {
-          start = target;
-          startOld = old;
+          if (chain) {
+            start = target;
+            startOld = old;
+          } else {
+            start = null;
+            startOld = null;
+            clearOverlay();
+          }
           verdict = null;
           if (lastEvent) onMove(lastEvent);
         }
@@ -533,6 +546,7 @@ export function attachRoadTool(view: View): void {
     }
     // Arc mode, second stage: the chord is fixed and the cursor bends the arc through itself.
     if (arcEnd && start) {
+      if (bending && pressScreen && Math.hypot(e.point[0] - pressScreen.x, e.point[1] - pressScreen.y) >= dragPx(e)) bendMoved = true;
       angleHint = "";
       streetHint = "";
       setSnap(null);
@@ -540,7 +554,7 @@ export function attachRoadTool(view: View): void {
       return;
     }
     if (pressing && pressScreen) {
-      if (!dragging && Math.hypot(e.point[0] - pressScreen.x, e.point[1] - pressScreen.y) >= DRAG_PX) dragging = true;
+      if (!dragging && Math.hypot(e.point[0] - pressScreen.x, e.point[1] - pressScreen.y) >= dragPx(e)) dragging = true;
       const anchor = pressSnap;
       if (dragging && anchor) {
         const a = aim(e, ctx, anchor);
@@ -571,11 +585,16 @@ export function attachRoadTool(view: View): void {
     if (!t || busy) return;
     const ctx = context(e);
     if (!ctx || view.metersPerPixel() > ROAD_MAX_MPP || spaceDown) return;
+    const { g, x, y, tol } = ctx;
     if (t === "restore") {
-      void commitRestore();
+      // The click picks the street under it (a finger has no hover); a click on the street already picked restores it.
+      const picked = restore;
+      cursor = { x: e.point[0], y: e.point[1] };
+      lastEvent = e;
+      hoverRestore(x, y, tol);
+      if (restore && restore === picked) void commitRestore();
       return;
     }
-    const { g, x, y, tol } = ctx;
     if (t === "bulldoze") {
       const id = nearestEdge(x, y, tol);
       if (id === null) return;
@@ -595,11 +614,7 @@ export function attachRoadTool(view: View): void {
     }
     // Third click of an arc: the bend point is where the cursor is.
     if (arcEnd && start) {
-      const end = arcEnd;
-      const endOld = arcOld;
-      arcEnd = null;
-      arcOld = null;
-      commitPath(arcPath([start.x, start.y], [x, y], [end.x, end.y]), end, endOld);
+      layArc(start, arcEnd, x, y);
       return;
     }
     const a = aim(e, ctx, start);
@@ -616,7 +631,18 @@ export function attachRoadTool(view: View): void {
     commitPath([[start.x, start.y], [a.snap.x, a.snap.y]], a.snap, a.old);
   };
 
+  const layArc = (from: Snap, end: Snap, x: number, y: number) => {
+    const endOld = arcOld;
+    arcEnd = null;
+    arcOld = null;
+    commitPath(arcPath([from.x, from.y], [x, y], [end.x, end.y]), end, endOld);
+  };
+
+  const dragPx = (e: ViewPointer) => (e.pointerType === "touch" ? TOUCH_DRAG_PX : DRAG_PX);
+
   const resetPress = () => {
+    bending = false;
+    bendMoved = false;
     pressing = false;
     dragging = false;
     pressScreen = null;
@@ -638,6 +664,13 @@ export function attachRoadTool(view: View): void {
     activePointerId = e.pointerId;
     suppressClick = false;
     const t = roadT();
+    // Arc bend stage: a press drags the bend (a finger cannot hover), its release lays the arc.
+    bending = !!t && !!arcEnd && !!start && !busy && !spaceDown && e.original.button === 0;
+    bendMoved = false;
+    if (bending) {
+      pressScreen = { x: e.point[0], y: e.point[1] };
+      return;
+    }
     if (!t || !roadKindOf(t) || busy || spaceDown || arcEnd) return;
     if (e.original.button !== 0) return;
     const ctx = context(e);
@@ -655,6 +688,17 @@ export function attachRoadTool(view: View): void {
     if (activePointers.size === 0) multiPointer = false;
     if (activePointerId !== e.pointerId) return;
     activePointerId = null;
+    if (bending) {
+      const moved = bendMoved;
+      resetPress();
+      // A plain tap is left to the click, which lays the arc through the tap.
+      if (!moved || !arcEnd || !start || !lastEvent || spaceDown || busy) return;
+      const ctx = context(lastEvent);
+      if (!ctx || view.metersPerPixel() > ROAD_MAX_MPP) return;
+      suppressClick = true;
+      layArc(start, arcEnd, ctx.x, ctx.y);
+      return;
+    }
     if (!pressing) return;
     const wasDrag = dragging;
     const anchor = pressSnap;
@@ -764,6 +808,7 @@ export function attachRoadTool(view: View): void {
   // Track every canvas pointer, including a second finger placed over the sky.
   // The View event above only dispatches when the ray hits the planet.
   const trackPointerDown = (e: PointerEvent) => {
+    touchInput = e.pointerType === "touch";
     if (activePointers.size === 0) multiPointer = false;
     activePointers.add(e.pointerId);
     if (activePointers.size > 1 || !e.isPrimary) {
@@ -780,7 +825,9 @@ export function attachRoadTool(view: View): void {
   view.on("click", onClick);
   view.on("contextmenu", onContext);
   view.on("move", () => syncPan(view));
-  view.canvas.addEventListener("pointerleave", () => {
+  view.canvas.addEventListener("pointerleave", (e) => {
+    // A lifted finger leaves the canvas too: keep the street a tap picked, so the next tap can restore it.
+    if (e.pointerType === "touch" && restore) return;
     cursor = null;
     if (!start && !dragging) clearOverlay();
     else setLabel(null);

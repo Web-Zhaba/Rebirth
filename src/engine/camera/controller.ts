@@ -363,6 +363,13 @@ export function createCameraControl(engine: Engine): CameraControl {
     drag = { id, mode, touch, sx: x, sy: y, x, y, px: x, py: y, started: false, dirty: false };
   };
 
+  // The gesture follows the first two fingers down; whenever that pair changes it holds on afresh, or it would jump.
+  const startMulti = (): void => {
+    const [a, b] = [...touches.values()];
+    multi = { grab: null, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, dist: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), angle: Math.atan2(b.y - a.y, b.x - a.x) };
+    multi.grab = grabAt(multi.cx, multi.cy);
+  };
+
   const onDown = (e: PointerEvent): void => {
     const [x, y] = local(e);
     if (e.pointerType === "touch") {
@@ -378,9 +385,7 @@ export function createCameraControl(engine: Engine): CameraControl {
         endDrag(false);
         cancelMotion();
         beginHand();
-        const [a, b] = [...touches.values()];
-        multi = { grab: null, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, dist: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), angle: Math.atan2(b.y - a.y, b.x - a.x) };
-        multi.grab = grabAt(multi.cx, multi.cy);
+        startMulti();
       }
       e.preventDefault();
       return;
@@ -421,6 +426,10 @@ export function createCameraControl(engine: Engine): CameraControl {
     if (canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
     if (e.pointerType === "touch") {
       touches.delete(e.pointerId);
+      if (multi && touches.size >= 2) {
+        startMulti();
+        return;
+      }
       if (multi && touches.size < 2) {
         multi = null;
         const rest = [...touches.entries()][0];

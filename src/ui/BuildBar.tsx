@@ -14,6 +14,7 @@ import { Segmented, Tooltip } from "./kit";
 import { storedChoice } from "./preferenceModel";
 import { LANDMARK_LABELS } from "./semanticModel";
 import { L } from "../i18n";
+import { touchScreen } from "../map/motion";
 
 const CATEGORY_STORE = "rebirth.build.category";
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
@@ -68,42 +69,60 @@ function onDockKey(e: KeyboardEvent): void {
   buttons[to]?.focus();
 }
 
-const ROAD_HINT: Record<RoadMode, string> = {
-  straight: L("Протяните от начала до конца — прямая; Shift — угол 15°, Пробел — двигать карту, ПКМ или Esc — закончить", "Drag from start to end — straight; Shift — 15° steps, Space — pan the map, RMB or Esc — finish"),
-  arc: L("Протяните от начала до конца (или клик, клик), затем движение мышью — изгиб, клик — готово; Shift — угол 15°, ПКМ или Esc — отмена", "Drag from start to end (or click, click), then move the mouse to bend, click to finish; Shift — 15° steps, RMB or Esc — cancel"),
-};
-const BRUSH_HINT = L("Тяните — закрасить, Shift+клик — вся сторона дороги, Пробел — двигать карту, Esc — выйти", "Drag to paint, Shift+click — the whole side of a road, Space — pan the map, Esc — exit");
-const PLACE_HINT = L("Клик — поставить у дороги, ПКМ или Esc — выйти", "Click to place by a road, RMB or Esc — exit");
-const service = (id: keyof typeof SERVICES, tail: string) => `${PLACE_HINT}. ${L(`Подсветка дорог — охват ${SERVICES[id].reach} м по дорогам`, `Highlighted roads — reach ${SERVICES[id].reach} m by road`)}${tail}`;
-
-const HINT: Partial<Record<Tool, string>> = {
-  bulldoze: L("Клик по участку — снести, Esc — выйти", "Click a section to demolish, Esc — exit"),
-  restore: L("Наведите на раскопанную улицу — она подсветится целиком с ценой, клик — восстановить, Esc — выйти", "Hover over an excavated street — it lights up whole with its cost; click to restore, Esc — exit"),
-  res: BRUSH_HINT,
-  craft: BRUSH_HINT,
-  trade: BRUSH_HINT,
-  clear: `${BRUSH_HINT}. ${L("Клик по полю или вырубке в работе — убрать", "Click a field or an active clearing to remove it")}`,
-  gumno: `${PLACE_HINT}. ${L(`Круг — досягаемость полей (${FIELD.radius} м)`, `Circle — field reach (${FIELD.radius} m)`)}`,
-  woodcutter: `${PLACE_HINT}. ${L(`Круг — лес вокруг (${SITE_RADIUS.woodcutter} м)`, `Circle — forest around (${SITE_RADIUS.woodcutter} m)`)}`,
-  sawpit: PLACE_HINT,
-  quarry: PLACE_HINT,
-  fisher: `${PLACE_HINT}. ${L(`Круг — вода рядом (${SITE_RADIUS.fisher} м)`, `Circle — water nearby (${SITE_RADIUS.fisher} m)`)}`,
-  garden: PLACE_HINT,
-  hunter: PLACE_HINT,
-  forager: `${PLACE_HINT}. ${L(`Круг — лес вокруг (${SITE_RADIUS.forager} м)`, `Circle — forest around (${SITE_RADIUS.forager} m)`)}`,
-  orchard: PLACE_HINT,
-  apiary: PLACE_HINT,
-  cellar: PLACE_HINT,
-  barn: PLACE_HINT,
-  well: service("well", ""),
-  market: service("market", L(", нужны работники", ", needs workers")),
-  chapel: service("chapel", L(", нужен работник", ", needs a worker")),
-  school: service("school", L(", нужны работники", ", needs workers")),
-  healer: service("healer", L(", нужен работник", ", needs a worker")),
-  dig: `${PLACE_HINT}. ${L(`Круг — первое вскрытие (${DIG.startRadius} м), потом растёт до ${DIG.maxRadius} м и снимается, а найденное остаётся на карте`, `Circle — the first opening (${DIG.startRadius} m); it grows to ${DIG.maxRadius} m and is then removed, while the finds stay on the map`)}`,
-  field: L("Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить", "Click — add a corner, click the first point or Enter — close, RMB — undo a point, Esc — reset"),
-  clearing: L("Как поле: контур леса до 5 га у построенной дороги (до 300 м). Строители рубят после строек, а когда брёвен на складе меньше, чем на дом, — раньше них. Брёвна идут на склад, земля станет лугом", "Like a field: an outline of forest up to 5 ha near a built road (within 300 m). Builders fell it after the building sites, or before them when the store holds fewer logs than a house needs. Logs go to the store; the land becomes meadow"),
-};
+// Hints for a mouse and keyboard, and for a finger: no hover, no right button, no Esc; the tool's own button exits.
+const EXIT_TOUCH = L("повторный тап по инструменту — выйти", "tap the tool again to exit");
+function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<Record<Tool, string>> } {
+  const road: Record<RoadMode, string> = touch
+    ? {
+        straight: L(`Протяните от начала до конца или тап, тап — прямая; ${EXIT_TOUCH}`, `Drag from start to end, or tap, tap — straight; ${EXIT_TOUCH}`),
+        arc: L(`Протяните от начала до конца (или тап, тап), затем протяните — изгиб, отпустите — готово; ${EXIT_TOUCH}`, `Drag from start to end (or tap, tap), then drag to bend and release to finish; ${EXIT_TOUCH}`),
+      }
+    : {
+        straight: L("Протяните от начала до конца — прямая; Shift — угол 15°, Пробел — двигать карту, ПКМ или Esc — закончить", "Drag from start to end — straight; Shift — 15° steps, Space — pan the map, RMB or Esc — finish"),
+        arc: L("Протяните от начала до конца (или клик, клик), затем движение мышью — изгиб, клик — готово; Shift — угол 15°, ПКМ или Esc — отмена", "Drag from start to end (or click, click), then move the mouse to bend, click to finish; Shift — 15° steps, RMB or Esc — cancel"),
+      };
+  const brush = touch
+    ? L(`Ведите пальцем — закрасить, двумя пальцами — двигать карту; ${EXIT_TOUCH}`, `Drag a finger to paint, two fingers to move the map; ${EXIT_TOUCH}`)
+    : L("Тяните — закрасить, Shift+клик — вся сторона дороги, Пробел — двигать карту, Esc — выйти", "Drag to paint, Shift+click — the whole side of a road, Space — pan the map, Esc — exit");
+  const place = touch
+    ? L(`Тап — показать участок у дороги, второй тап — поставить; ${EXIT_TOUCH}`, `Tap to show a lot by a road, tap it again to place; ${EXIT_TOUCH}`)
+    : L("Клик — поставить у дороги, ПКМ или Esc — выйти", "Click to place by a road, RMB or Esc — exit");
+  const service = (id: keyof typeof SERVICES, tail: string) => `${place}. ${L(`Подсветка дорог — охват ${SERVICES[id].reach} м по дорогам`, `Highlighted roads — reach ${SERVICES[id].reach} m by road`)}${tail}`;
+  const tool: Partial<Record<Tool, string>> = {
+    bulldoze: touch ? L(`Тап по участку — снести; ${EXIT_TOUCH}`, `Tap a section to demolish; ${EXIT_TOUCH}`) : L("Клик по участку — снести, Esc — выйти", "Click a section to demolish, Esc — exit"),
+    restore: touch
+      ? L(`Тап по раскопанной улице — она подсветится целиком с ценой, второй тап — восстановить; ${EXIT_TOUCH}`, `Tap an excavated street — it lights up whole with its cost; tap again to restore; ${EXIT_TOUCH}`)
+      : L("Наведите на раскопанную улицу — она подсветится целиком с ценой, клик — восстановить, Esc — выйти", "Hover over an excavated street — it lights up whole with its cost; click to restore, Esc — exit"),
+    res: brush,
+    craft: brush,
+    trade: brush,
+    clear: `${brush}. ${touch ? L("Тап по полю или вырубке в работе — убрать", "Tap a field or an active clearing to remove it") : L("Клик по полю или вырубке в работе — убрать", "Click a field or an active clearing to remove it")}`,
+    gumno: `${place}. ${L(`Круг — досягаемость полей (${FIELD.radius} м)`, `Circle — field reach (${FIELD.radius} m)`)}`,
+    woodcutter: `${place}. ${L(`Круг — лес вокруг (${SITE_RADIUS.woodcutter} м)`, `Circle — forest around (${SITE_RADIUS.woodcutter} m)`)}`,
+    sawpit: place,
+    quarry: place,
+    fisher: `${place}. ${L(`Круг — вода рядом (${SITE_RADIUS.fisher} м)`, `Circle — water nearby (${SITE_RADIUS.fisher} m)`)}`,
+    garden: place,
+    hunter: place,
+    forager: `${place}. ${L(`Круг — лес вокруг (${SITE_RADIUS.forager} м)`, `Circle — forest around (${SITE_RADIUS.forager} m)`)}`,
+    orchard: place,
+    apiary: place,
+    cellar: place,
+    barn: place,
+    well: service("well", ""),
+    market: service("market", L(", нужны работники", ", needs workers")),
+    chapel: service("chapel", L(", нужен работник", ", needs a worker")),
+    school: service("school", L(", нужны работники", ", needs workers")),
+    healer: service("healer", L(", нужен работник", ", needs a worker")),
+    dig: `${place}. ${L(`Круг — первое вскрытие (${DIG.startRadius} м), потом растёт до ${DIG.maxRadius} м и снимается, а найденное остаётся на карте`, `Circle — the first opening (${DIG.startRadius} m); it grows to ${DIG.maxRadius} m and is then removed, while the finds stay on the map`)}`,
+    field: touch
+      ? L(`Тап — вершина, тап по первой точке — замкнуть, тап по последней — убрать её; ${EXIT_TOUCH}`, `Tap — add a corner, tap the first point — close, tap the last one — remove it; ${EXIT_TOUCH}`)
+      : L("Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить", "Click — add a corner, click the first point or Enter — close, RMB — undo a point, Esc — reset"),
+    clearing: L("Как поле: контур леса до 5 га у построенной дороги (до 300 м). Строители рубят после строек, а когда брёвен на складе меньше, чем на дом, — раньше них. Брёвна идут на склад, земля станет лугом", "Like a field: an outline of forest up to 5 ha near a built road (within 300 m). Builders fell it after the building sites, or before them when the store holds fewer logs than a house needs. Logs go to the store; the land becomes meadow"),
+  };
+  return { road, tool };
+}
+const HINTS = { mouse: hints(false), touch: hints(true) };
 
 const ADVICE: Record<GrowthWhy, string | null> = {
   ok: null,
@@ -253,7 +272,8 @@ export function BuildBar() {
   const mode = roadMode.value;
   const drawsRoad = !!active && isRoadTool(active) && active !== "bulldoze" && active !== "restore";
   const materials = active && isMaterialTool(active) ? ROAD_MATERIALS[active] : null;
-  const hint = active ? (drawsRoad ? ROAD_HINT[mode] : HINT[active]) : null;
+  const h = touchScreen() ? HINTS.touch : HINTS.mouse;
+  const hint = active ? (drawsRoad ? h.road[mode] : h.tool[active]) : null;
   return (
     <section class="build-bar" aria-label={LANDMARK_LABELS.build}>
       <div class="bb-lines" aria-live="polite">

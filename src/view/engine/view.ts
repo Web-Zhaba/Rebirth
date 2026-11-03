@@ -2,7 +2,7 @@ import { prefersReducedMotion } from "../../map/motion";
 import type { Engine } from "../../engine/engine";
 import type { CameraControl, CameraTarget } from "../../engine/camera/cameraControl";
 import type { Camera, CameraGoal, LngLat, Overlay, OverlayId, ScreenPoint, View, ViewEvents, ViewMarker, ViewPointer } from "../view";
-import { distanceToMpp, markerTransform, mppToDistance, type MarkerAnchor } from "./scale";
+import { clickTolerance, distanceToMpp, markerTransform, mppToDistance, type MarkerAnchor } from "./scale";
 import { labelSight } from "./labelSight";
 import { PointerClickTracker } from "./pointer";
 
@@ -90,7 +90,8 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
 
     on<K extends keyof ViewEvents>(type: K, fn: (e: ViewEvents[K]) => void) {
       const call = fn as (e: ViewPointer) => void;
-      const dispatch = (e: MouseEvent): void => {
+      // `pressType`: what pressed the pointer, for a click some browsers still deliver as a plain MouseEvent.
+      const dispatch = (e: MouseEvent, pressType: string | null = null): void => {
         const point = local(e);
         const g = engine.pick(point[0], point[1]);
         if (!g) return; // game tools only act on the planet, never on the sky
@@ -101,14 +102,18 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
           point,
           original: e,
           pointerId: hasPointer ? pointer.pointerId : null,
-          pointerType: hasPointer ? pointer.pointerType : null,
+          pointerType: (hasPointer && pointer.pointerType) || pressType,
           isPrimary: hasPointer ? pointer.isPrimary : true,
         });
       };
 
       if (type === "click") {
         const clicks = new PointerClickTracker();
-        const onPointerDown = (e: PointerEvent) => clicks.pointerDown(e.pointerId, local(e));
+        let pressType: string | null = null;
+        const onPointerDown = (e: PointerEvent) => {
+          pressType = e.pointerType;
+          clicks.pointerDown(e.pointerId, local(e), clickTolerance(e.pointerType));
+        };
         const onPointerMove = (e: PointerEvent) => clicks.pointerMove(e.pointerId, local(e));
         const onPointerUp = (e: PointerEvent) => clicks.pointerUp(e.pointerId);
         const onPointerCancel = (e: PointerEvent) => clicks.pointerCancel(e.pointerId);
@@ -119,7 +124,7 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
           } else if (e.detail !== 0 && !clicks.isClick(null, local(e))) {
             return; // non-PointerEvent browsers still get drag-filtered clicks
           }
-          dispatch(e);
+          dispatch(e, pressType);
         };
         canvas.addEventListener("pointerdown", onPointerDown);
         window.addEventListener("pointermove", onPointerMove);

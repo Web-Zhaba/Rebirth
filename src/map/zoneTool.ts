@@ -15,6 +15,7 @@ import { decimal, L } from "../i18n";
 const BRUSH_PX = 16;
 const MIN_BRUSH_M = 6;
 const CLOSE_PX = 12;
+const TOUCH_CLOSE_PX = 28; // a fingertip covers far more than a cursor
 const FIELD_MAX_MPP = mppAtZoom(14); // old FIELD_MIN_ZOOM 14
 const GRID_STEP = 10; // m, land sampling inside a field
 const ANALYZE_MS = 200;
@@ -401,12 +402,21 @@ export function attachZoneTool(view: View): void {
     const f = frame.value;
     if (!f || busy || view.metersPerPixel() > FIELD_MAX_MPP) return;
     const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
-    if (pts.length >= 3) {
-      const first = view.project(f.toLngLat(pts[0][0], pts[0][1]));
-      if (Math.hypot(first[0] - e.point[0], first[1] - e.point[1]) <= CLOSE_PX) {
-        finishField();
-        return;
-      }
+    const touch = e.pointerType === "touch";
+    const near = (p: Pt) => {
+      const s = view.project(f.toLngLat(p[0], p[1]));
+      return Math.hypot(s[0] - e.point[0], s[1] - e.point[1]) <= (touch ? TOUCH_CLOSE_PX : CLOSE_PX);
+    };
+    if (pts.length >= 3 && near(pts[0])) {
+      finishField();
+      return;
+    }
+    // A finger has no right button: a tap on the last corner takes it back.
+    if (touch && pts.length > 0 && near(pts[pts.length - 1])) {
+      pts.pop();
+      local = [x, y];
+      showDraft();
+      return;
     }
     const last = pts[pts.length - 1];
     if (last && Math.hypot(last[0] - x, last[1] - y) < 0.5) return;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PointerClickTracker } from "./pointer";
+import { TOUCH_CLICK_TOLERANCE } from "./scale";
 
 describe("PointerClickTracker", () => {
   it("accepts a primary tap after pointerup", () => {
@@ -86,5 +87,17 @@ describe("PointerClickTracker", () => {
     clicks.pointerDown(1, [50, 50]);
     clicks.pointerUp(1);
     expect(clicks.isClick(1, [51, 50])).toBe(true);
+  });
+
+  it("gives a finger tap the touch tolerance, a mouse press the default one", () => {
+    const clicks = new PointerClickTracker();
+    clicks.pointerDown(1, [0, 0], TOUCH_CLICK_TOLERANCE);
+    clicks.pointerMove(1, [10, 0]);
+    clicks.pointerUp(1);
+    expect(clicks.isClick(1, [10, 0])).toBe(true);
+    clicks.pointerDown(2, [0, 0]);
+    clicks.pointerMove(2, [10, 0]);
+    clicks.pointerUp(2);
+    expect(clicks.isClick(2, [10, 0])).toBe(false);
   });
 });
