@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.2.0...rebirth-v0.3.0) (2026-11-03)
+
+
+### Features
+
+* **engine:** real-world biomes on the terrain ([bb2d6d9](https://github.com/Web-Zhaba/Rebirth/commit/bb2d6d9e2cfc7599ca338bc9fcecf9e7f8a490b8))
+* **engine:** sun shadows for terrain, town and forest ([6496b67](https://github.com/Web-Zhaba/Rebirth/commit/6496b67fd62a7f7660f08f4c31f08417647c0709))
+* **sim:** remove random town events ([774375d](https://github.com/Web-Zhaba/Rebirth/commit/774375dff32ca6f181fdb05fe0bc9b863d117dad))
+
+
+### Bug Fixes
+
+* **camera:** keep the eye above ground and tighten forest culling ([bb46922](https://github.com/Web-Zhaba/Rebirth/commit/bb46922af0b7ce7bd9215f4f7a30a09dfc4b8f8b))
+* **residents:** consistent daily life, follow mode and hiring ([c2127ec](https://github.com/Web-Zhaba/Rebirth/commit/c2127ece7fd030d4188b0364dea958a38a2784ac))
+* **touch:** make the map and build tools work with a finger ([1ddae1b](https://github.com/Web-Zhaba/Rebirth/commit/1ddae1b1c2326e34a35d396397346d58f6782522))
+
 ## [0.2.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.1.0...rebirth-v0.2.0) (2026-11-03)
 
 
