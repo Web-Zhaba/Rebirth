@@ -6,6 +6,7 @@ import { createShader } from "../gpu/wgsl";
 import { SHADOW_DEPTH, type ShadowMap } from "../shadow/shadowMap";
 import { DEM_SIZE } from "../bake/terrarium";
 import { DRAPE_MAX_ZOOM, DRAPE_SIZE } from "../bake/drape";
+import { C } from "../../world/biome";
 import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
 import type { DrapeResponse } from "../bake/drapeWorker";
 import { demStream, TileStream } from "../stream/demStream";
@@ -27,6 +28,15 @@ export const EXAGGERATION = 1.6; // the old MapLibre relief's
 
 const MAX_NODES = 4096; // chunk-table capacity per frame
 const SLOTS = 1024; // resident node vertex blocks
+// An atlas colour as a linear WGSL vec3f literal, for the shader's compile-time constants.
+function linearVec3(hex: string): string {
+  const ch = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4).toFixed(4);
+  };
+  return `vec3f(${ch(1)}, ${ch(3)}, ${ch(5)})`;
+}
+
 const NODE_STRIDE = 40; // floats per chunk-table entry (160 B, struct Node in terrain.wgsl)
 export const NO_PAGE = 0xffffffff;
 const VERTEX_BUILDS_PER_FRAME = 64; // 64 x 35 KB ~ 2.2 MB
@@ -143,7 +153,8 @@ export class Terrain {
       ],
     });
     const wet = COVER_TABLE.flatMap((c, i) => (c.key.startsWith("wetland") ? [i + 1] : []));
-    const module = createShader(device, "terrain", terrainWgsl, { GRID, DRAPE_SIZE, WOOD: coverIdOf("wood", ""), WET_LO: Math.min(...wet), WET_HI: Math.max(...wet) });
+    const module = createShader(device, "terrain", terrainWgsl, { GRID, DRAPE_SIZE, WOOD: coverIdOf("wood", ""), WET_LO: Math.min(...wet), WET_HI: Math.max(...wet),
+      ALPINE: linearVec3(C.fell), ROCK: linearVec3(C.rock), SNOW: linearVec3(C.ice) });
     this.pipeline = device.createRenderPipeline({
       label: "terrain",
       layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, layout] }),

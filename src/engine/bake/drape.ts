@@ -1,11 +1,12 @@
 import type { VectorTile } from "@mapbox/vector-tile";
 import { biomeColor, C, isDrawnLandcover } from "../../world/biome";
+import { fillBiomes, type BiomeMap } from "../../world/biomes";
 import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
 import { isNatureWater, isNatureWaterway } from "../../world/nature";
 
 // Drape pages: the land's colour and water coverage over one quadtree tile, rasterised from the OpenMapTiles tile of
-// the same place (docs/PLAN-engine.md section 4, "Far world" and "Water"). RGB is the atlas colour (sRGB, the palette of
-// world/biome.ts, the same as the MapLibre style), alpha is water coverage. The terrain shader lights the colour and
+// the same place (docs/PLAN-engine.md section 4, "Far world" and "Water") over the biome of the place (world/biomes.ts).
+// RGB is the atlas colour (sRGB, the palette of world/biome.ts), alpha is water coverage. The terrain shader lights the colour and
 // shades water where alpha is high, so one texture replaces the fill, line, shore and hillshade layers of the old map.
 //
 // The same page carries the vegetation cover for the GPU tree scatter (N5, `rasterCover`): an 8-bit class id per texel
@@ -96,8 +97,50 @@ function pageWindow(src: DrapeSource, z: number, x: number, y: number): { ox: nu
   return { ox: (x % n) * size, oy: (y % n) * size, k: DRAPE_SIZE / size };
 }
 
-// Paint page (z, x, y) from its source tile. `colour` gets the atlas colours, `water` the coverage mask (white = water).
-export function paintDrape(colour: Ctx, water: Ctx, src: DrapeSource, z: number, x: number, y: number): void {
+// The land's base colour under page (z, x, y), RGBA row by row: the biome field (world/biomes.ts) sampled on a
+// (BASE_GRID + 1)^2 grid of points from edge to edge, so neighbouring pages share their edge samples, and bilinearly
+// spread over the texels. Far pages show the biome as seen from orbit, near ones its open ground
+// (docs/PLAN-biomes.md step 3).
+const BASE_GRID = 64;
+export function biomeBase(map: BiomeMap, z: number, x: number, y: number): Uint8ClampedArray<ArrayBuffer> {
+  const G = BASE_GRID;
+  const n = 2 ** z;
+  const lngs = Array.from({ length: G + 1 }, (_, i) => ((x + i / G) / n) * 360 - 180);
+  const lats = Array.from({ length: G + 1 }, (_, j) => (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * (y + j / G)) / n)) * 180) / Math.PI);
+  const grid = new Uint8ClampedArray((G + 1) * (G + 1) * 4);
+  fillBiomes(map, lngs, lats, smoothstep(7, 11, z), grid);
+  const S = DRAPE_SIZE;
+  const out = new Uint8ClampedArray(S * S * 4);
+  for (let j = 0; j < S; j++) {
+    const v = ((j + 0.5) / S) * G;
+    const j0 = Math.min(G - 1, Math.floor(v));
+    const fv = v - j0;
+    for (let i = 0; i < S; i++) {
+      const u = ((i + 0.5) / S) * G;
+      const i0 = Math.min(G - 1, Math.floor(u));
+      const fu = u - i0;
+      const a = (j0 * (G + 1) + i0) * 4;
+      const b = a + (G + 1) * 4;
+      const o = (j * S + i) * 4;
+      for (let k = 0; k < 3; k++) {
+        const top = grid[a + k] + (grid[a + 4 + k] - grid[a + k]) * fu;
+        const bottom = grid[b + k] + (grid[b + 4 + k] - grid[b + k]) * fu;
+        out[o + k] = top + (bottom - top) * fv;
+      }
+      out[o + 3] = 255;
+    }
+  }
+  return out;
+}
+
+const smoothstep = (a: number, b: number, t: number) => {
+  const k = Math.min(1, Math.max(0, (t - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
+// Paint page (z, x, y) from its source tile over its base colour (`biomeBase`, or the meadow fill without one).
+// `colour` gets the atlas colours, `water` the coverage mask (white = water).
+export function paintDrape(colour: Ctx, water: Ctx, src: DrapeSource, z: number, x: number, y: number, base: ImageData | null): void {
   const S = DRAPE_SIZE;
   const { ox, oy, k } = pageWindow(src, z, x, y);
   const mpp = pageMpp(z, y);
@@ -126,8 +169,11 @@ export function paintDrape(colour: Ctx, water: Ctx, src: DrapeSource, z: number,
     ctx.restore();
   };
 
-  colour.fillStyle = C.meadow;
-  colour.fillRect(0, 0, S, S);
+  if (base) colour.putImageData(base, 0, 0);
+  else {
+    colour.fillStyle = C.meadow;
+    colour.fillRect(0, 0, S, S);
+  }
   water.fillStyle = "#000";
   water.fillRect(0, 0, S, S);
 

@@ -13,6 +13,7 @@ const LINKS: { name: string; href: string; what: string }[] = [
   { name: "OpenFreeMap", href: "https://openfreemap.org", what: L("векторные тайлы", "vector tiles") },
   { name: "\u00a9 OpenMapTiles", href: "https://www.openmaptiles.org/", what: L("схема векторных данных", "vector data schema") },
   { name: "Mapzen / AWS Open Data", href: "https://registry.opendata.aws/terrain-tiles/", what: L("высоты рельефа (Terrain Tiles)", "terrain elevation (Terrain Tiles)") },
+  { name: "RESOLVE Ecoregions 2017", href: "https://ecoregions.appspot.com", what: L("карта биомов (Dinerstein и др., 2017), лицензия CC BY 4.0", "biome map (Dinerstein et al., 2017), CC BY 4.0 license") },
   { name: "MapLibre GL JS", href: "https://maplibre.org", what: L("образец поведения камеры, лицензия BSD-3-Clause", "reference for camera behaviour, BSD-3-Clause license") },
   { name: L("Звуки интерфейса", "Interface sounds"), href: "https://developer.mozilla.org/docs/Web/API/Web_Audio_API", what: L("синтезируются в игре средствами Web Audio API, без сторонних файлов", "synthesized in the game with the Web Audio API, no third-party files") },
   { name: "Photon (komoot)", href: "https://photon.komoot.io", what: L("поиск мест по названию перед основанием, данные OpenStreetMap", "place search by name before founding, OpenStreetMap data") },
