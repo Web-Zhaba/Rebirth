@@ -1,20 +1,24 @@
 ﻿/* Layout and access (PLAN-ui.md U8). Loaded after the component stylesheets, so it wins at equal specificity.
 
+   The frame is a set of tar plates on the field: the town plate top-left, the ledger in the middle, the actions
+   top-right, the build dock at the foot, the builders' tag bottom-left. The right column belongs to the right slot
+   (inspector, town panel, notebook); the map controls step aside while a sheet is open.
+
    Breakpoints
-     >= 1100 px   wide: left column, centre column and right slot side by side; full top bar.
-     < 1300 px    compact top bar: resources show icon + number only (caption and daily delta stay for screen readers
-                  and in the tooltip); the full bar needs about 1260 px.
-     900-1099 px  medium: left column 250 px, centre column starts right of it and narrows when the right slot
-                  is open, layers start collapsed.
-     < 900 px     narrow: the top bar wraps onto a second row; the right slot is a drawer from the bar down to the
-                  build bar; an event card or the day summary takes the whole width and hides the left column and the
-                  drawer while it is shown (they come back after it is answered).
+     >= 1400 px        wide: everything on one line; the right sheet runs down to the foot of the screen.
+     1280-1399 px      the ledger drops its daily deltas (they stay in the tooltip).
+     641-1279 px       the ledger takes a second row under the town plate and the actions; below 1100 the
+                       left column and the centre column narrow.
+     <= 640 px         phone, portrait: one tar band in two rows (town and actions; speed and ledger), the dock
+                       across the full width at the foot, the right slot as a bottom sheet.
+     height <= 500 px  phone, landscape: one low band, the right slot as a side sheet over the dock.
    --topbar-h and --bb-h are measured at run time by layout.ts. */
 
 :root {
-  --bb-h: 150px; /* build bar: tabs and items; fallback until measured */
-  --bb-bottom: 44px; /* attribution bar below the build bar; it wraps to more lines on narrow screens */
-  --bb-reserve: calc(var(--bb-h) + var(--bb-bottom) + 44px); /* build bar, its offset and the hint line above it */
+  --bb-h: 94px; /* build dock with its tray; fallback until measured */
+  --bb-bottom: 30px; /* the dock stands clear of the attribution line */
+  --bb-reserve: calc(var(--bb-h) + var(--bb-bottom) + 48px); /* dock, its offset and the hint slip above it */
+  --sheet-w: min(360px, calc(100vw - 16px));
   --z-slot: 2;
   --z-drawer: 4;
 }
@@ -26,27 +30,90 @@
 }
 
 .side-col {
-  max-height: calc(100vh - var(--topbar-h) - 14px - var(--bb-reserve));
-}
-
-.notebook {
-  top: calc(var(--topbar-h) + 114px);
-  z-index: var(--z-slot);
+  max-height: calc(100vh - var(--topbar-h) - 16px - var(--bb-reserve));
 }
 
 .rs-panel {
-  top: calc(var(--topbar-h) + 158px);
-  max-height: max(200px, calc(100vh - var(--topbar-h) - 158px - var(--bb-reserve)));
+  top: calc(var(--topbar-h) + var(--sp-2));
+  width: var(--sheet-w);
+  max-height: max(200px, calc(100vh - var(--topbar-h) - 16px - var(--bb-reserve)));
+  z-index: var(--z-slot);
+}
+
+/* Where the dock cannot reach the right column, the sheet runs down to the bottom line. */
+@media (min-width: 1400px) {
+  .rs-panel {
+    max-height: calc(100vh - var(--topbar-h) - 16px - var(--bb-bottom));
+  }
+}
+
+.notebook {
+  top: calc(var(--topbar-h) + 124px);
+  right: var(--sp-2);
   z-index: var(--z-slot);
 }
 
 .notebook .notebook-panel {
-  max-height: min(500px, max(160px, calc(100vh - var(--topbar-h) - 158px - var(--bb-reserve))));
+  max-height: min(520px, max(160px, calc(100vh - var(--topbar-h) - 140px - var(--bb-reserve))));
+}
+
+.engine-nav {
+  top: calc(var(--topbar-h) + var(--sp-2));
+  right: var(--sp-2);
+  transition: right 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The map controls and the notebook tag step left of an open sheet instead of hiding under it. */
+body:has(#ui .rs-panel) .engine-nav,
+#ui:has(.rs-panel) .notebook {
+  right: calc(var(--sheet-w) + 16px);
 }
 
 .centre-col {
   top: calc(var(--topbar-h) + 34px);
   max-height: calc(100vh - var(--topbar-h) - 34px - var(--bb-reserve));
+}
+
+/* Builders' tag: bottom-left, on the dock's line; the list rises above it. */
+.builder-tasks {
+  position: absolute;
+  left: var(--sp-2);
+  bottom: var(--bb-bottom);
+  z-index: var(--z-slot);
+  max-height: calc(100vh - var(--topbar-h) - var(--bb-bottom) - 24px);
+}
+
+.builder-tasks-list {
+  max-height: min(420px, calc(100vh - var(--topbar-h) - var(--bb-bottom) - 80px));
+  overflow-y: auto;
+}
+
+/* Terrain under the pointer (TerrainInspector.tsx): bottom-left, just above the builders' tag. */
+.cell-panel {
+  left: var(--sp-2);
+  bottom: calc(var(--bb-bottom) + 44px);
+}
+
+/* FPS counter (FpsCounter.tsx): bottom-left under the builders' tag; never in the way of map gestures. */
+.fps {
+  position: absolute;
+  left: var(--sp-2);
+  bottom: 4px;
+  z-index: var(--z-label);
+  pointer-events: none;
+  padding: 1px 6px;
+  border: var(--bw-hair) solid var(--frame-edge);
+  border-radius: 0;
+  background: var(--frame-deep);
+  font-size: var(--fs-xs);
+  color: var(--frame-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.fps-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--frame-text);
 }
 
 /* Text-like buttons (link style) */
@@ -59,18 +126,22 @@ button.link {
   text-align: left;
 }
 
-/* Targets at least 24 px high (WCAG 2.2). */
-.layer-head,
-button.event-card-pause-btn {
-  min-height: 24px;
-}
-
 /* The ring sits inside where the control is clipped by a scrolling container. */
-.tabs :focus-visible,
+.bb-items :focus-visible,
 .rs-panel :focus-visible,
 .centre-col :focus-visible,
-.side-col :focus-visible {
+.side-col :focus-visible,
+.topbar .stats :focus-visible {
   outline-offset: -2px;
+}
+
+/* On the tar plates the focus ring is light, so it reads against the frame. */
+.topbar :focus-visible,
+.bb-panel :focus-visible,
+.builder-tasks-head:focus-visible,
+.layer-head:focus-visible,
+.insp-head :focus-visible {
+  outline-color: var(--frame-night);
 }
 
 /* Reduced motion: no transitions or animations anywhere (the map camera jumps, see View.flyTo). */
@@ -85,29 +156,17 @@ button.event-card-pause-btn {
   }
 }
 
-/* ---- Compact top bar: the full one needs about 1260 px ---- */
-
-@media (max-width: 1559px) {
-  .topbar {
-    gap: var(--sp-3);
-    padding: 0 var(--sp-2);
+/* Touch has no hover: a tool's card would stick over the map. The cost line above the dock carries it instead. */
+@media (hover: none) {
+  .bb-items .tooltip,
+  .bb-items .tooltip-wrap:hover .tooltip {
+    display: none;
   }
+}
 
-  .tb-city {
-    max-width: 190px;
-  }
+/* ---- Below 1400: the ledger drops its daily deltas ---- */
 
-  .bar-stat {
-    position: relative;
-    padding: 3px var(--sp-2);
-  }
-
-  .bar-stat .stat {
-    grid-template-columns: 22px auto;
-  }
-
-  /* Caption and delta stay in the accessibility tree and in the tooltip. */
-  .bar-stat .stat-cap,
+@media (max-width: 1399px) {
   .bar-stat .stat-delta {
     position: absolute;
     width: 1px;
@@ -117,217 +176,657 @@ button.event-card-pause-btn {
     white-space: nowrap;
   }
 
-  .bar-stat .stat-num {
-    grid-row: 1 / 3;
+  .bar-stat .stat .icon {
+    grid-row: 1;
   }
 }
 
-/* ---- Medium ---- */
+/* ---- Below 1280: the ledger takes its own row under the town plate ---- */
+
+@media (max-width: 1279px) {
+  .topbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  /* A forced line break: the town plate and the actions on top, the ledger alone under them. */
+  .topbar::after {
+    content: "";
+    order: 2;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .topbar .stats {
+    order: 3;
+    margin-inline: 0;
+  }
+
+  .stats ~ .tb-end {
+    margin-left: auto;
+  }
+}
+
+/* ---- 641-1099: narrower columns ---- */
 
 @media (max-width: 1099px) {
   .side-col {
-    width: 250px;
+    width: 270px;
   }
 
   .centre-col {
-    left: 270px;
+    left: 290px;
     transform: none;
-    width: min(380px, calc(100vw - 282px));
+    width: min(380px, calc(100vw - 302px));
   }
 
-}
-
-/* Between 900 and 1099 px the resources do not fit beside the speed buttons: they take a second row. */
-@media (min-width: 900px) and (max-width: 1099px) {
-  .topbar {
-    flex-wrap: wrap;
-    row-gap: var(--sp-1);
+  /* The dock reaches under the builders' tag here: the tag rises above the dock. */
+  .builder-tasks {
+    bottom: calc(var(--bb-reserve) - 40px);
   }
 
-  .speed {
-    order: 2;
+  .cell-panel {
+    bottom: calc(var(--bb-reserve) + 4px);
   }
 
-  .tb-end {
-    order: 3;
-    margin-left: 0;
+  .side-col {
+    max-height: calc(100vh - var(--topbar-h) - 70px - var(--bb-reserve));
   }
 
-  .stats {
-    order: 4;
-    flex: 1 1 100%;
-    margin-left: 0;
-  }
-}
-
-/* Room for the right slot: it takes 350 px from the right edge. */
-@media (min-width: 900px) and (max-width: 1099px) {
   #ui:has(.rs-panel, .notebook-panel) .centre-col {
-    width: min(380px, calc(100vw - 632px));
+    width: min(380px, calc(100vw - 670px));
   }
 }
 
-/* ---- Narrow ---- */
+@media (max-width: 1099px) and (min-width: 641px) {
+  .bb-cat {
+    padding: 0 var(--sp-3);
+  }
+}
 
-@media (max-width: 899px) {
-  :root {
-    --bb-bottom: 62px;
+/* ======== Phone ======== */
+
+/* Shared by both orientations: the ledger scrolls sideways, its notes open as a slip under the band, the right slot
+   becomes a sheet over the dock, bigger targets for a thumb. */
+@media (max-width: 640px), (max-height: 500px) {
+  .topbar::after {
+    display: none;
   }
 
-  .topbar {
-    flex-wrap: wrap;
-    align-content: center;
-    row-gap: var(--sp-1);
-    padding: var(--sp-1) var(--sp-2);
+  .topbar .stats {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
   }
 
-  /* Row 1: city and date, speed, buttons. Row 2: resources. */
-  .tb-city {
-    order: 1;
-    flex: 1 1 120px;
+  .topbar .stats::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bar-stat {
+    scroll-snap-align: start;
+    padding: 0 6px;
+  }
+
+  .bar-stat .stat {
+    column-gap: 4px;
+  }
+
+  .bar-stat .stat .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .bar-stat .stat-num {
+    font-size: var(--fs-md);
+  }
+
+  /* A tapped resource opens its note under the band, the full width of the screen. */
+  .topbar .stats .tooltip {
+    position: fixed;
+    top: calc(var(--topbar-h) + 6px);
+    left: var(--sp-2);
+    right: var(--sp-2);
+    width: auto;
     max-width: none;
+    font-size: var(--fs-sm);
   }
 
-  .city-date {
+  .tb-btn-label,
+  .tb-research-head,
+  .tb-research-what,
+  .builder-tasks-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
     overflow: hidden;
-    text-overflow: ellipsis;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
-  .speed {
-    order: 2;
+  /* Research shrinks to its icon; the progress line stays under it, the idle state is a warning square. */
+  .tb-research {
+    position: relative;
+    justify-content: center;
+    min-width: 40px;
+    padding: 0 var(--sp-2);
   }
 
-  .tb-end,
-  .stats ~ .tb-end {
-    order: 3;
-    margin-left: 0;
+  .tb-research-body {
+    position: absolute;
+    left: 7px;
+    right: 7px;
+    bottom: 5px;
+  }
+
+  .tb-research-track {
+    min-width: 0;
+  }
+
+  .tb-research.is-idle::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 7px;
+    height: 7px;
+    background: var(--frame-warn);
+    box-shadow: 0 0 0 1px var(--frame-edge);
+  }
+
+  .tb-btn {
+    justify-content: center;
+    min-width: 40px;
   }
 
   .speed-note {
     display: none;
   }
 
-  .stats {
-    order: 4;
-    flex: 1 1 100%;
-    margin-left: 0;
-    flex-wrap: wrap;
+  .layer-head,
+  .builder-tasks-head {
+    min-height: 40px;
   }
 
-  .bar-stat {
-    padding: 2px var(--sp-1);
+  /* The builders' tag shrinks to its numbers: builders, then the task count after a rule. */
+  .builder-tasks-head {
+    gap: 6px;
+    padding: 0 10px;
   }
 
-  .stats > .tooltip-wrap + .tooltip-wrap > .bar-stat {
-    border-left: 0;
+  .builder-tasks-count {
+    padding-left: 6px;
+    border-left: var(--bw-hair) solid var(--frame-line);
+    color: var(--frame-text);
   }
 
-  .side-col {
-    left: 8px;
-    width: min(250px, calc(100vw - 16px));
-  }
-
-  /* Right slot as a drawer from the bar down to the build bar. */
-  .rs-panel,
-  .notebook .notebook-panel {
-    position: fixed;
-    top: var(--topbar-h);
-    right: 0;
-    bottom: var(--bb-reserve);
-    width: min(340px, 100vw);
-    max-height: none;
-    border-radius: 0;
-    border-right: 0;
-    z-index: var(--z-drawer);
-  }
-
-  .centre-col {
-    left: 8px;
-    right: 52px; /* clear of the zoom buttons */
-    width: auto;
-    top: calc(var(--topbar-h) + 8px);
-    z-index: calc(var(--z-drawer) + 1);
-  }
-
-  /* Build bar: shorter tabs, no hotkey hints on them. */
-  .build-bar {
-    max-width: calc(100vw - 16px);
-  }
-
-  .bb-panel {
-    box-sizing: border-box;
-    max-width: calc(100vw - 16px);
-  }
-
-  .bb-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none; /* swipeable; the cut-off last tab shows there is more */
-  }
-
-  .bb-tabs .tab {
-    flex: none;
-    padding: var(--sp-1) var(--sp-2);
-  }
-
-  .bb-tabs kbd {
+  /* No frame counter on a phone. */
+  .fps {
     display: none;
   }
 
-  /* A card that needs an answer has the screen to itself. */
+  .layer-group {
+    grid-template-columns: repeat(auto-fill, 40px);
+  }
+
+  .layer-group .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .rs-panel .person-follow {
+    width: 36px;
+    height: 36px;
+  }
+
+  .staff-ctl .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* The right slot as a sheet: above the dock and the tags, under dialogs. */
+  .rs-panel,
+  .notebook .notebook-panel {
+    position: fixed;
+    z-index: var(--z-drawer);
+    max-height: none;
+    border-color: var(--frame-edge);
+  }
+
+  .bb-items .tooltip {
+    display: none;
+  }
+}
+
+/* ---- Phone, portrait ---- */
+
+@media (max-width: 640px) {
+  :root {
+    --bb-bottom: 0px;
+    --bb-reserve: calc(var(--bb-h) + 44px);
+  }
+
+  /* One tar band in two rows. The town plate dissolves into the band's grid: name and clock with the actions on top,
+     speed and the ledger under them. */
+  .topbar {
+    display: grid;
+    /* The ledger spans the flexible column, so its long row never widens the fixed ones. */
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "city city clock end"
+      "speed ledger ledger ledger";
+    align-items: center;
+    gap: 0 var(--sp-2);
+    padding: max(6px, env(safe-area-inset-top)) var(--sp-2) 0;
+    border-bottom: var(--bw) solid var(--frame-edge);
+    background:
+      var(--frame-lenticel) left bottom 3px / 100% 1px no-repeat,
+      linear-gradient(180deg, var(--frame), var(--frame-deep) 85%);
+    box-shadow: var(--shadow-hard-sm);
+    pointer-events: auto;
+  }
+
+  .tb-plate,
+  .topbar .stats,
+  .tb-end {
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .tb-plate {
+    display: contents;
+  }
+
+  .tb-mark {
+    display: none;
+  }
+
+  .tb-city {
+    grid-area: city;
+    max-width: none;
+  }
+
+  .city-name {
+    font-size: var(--fs-md);
+  }
+
+  .city-date {
+    max-width: none;
+  }
+
+  .tb-clock {
+    grid-area: clock;
+  }
+
+  .tb-ruler {
+    width: 52px;
+  }
+
+  .tb-end {
+    grid-area: end;
+    height: 44px;
+    margin: 0 calc(-1 * var(--sp-1)) 0 0;
+    padding: 0;
+  }
+
+  .tb-btn,
+  .tb-research {
+    height: 40px;
+  }
+
+  .speed {
+    grid-area: speed;
+    padding: 4px 0 8px;
+  }
+
+  .speed button {
+    min-width: 34px;
+    height: 32px;
+    padding: 0 6px;
+  }
+
+  .topbar .stats {
+    grid-area: ledger;
+    min-width: 0;
+    height: 44px;
+    margin: 0 calc(-1 * var(--sp-2)) 0 0;
+    padding: 0 var(--sp-2) 4px 0;
+  }
+
+  .bar-stat {
+    height: 36px;
+  }
+
+  /* Left column: warnings, layers and news, clear of the map controls on the right. */
+  .side-col {
+    left: var(--sp-2);
+    width: calc(100vw - 64px);
+    max-width: 320px;
+    max-height: calc(100vh - var(--topbar-h) - 24px - var(--bb-reserve));
+  }
+
+  .layer-body {
+    width: min(300px, calc(100vw - 64px));
+  }
+
+  /* The dock: the full width of the foot, categories as equal columns, the tray scrolls sideways. */
+  .build-bar {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
+  .bb-lines {
+    max-width: calc(100vw - 16px);
+    margin: 0 var(--sp-2);
+  }
+
+  .bb-panel {
+    width: 100%;
+    border-width: var(--bw) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .bb-items {
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .bb-items::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bb-items .tooltip-wrap {
+    flex: none;
+    scroll-snap-align: start;
+  }
+
+  .build-btn {
+    width: 78px;
+    min-height: 60px;
+  }
+
+  .bb-cat {
+    flex-direction: column;
+    gap: 3px;
+    min-height: 54px;
+    padding: 6px 2px 5px;
+    font-size: 11px;
+  }
+
+  .bb-cat-name {
+    overflow: hidden;
+    max-width: 100%;
+    text-overflow: ellipsis;
+  }
+
+  .bb-cat-live {
+    position: absolute;
+    top: 7px;
+    right: calc(50% - 17px);
+    margin: 0;
+  }
+
+  /* The builders' tag stands on the dock's left corner like a tab; the credits' «i» on the right. */
+  .builder-tasks {
+    left: 0;
+    bottom: var(--bb-h);
+    width: auto;
+    max-width: calc(100vw - 64px);
+    max-height: calc(100vh - var(--topbar-h) - var(--bb-h) - 24px);
+  }
+
+  .builder-tasks-head {
+    border-bottom: 0;
+    border-left: 0;
+    box-shadow: none;
+  }
+
+  .builder-tasks-list {
+    width: min(300px, calc(100vw - 64px));
+    box-sizing: border-box;
+    max-height: calc(100vh - var(--topbar-h) - var(--bb-h) - 80px);
+  }
+
+  .engine-attrib {
+    right: var(--sp-2);
+    bottom: calc(var(--bb-h) + var(--sp-2));
+  }
+
+  .cell-panel {
+    bottom: calc(var(--bb-h) + 48px);
+  }
+
+  .centre-col {
+    left: var(--sp-2);
+    right: 52px; /* clear of the zoom buttons */
+    width: auto;
+    top: calc(var(--topbar-h) + var(--sp-2));
+    transform: none;
+    z-index: calc(var(--z-drawer) + 1);
+  }
+
+  /* The right slot rises from the foot over the dock: the map stays visible above it. */
+  .rs-panel,
+  .notebook .notebook-panel {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: min(72vh, calc(100vh - var(--topbar-h) - 24px));
+    max-height: min(72dvh, calc(100dvh - var(--topbar-h) - 24px));
+    border-width: var(--bw) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* The map controls never need to step aside here: the sheet comes from below. */
+  body:has(#ui .rs-panel) .engine-nav,
+  #ui:has(.rs-panel) .notebook {
+    right: var(--sp-2);
+  }
+
+  .notebook {
+    top: calc(var(--topbar-h) + 124px);
+  }
+
+  /* Under an open sheet the tags and the left column would only peek out: they wait until it closes. */
+  #ui:has(.rs-panel, .notebook-panel) :is(.side-col, .builder-tasks),
   #ui:has(.centre-col > *) :is(.side-col, .rs-panel, .notebook, .notebook-panel) {
     visibility: hidden;
   }
 }
 
-@media (max-width: 599px) {
-  #ui:has(.rs-panel, .notebook-panel) .side-col {
-    visibility: hidden;
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
   }
 }
 
-/* FPS counter (FpsCounter.tsx): bottom-left, just above the attribution bar; never in the way of map gestures. */
-.fps {
-  position: absolute;
-  left: 12px;
-  bottom: 44px; /* clear the attribution bar */
-  z-index: var(--z-label);
-  pointer-events: none;
-  padding: 2px 8px;
-  border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--paper);
-  box-shadow: var(--shadow-hard-sm);
-  font-size: var(--fs-sm);
-  color: var(--pencil);
-  font-variant-numeric: tabular-nums;
-}
+/* ---- Phone, landscape ---- */
 
-.fps-num {
-  font-family: var(--font-display);
-  font-weight: 700;
-  color: var(--ink);
-}
+@media (max-height: 500px) and (min-width: 641px) {
+  :root {
+    --plate-h: 40px;
+    --bb-bottom: 0px;
+    --bb-reserve: calc(var(--bb-h) + 40px);
+  }
 
-/* Builders' tasks: bottom-right, on the same bottom line as the build bar; sized by its content. Moves left of the right
-   slot while it is open. */
-.builder-tasks {
-  position: absolute;
-  right: 8px;
-  bottom: var(--bb-bottom);
-  z-index: var(--z-slot);
-  /* Grows upwards from the bottom line: never past the top bar; a long list scrolls. */
-  max-height: calc(100vh - var(--topbar-h) - var(--bb-reserve) - 16px);
-  overflow-y: auto;
-}
-/* Below ~1200 px the build bar (centred, ~640 px wide) reaches under the panel: the panel sits above it instead. */
-@media (max-width: 1199px) {
+  .topbar {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 6px 6px 0;
+  }
+
+  .tb-plate {
+    flex: none;
+    gap: var(--sp-2);
+    padding: 0 6px 0 var(--sp-2);
+  }
+
+  .tb-mark,
+  .city-date {
+    display: none;
+  }
+
+  .tb-city {
+    max-width: 120px;
+  }
+
+  .city-name {
+    font-size: var(--fs-md);
+  }
+
+  .tb-ruler {
+    width: 48px;
+  }
+
+  .topbar .stats {
+    order: 0;
+    flex: 1 1 auto;
+    margin-inline: 0;
+  }
+
+  .tb-end {
+    margin-left: 0;
+  }
+
+  .tb-btn,
+  .tb-research {
+    height: 34px;
+  }
+
+  .speed button {
+    min-width: 30px;
+    height: 28px;
+    padding: 0 6px;
+  }
+
+  .bar-stat {
+    height: 32px;
+  }
+
+  .build-bar {
+    bottom: 0;
+  }
+
+  .bb-panel {
+    border-bottom: 0;
+  }
+
+  .bb-cat {
+    min-height: 40px;
+    padding: 0 var(--sp-3);
+  }
+
+  .build-btn {
+    width: 76px;
+    min-height: 54px;
+    padding-top: 6px;
+  }
+
+  /* The dock takes the middle of the foot; the builders' tag sits in the bottom-left corner beside it, the
+     credits' «i» in the bottom-right one. */
   .builder-tasks {
-    bottom: calc(var(--bb-reserve) + 8px);
+    left: 0;
+    bottom: 0;
+    max-height: calc(100vh - var(--topbar-h) - 16px);
+  }
+
+  .builder-tasks-head {
+    border-bottom: 0;
+    border-left: 0;
+  }
+
+  .builder-tasks-list {
+    max-height: calc(100vh - var(--topbar-h) - 64px);
+  }
+
+  .cell-panel {
+    bottom: 48px;
+  }
+
+  .engine-attrib {
+    right: 0;
+    bottom: 0;
+  }
+
+  /* Open, the credits line is too long for the corner: it stands above the dock until it folds. */
+  .engine-attrib[open] {
+    bottom: calc(var(--bb-h) + 6px);
+  }
+
+  .side-col {
+    max-height: calc(100vh - var(--topbar-h) - 64px - var(--bb-h));
+  }
+
+  /* A pending event may not be cut off by the dock: the left column runs down to the foot over it, and the card
+     widens so its two choices stand side by side. */
+  .side-col:has(.event-card) {
+    z-index: calc(var(--z-panel) + 1);
+    width: min(440px, 54vw);
+    max-width: none;
+    max-height: calc(100vh - var(--topbar-h) - 16px);
+  }
+
+  .event-card {
+    align-self: stretch;
+  }
+
+  .event-card-options {
+    flex-direction: row;
+  }
+
+  .event-card-option {
+    flex: 1 1 0;
+    width: auto;
+  }
+
+  /* The right slot as a side sheet from the band down to the foot, over the dock. */
+  .rs-panel,
+  .notebook .notebook-panel {
+    top: calc(var(--topbar-h) + 6px);
+    right: 0;
+    bottom: 0;
+    width: min(360px, 50vw);
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  body:has(#ui .rs-panel) .engine-nav,
+  #ui:has(.rs-panel) .notebook {
+    right: calc(min(360px, 50vw) + 8px);
+  }
+
+  .centre-col {
+    top: calc(var(--topbar-h) + 8px);
   }
 }
 
+/* A narrow landscape phone leaves no room beside the dock: the builders' tag stands on its left end instead. */
+@media (max-height: 500px) and (min-width: 641px) and (max-width: 839px) {
+  .builder-tasks {
+    bottom: var(--bb-h);
+  }
 
+  .builder-tasks-head {
+    box-shadow: none;
+  }
+
+  .cell-panel {
+    bottom: calc(var(--bb-h) + 48px);
+  }
+}
 
 /* Screenshot mode (F10): keep the map and its legal attribution, hide game chrome and navigation controls. */
 html.screenshot-mode #ui {
@@ -337,4 +836,3 @@ html.screenshot-mode .engine-nav,
 html.screenshot-mode .engine-markers {
   display: none;
 }
-

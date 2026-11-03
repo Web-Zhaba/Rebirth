@@ -4,7 +4,7 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { SERVICE_LIST } from "../sim/services";
-import { lockReason } from "../sim/tech";
+import { lockReason, techOf } from "../sim/tech";
 import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
 import type { City, Stock } from "../sim/types";
 import { setManualOverlay, tool } from "../map/tools";
@@ -17,7 +17,8 @@ import { settingsOpen } from "./SettingsDialog";
 import { openPanel, rightPanel, togglePanel } from "./panels";
 import { BADGE_TEXT } from "./techModel";
 import { badge } from "./techState";
-import { IconButton, Stat, Tooltip } from "./kit";
+import { Stat, Tooltip } from "./kit";
+import { researchStatusView } from "./researchStatusModel";
 import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
 import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
@@ -126,36 +127,48 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
   const wx = weatherChip(state.value?.weather, cal.season, eco);
   const text = (id: Good) => (st ? (id === "wares" ? String(Math.floor(st[id])) : amount(st[id])) : "");
 
+  const time = `${pad(cal.hour)}:${pad(cal.minute)}`;
+
   return (
     <header class="topbar" aria-label={L("Верхняя панель управления", "Top control bar")}>
-      <div class="tb-city">
-        {view ? (
-          <Tooltip text={L("К центру поселения (H)", "To the settlement centre (H)")}>
-            <button
-              class="city-name-btn"
-              type="button"
-              onClick={() => view.flyTo({ center: [city.lng, city.lat], mpp: TOWN_VIEW_MPP })}
-            >
-              <span class="city-name">{city.name}</span>
-            </button>
-          </Tooltip>
-        ) : (
-          <div class="city-name">{city.name}</div>
-        )}
-        <div class="city-date">
-          <Icon name={phase} size={16} label={PHASE_LABEL[phase]} class={`phase-${phase}`} />
-          <span>
-            {L("Год", "Year")} {cal.year} · {SEASON_NAMES[cal.season]}, {L("день", "day")} {cal.dayOfSeason} · {pad(cal.hour)}:{pad(cal.minute)}
+      <div class="tb-plate">
+        <span class="logo-mark tb-mark" aria-hidden="true" />
+        <div class="tb-city">
+          {view ? (
+            <Tooltip text={L("К центру поселения (H)", "To the settlement centre (H)")}>
+              <button class="city-name-btn" type="button" aria-keyshortcuts="H" onClick={() => view.flyTo({ center: [city.lng, city.lat], mpp: TOWN_VIEW_MPP })}>
+                <span class="city-name">{city.name}</span>
+              </button>
+            </Tooltip>
+          ) : (
+            <div class="city-name">{city.name}</div>
+          )}
+          <div class="city-date">
+            {L("Год", "Year")} {cal.year} · {SEASON_NAMES[cal.season]}, {L("день", "day")} {cal.dayOfSeason}
+          </div>
+        </div>
+        <div class="tb-clock" role="group" aria-label={`${L("Время", "Time")} ${time}, ${PHASE_LABEL[phase]}`}>
+          <span class="tb-time" aria-hidden="true">
+            <Icon name={phase} size={14} class={`phase-${phase}`} />
+            {time}
+          </span>
+          {/* The day as a ruler: night, morning, day and evening spans, a resin needle at the current minute. */}
+          <span class="tb-ruler" aria-hidden="true">
+            <i style={{ left: `${((cal.hour * 60 + cal.minute) / 1440) * 100}%` }} />
           </span>
         </div>
-      </div>
-      <div class="speed" role="toolbar" aria-label={L("Скорость времени", "Time speed")} aria-orientation="horizontal">
-        {SPEEDS.map((s) => (
-          <button key={s.v} type="button" aria-pressed={speed.value === s.v} aria-keyshortcuts={s.key} title={`${L("Клавиша", "Key")} ${s.key}`} aria-label={s.v === 0 ? L("Пауза", "Pause") : undefined} onClick={() => setSpeed(s.v)}>
-            {s.v === 0 ? <Icon name="pause" size={16} /> : s.label}
-          </button>
-        ))}
-        {speed.value > 0 && isNight(gm) && <span class="speed-note">{L("ночь", "night")} ×{NIGHT_BOOST}</span>}
+        <div class="speed" role="toolbar" aria-label={L("Скорость времени", "Time speed")} aria-orientation="horizontal">
+          {SPEEDS.map((s) => (
+            <button key={s.v} type="button" aria-pressed={speed.value === s.v} aria-keyshortcuts={s.key} title={`${s.label} · ${L("клавиша", "key")} ${s.key}`} aria-label={s.v === 0 ? L("Пауза", "Pause") : undefined} onClick={() => setSpeed(s.v)}>
+              {s.v === 0 ? <Icon name="pause" size={14} /> : s.label}
+            </button>
+          ))}
+          {speed.value > 0 && isNight(gm) && (
+            <span class="speed-note" title={L("Ночью время идёт быстрее", "Night passes faster")}>
+              <Icon name="night" size={12} />×{NIGHT_BOOST}
+            </span>
+          )}
+        </div>
       </div>
       {p && st && eco && (
         <section class="stats" aria-label={L("Состояние поселения", "Settlement status")}>
@@ -264,26 +277,115 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
         </section>
       )}
       <div class="tb-end" role="toolbar" aria-label={L("Основные действия", "Main actions")}>
-        <TechButton />
-        <IconButton icon="town" size={20} label={L("Город", "Town")} aria-controls={SEMANTIC_IDS.townPanel} aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")} />
-        <IconButton icon="camera" size={16} label={L("Скрыть HUD (F10)", "Hide HUD (F10)")} aria-keyshortcuts="F10" onClick={() => (screenshotMode.value = true)} />
-        <IconButton icon="help" size={16} label={L("Горячие клавиши (?)", "Keyboard shortcuts (?)")} aria-keyshortcuts="?" onClick={() => (hotkeysOpen.value = true)} />
-        <IconButton icon="settings" size={16} label={L("Настройки", "Settings")} onClick={() => (settingsOpen.value = true)} />
-        <IconButton icon="info" size={16} label={L("Об игре", "About")} onClick={() => (aboutOpen.value = true)} />
+        <ResearchButton />
+        <button type="button" class="tb-btn" title={L("Город", "Town")} aria-controls={SEMANTIC_IDS.townPanel} aria-pressed={rightPanel.value === "town"} onClick={() => togglePanel("town")}>
+          <Icon name="town" size={20} />
+          <span class="tb-btn-label">{L("Город", "Town")}</span>
+        </button>
+        <MainMenu />
       </div>
     </header>
   );
 }
 
-// «Наука» with a badge: a tech finished since the panel was last open, or nothing under research.
-function TechButton() {
-  const b = badge.value;
-  const text = b ? BADGE_TEXT[b] : "";
+// «Наука» with what is being studied and how far it is: the tech, a resin progress line, or a warning that nothing is
+// under research. A tech finished since the panel was last open adds a «готово» tag.
+function ResearchButton() {
+  const s = state.value;
+  const r = s?.research;
+  const active = r?.active ? techOf(r.active.techId) : null;
+  const queued = s ? s.progress.research.queue.map((id) => techOf(id)?.name ?? id) : [];
+  const view = researchStatusView(active?.name ?? null, r?.active?.share ?? null, queued);
+  const pct = view.progress === null ? null : Math.floor(view.progress * 100);
+  const done = badge.value === "done";
+  const label = `${L("Наука", "Research")} (N). ${view.title}${view.next ? `. ${view.next}` : ""}${done ? `. ${BADGE_TEXT.done}` : ""}`;
   return (
-    <span class="tb-tech">
-      <IconButton icon="scroll" size={20} label={`${L("Наука", "Research")} (N)${text ? `: ${text}` : ""}`} aria-controls={SEMANTIC_IDS.techPanel} aria-keyshortcuts="N" aria-pressed={rightPanel.value === "tech"} onClick={() => togglePanel("tech")} />
-      {b && <span class={`tb-badge tb-badge-${b}`}>{text}</span>}
-    </span>
+    <button type="button" class={`tb-research${view.idle ? " is-idle" : ""}`} title={label} aria-label={label} aria-controls={SEMANTIC_IDS.techPanel} aria-keyshortcuts="N" aria-pressed={rightPanel.value === "tech"} onClick={() => togglePanel("tech")}>
+      <Icon name="scroll" size={20} />
+      <span class="tb-research-body" aria-hidden="true">
+        <span class="tb-research-head">
+          {L("Наука", "Research")}
+          {done && <span class="tb-badge">{BADGE_TEXT.done}</span>}
+        </span>
+        <span class="tb-research-what">
+          {view.idle ? BADGE_TEXT.idle : active?.name}
+          {pct !== null && <b>{pct}%</b>}
+        </span>
+        {pct !== null && (
+          <span class="tb-research-track">
+            <span style={{ width: `${pct}%` }} />
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+const MENU: { icon: IconName; label: string; key?: string; run: () => void }[] = [
+  { icon: "camera", label: L("Скрыть интерфейс", "Hide interface"), key: "F10", run: () => (screenshotMode.value = true) },
+  { icon: "help", label: L("Горячие клавиши", "Keyboard shortcuts"), key: "?", run: () => (hotkeysOpen.value = true) },
+  { icon: "settings", label: L("Настройки", "Settings"), run: () => (settingsOpen.value = true) },
+  { icon: "info", label: L("Об игре", "About"), run: () => (aboutOpen.value = true) },
+];
+
+// The rare actions folded behind one button: a menu button with arrow keys, Esc and a click outside to close it.
+function MainMenu() {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    wrap.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    const outside = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", outside);
+    return () => window.removeEventListener("pointerdown", outside);
+  }, [open]);
+  const onKey = (e: KeyboardEvent) => {
+    if (!open) return;
+    const items = [...(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    const to = e.key === "ArrowDown" ? (i + 1) % items.length : e.key === "ArrowUp" ? (i - 1 + items.length) % items.length : e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : -1;
+    if (to >= 0) {
+      e.preventDefault();
+      items[to]?.focus();
+    } else if (e.key === "Escape") {
+      // Before the window handler that would also close the right panel.
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      button.current?.focus();
+    } else if (e.key === "Tab") setOpen(false);
+  };
+  return (
+    <div class="tb-menu-wrap" ref={wrap} onKeyDown={onKey}>
+      <button ref={button} type="button" class="tb-btn tb-menu-btn" title={L("Меню", "Menu")} aria-label={L("Меню", "Menu")} aria-haspopup="menu" aria-expanded={open} aria-controls="tb-menu" onClick={() => setOpen(!open)}>
+        <Icon name="menu" size={20} />
+      </button>
+      {open && (
+        <ul class="tb-menu" id="tb-menu" role="menu" aria-label={L("Меню", "Menu")}>
+          {MENU.map((m) => (
+            <li key={m.label} role="none">
+              <button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                aria-keyshortcuts={m.key}
+                onClick={() => {
+                  setOpen(false);
+                  m.run();
+                }}
+              >
+                <Icon name={m.icon} size={16} />
+                <span>{m.label}</span>
+                {m.key && <kbd>{m.key}</kbd>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

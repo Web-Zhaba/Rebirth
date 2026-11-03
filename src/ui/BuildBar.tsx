@@ -9,14 +9,15 @@ import type { GrowthWhy } from "../sim/types";
 import { people, state } from "../simClient";
 import { CATEGORIES, CATEGORY_KEYS, categoryOf, ITEM_KEY_LABEL, toolForKey, toolInfo, toolLabel, TOOL_ICON, type CategoryId } from "./buildMenu";
 import { Icon } from "./Icon";
-import { Segmented, Tabs, Tooltip } from "./kit";
+import type { IconName } from "./icons";
+import { Segmented, Tooltip } from "./kit";
 import { storedChoice } from "./preferenceModel";
 import { LANDMARK_LABELS } from "./semanticModel";
-import { tabId, tabPanelId } from "./tabSemantics";
 import { L } from "../i18n";
 
 const CATEGORY_STORE = "rebirth.build.category";
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
+const TRAY_ID = "build-tray";
 const readCategory = (): CategoryId => {
   try {
     return storedChoice(localStorage.getItem(CATEGORY_STORE), CATEGORY_IDS, "roads");
@@ -25,14 +26,47 @@ const readCategory = (): CategoryId => {
   }
 };
 const category = signal<CategoryId>(readCategory());
+// The tray of the category's tools is open; closed, only the dock of categories stays on screen.
+const TRAY_STORE = "rebirth.build.tray";
+const readTray = (): boolean => {
+  try {
+    return localStorage.getItem(TRAY_STORE) !== "0";
+  } catch {
+    return true;
+  }
+};
+const trayOpen = signal(readTray());
 effect(() => {
   const id = category.value;
+  const open = trayOpen.value;
   try {
     localStorage.setItem(CATEGORY_STORE, id);
+    localStorage.setItem(TRAY_STORE, open ? "1" : "0");
   } catch {
     /* ignore */
   }
 });
+
+const CATEGORY_ICON: Record<CategoryId, IconName> = { roads: "dirt", zones: "res", food: "food", farm: "log", services: "well", past: "dig" };
+
+// A category button: the live one with its tray open closes it, any other opens its own.
+const pickCategory = (id: CategoryId): void => {
+  if (category.peek() === id && trayOpen.peek()) trayOpen.value = false;
+  else {
+    category.value = id;
+    trayOpen.value = true;
+  }
+};
+
+// Arrow keys, Home and End move along the dock (roving focus, like a tab strip).
+function onDockKey(e: KeyboardEvent): void {
+  const buttons = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("button")];
+  const i = buttons.indexOf(document.activeElement as HTMLElement);
+  const to = e.key === "ArrowRight" ? (i + 1) % buttons.length : e.key === "ArrowLeft" ? (i - 1 + buttons.length) % buttons.length : e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : -1;
+  if (to < 0) return;
+  e.preventDefault();
+  buttons[to]?.focus();
+}
 
 const ROAD_HINT: Record<RoadMode, string> = {
   straight: L("Протяните от начала до конца — прямая; Shift — угол 15°, Пробел — двигать карту, ПКМ или Esc — закончить", "Drag from start to end — straight; Shift — 15° steps, Space — pan the map, RMB or Esc — finish"),
@@ -96,12 +130,14 @@ function onKey(e: KeyboardEvent): void {
   const f = CATEGORY_KEYS.indexOf(e.code as (typeof CATEGORY_KEYS)[number]);
   if (f >= 0) {
     category.value = CATEGORIES[f].id;
+    trayOpen.value = true;
     e.preventDefault();
     return;
   }
   const t = toolForKey(e.code, category.value);
   if (!t) return;
   category.value = categoryOf(t).id;
+  trayOpen.value = true;
   if (lockOf(t)) {
     flash(lockOf(t)!);
     e.preventDefault();
@@ -201,12 +237,16 @@ export function BuildBar() {
     () =>
       effect(() => {
         const t = tool.value;
-        if (t) category.value = categoryOf(t).id;
+        if (t) {
+          category.value = categoryOf(t).id;
+          trayOpen.value = true;
+        }
       }),
     [],
   );
   const active = tool.value;
   const cat = CATEGORIES.find((c) => c.id === category.value)!;
+  const open = trayOpen.value;
   const msg = toolMsg.value;
   const progress = state.value?.progress;
   const growth = active === "res" || active === "craft" || active === "trade" ? ADVICE[people.value?.growth?.[active] ?? "ok"] : null;
@@ -238,42 +278,49 @@ export function BuildBar() {
         )}
         {active && !msg && <CostLine t={active} />}
       </div>
-      <div class="bb-panel panel">
-        <Tabs
-          class="bb-tabs"
-          label={L("Разделы стройки", "Building categories")}
-          idPrefix="build"
-          active={cat.id}
-          onChange={(id) => (category.value = id)}
-          tabs={CATEGORIES.map((c, i) => ({
-            id: c.id,
-            label: (
-              <>
-                {c.label}
-                <kbd>{CATEGORY_KEYS[i]}</kbd>
-              </>
-            ),
-          }))}
-        />
-        <div class="bb-items" role="tabpanel" id={tabPanelId("build", cat.id)} aria-labelledby={tabId("build", cat.id)}>
-          {cat.tools.map((t, i) => {
-            const lock = progress ? lockReason({ progress }, t) : null;
+      <div class={`bb-panel${open ? " is-open" : ""}`}>
+        {open && (
+          <div class="bb-items" role="group" id={TRAY_ID} aria-label={cat.label}>
+            {cat.tools.map((t, i) => {
+              const lock = progress ? lockReason({ progress }, t) : null;
+              return (
+                <Tooltip key={t} side="top" align={i >= 4 ? "end" : "start"} text={<Card t={t} lock={lock} />}>
+                  <button
+                    type="button"
+                    class={`${active === t ? "build-btn on" : "build-btn"}${lock ? " locked" : ""}`}
+                    aria-pressed={active === t}
+                    aria-disabled={lock ? true : undefined}
+                    aria-keyshortcuts={t === "bulldoze" ? `${ITEM_KEY_LABEL[i]} B` : ITEM_KEY_LABEL[i]}
+                    onClick={() => (lock ? flash(lock) : (tool.value = active === t ? null : t))}
+                  >
+                    <Icon name={TOOL_ICON[t]} size={20} />
+                    <span class="bb-name">{toolLabel(t)}</span>
+                    {lock && <Icon name="lock" size={12} class="bb-lock" />}
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+        )}
+        <div class="bb-cats" role="toolbar" aria-label={L("Разделы стройки", "Building categories")} onKeyDown={onDockKey}>
+          {CATEGORIES.map((c, i) => {
+            const live = c.id === cat.id;
             return (
-            <Tooltip key={t} side="top" align={i >= 4 ? "end" : "start"} text={<Card t={t} lock={lock} />}>
               <button
+                key={c.id}
                 type="button"
-                class={`${active === t ? "build-btn on" : "build-btn"}${lock ? " locked" : ""}`}
-                aria-pressed={active === t}
-                aria-disabled={lock ? true : undefined}
-                aria-keyshortcuts={t === "bulldoze" ? `${ITEM_KEY_LABEL[i]} B` : ITEM_KEY_LABEL[i]}
-                onClick={() => (lock ? flash(lock) : (tool.value = active === t ? null : t))}
+                class={`bb-cat${live ? " on" : ""}${live && open ? " open" : ""}`}
+                aria-expanded={live && open}
+                aria-controls={live && open ? TRAY_ID : undefined}
+                aria-keyshortcuts={CATEGORY_KEYS[i]}
+                title={`${c.label} · ${CATEGORY_KEYS[i]}`}
+                tabIndex={live ? 0 : -1}
+                onClick={() => pickCategory(c.id)}
               >
-                <Icon name={TOOL_ICON[t]} size={22} />
-                <span class="bb-name">{toolLabel(t)}</span>
-                <kbd>{t === "bulldoze" ? "B" : ITEM_KEY_LABEL[i]}</kbd>
-                {lock && <Icon name="lock" size={14} class="bb-lock" />}
+                <Icon name={CATEGORY_ICON[c.id]} size={18} />
+                <span class="bb-cat-name">{c.label}</span>
+                {c.tools.includes(active as Tool) && <span class="bb-cat-live" aria-hidden="true" />}
               </button>
-            </Tooltip>
             );
           })}
         </div>

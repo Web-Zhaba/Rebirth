@@ -33,18 +33,40 @@ export function siteEta(hours: number, key: number): string {
   return Number.isFinite(ms) ? `${formatReal(ms)} (${hands} ${L("стр.", "bld.")})` : L("очень долго", "very long");
 }
 
-export function InspectorHead({ icon, title, chip, onClose, headingId }: { icon: IconName; title: string; chip?: Chip; onClose: () => void; headingId?: string }) {
+// The tar head of a right-slot sheet: icon, name, status tag and a quiet line under the name. It stays on top while
+// the sheet scrolls.
+export function InspectorHead({ icon, title, chip, sub, onClose, headingId }: { icon: IconName; title: string; chip?: Chip; sub?: ComponentChildren; onClose: () => void; headingId?: string }) {
   return (
     <div class="insp-head">
       <span class="insp-ic">
-        <Icon name={icon} size={28} />
+        <Icon name={icon} size={26} />
       </span>
       <div class="insp-title">
         <h2 id={headingId}>{title}</h2>
-        {chip && <span class={`chip chip-${chip.tone}`}>{chip.label}</span>}
+        {(chip || sub) && (
+          <div class="insp-meta">
+            {chip && <span class={`chip chip-${chip.tone}`}>{chip.label}</span>}
+            {sub && <span class="insp-sub">{sub}</span>}
+          </div>
+        )}
       </div>
       <IconButton icon="close" size={16} label={L("Закрыть", "Close")} onClick={onClose} />
     </div>
+  );
+}
+
+// A titled part of a sheet, ruled off from the one above by a lenticel.
+export function Section({ title, aside, children, class: cls }: { title?: string; aside?: ComponentChildren; children: ComponentChildren; class?: string }) {
+  return (
+    <section class={`insp-sec${cls ? ` ${cls}` : ""}`}>
+      {(title || aside) && (
+        <div class="insp-sec-head">
+          {title && <h3>{title}</h3>}
+          {aside}
+        </div>
+      )}
+      {children}
+    </section>
   );
 }
 

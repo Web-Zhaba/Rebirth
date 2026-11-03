@@ -122,7 +122,7 @@ components:
 
 The world refuses two things: the category's dark HUD floating over a map, and the previous paper atlas, which it replaces by giving paper a body (bark, tar, moss, resin) instead of a texture-free cream.
 
-**Scope note:** every surface is now in the world. Rebuilt: the **first-launch / founding surface** (`FoundCity.tsx`, `PlaceSearch.tsx`, `journal.css`), the **frame** (`topbar.css`, `buildbar.css` — tar brackets), the **right slot** (`panels.css`), the **research screen** (`TechPanel.tsx`, `tech.css`), the **notebook** (`Notebook.tsx`, `notebook.css`), the **feedback layer** (`feedback.css`: toasts, event cards, map badges), **heritage** (`heritage.css`) and **admin** (`admin.css`), plus the space background and map controls in `style.css`.
+**Scope note:** every surface is now in the world. Rebuilt: the **first-launch / founding surface** (`FoundCity.tsx`, `PlaceSearch.tsx`, `journal.css`), the **frame** (`topbar.css`, `buildbar.css`, `layout.css` — tar plates, redesigned 2026-11-03 with phone layouts), the **right slot** (`panels.css`), the **research screen** (`TechPanel.tsx`, `tech.css`), the **notebook** (`Notebook.tsx`, `notebook.css`), the **feedback layer** (`feedback.css`: toasts, event cards, map badges), **heritage** (`heritage.css`) and **admin** (`admin.css`), plus the space background and map controls in `style.css`.
 
 ## Colors
 
@@ -130,7 +130,7 @@ Roles, not materials: the `paper*` variables are the bark surface role (birch ba
 
 **Surface hierarchy (three registers, never one):**
 - **Ground — moss and space** (`--moss`, `--moss-deep`): the field around the settlement, and behind the globe the Earth's actual void — near-black `#04060c` with a cold glow at the planet and a sparse dust of stars, never a mossy green. Map controls sit on `#121722` so they read against both the void and the moss floor.
-- **Frame — tar** (`#2b3624` → `--moss-deep`): the top bar and the build bar, the two dark brackets that hold the screen. Their text is bark; the live step or tab is resin. The frame is what recedes.
+- **Frame — tar plates** (`--frame` `#26302b` → `--frame-deep` `#1b241f`, edge `--frame-edge`, hover `--frame-raise`, rules `--frame-line`, text `--frame-text` / `--frame-dim`): not full-width bars but separate plates laid on the field — the town plate, the ledger, the actions, the build dock, the layers and builders' tags — so the map shows between them. A plate has a lit top edge and a row of lenticels along its foot in `--frame-line`. Text is bark; the live step, tab or tool is resin with `--on-resin` text; status on tar uses `--frame-up` / `--frame-down` / `--frame-warn` / `--frame-night`. The frame is what recedes.
 - **Records — bark** (`--paper*`): everything that carries reading — the founding sheet, the research spread, the inspector, the town panel, the layers panel, notes and cards.
 
 Do not make every panel bark (the screen becomes one sheet of old paper) and do not make panels moss (they dissolve into the map and the world loses its paper). The hierarchy is the answer, not a different colour for everything.
@@ -153,7 +153,10 @@ Do not make every panel bark (the screen becomes one sheet of old paper) and do 
 ## Layout
 
 - The map is the artifact and stays the visual centre; panels never cover it entirely and never sit in the middle of the viewport unless they are modal.
-- **The top bar is full only from 1560 px.** Below that it switches to the compact form (icon + number; the caption, the daily delta and the full wording live in the tooltip and for screen readers) — Bitter's wide figures plus eight resources do not fit a 1440 screen, and clipping the captions is worse than hiding them behind a tooltip.
+- **The in-game HUD (redesigned 2026-11-03)** is plates on the field, laid out in `layout.css`: town plate top-left, ledger in the middle, actions top-right, build dock centred at the foot, builders' tag bottom-left, warnings / layers / news in the left column. The right column belongs to the right slot (inspector, town panel, notebook): its sheet starts right under the plates, and the map controls and the notebook tag step left of an open sheet instead of hiding under it.
+- **Ledger captions are never printed**: icon + number, the daily delta under the number from 1400 px; the caption and the full wording live in the tooltip and for screen readers. Below 1280 px the ledger takes its own row under the town plate and the actions.
+- **Phone, portrait (≤ 640 px)**: one tar band in two rows (name and clock with the actions; speed with the ledger, which scrolls sideways and opens its notes as a full-width slip under the band); the dock spans the foot with categories as equal columns and a sideways-scrolling tray; the right slot is a bottom sheet over the dock (≤ 72 dvh); the builders' tag, credits «i» and FPS stand just above the dock.
+- **Phone, landscape (height ≤ 500 px)**: one low band of plates (40 px), the dock at the foot, the right slot as a side sheet from the band to the foot. Map credits fold behind the «i» in both orientations.
 - **First launch**: search slip top-left (430 px), task line directly beneath it, founding sheet bottom-left (462 px). The sheet is a flex column whose *land readout* is the only part allowed to shrink (`max-height: calc(100vh - 158px)`), so the name field and «Основать» are always visible from 390 px up.
 - 4 px spacing scale; 12 px between fields inside the sheet, 16 px between groups.
 
@@ -179,8 +182,13 @@ Do not make every panel bark (the screen becomes one sheet of old paper) and do 
 - **Search slip** (`.place-search`): bark field with the icon inside, then two tar square icon buttons (locate, place names). Its dropdown opens *over* the task line (`z-index: var(--z-tooltip)`); the Photon / OpenStreetMap credit is the last row of that dropdown.
 - **Chip** (`.chip-btn`): outline in tar, Bitter 600; pressed inverts to tar with bark text.
 - **Primary action**: tar fill, bark-raised text, Bitter 800 at 21 px, full width of the sheet. Disabled = transparent with a tar outline — an empty record line, not a faded button.
-- **Build bar tiles**: icon and name only. Shortcuts are not printed on the tiles — they live in the hotkey dialog and in `aria-keyshortcuts`, so thirteen little key tags stop shouting from the corners. A tile has no box until it is live; the live one is inked.
+- **Town plate** (`.tb-plate`): the mark, the name (Bitter 800, flies the map home) over the date, the clock with its **day ruler** — a 66 px strip of night / morning / day / evening spans with six-hour ticks and a resin needle at the current minute — and the joined speed block.
+- **Actions plate** (`.tb-end`): «Наука» shows what is studied, its percent and a resin progress line, or «простаивает» in the warning colour (an «готово» tag when a tech finished); «Город»; and one menu button (`role="menu"`, arrow keys, Esc returns focus) holding the rare actions — hide interface, hotkeys, settings, about.
+- **Build dock** (`.bb-panel`): one row of categories (icon + name) is all that stays on screen; the live category opens its tray of tools above the row as one slab, a resin edge joining them; clicking the live category folds the tray (remembered). F-keys and tool keys open the tray. Tool tiles: icon and name only, shortcuts in titles, `aria-keyshortcuts` and the hotkey dialog. Touch gets no hover card; the cost line above the dock carries it.
 - **Resource columns**: icon and number, separated by spacing alone — no dividers between them.
+- **Layers tag** (`.layers`): a tar tag naming the live layer; open, a bark slip with two captioned groups (what the map shows / on top of the map). The live layer's legend stays under the tag while the slip is folded.
+- **Builders' tag** (`.builder-tasks`): tar tag with the count; open, a bark list rises above it.
+- **Right-slot sheet** (`.rs-panel`): bark under a sticky tar head (icon tile, name, status stamp and size line, close); parts are `Section`s ruled off by lenticels with Bitter titles; construction shows the share done large beside the bar; residents are rows with a locate button to follow; the actions stay pinned to the foot of the sheet.
 - **Research screen** (`.tech-screen`): a full-screen bark spread over a moss scrim — era rail on the left, the era's register in the middle (available first, then the rest, rows separated by lenticels), the chosen technology's leaf on the right, the queue along the foot. Domain identity is a square swatch and a word, never a coloured side bar. A row's state is a word in a tag: изучать / идёт / в очереди / изучено / закрыто, colour only backing it up.
 - **Map chrome**: MapLibre's zoom group is a tar square on the moss floor with `invert(1)` icons; the attribution is bark with square corners (it must override `.maplibregl-compact`, which ships white with a 12 px radius).
 

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { frame, pendingChoice, sendCmd, setSpeed, speed } from "../simClient";
 import { play } from "./sound";
 import { Icon } from "./Icon";
-import { Button, Panel } from "./kit";
 import { hoursLeft } from "./toastModel";
 import { useGameMinutes } from "./useGameMinutes";
 import { SEMANTIC_IDS } from "./semanticIds";
@@ -26,6 +25,7 @@ const hoursText = (h: number): string => {
 
 // An event with two choices (PLAN-pace.md section 10); every option states its effect. Unanswered, it resolves on its
 // own with the safe option when `until` passes. Enter picks the safe option while the focus is on the card itself.
+// A tar strip carries the title, the time left and the card's tools; the bark under it, the text and the choices.
 export function EventCard({ view }: { view: View }) {
   const c = pendingChoice.value;
   const gm = useGameMinutes();
@@ -70,47 +70,55 @@ export function EventCard({ view }: { view: View }) {
     }
   };
 
+  const pauseLabel = isPaused ? L("Возобновить время (1×)", "Resume time (1×)") : L("Поставить на паузу", "Pause");
+  const leftText = `${L("Решение через", "Decides in")} ${hoursText(leftHours)}`;
+
   return (
-    <Panel class="event-card" role="dialog" aria-labelledby={SEMANTIC_IDS.eventCardTitle} tabIndex={0} onKeyDown={onKey}>
-      <div class="event-card-head">
+    <section class="event-card" role="dialog" aria-labelledby={SEMANTIC_IDS.eventCardTitle} tabIndex={0} onKeyDown={onKey}>
+      <header class="event-card-head">
+        <Icon name="scroll" size={16} />
         <h2 class="event-card-title" id={SEMANTIC_IDS.eventCardTitle}>
-          <Icon name="scroll" size={18} /> {c.title}
+          {c.title}
         </h2>
-        <div class="event-card-actions">
-          <button
-            class="event-card-pause-btn"
-            type="button"
-            title={isPaused ? L("Возобновить время (1×)", "Resume time (1×)") : L("Поставить на паузу", "Pause")}
-            onClick={togglePause}
-          >
-            <Icon name={isPaused ? "play" : "pause"} size={14} />
-            <span>{isPaused ? L("На паузе", "Paused") : L("Пауза", "Pause")}</span>
-          </button>
-        </div>
-      </div>
-      <p class="event-card-text">{c.text}</p>
-      {pos && fl && (
-        <button class="link event-card-place" onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}>
-          <Icon name="find" size={14} /> {L("Показать на карте", "Show on the map")}
-        </button>
-      )}
-      {c.options.map((o, i) => (
-        <Button key={i} variant={i === c.safe ? "default" : "primary"} class="event-card-option" onClick={() => choose(i)}>
-          <strong>{o.label}</strong>
-          <span class="event-card-effect">{o.effect}</span>
-          {i === c.safe && <span class="event-card-safe">{L("решится так, если не выбрать", "the outcome if you don’t choose")}</span>}
-        </Button>
-      ))}
-      <div class="event-card-foot">
-        <span class={`event-card-timer${isUrgent ? " urgent" : ""}`}>
-          <Icon name="hourglass" size={14} /> {L("Решение через", "Decides in")} {hoursText(leftHours)}
+        <span class={`event-card-timer${isUrgent ? " urgent" : ""}`} title={leftText}>
+          <Icon name="hourglass" size={12} />
+          <span aria-hidden="true">
+            {leftHours} {L("ч", "h")}
+          </span>
+          <span class="event-card-sr">{leftText}</span>
         </span>
-        <label class="event-card-autopause" title={L("Автоматически ставить симуляцию на паузу при появлении события", "Pause the simulation automatically when an event appears")}>
-          <input type="checkbox" checked={autopause} onChange={toggleAutopause} />
-          <span>{L("Автопауза", "Auto-pause")}</span>
-        </label>
-        <span class="event-card-key">{L("Enter на карточке:", "Enter on the card:")} «{c.options[c.safe].label}»</span>
+        {pos && fl && (
+          <button
+            type="button"
+            class="event-card-tool"
+            title={L("Показать на карте", "Show on the map")}
+            aria-label={L("Показать на карте", "Show on the map")}
+            onClick={() => view.flyTo({ center: fl.toLngLat(pos[0], pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) })}
+          >
+            <Icon name="find" size={16} />
+          </button>
+        )}
+        <button type="button" class="event-card-tool" title={pauseLabel} aria-label={pauseLabel} aria-pressed={isPaused} onClick={togglePause}>
+          <Icon name={isPaused ? "play" : "pause"} size={16} />
+        </button>
+      </header>
+      <p class="event-card-text">{c.text}</p>
+      <div class="event-card-options">
+        {c.options.map((o, i) => (
+          <button key={i} type="button" class={`event-card-option${i === c.safe ? " is-safe" : ""}`} onClick={() => choose(i)}>
+            <span class="event-card-label">
+              <strong>{o.label}</strong>
+              {i === c.safe && <kbd title={L("Enter на карточке", "Enter on the card")}>Enter</kbd>}
+            </span>
+            <span class="event-card-effect">{o.effect}</span>
+            {i === c.safe && <span class="event-card-safe">{L("решится так, если не выбрать", "the outcome if you don’t choose")}</span>}
+          </button>
+        ))}
       </div>
-    </Panel>
+      <label class="event-card-autopause" title={L("Автоматически ставить симуляцию на паузу при появлении события", "Pause the simulation automatically when an event appears")}>
+        <input type="checkbox" checked={autopause} onChange={toggleAutopause} />
+        <span>{L("Автопауза", "Auto-pause")}</span>
+      </label>
+    </section>
   );
 }

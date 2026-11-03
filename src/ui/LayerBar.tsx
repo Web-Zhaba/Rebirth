@@ -1,6 +1,5 @@
 import { useState } from "preact/hooks";
 import { OVERLAY_COLORS, OVERLAYS, overlay, setManualOverlay, setManualZonesShown, TRAFFIC_STOPS, zonesShown, type Overlay } from "../map/tools";
-import { compactScreen } from "../map/motion";
 import { placeLabelsOn, togglePlaceLabels } from "../view/placeNames";
 import { cloudsOn, toggleClouds } from "../map/clouds/settings";
 import { ruinsShown, toggleRuins } from "../view/ruinsShown";
@@ -69,16 +68,16 @@ function Legend({ id }: { id: Overlay }) {
 }
 
 const STORE_KEY = "rebirth.layers.collapsed";
+// Folded unless the player opened it before: the tag names the live layer, the legend shows under it anyway.
 const readCollapsed = (): boolean => {
   try {
-    const v = localStorage.getItem(STORE_KEY);
-    return v === null ? compactScreen() : v === "1";
+    return localStorage.getItem(STORE_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 };
 
-// Map layers as an icon button group, with a legend for the one that is on.
+// Map layers: a tag naming the live layer; open, the switches and the legend of the one that is on.
 export function LayerBar() {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const toggle = () => {
@@ -93,30 +92,39 @@ export function LayerBar() {
   const cur = overlay.value;
   const active = OVERLAYS.find((o) => o.id === cur);
   return (
-    <div class="layerbar">
+    <>
       <button class="layer-head" type="button" aria-expanded={!collapsed} aria-controls={SEMANTIC_IDS.layerControls} onClick={toggle}>
         <Icon name="layers" size={16} />
         <span>{L("Слои", "Layers")}</span>
         <b class="layer-name">{zonesShown.value ? L("зоны", "zones") : active?.label}</b>
-        <Icon name={collapsed ? "caretDown" : "caretUp"} size={14} />
+        <Icon name={collapsed ? "caretDown" : "caretUp"} size={12} />
       </button>
-      {!collapsed && (
-        <>
+      {collapsed ? (
+        cur !== "none" && (
+          <div class="layer-legend">
+            <Legend id={cur} />
+          </div>
+        )
+      ) : (
+        <div class="layer-body">
+          <span class="layer-caption">{L("Что показать на карте", "What the map shows")}</span>
           <div class="layer-group" id={SEMANTIC_IDS.layerControls} role="toolbar" aria-label={L("Слои карты", "Map layers")} aria-orientation="horizontal">
             {/* Native title tooltips: a CSS tooltip here overflows the scrolling left column and makes it jump. */}
             {OVERLAYS.map((o) => (
               <IconButton key={o.id} icon={LAYER_ICON[o.id]} label={o.label} aria-pressed={cur === o.id} onClick={() => setManualOverlay(o.id)} />
             ))}
-            <span class="layer-sep" aria-hidden="true" />
+          </div>
+          <Legend id={cur} />
+          <span class="layer-caption">{L("Поверх карты", "On top of the map")}</span>
+          <div class="layer-group" role="toolbar" aria-label={L("Пометки на карте", "Map marks")} aria-orientation="horizontal">
             <IconButton icon="layers" label={L("Зоны", "Zones")} aria-pressed={zonesShown.value} onClick={() => setManualZonesShown(!zonesShown.value)} />
             <IconButton icon="placeNames" label={L("Старые названия", "Old names")} aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
             <IconButton icon="dig" label={L("Старый город", "Old town")} aria-pressed={ruinsShown.value} onClick={toggleRuins} />
             <IconButton icon="weatherRain" label={L("Погода на карте", "Weather on the map")} aria-pressed={weatherMapOn.value} onClick={toggleWeatherMap} />
             <IconButton icon="clouds" label={L("Облака", "Clouds")} aria-pressed={cloudsOn.value} onClick={toggleClouds} />
           </div>
-          <Legend id={cur} />
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 }

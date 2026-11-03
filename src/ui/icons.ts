@@ -62,6 +62,7 @@ import PhPlus from "~icons/ph/plus-bold";
 import PhCheck from "~icons/ph/check-bold";
 import PhEraser from "~icons/ph/eraser";
 import PhGear from "~icons/ph/gear";
+import PhList from "~icons/ph/list";
 import PhInfo from "~icons/ph/info-bold";
 import PhFlag from "~icons/ph/flag-bold";
 import PhLock from "~icons/ph/lock-simple-fill";
@@ -104,6 +105,7 @@ export const ICONS = {
   mood: PhSmiley,
   info: PhInfo,
   settings: PhGear,
+  menu: PhList,
   // Finding a place before founding: search, own location, old place names
   search: PhSearch,
   locate: PhGpsFix,

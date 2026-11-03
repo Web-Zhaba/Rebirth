@@ -11,6 +11,7 @@ import { ROAD_KINDS, stoneWaiting, workableEdges } from "../sim/roads";
 import { frame, gameClock, speed, state } from "../simClient";
 import { plural } from "./InspectorParts";
 import { ProgressBar } from "./kit";
+import { Icon } from "./Icon";
 import { LANDMARK_LABELS } from "./semanticModel";
 import { L } from "../i18n";
 
@@ -110,10 +111,22 @@ export function BuilderTasks({ view }: { view: View }) {
     }
   };
   return (
-    <aside class="panel builder-tasks" aria-label={LANDMARK_LABELS.builders}>
+    <aside class={`builder-tasks${collapsed || tasks.length === 0 ? "" : " is-open"}`} aria-label={LANDMARK_LABELS.builders}>
       <button type="button" class="builder-tasks-head" aria-expanded={!collapsed} aria-controls="builder-tasks-body" onClick={toggle}>
-        <span>{L("Строители:", "Builders:")} {builders}</span>
-        <span class="builder-tasks-count">{tasks.length > 0 ? `${tasks.length} ${plural(tasks.length, "работа", "работы", "работ", "task")}` : L("работы нет", "no work")}</span>
+        <Icon name="build" size={16} />
+        <span>
+          <span class="builder-tasks-word">{L("Строители", "Builders")}</span> <b>{builders}</b>
+        </span>
+        <span class="builder-tasks-count">
+          {tasks.length > 0 ? (
+            <>
+              {tasks.length} <span class="builder-tasks-word">{plural(tasks.length, "работа", "работы", "работ", "task")}</span>
+            </>
+          ) : (
+            L("работы нет", "no work")
+          )}
+        </span>
+        {tasks.length > 0 && <Icon name={collapsed ? "caretUp" : "caretDown"} size={12} />}
       </button>
       {tasks.length > 0 && (
         <ul class="builder-tasks-list" id="builder-tasks-body" hidden={collapsed}>

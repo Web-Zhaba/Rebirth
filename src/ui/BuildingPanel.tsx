@@ -10,12 +10,12 @@ import { DIG, revealedArea } from "../sim/excavation";
 import { SERVICE, SERVICES } from "../sim/services";
 import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
-import type { Building, BuildingQuery, FoundFoundation, ProductionInfo, Stock } from "../sim/types";
+import type { ComponentChildren } from "preact";
+import type { Building, BuildingQuery, FoundFoundation, Needs, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../view/layers/buildings";
 import { PLACE_TOOLS, tool, type PlaceTool } from "../map/tools";
 import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simClient";
-import { Icon } from "./Icon";
-import { act, InspectorHead, Line, num, plural, siteEta, SiteLevers } from "./InspectorParts";
+import { act, InspectorHead, Line, num, plural, Section, siteEta, SiteLevers } from "./InspectorParts";
 import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspectorModel";
 import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
 import { Button, Confirm, IconButton, ProgressBar, Segmented } from "./kit";
@@ -107,6 +107,10 @@ function useResidents(id: number | null, active: boolean, bump: string): Buildin
   return data && data.id === id ? data.q : null;
 }
 
+const SITE_FACT = new Set(["woodcutter", "fisher", "forager"]);
+// Whether Production below has anything to show for this workplace.
+const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && SITE_FACT.has(template)) || !!p.orchard || p.storage !== undefined || !!p.fields || !!p.missing;
+
 function Production({ template, p }: { template: string; p: ProductionInfo }) {
   const site = p.site;
   return (
@@ -145,11 +149,8 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
   const set = (next: number) => act({ type: "setStaff", id, staff: next });
   return (
     <div class="staff">
-      <Line icon={JOB_ICON[group]} label={`${L("Группа", "Group")}: ${JOB_NAMES[group]}`}>
-        {L("приоритет", "priority")} {PRIORITY_LONG[priority].toLowerCase()}
-      </Line>
-      <div class="insp-line">
-        <span class="people-title">{L("Работники", "Workers")}</span>
+      <div class="insp-line staff-line">
+        <span class="insp-label">{L("Работают", "Working")}</span>
         <span class="staff-ctl" role="group" aria-label={L("Лимит найма", "Hiring limit")}>
           <IconButton icon="minus" size={14} label={L("Меньше работников", "Fewer workers")} disabled={limit <= 0} onClick={() => set(limit - 1)} />
           <b aria-live="polite">
@@ -158,6 +159,9 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
           <IconButton icon="plus" size={14} label={L("Больше работников", "More workers")} disabled={limit >= jobs} onClick={() => set(limit + 1)} />
         </span>
       </div>
+      <Line icon={JOB_ICON[group]} label={`${L("Группа", "Group")}: ${JOB_NAMES[group]}`}>
+        {L("приоритет", "priority")} {PRIORITY_LONG[priority].toLowerCase()}
+      </Line>
       {limit < jobs && (
         <div class="people-note">
           {L(`Мест ${jobs}, найм ограничен до ${limit}`, `${jobs} jobs, hiring limited to ${limit}`)}
@@ -184,7 +188,6 @@ function MarketTrade({ workers }: { workers: number }) {
   const surplus = order ? st[order.give] - TRADE.keep[order.give] : 0;
   return (
     <div class="prod">
-      <div class="people-title">{L("Обмен", "Trade")}</div>
       <Segmented
         label={L("Отдаём", "We give")}
         value={order?.give ?? TRADE_OFF.id}
@@ -212,6 +215,28 @@ function MarketTrade({ workers }: { workers: number }) {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// One resident: name and age, follow, what they do, their needs and what is hard for them.
+function PersonRow({ id, name, age, needs, problems, children }: { id: number; name: string; age: number; needs?: Needs; problems?: string[]; children: ComponentChildren }) {
+  return (
+    <div class="person">
+      <div class="person-line">
+        <span class="person-name">{name}</span>
+        <span class="person-age">
+          {age} {plural(age, "год", "года", "лет", "year")}
+        </span>
+        <IconButton icon="locate" size={14} class="person-follow" label={`${L("Следить за", "Follow")} ${name}`} onClick={() => followResident(id, name)} />
+      </div>
+      <div class="person-role">{children}</div>
+      {needs && <NeedsBars needs={needs} compact />}
+      {problems && problems.length > 0 && (
+        <div class="prod-warn">
+          {L("Тяжело:", "Struggling:")} {problems.join(", ")}
+        </div>
       )}
     </div>
   );
@@ -265,149 +290,172 @@ export function BuildingPanel() {
   const share = labor > 0 ? (labor - left) / labor : 1;
   const output = info?.kind === "workplace" && info.production?.good ? { ...OUTPUT[info.production.good], made: info.production.yesterday } : null;
   const residents = info?.kind === "house" ? info.households.reduce((a, h) => a + h.people.length, 0) : 0;
+  const size = site ? L(`${Math.round(site.area)} м², высота ${b.height} м`, `${Math.round(site.area)} m², height ${b.height} m`) : L(`${t.along} × ${t.deep} м, высота ${b.height} м`, `${t.along} × ${t.deep} m, height ${b.height} m`);
+  const level = b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level}` : "";
   return (
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
-      <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
-      <div class="insp-sub">
-        {site ? L(`${Math.round(site.area)} м², высота ${b.height} м`, `${Math.round(site.area)} m², height ${b.height} m`) : L(`${t.along} × ${t.deep} м, высота ${b.height} м`, `${t.along} × ${t.deep} m, height ${b.height} m`)}
-        {b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level}` : ""}
-      </div>
-      {b.siteId && <Restored b={b} site={site} />}
-      {b.onRuins && <div class="people-note">{b.state === "active" ? L("Стоит на старом фундаменте", "Stands on an old foundation") : L("Строится на старом фундаменте", "Being built on an old foundation")}</div>}
-      {left > 0 && (
-        <div class="insp-block">
-          <ProgressBar big value={share} label={upgrading ? L("Перестройка", "Rebuild") : L("Строительство", "Construction")} />
-          <Line icon="hourglass" label={upgrading ? L("Перестроено", "Rebuilt") : L("Готово", "Done")}>
-            {Math.floor(share * 100)}{L(" % · осталось", "% · left")} {num(left)} {L("чел.-ч", "person-h")}
-          </Line>
-          <Line label={L("Ждать", "Wait")}>{siteEta(left, b.id) || "—"}</Line>
-          {queued && <div class="people-note">{queued}</div>}
-          <SiteLevers siteKey={b.id} />
-        </div>
+      <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
+      {(b.siteId || b.onRuins) && (
+        <Section>
+          {b.siteId && <Restored b={b} site={site} />}
+          {b.onRuins && <div class="people-note">{b.state === "active" ? L("Стоит на старом фундаменте", "Stands on an old foundation") : L("Строится на старом фундаменте", "Being built on an old foundation")}</div>}
+        </Section>
       )}
-      {weatherBuild && (
-        <Line label={L("Стройка сегодня", "Building today")} tone={weatherBuild.pct <= 50 ? "bad" : "warn"}>
-          {weatherBuild.pct}{L(" %", "%")}{weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
-        </Line>
+      {(left > 0 || b.state !== "active") && (
+        <Section title={upgrading ? L("Перестройка", "Rebuild") : L("Стройка", "Construction")}>
+          {left > 0 && (
+            <>
+              <div class="insp-progress">
+                <b>
+                  {Math.floor(share * 100)}
+                  {L(" %", "%")}
+                </b>
+                <ProgressBar big value={share} label={upgrading ? L("Перестройка", "Rebuild") : L("Строительство", "Construction")} />
+              </div>
+              <Line icon="hourglass" label={L("Осталось", "Left")}>
+                {num(left)} {L("чел.-ч", "person-h")}
+              </Line>
+              <Line label={L("Ждать", "Wait")}>{siteEta(left, b.id) || "—"}</Line>
+              {queued && <div class="people-note">{queued}</div>}
+            </>
+          )}
+          {weatherBuild && (
+            <Line label={L("Стройка сегодня", "Building today")} tone={weatherBuild.pct <= 50 ? "bad" : "warn"}>
+              {weatherBuild.pct}
+              {L(" %", "%")}
+              {weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
+            </Line>
+          )}
+          {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} st={stock.value} />}
+          {left > 0 && <SiteLevers siteKey={b.id} />}
+        </Section>
       )}
-      {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} st={stock.value} />}
-      {upgradeNote && (
-        <div class="prod">
-          {upgradeNote.length > 0 ? (
-            <div>{L("Расширение до второго уровня: нет —", "Expansion to level two: no —")} {upgradeNote.join("; ")}</div>
+      {(capacity || info?.kind === "house" || (info?.kind === "workplace" && info.service) || output || weatherWork || upgradeNote || dig) && (
+        <Section>
+          {info?.kind === "house" ? (
+            <>
+              <Line icon="person" label={L("Жители", "Residents")}>
+                {residents} {L("из", "of")} {houseCapacity(b)}
+              </Line>
+              <Line icon="value" label={L("Стоимость земли", "Land value")}>
+                {info.landValue}
+              </Line>
+              <Line label={L("Рядом", "Nearby")} tone={info.services.length === 0 ? "warn" : undefined}>
+                {info.services.length > 0 ? info.services.map((sid) => SERVICES[sid].name.toLowerCase()).join(", ") : L("ничего из служб", "no services")}
+              </Line>
+              {b.template === "izba" && b.level < 2 && !b.upgrade && b.streak > 0 && (
+                <div class="people-note">
+                  {L("Хороших дней подряд:", "Good days in a row:")} {b.streak} {L("из", "of")} 20
+                </div>
+              )}
+            </>
           ) : (
-            <div>
-              {L(`Расширение до второго уровня: условия выполнены, ${b.streak} из ${SERVICE.upgradeDays} дней подряд`, `Expansion to level two: conditions met, ${b.streak} of ${SERVICE.upgradeDays} days in a row`)}
+            capacity && <Line label={L("Вместимость", "Capacity")}>{capacity}</Line>
+          )}
+          {info?.kind === "workplace" && info.service && (
+            <>
+              <Line label={L(`Охват ${info.service.reach} м`, `Reach ${info.service.reach} m`)}>
+                {info.service.covered} {L("из", "of")} {info.service.houses} {L("домов", "houses")}
+              </Line>
+              {info.service.id === "school" && (
+                <Line label={L("Ученики", "Pupils")}>
+                  {info.service.pupils} {L("из", "of")} {info.service.seats}
+                </Line>
+              )}
+              {!info.service.working && <div class="prod-warn">{L("Не работает: нет работников", "Not working: no workers")}</div>}
+            </>
+          )}
+          {output && (
+            <Line icon={output.icon} label={`${L("Делает", "Makes")}: ${output.name}`}>
+              {b.template === "gumno" ? L("вчера собрано", "gathered yesterday") : L("вчера", "yesterday")} {num(output.made)} {output.unit}
+            </Line>
+          )}
+          {weatherWork && (
+            <Line label={L("Работа сегодня", "Work today")} tone={weatherWork.pct <= 50 ? "bad" : "warn"}>
+              {weatherWork.pct} %{weatherWork.reason ? ` — ${weatherWork.reason}` : ""}
+            </Line>
+          )}
+          {upgradeNote && (
+            <div class={upgradeNote.length > 0 ? "people-note" : "insp-ok"}>
+              {upgradeNote.length > 0
+                ? `${L("Расширение до второго уровня: нет —", "Expansion to level two: no —")} ${upgradeNote.join("; ")}`
+                : L(`Расширение до второго уровня: условия выполнены, ${b.streak} из ${SERVICE.upgradeDays} дней подряд`, `Expansion to level two: conditions met, ${b.streak} of ${SERVICE.upgradeDays} days in a row`)}
             </div>
           )}
-        </div>
+          {dig && (
+            <>
+              <Line label={L("Радиус вскрытия", "Opened radius")}>
+                {Math.round(dig.r)} {L("из", "of")} {DIG.maxRadius} {L("м", "m")}
+              </Line>
+              <Line label={L("Вскрыто", "Opened")}>
+                {Math.round(revealedArea(dig.r))} {L("м²", "m²")}
+              </Line>
+              <div class="people-note">
+                {L("Находки:", "Finds:")} {dig.foundations} {plural(dig.foundations, "фундамент", "фундамента", "фундаментов", "foundation")}, {dig.pois}{" "}
+                {plural(dig.pois, "место", "места", "мест", "place")}, {dig.streets} {plural(dig.streets, "улица", "улицы", "улиц", "street")}
+              </div>
+            </>
+          )}
+        </Section>
       )}
-      {dig && (
-        <div class="prod">
-          <div>
-            {L(`Радиус вскрытия: ${Math.round(dig.r)} м из ${DIG.maxRadius} м`, `Opened radius: ${Math.round(dig.r)} m of ${DIG.maxRadius} m`)}
-          </div>
-          <div>{L("Вскрыто:", "Opened:")} {Math.round(revealedArea(dig.r))} {L("м²", "m²")}</div>
-          <div>
-            {L("Находки:", "Finds:")} {dig.foundations} {plural(dig.foundations, "фундамент", "фундамента", "фундаментов", "foundation")}, {dig.pois}{" "}
-            {plural(dig.pois, "место", "места", "мест", "place")}, {dig.streets} {plural(dig.streets, "улица", "улицы", "улиц", "street")}
-          </div>
-        </div>
+      {info?.kind === "workplace" && info.production && hasProduction(b.template, info.production) && (
+        <Section title={L("Хозяйство", "Production")}>
+          <Production template={b.template} p={info.production} />
+        </Section>
+      )}
+      {b.template === "market" && b.state === "active" && info?.kind === "workplace" && (
+        <Section title={L("Обмен", "Trade")}>
+          <MarketTrade workers={info.workers.length} />
+        </Section>
       )}
       {info?.kind === "house" && (
-        <>
-          <Line icon="person" label={L("Жители", "Residents")}>
-            {residents} {L("из", "of")} {houseCapacity(b)}
-          </Line>
-          <Line icon="value" label={L("Стоимость земли", "Land value")}>
-            {info.landValue}
-          </Line>
-          <div class={info.services.length === 0 ? "people-note" : ""}>
-            {L("Рядом:", "Nearby:")} {info.services.length > 0 ? info.services.map((sid) => SERVICES[sid].name.toLowerCase()).join(", ") : L("ничего из служб", "no services")}
-          </div>
-          {b.template === "izba" && b.level < 2 && !b.upgrade && b.streak > 0 && <div class="people-note">{L("Хороших дней подряд:", "Good days in a row:")} {b.streak} {L("из", "of")} 20</div>}
-        </>
-      )}
-      {info?.kind === "workplace" && info.service && (
-        <>
-          <div>
-            {L(`Охват ${info.service.reach} м: ${info.service.covered} из ${info.service.houses} домов`, `Reach ${info.service.reach} m: ${info.service.covered} of ${info.service.houses} houses`)}
-          </div>
-          {info.service.id === "school" && (
-            <div class="people-note">
-              {L(`Учеников: ${info.service.pupils} из ${info.service.seats} мест`, `Pupils: ${info.service.pupils} of ${info.service.seats} places`)}
-            </div>
-          )}
-          {!info.service.working && <div class="prod-warn">{L("Не работает: нет работников", "Not working: no workers")}</div>}
-        </>
-      )}
-      {capacity && <div>{capacity}</div>}
-      {weatherWork && (
-        <Line label={L("Работа сегодня", "Work today")} tone={weatherWork.pct <= 50 ? "bad" : "warn"}>
-          {weatherWork.pct} %{weatherWork.reason ? ` — ${weatherWork.reason}` : ""}
-        </Line>
-      )}
-      {output && (
-        <Line icon={output.icon} label={`${L("Делает", "Makes")}: ${output.name}`}>
-          {b.template === "gumno" ? L("вчера собрано", "gathered yesterday") : L("вчера", "yesterday")} {num(output.made)} {output.unit}
-        </Line>
-      )}
-      {info?.kind === "workplace" && info.production && <Production template={b.template} p={info.production} />}
-      {b.template === "market" && b.state === "active" && info?.kind === "workplace" && <MarketTrade workers={info.workers.length} />}
-      {info?.kind === "house" &&
-        (info.households.length === 0 ? (
-          <div class="people-note">{L("Пока пустует", "Empty for now")}</div>
-        ) : (
-          info.households.map((h) => (
-            <div class="people" key={h.id}>
-              <div class="people-title">{L(`Семья ${familyGenitive(h.last)}`, `The ${h.last} family`)}</div>
-              <div class={h.mood < 35 ? "prod-warn" : "people-note"}>
-                {L("Настроение:", "Mood:")} {moodWord(h.mood)} ({h.mood})
-              </div>
-              {h.people.map((p) => (
-                <div class="person" key={p.id}>
-                  <div class="person-line">
-                    <span class="person-name">{p.name}</span>, {p.age} {plural(p.age, "год", "года", "лет", "year")}
-                    <button type="button" class="link person-follow" title={`${L("Следить за", "Follow")} ${p.name}`} onClick={() => followResident(p.id, p.name)}>
-                      <Icon name="locate" size={13} /> {L("следить", "follow")}
-                    </button>
-                  </div>
-                  <div class="person-role">
+        <Section title={L("Семьи", "Families")}>
+          {info.households.length === 0 ? (
+            <div class="people-note">{L("Пока пустует", "Empty for now")}</div>
+          ) : (
+            info.households.map((h) => (
+              <div class="household" key={h.id}>
+                <div class="household-head">
+                  <span>{L(`Семья ${familyGenitive(h.last)}`, `The ${h.last} family`)}</span>
+                  <span class={h.mood < 35 ? "prod-warn" : "people-note"}>
+                    {moodWord(h.mood)} · {h.mood}
+                  </span>
+                </div>
+                {h.people.map((p) => (
+                  <PersonRow key={p.id} id={p.id} name={p.name} age={p.age} needs={p.needs} problems={p.problems}>
                     {p.role}
                     {p.literate ? L(" · грамотный", " · literate") : p.learn > 0 && L(` · грамотность ${p.learn} %`, ` · literacy ${p.learn}%`)}
-                  </div>
-                  {p.needs && <NeedsBars needs={p.needs} compact />}
-                  {p.problems && p.problems.length > 0 && <div class="prod-warn">{L("Тяжело:", "Struggling:")} {p.problems.join(", ")}</div>}
-                </div>
-              ))}
-            </div>
-          ))
-        ))}
+                  </PersonRow>
+                ))}
+              </div>
+            ))
+          )}
+        </Section>
+      )}
       {info?.kind === "workplace" && info.capacity > 0 && (
-        <div class="people">
-          {group ? <StaffControl id={b.id} group={group} jobs={info.capacity} workers={info.workers.length} staff={b.staff} /> : <div class="people-title">{L("Работники", "Workers")} {info.workers.length} {L("из", "of")} {info.capacity}</div>}
+        <Section
+          title={L("Работники", "Workers")}
+          aside={
+            group ? undefined : (
+              <b class="insp-sec-count">
+                {info.workers.length} {L("из", "of")} {info.capacity}
+              </b>
+            )
+          }
+        >
+          {group && <StaffControl id={b.id} group={group} jobs={info.capacity} workers={info.workers.length} staff={b.staff} />}
           {info.workers.map((w) => (
-            <div class="person" key={w.id}>
-              <div class="person-line">
-                <span class="person-name">{w.name}</span>, {w.age} {plural(w.age, "год", "года", "лет", "year")}
-                <button type="button" class="link person-follow" title={`${L("Следить за", "Follow")} ${w.name}`} onClick={() => followResident(w.id, w.name)}>
-                  <Icon name="locate" size={13} /> {L("следить", "follow")}
-                </button>
-              </div>
-              <div class="person-role">
-                {w.idle && L("сейчас на стройке (нет работы) · ", "at a building site now (no job) · ")}
-                {w.commute === null ? L("дорога неизвестна", "commute unknown") : L(`дорога ~${Math.round(w.commute)} мин`, `commute ~${Math.round(w.commute)} min`)}
-                {typeof w.work === "number" && w.work < 0.95 ? L(` · силы ${Math.round(w.work * 100)} %`, ` · fitness ${Math.round(w.work * 100)}%`) : ""}
-              </div>
-              {w.needs && <NeedsBars needs={w.needs} compact />}
-              {w.problems && w.problems.length > 0 && <div class="prod-warn">{L("Тяжело:", "Struggling:")} {w.problems.join(", ")}</div>}
-            </div>
+            <PersonRow key={w.id} id={w.id} name={w.name} age={w.age} needs={w.needs} problems={w.problems}>
+              {w.idle && L("сейчас на стройке (нет работы) · ", "at a building site now (no job) · ")}
+              {w.commute === null ? L("дорога неизвестна", "commute unknown") : L(`дорога ~${Math.round(w.commute)} мин`, `commute ~${Math.round(w.commute)} min`)}
+              {typeof w.work === "number" && w.work < 0.95 ? L(` · силы ${Math.round(w.work * 100)} %`, ` · fitness ${Math.round(w.work * 100)}%`) : ""}
+            </PersonRow>
           ))}
-        </div>
+        </Section>
       )}
       <div class="insp-actions">
         {duplicate && (
-          <Button icon="plus" onClick={onDuplicate}>
+          <Button variant="primary" icon="plus" onClick={onDuplicate}>
             {L("Построить ещё", "Build another")}
           </Button>
         )}

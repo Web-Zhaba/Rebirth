@@ -11,7 +11,7 @@ export function LeftPanel() {
   const { cut } = roadQueue(roads.value);
   return (
     <>
-      <nav class="town panel" aria-label={LANDMARK_LABELS.layers}>
+      <nav class="layers" aria-label={LANDMARK_LABELS.layers}>
         <LayerBar />
       </nav>
       {cut.size > 0 && (
