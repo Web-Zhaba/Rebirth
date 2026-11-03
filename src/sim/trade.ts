@@ -16,7 +16,7 @@ export interface TradeOrder {
 
 export const TRADE = {
   // Worth of one unit (kg, m3, m3, t, piece) in the same abstract points; felt, not labor-derived, because building materials come PACE times faster.
-  value: { food: 1, logs: 4, planks: 10, stone: 6, wares: 25 } satisfies Record<TradeGood, number>,
+  value: { food: 3, logs: 4, planks: 10, stone: 6, wares: 25 } satisfies Record<TradeGood, number>,
   keep: { food: 1500, logs: 80, planks: 20, stone: 20, wares: 10 } satisfies Record<TradeGood, number>, // never given away
   margin: 0.25, // share of the worth the neighbours keep
   perWorker: 150, // points of the given good a market worker moves in a day
