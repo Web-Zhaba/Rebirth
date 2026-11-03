@@ -1,15 +1,19 @@
 import type { CameraView } from "../camera/camera";
 import type { Vec3 } from "../geo/ellipsoid";
 import frameWgsl from "./frame.wgsl?raw";
+import shadowWgsl from "../shadow/shadow.wgsl?raw";
+import type { ShadowMap } from "../shadow/shadowMap";
 import { registerWgsl } from "../gpu/wgsl";
 import { WeatherGpu } from "../sky/weather";
 
 registerWgsl("frame", frameWgsl);
+registerWgsl("shadow", shadowWgsl);
 
-// Bind group 0 for every pass: the Frame uniform of frame.wgsl and the weather of sky/weather.wgsl (its textures are
-// replaced when the weather cubes change size or swap, so the group is rebuilt then).
+// Bind group 0 for every pass: the Frame uniform of frame.wgsl, the weather of sky/weather.wgsl (its textures are
+// replaced when the weather cubes change size or swap, so the group is rebuilt then) and the sun's shadow map of
+// shadow/shadow.wgsl. The shadow pass itself binds `castBindGroup`, the same with a stand-in for the map it draws into.
 
-const FLOATS = 16 + 7 * 4;
+const FLOATS = 16 + 7 * 4 + 16 + 4;
 
 export interface FrameParams {
   sun: Vec3;
@@ -36,9 +40,13 @@ export class FrameUniforms {
   private buffer: GPUBuffer;
   private data = new Float32Array(FLOATS);
   private group: GPUBindGroup | null = null;
-  private groupGeneration = -1;
+  private castGroup: GPUBindGroup | null = null;
+  private groupGeneration = "";
 
-  constructor(private readonly device: GPUDevice) {
+  constructor(
+    private readonly device: GPUDevice,
+    private readonly shadow: ShadowMap,
+  ) {
     const all = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
     this.layout = device.createBindGroupLayout({
       label: "frame",
@@ -49,6 +57,8 @@ export class FrameUniforms {
         { binding: 3, visibility: all, texture: { viewDimension: "cube" } },
         { binding: 4, visibility: all, texture: { viewDimension: "3d" } },
         { binding: 5, visibility: all, sampler: {} },
+        { binding: 6, visibility: all, texture: { sampleType: "depth" } },
+        { binding: 7, visibility: all, sampler: { type: "comparison" } },
       ],
     });
     this.buffer = device.createBuffer({ label: "frame", size: FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -56,11 +66,23 @@ export class FrameUniforms {
   }
 
   get bindGroup(): GPUBindGroup {
+    this.refresh();
+    return this.group!;
+  }
+
+  get castBindGroup(): GPUBindGroup {
+    this.refresh();
+    return this.castGroup!;
+  }
+
+  private refresh(): void {
     const w = this.weather;
-    if (!this.group || this.groupGeneration !== w.generation) {
-      const [a, b] = w.cubeViews;
-      this.group = this.device.createBindGroup({
-        label: "frame",
+    const generation = `${w.generation}/${this.shadow.generation}`;
+    if (this.group && this.groupGeneration === generation) return;
+    const [a, b] = w.cubeViews;
+    const make = (label: string, map: GPUTextureView) =>
+      this.device.createBindGroup({
+        label,
         layout: this.layout,
         entries: [
           { binding: 0, resource: { buffer: this.buffer } },
@@ -69,11 +91,13 @@ export class FrameUniforms {
           { binding: 3, resource: b },
           { binding: 4, resource: w.base.createView() },
           { binding: 5, resource: w.sampler },
+          { binding: 6, resource: map },
+          { binding: 7, resource: this.shadow.sampler },
         ],
       });
-      this.groupGeneration = w.generation;
-    }
-    return this.group;
+    this.group = make("frame", this.shadow.view);
+    this.castGroup = make("frame (shadow pass)", this.shadow.dummyView);
+    this.groupGeneration = generation;
   }
 
   write(v: CameraView, p: FrameParams): void {
@@ -88,6 +112,9 @@ export class FrameUniforms {
     const h = p.highlight;
     d.set([p.exaggeration, p.lodTint ? 1 : 0, p.time, h?.mode ?? 0], 36);
     d.set(h ? [...h.colour, h.opacity] : [0, 0, 0, 0], 40);
+    const sh = this.shadow;
+    d.set(sh.proj, 44);
+    d.set([sh.texel, sh.fade, 1 / sh.size, 0], 60);
     this.device.queue.writeBuffer(this.buffer, 0, d);
   }
 }

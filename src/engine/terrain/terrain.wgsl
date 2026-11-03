@@ -1,6 +1,7 @@
 #include "frame"
 #include "atmosphere"
 #include "weather"
+#include "shadow"
 
 // Globe terrain: one instanced draw, an instance per selected quadtree node. Node i's chunk-table entry carries its
 // origin relative to the eye (f64 subtraction on the CPU, stored f32), its vertex slot, its height page and the page
@@ -126,6 +127,16 @@ struct VsOut {
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut {
+  return vertex(vi, ii);
+}
+
+// The sun's shadow map pass (shadow/shadowMap.ts): the same surface, projected from the sun.
+@vertex
+fn shadowVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
+  return frame.shadowProj * vec4f(vertex(vi, ii).rel, 1.0);
+}
+
+fn vertex(vi: u32, ii: u32) -> VsOut {
   let node = nodes[ii];
   var g = vi;
   var skirt = 0.0;
@@ -306,7 +317,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   }
 
   let light = sunLightAt(up);
-  let sun = frame.sun.w * max(dot(n, frame.sun.xyz), 0.0);
+  let sun = frame.sun.w * max(dot(n, frame.sun.xyz), 0.0) * sunShadow(v.rel, n);
   let sky = 0.35 * (0.6 + 0.4 * dot(n, up)) * vec3f(0.55, 0.65, 0.85);
   var c = albedo * (vec3f(sun) + sky) * light;
   c += albedo * NIGHT_AMBIENT * (1.0 - light); // moon and starlight: the night side stays readable, not black

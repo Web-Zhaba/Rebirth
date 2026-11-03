@@ -7,6 +7,7 @@ import type { RenderTarget } from "../gpu/device";
 import type { HiZ } from "../frame/hiz";
 import { GpuTimer } from "../gpu/timer";
 import { createShader } from "../gpu/wgsl";
+import { SHADOW_DEPTH } from "../shadow/shadowMap";
 import { COVER_BLOCKS } from "../bake/drape";
 import { EXAGGERATION, NO_PAGE, type Terrain } from "../terrain/terrain";
 import { birchShare, coniferShare, COVER_TABLE, DETAIL_KINDS, DETAIL_SIZE, DETAIL_SPACING, RUIN_ADD, TREE_SIZE, TREE_SPACING } from "../../world/forestMix";
@@ -42,7 +43,7 @@ const JOB_WORDS = 36;
 const UNIFORM_FLOATS = 5 * 4 + 4 + 4 + 4 + 4 + 4 + 12 * 4 + 17 * 4 + 4 + 4 * 4 + 16 + 4 + 4;
 const COUNTERS = 16; // the 12 slots, then frustum-culled and occluded candidates
 const STATS_MS = 250;
-const LOOK_FLOATS = 8 * 4 + 6 * 4 * 4;
+const LOOK_FLOATS = 8 * 4 + 6 * 4 * 4 + 4;
 
 export interface ForestKind {
   tall: number; // typical height (m): how far it is drawn
@@ -106,6 +107,7 @@ export class Forest implements Drawable {
   private readonly scatterPipe: GPUComputePipeline;
   private readonly finalizePipe: GPUComputePipeline;
   private readonly meshPipe: GPURenderPipeline;
+  private readonly shadowPipe: GPURenderPipeline;
   private readonly impostorPipe: GPURenderPipeline;
   private readonly uniform: GPUBuffer;
   private readonly lookBuffer: GPUBuffer;
@@ -132,6 +134,11 @@ export class Forest implements Drawable {
   private statsBusy = false;
   private statsAt = 0;
   private statsWanted = false;
+  private eye: Vec3 = [0, 0, 0]; // this frame's
+  private scatterEye: Vec3 | null = null; // the eye the instances in the buffer were scattered for
+  private castHash = 0;
+  private castPending = false;
+  shadowVersion = 0; // bumped when the instances the shadow pass draws changed (Drawable.shadowVersion)
 
   constructor(
     private readonly device: GPUDevice,
@@ -208,6 +215,13 @@ export class Forest implements Drawable {
       depthStencil,
       multisample: { count: target.sampleCount },
     });
+    this.shadowPipe = device.createRenderPipeline({
+      label: "forest shadow",
+      layout,
+      vertex: { module, entryPoint: "meshShadowVs", buffers: [TREE_VERTEX_LAYOUT, instanceLayout] },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: SHADOW_DEPTH,
+    });
     this.impostorPipe = device.createRenderPipeline({
       label: "forest impostors",
       layout,
@@ -228,6 +242,24 @@ export class Forest implements Drawable {
   }
 
   update(view: CameraView, engine: Engine): void {
+    this.eye = view.eye;
+    this.prepare(view, engine);
+    this.noteCasters();
+  }
+
+  // The shadow pass draws the instances last frame's scatter made, so a change of them reaches it one frame later: the
+  // version is bumped on the frame after the job table, the growth or the crowns changed.
+  private noteCasters(): void {
+    let h = Math.imul(this.jobCount + 1, 31) + Math.round(this.grow * 1000);
+    const words = new Uint32Array(this.jobData, 0, this.jobCount * JOB_WORDS);
+    for (let i = 0; i < words.length; i++) h = Math.imul(h ^ words[i], 16777619);
+    for (const k of this.look?.kinds ?? []) h = Math.imul(h ^ Math.round(k.bare * 1000), 16777619);
+    if (this.castPending) this.shadowVersion++;
+    this.castPending = h !== this.castHash;
+    this.castHash = h;
+  }
+
+  private prepare(view: CameraView, engine: Engine): void {
     this.total = 0;
     this.jobCount = 0;
     if (this.grow <= 0 || !this.look) return;
@@ -357,6 +389,7 @@ export class Forest implements Drawable {
 
   compute(encoder: GPUCommandEncoder): void {
     if (!this.jobCount) return;
+    this.scatterEye = this.eye;
     encoder.clearBuffer(this.counts);
     if (this.hiz.version !== this.hizVersion) (this.hizVersion = this.hiz.version), (this.scatterGroup = null);
     const group = (this.scatterGroup ??= this.device.createBindGroup({
@@ -423,6 +456,19 @@ export class Forest implements Drawable {
     }
   }
 
+  // Into the sun's shadow map: the near models only (impostors stand far beyond the map).
+  drawShadow(pass: GPURenderPassEncoder): void {
+    if (!this.jobCount || !this.scatterEye) return;
+    pass.setBindGroup(1, this.drawGroup);
+    pass.setPipeline(this.shadowPipe);
+    pass.setVertexBuffer(0, this.meshes.vertices);
+    pass.setIndexBuffer(this.meshes.indices, "uint32");
+    for (let k = 0; k < FOREST_KINDS; k++) {
+      pass.setVertexBuffer(1, this.instances, this.bases[k * 2] * INSTANCE_BYTES, CAPS[k * 2] * INSTANCE_BYTES);
+      pass.drawIndexedIndirect(this.args, k * 2 * 20);
+    }
+  }
+
   private finalizeGroupCache: GPUBindGroup | null = null;
   private finalizeGroup(): GPUBindGroup {
     return (this.finalizeGroupCache ??= this.device.createBindGroup({
@@ -447,6 +493,8 @@ export class Forest implements Drawable {
       d.set([...s.colB, 0], 80 + k * 4);
       d.set([...info.leaf, 0], 104 + k * 4);
     }
+    const se = this.scatterEye ?? this.eye;
+    d.set([se[0] - this.eye[0], se[1] - this.eye[1], se[2] - this.eye[2], 0], 128);
     this.device.queue.writeBuffer(this.lookBuffer, 0, d);
   }
 

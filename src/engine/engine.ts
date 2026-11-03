@@ -8,6 +8,7 @@ import { enuAt, geodeticToEcef, sub, type Geodetic, type Vec3 } from "./geo/elli
 import { DEPTH_FORMAT, fitCanvas, initGpu, SAMPLE_COUNT, type Gpu, type RenderTarget } from "./gpu/device";
 import { GpuTimer } from "./gpu/timer";
 import { OverlayRaster } from "./overlay/overlayRaster";
+import { ShadowMap } from "./shadow/shadowMap";
 import { Sky } from "./sky/sky";
 import type { WeatherGpu } from "./sky/weather";
 import { EXAGGERATION, Terrain } from "./terrain/terrain";
@@ -22,6 +23,8 @@ export interface Drawable {
   update?(view: CameraView, engine: Engine): void;
   compute?(encoder: GPUCommandEncoder): void; // GPU work the draw depends on (culling, scatter), before the main pass
   draw(pass: GPURenderPassEncoder): void;
+  drawShadow?(pass: GPURenderPassEncoder, shadow: ShadowMap): void; // casts into the sun's shadow map (depth only)
+  shadowVersion?: number; // changes whenever what drawShadow draws changed (the map is re-rendered then)
   afterSubmit?(): void; // the frame's commands are on the queue (timer read-backs)
 }
 
@@ -58,6 +61,7 @@ export class Engine {
   readonly timer: GpuTimer | null;
   readonly drawables: Drawable[] = [];
   readonly hiz: HiZ;
+  readonly shadow: ShadowMap;
   light: (s: CameraState) => Light = defaultLight;
   lodTint = false;
   highlight: Highlight | null = null; // a class of ground tinted for a tool (frame/frameUniforms.ts HIGHLIGHT)
@@ -81,7 +85,8 @@ export class Engine {
   ) {
     const { device, format } = gpu;
     this.target = { format, depthFormat: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT };
-    this.frameU = new FrameUniforms(device);
+    this.shadow = new ShadowMap(device);
+    this.frameU = new FrameUniforms(device, this.shadow);
     this.overlay = new OverlayRaster(device);
     this.terrain = new Terrain(device, this.target, this.frameU.layout, device.limits.maxTextureArrayLayers, this.overlay);
     this.sky = new Sky(device, this.target, this.frameU.layout);
@@ -205,19 +210,33 @@ export class Engine {
     this.terrain.update(view);
     for (const d of this.drawables) d.update?.(view, this);
     const light = this.light(s);
+    const t = this.terrain;
+    const casters = [t.groundVersion, t.stats.selectionHash, t.stats.nodes, ...this.drawables.map((d) => d.shadowVersion ?? 0)];
+    const castShadows = this.shadow.update(view, light.sun, casters);
     this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: motionTime(), highlight: this.highlight });
 
     const encoder = device.createCommandEncoder({ label: "frame" });
-    // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else
-    // on top of the same colour and depth (docs/PLAN-engine.md N6). The timer spans both passes.
+    // The timer spans the shadow pass (when it runs), the occluders and the main pass.
     const times = this.timer?.passWrites();
+    const begin = times && { querySet: times.querySet, beginningOfPassWriteIndex: times.beginningOfPassWriteIndex };
+    // The sun's shadow map first, when what it is baked from changed (docs/PLAN-shadows.md): every receiver below
+    // samples it. The forest casts the instances its scatter made last frame (scene/forest.ts drawShadow).
+    if (castShadows) {
+      const shadowPass = this.shadow.beginPass(encoder, begin);
+      shadowPass.setBindGroup(0, this.frameU.castBindGroup);
+      this.terrain.drawShadow(shadowPass, this.shadow);
+      for (const d of this.drawables) d.drawShadow?.(shadowPass, this.shadow);
+      shadowPass.end();
+    }
+    // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else
+    // on top of the same colour and depth (docs/PLAN-engine.md N6).
     const colorView = this.color!.createView();
     const depthView = this.depth.createView();
     const occluders = encoder.beginRenderPass({
       label: "occluders",
       colorAttachments: [{ view: colorView, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" }],
       depthStencilAttachment: { view: depthView, depthClearValue: 0, depthLoadOp: "clear", depthStoreOp: "store" },
-      timestampWrites: times && { querySet: times.querySet, beginningOfPassWriteIndex: times.beginningOfPassWriteIndex },
+      timestampWrites: castShadows ? undefined : begin,
     });
     occluders.setBindGroup(0, this.frameU.bindGroup);
     this.terrain.draw(occluders);

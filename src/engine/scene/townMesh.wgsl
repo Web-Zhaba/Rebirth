@@ -1,6 +1,7 @@
 #include "frame"
 #include "atmosphere"
 #include "weather"
+#include "shadow"
 
 // The town's models (scene/townMesh.ts): a WGSL port of the three.js model layer's shaders. Vertices
 // are metres in the east/north/up frame of the town origin; `model.rel` is the origin minus the eye (f64 on the CPU), so
@@ -39,11 +40,20 @@ struct VsOut {
   @location(4) xy: vec2f,
   @location(5) lamp: f32,
   @location(6) shade: f32, // cloud shadow (sky/weather.wgsl cloudShade): kilometre patches, per vertex is plenty
+  @location(7) rel: vec3f,
 };
+
+fn toRel(p: vec3f) -> vec3f {
+  return model.rel.xyz + model.e.xyz * p.x + model.n.xyz * p.y + model.u.xyz * p.z;
+}
+
+fn toEcef(v: vec3f) -> vec3f {
+  return model.e.xyz * v.x + model.n.xyz * v.y + model.u.xyz * v.z;
+}
 
 @vertex
 fn vs(v: VsIn) -> VsOut {
-  let rel = model.rel.xyz + model.e.xyz * v.pos.x + model.n.xyz * v.pos.y + model.u.xyz * v.pos.z;
+  let rel = toRel(v.pos);
   var o: VsOut;
   o.pos = frame.viewProj * vec4f(rel, 1.0);
   o.n = v.normal;
@@ -53,7 +63,14 @@ fn vs(v: VsIn) -> VsOut {
   o.xy = v.pos.xy; // metres east and north of the origin, for patterns laid out in world space
   o.lamp = v.lamp;
   o.shade = cloudShade(rel, model.u.xyz, 0.0);
+  o.rel = rel;
   return o;
+}
+
+// The sun's shadow map pass (shadow/shadowMap.ts): buildings and ruins cast.
+@vertex
+fn shadowVs(@location(0) pos: vec3f) -> @builtin(position) vec4f {
+  return frame.shadowProj * vec4f(toRel(pos), 1.0);
 }
 
 // The townspeople (TownMesh.setFigures): flat-shaded figures with a colour per vertex, lit like the buildings' walls
@@ -63,24 +80,28 @@ struct FigureOut {
   @location(0) n: vec3f,
   @location(1) c: vec3f,
   @location(2) shade: f32,
+  @location(3) rel: vec3f,
 };
 
 @vertex
 fn figureVs(@location(0) pos: vec3f, @location(1) normal: vec3f, @location(2) colour: vec3f) -> FigureOut {
-  let rel = model.rel.xyz + model.e.xyz * pos.x + model.n.xyz * pos.y + model.u.xyz * pos.z;
+  let rel = toRel(pos);
   var o: FigureOut;
   o.pos = frame.viewProj * vec4f(rel, 1.0);
   o.n = normal;
   o.c = colour;
   o.shade = cloudShade(rel, model.u.xyz, 0.0);
+  o.rel = rel;
   return o;
 }
 
 @fragment
 fn figureFs(v: FigureOut) -> @location(0) vec4f {
-  let d = max(dot(normalize(v.n), model.light.xyz), 0.0);
-  let k = mix(0.55, 1.0, d) * mix(0.88, 1.0, model.light.w);
-  return vec4f(v.c * k * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
+  let n = normalize(v.n);
+  let d = max(dot(n, model.light.xyz), 0.0);
+  let s = sunShadow(v.rel, toEcef(n));
+  let k = mix(0.55, 1.0, d * s) * mix(0.88, 1.0, model.light.w);
+  return vec4f(v.c * k * shadowInk(s, d) * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
 }
 
 // Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
@@ -229,12 +250,13 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   let snow = snowShare(v.xy, up, weather.ground.x, 0.0);
   col = mix(col, weather.snowCol.rgb, snow * select(1.0, 0.5, code >= 30));
   let d = max(dot(n, model.light.xyz), 0.0);
-  var k = mix(0.55, 1.0, d) * mix(0.88, 1.0, model.light.w);
+  let s = sunShadow(v.rel, toEcef(n));
+  var k = mix(0.55, 1.0, d * s) * mix(0.88, 1.0, model.light.w);
   if (abs(n.z) < 0.5) {
     k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z)); // walls darken towards the ground
   }
   // The old map's dusk-blue night tint, as a dimming by how lit the place is (the ground goes dark the same way).
-  return vec4f(col * k * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
+  return vec4f(col * k * shadowInk(s, d) * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
 }
 
 // Window light: only the glass of lit buildings, added on top (blending one, one). Each window of a building is lit or

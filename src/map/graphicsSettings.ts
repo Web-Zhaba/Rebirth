@@ -1,4 +1,5 @@
 import { signal, type Signal } from "@preact/signals";
+import type { ShadowQuality } from "../engine/shadow/shadowMap";
 
 // Graphics effects the player can turn off for a lighter map (the settings dialog).
 
@@ -61,4 +62,29 @@ export function motionTime(): number {
   }
 
   return still;
+}
+
+// The sun's shadows of buildings and trees (engine/shadow/shadowMap.ts): off, a 1024 map, or a 2048 one. Low on phones.
+export const SHADOW_QUALITIES: ShadowQuality[] = ["off", "low", "high"];
+const SHADOW_KEY = "rebirth.shadows";
+
+function readShadowQuality(): ShadowQuality {
+  try {
+    const v = localStorage.getItem(SHADOW_KEY);
+    if (SHADOW_QUALITIES.includes(v as ShadowQuality)) return v as ShadowQuality;
+    return matchMedia("(pointer: coarse) and (max-width: 640px)").matches ? "low" : "high";
+  } catch {
+    return "high";
+  }
+}
+
+export const shadowQuality = signal<ShadowQuality>(readShadowQuality());
+
+export function setShadowQuality(q: ShadowQuality): void {
+  shadowQuality.value = q;
+  try {
+    localStorage.setItem(SHADOW_KEY, q);
+  } catch {
+    /* no storage: the choice lives for the session */
+  }
 }

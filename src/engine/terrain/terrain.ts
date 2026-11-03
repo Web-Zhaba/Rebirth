@@ -3,6 +3,7 @@ import type { CameraView } from "../camera/camera";
 import { ecefToGeodetic, type Vec3 } from "../geo/ellipsoid";
 import { MAX_MERCATOR_LAT, tileKey } from "../geo/mercator";
 import { createShader } from "../gpu/wgsl";
+import { SHADOW_DEPTH, type ShadowMap } from "../shadow/shadowMap";
 import { DEM_SIZE } from "../bake/terrarium";
 import { DRAPE_MAX_ZOOM, DRAPE_SIZE } from "../bake/drape";
 import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
@@ -72,6 +73,8 @@ export class Terrain {
   private drapeZoom = new Uint8Array(MAX_NODES); // per selection index: the drape page zoom it may want
   private drapeGranted = new Set<number>();
   private pipeline: GPURenderPipeline;
+  private shadowPipeline: GPURenderPipeline;
+  private readonly rowBounds = new Float64Array(MAX_NODES * 4); // per drawn row: bounding sphere centre (ECEF), radius
   private bindGroup: GPUBindGroup;
   private nodeBuf: GPUBuffer;
   private vertBuf: GPUBuffer;
@@ -150,6 +153,13 @@ export class Terrain {
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: { format: target.depthFormat, depthWriteEnabled: true, depthCompare: "greater" },
       multisample: { count: target.sampleCount },
+    });
+    this.shadowPipeline = device.createRenderPipeline({
+      label: "terrain shadow",
+      layout: device.createPipelineLayout({ bindGroupLayouts: [frameLayout, layout] }),
+      vertex: { module, entryPoint: "shadowVs" },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: SHADOW_DEPTH,
     });
   }
 
@@ -341,6 +351,7 @@ export class Terrain {
           }
         }
       }
+      this.rowBounds.set([...node.center, node.radius], count * 4);
       count++;
       if (node.z > maxZ) maxZ = node.z;
       hash = (Math.imul(hash, 31) + node.x * 3 + node.y * 5 + node.z * 7 + (page ? page.z * 11 : 0) + (parent ? parent.z * 13 : 0)) | 0;
@@ -412,6 +423,31 @@ export class Terrain {
     pass.setBindGroup(1, this.bindGroup);
     pass.setIndexBuffer(this.indexBuf, "uint32");
     pass.drawIndexed(this.indexCount, this.drawCount);
+  }
+
+  // Into the sun's shadow map: only the drawn nodes that reach into it, in runs of neighbouring rows.
+  drawShadow(pass: GPURenderPassEncoder, shadow: ShadowMap): void {
+    if (!this.drawCount) return;
+    pass.setPipeline(this.shadowPipeline);
+    pass.setBindGroup(1, this.bindGroup);
+    pass.setIndexBuffer(this.indexBuf, "uint32");
+    const b = this.rowBounds;
+    const c: Vec3 = [0, 0, 0];
+    let start = -1;
+    for (let i = 0; i <= this.drawCount; i++) {
+      let on = false;
+      if (i < this.drawCount) {
+        c[0] = b[i * 4];
+        c[1] = b[i * 4 + 1];
+        c[2] = b[i * 4 + 2];
+        on = shadow.covers(c, b[i * 4 + 3]);
+      }
+      if (on && start < 0) start = i;
+      else if (!on && start >= 0) {
+        pass.drawIndexed(this.indexCount, i - start, 0, 0, start);
+        start = -1;
+      }
+    }
   }
 
   // Slot holding the node's vertices; builds them if needed (returns slot + SLOTS to flag a build), -1 if none.
