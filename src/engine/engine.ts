@@ -1,4 +1,4 @@
-import { buildView, clampState, defaultCamera, rayDir, type CameraState, type CameraView } from "./camera/camera";
+import { buildView, clampState, defaultCamera, liftEyeAboveGround, rayDir, type CameraState, type CameraView } from "./camera/camera";
 import { pickGround } from "./camera/pick";
 import { transformPoint } from "./camera/projection";
 import { FrameUniforms, type Highlight } from "./frame/frameUniforms";
@@ -195,6 +195,7 @@ export class Engine {
       const size = [canvas.width, canvas.height];
       this.color = device.createTexture({ label: "msaa color", size, format: this.target.format, sampleCount: SAMPLE_COUNT, usage: GPUTextureUsage.RENDER_ATTACHMENT });
       this.depth = device.createTexture({ label: "depth", size, format: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+      this.hiz.fit(this.depth); // before the drawables' updates read its size
     }
     const s = this.state;
     // The target rides on the drawn ground; heights that arrive while streaming ease in instead of jumping.
@@ -204,6 +205,7 @@ export class Engine {
       this.snapHeight = false;
     }
     clampState(s);
+    liftEyeAboveGround(s, this.groundAt);
     const view = buildView(s, canvas.clientWidth, canvas.clientHeight, this.groundAt);
     this.view = view;
     this.overlay.update(s, this.metersPerPixel());

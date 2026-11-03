@@ -2,7 +2,7 @@ import type { CameraView } from "../camera/camera";
 import { frustumPlanes, sphereInView as inside } from "../camera/frustum";
 import type { Drawable, Engine } from "../engine";
 import { ecefToGeodetic, enuAt, type Vec3 } from "../geo/ellipsoid";
-import { lngLatToTile, tileToLngLat } from "../geo/mercator";
+import { lngLatToTile } from "../geo/mercator";
 import type { RenderTarget } from "../gpu/device";
 import type { HiZ } from "../frame/hiz";
 import { GpuTimer } from "../gpu/timer";
@@ -38,7 +38,7 @@ const TREE_FAR_CAP = 12_000;
 const DETAIL_FAR_CAP = 2_000;
 const MIN_PX = 1.5; // drawn up to where a typical one is this many px tall
 const SINK = 0.3; // m below the ground, so a slope does not show a floating root
-const TILE_SLACK = 150; // m added to a tile's radius for its relief and its trees
+const TILE_SLACK = 150; // m added to a tile's bounding sphere for its trees
 const JOB_WORDS = 36;
 const UNIFORM_FLOATS = 5 * 4 + 4 + 4 + 4 + 4 + 4 + 12 * 4 + 17 * 4 + 4 + 4 * 4 + 16 + 4 + 4;
 const COUNTERS = 16; // the 12 slots, then frustum-culled and occluded candidates
@@ -91,7 +91,9 @@ export interface ForestCulling {
 
 interface TileInfo extends TileFrame {
   seed: number;
-  ground: number | null; // drawn height at the centre, once known
+  lo: number; // drawn height range over the tile (0..0 until a page covers it)
+  hi: number;
+  source: number; // the height page the range came from (terrain.ranges.source), NaN = not yet read
 }
 
 export class Forest implements Drawable {
@@ -285,12 +287,14 @@ export class Forest implements Drawable {
       for (let tx0 = Math.floor(at.x) - span; tx0 <= Math.floor(at.x) + span; tx0++) {
         const tx = ((tx0 % n) + n) % n;
         const t = this.tile(tx, ty);
-        const h = t.ground ?? 0;
+        // Bounding sphere over the tile's relief: centred halfway up its height range, wide enough for both ends.
+        const h = (t.lo + t.hi) / 2;
+        const radius = Math.hypot(t.radius, (t.hi - t.lo) / 2) + TILE_SLACK;
         const c: Vec3 = [t.centre[0] + t.up[0] * h - view.eye[0], t.centre[1] + t.up[1] * h - view.eye[1], t.centre[2] + t.up[2] * h - view.eye[2]];
         const d = Math.hypot(c[0], c[1], c[2]);
-        const dMin = Math.max(1, d - t.radius - TILE_SLACK);
+        const dMin = Math.max(1, d - radius);
         if (dMin > maxFar) continue;
-        if (!inside(planes, c, t.radius + TILE_SLACK)) continue;
+        if (!inside(planes, c, radius)) continue;
         const cover = this.terrain.drape.best(z, tx, ty);
         if (!cover) continue;
         const ruins = mask !== null && tx0 / n < mask[2] && (tx0 + 1) / n > mask[0] && ty / n < mask[3] && (ty + 1) / n > mask[1];
@@ -365,7 +369,7 @@ export class Forest implements Drawable {
     const put = (...v: number[]) => (d.set(v, k), (k += v.length));
     for (const p of planes) put(...p);
     const groups = Math.ceil(total / 64);
-    put(...up.up, total);
+    put(0, 0, 0, total);
     new Uint32Array(d.buffer).set([count, Math.min(groups, 65535) * 64, 0, 0], k);
     k += 4;
     put(treeFar, ...detailFar);
@@ -503,12 +507,17 @@ export class Forest implements Drawable {
     let t = this.tiles.get(key);
     if (!t) {
       if (this.tiles.size > 20000) this.tiles.clear();
-      t = { ...tileFrame(x, y), seed: (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0, ground: null };
+      t = { ...tileFrame(x, y), seed: (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0, lo: 0, hi: 0, source: NaN };
       this.tiles.set(key, t);
     }
-    if (t.ground === null) {
-      const c = tileToLngLat(SCATTER_ZOOM, x, y, 0.5, 0.5);
-      t.ground = this.terrain.groundAt(c.lat, c.lng);
+    // The range follows the page the scatter reads the heights from, refined as finer pages stream in.
+    const ranges = this.terrain.ranges;
+    const src = ranges.source!(SCATTER_ZOOM, x, y);
+    if (src !== t.source) {
+      t.source = src;
+      const r = ranges.range(SCATTER_ZOOM, x, y);
+      t.lo = r?.min ?? 0;
+      t.hi = r?.max ?? 0;
     }
     return t;
   }

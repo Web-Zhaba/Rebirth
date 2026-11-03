@@ -10,13 +10,13 @@ export interface CameraTarget {
 }
 
 export interface CameraEvents {
-  dragstart: void; // the player started moving the camera by hand (drag, touch, keys, wheel)
+  dragstart: void; // the player started moving the camera's centre by hand (drag, touch, arrow keys); zoom and turns do not count
   move: void; // the camera changed this frame
   moveend: void; // it stopped (after inertia and flights)
 }
 
 export interface CameraControl {
-  jumpTo(t: CameraTarget): void;
+  jumpTo(t: CameraTarget): void; // centre only: a zoom or turn in progress goes on about the new centre
   flyTo(t: CameraTarget, opts?: { duration?: number }): void; // ms; a smooth arc that zooms out on long hops
   fitBounds(bounds: [west: number, south: number, east: number, north: number], opts: { padding: number; minDistance: number; animate: boolean }): void;
   setPanEnabled(on: boolean): void;

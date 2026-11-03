@@ -1,4 +1,4 @@
-import { trackpadCameraDelta, wheelIntent } from "./trackpad";
+import { gestureIntent, trackpadCameraDelta, WHEEL_GESTURE_MS, type WheelGesture } from "./trackpad";
 import type { Engine } from "../engine";
 import { buildView, clampState, rayDir, MAX_DISTANCE, MAX_PITCH, MIN_DISTANCE, type CameraState } from "./camera";
 import type { CameraControl, CameraEvents, CameraTarget } from "./cameraControl";
@@ -54,6 +54,8 @@ interface Anim {
   update(k: number): void;
   goal?: Required<CameraTarget>;
   long?: boolean; // covers a lot of ground: keep the target's height glued to the terrain
+  readonly centre: boolean; // update() moves the target's lat/lng
+  release?(): void; // stop moving lat/lng where the animation can (a pivot zoom goes on about the centre)
 }
 
 export function createCameraControl(engine: Engine): CameraControl {
@@ -75,6 +77,8 @@ export function createCameraControl(engine: Engine): CameraControl {
   const tracker = new VelocityTracker();
   let rotAcc = { h: 0, p: 0 }; // unwrapped heading/pitch the user has dialled in this drag, for inertia
   let handSeq = false; // dragstart already sent for this run of input
+  let wheelGesture: WheelGesture | null = null;
+  let handUntil = 0; // performance.now() until which a run of wheel events still counts as moving the camera
   let owned = false; // the control moved the camera since the last moveend
   let lastNow = 0;
   let snap = { lat: s.lat, lng: s.lng, distance: s.distance, heading: s.heading, pitch: s.pitch };
@@ -103,11 +107,13 @@ export function createCameraControl(engine: Engine): CameraControl {
     return g ? { lat: g.lat, lng: g.lng } : null;
   };
 
-  const beginHand = (): void => {
+  // The player took the camera. `pan`: they move its centre (drag, touch, arrow keys), which is what dragstart announces
+  // (as MapLibre's did): a zoom or a turn leaves e.g. following a resident alone.
+  const beginHand = (pan: boolean): void => {
     owned = true;
     inertia = null;
     anim = null;
-    if (!handSeq) {
+    if (pan && !handSeq) {
       handSeq = true;
       emit("dragstart");
     }
@@ -129,7 +135,14 @@ export function createCameraControl(engine: Engine): CameraControl {
   });
 
   const jumpTo = (t: CameraTarget): void => {
-    cancelMotion();
+    if (t.distance === undefined && t.heading === undefined && t.pitch === undefined) {
+      // Only the centre (following something): motion that moves the centre gives way, a zoom or a turn in progress
+      // carries on about the new centre.
+      if (inertia?.kind === "pan") inertia = null;
+      if (wheel) wheel.grab = null;
+      anim?.release?.();
+      if (anim?.centre) anim = null;
+    } else cancelMotion();
     owned = true;
     const g = resolve(t);
     Object.assign(s, g);
@@ -152,20 +165,25 @@ export function createCameraControl(engine: Engine): CameraControl {
       jumpTo(to);
       return;
     }
+    const travels = to.lat !== from.lat || to.lng !== from.lng;
     anim = {
       t0: null,
       dur,
       goal: to,
       long: u1 > 20_000,
+      centre: travels,
       update(k) {
         const e = easeFly(k);
         if (k >= 1) {
-          Object.assign(s, to);
+          if (travels) Object.assign(s, to);
+          else Object.assign(s, { distance: to.distance, heading: to.heading, pitch: to.pitch });
         } else {
           const p = path.at(e);
-          const ll = slerpLatLng(from.lat, from.lng, to.lat, to.lng, p.frac);
-          s.lat = ll.lat;
-          s.lng = ll.lng;
+          if (travels) {
+            const ll = slerpLatLng(from.lat, from.lng, to.lat, to.lng, p.frac);
+            s.lat = ll.lat;
+            s.lng = ll.lng;
+          }
           s.distance = p.w / kW;
           s.heading = from.heading + dh * e;
           s.pitch = from.pitch + (to.pitch - from.pitch) * e;
@@ -179,18 +197,28 @@ export function createCameraControl(engine: Engine): CameraControl {
   const easeTo = (to: Required<CameraTarget>, dur: number, pivot?: { grab: Grab; x: number; y: number }): void => {
     const from = { lat: s.lat, lng: s.lng, distance: s.distance, heading: s.heading, pitch: s.pitch };
     const dh = angleDelta(from.heading, to.heading);
+    const travels = to.lat !== from.lat || to.lng !== from.lng;
+    let about = pivot?.grab ? { grab: pivot.grab, x: pivot.x, y: pivot.y } : null;
     anim = {
       t0: null,
       dur,
       goal: to,
+      get centre() {
+        return travels || about !== null;
+      },
+      release() {
+        about = null;
+      },
       update(k) {
         const e = easeOutCubic(k);
         const d = from.distance * Math.pow(to.distance / from.distance, e);
-        if (pivot?.grab) {
-          zoomAbout(s, d / s.distance, pivot.grab, pivot.x, pivot.y, pickAt);
+        if (about) {
+          zoomAbout(s, d / s.distance, about.grab, about.x, about.y, pickAt);
         } else {
-          s.lat = from.lat + (to.lat - from.lat) * e;
-          s.lng = from.lng + (angleDelta(from.lng, to.lng)) * e;
+          if (travels) {
+            s.lat = from.lat + (to.lat - from.lat) * e;
+            s.lng = from.lng + angleDelta(from.lng, to.lng) * e;
+          }
           s.distance = d;
         }
         s.heading = from.heading + dh * e;
@@ -313,7 +341,7 @@ export function createCameraControl(engine: Engine): CameraControl {
     if (solved) engine.snapToGround();
   };
 
-  const idle = (): boolean => !drag?.started && !multi && !inertia && !anim && !wheel;
+  const idle = (): boolean => !drag?.started && !multi && !inertia && !anim && !wheel && performance.now() >= handUntil;
 
   // After the frame is drawn: events carry the view the player sees.
   const afterFrame = (): void => {
@@ -384,7 +412,7 @@ export function createCameraControl(engine: Engine): CameraControl {
       } else if (touches.size === 2) {
         endDrag(false);
         cancelMotion();
-        beginHand();
+        beginHand(true);
         startMulti();
       }
       e.preventDefault();
@@ -416,7 +444,7 @@ export function createCameraControl(engine: Engine): CameraControl {
       drag.y = y;
       if (!drag.started && Math.hypot(x - drag.sx, y - drag.sy) >= DRAG_TOLERANCE) {
         drag.started = true;
-        beginHand();
+        beginHand(drag.mode === "pan");
       }
       drag.dirty = drag.started;
     }
@@ -450,10 +478,13 @@ export function createCameraControl(engine: Engine): CameraControl {
 
   const onWheel = (e: WheelEvent): void => {
     e.preventDefault();
-    if (wheelIntent(e) === "camera") {
+    const now = performance.now();
+    wheelGesture = gestureIntent(wheelGesture, e, now);
+    handUntil = now + WHEEL_GESTURE_MS; // one gesture, one dragstart..moveend
+    if (wheelGesture.intent === "camera") {
       // Two-finger trackpad movement: turn and tilt, as the game does today.
       const d = trackpadCameraDelta(e);
-      beginHand();
+      beginHand(false);
       wheel = null;
       s.heading += d.bearing;
       s.pitch += d.pitch;
@@ -463,7 +494,7 @@ export function createCameraControl(engine: Engine): CameraControl {
     const oct = wheelZoomOctaves(e);
     if (oct === 0) return;
     const [x, y] = local(e);
-    beginHand();
+    beginHand(false);
     if (!wheel || Math.hypot(x - wheel.x, y - wheel.y) > 3) wheel = { pending: wheel?.pending ?? 0, x, y, grab: grabAt(x, y) };
     wheel.pending += oct;
   };
@@ -472,7 +503,7 @@ export function createCameraControl(engine: Engine): CameraControl {
     if (!dblEnabled) return;
     e.preventDefault();
     const [x, y] = local(e);
-    beginHand();
+    beginHand(false);
     wheel = null;
     const goal = resolve({ distance: s.distance * (e.shiftKey ? 2 : 0.5) });
     easeTo(goal, DBLCLICK_MS, { grab: grabAt(x, y), x, y });
@@ -516,7 +547,7 @@ export function createCameraControl(engine: Engine): CameraControl {
         return;
     }
     e.preventDefault();
-    beginHand();
+    beginHand(goal.lat !== base.lat || goal.lng !== base.lng);
     easeTo(resolve(goal), KEY_EASE_MS);
   };
 

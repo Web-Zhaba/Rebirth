@@ -191,7 +191,8 @@ export class Terrain {
   // Water coverage 0..1 under a point from the drape pages, or null before any page covers it.
   waterAt = (lat: number, lng: number): number | null => this.drape.waterAt(lat, lng);
 
-  private ranges: HeightRanges = {
+  // Drawn (exaggerated) height ranges over tiles, from the finest resident page: the quadtree's bounds, the forest's tiles.
+  readonly ranges: HeightRanges = {
     source: (z, x, y) => this.pages.source(z, x, y),
     version: () => this.pages.version,
     range: (z, x, y) => {

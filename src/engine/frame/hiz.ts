@@ -24,9 +24,9 @@ export class HiZ {
     return this.texture?.mipLevelCount ?? 0;
   }
 
-  // Build from this frame's multisampled depth (recreated with it on a resize).
+  // Build from this frame's multisampled depth.
   build(encoder: GPUCommandEncoder, depth: GPUTexture): void {
-    if (depth !== this.depth) this.resize(depth);
+    this.fit(depth);
     const t = this.texture!;
     const pass = encoder.beginComputePass({ label: "hiz" });
     for (let k = 0; k < t.mipLevelCount; k++) {
@@ -37,7 +37,10 @@ export class HiZ {
     pass.end();
   }
 
-  private resize(depth: GPUTexture): void {
+  // Sizes the pyramid for a (new) depth texture. The engine calls it as soon as it recreates the depth, so the culling
+  // passes' uniforms, written before the build, already see the size and levels the build will make.
+  fit(depth: GPUTexture): void {
+    if (depth === this.depth) return;
     this.depth = depth;
     this.texture?.destroy();
     const w = Math.max(1, Math.ceil(depth.width / 2));
