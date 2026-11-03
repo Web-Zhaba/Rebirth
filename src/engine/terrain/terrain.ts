@@ -9,7 +9,7 @@ import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
 import type { DrapeResponse } from "../bake/drapeWorker";
 import { demStream, TileStream } from "../stream/demStream";
 import { OVERLAY_LEVELS, type OverlayRaster } from "../overlay/overlayRaster";
-import { DrapePages, type DrapePage } from "./drapePages";
+import { DrapePages, PINNED_ZOOM as DRAPE_PINNED_ZOOM, type DrapePage } from "./drapePages";
 import { DEM_MAX_ZOOM, HeightPages, type Page } from "./heightPages";
 import { morphBand } from "./morph";
 import { buildIndices, buildNodeVertices, CAP_NORTH, capFlags, GRID, NODE_FLOATS, nodeOrigin, poleLocal } from "./nodeMesh";
@@ -32,6 +32,7 @@ const VERTEX_BUILDS_PER_FRAME = 64; // 64 x 35 KB ~ 2.2 MB
 const UPLOADS_PER_FRAME = 4; // 4 x 266 KB height pages ~ 1 MB
 const DRAPE_UPLOADS_PER_FRAME = 4; // 4 x 256 KB drape pages ~ 1 MB: with the vertex builds inside the 4 MB/frame budget of section 6
 const DRAPE_LAYERS = 256; // 64 MB of rgba8 pages
+const DRAPE_OWN_SHARE = 0.75; // of the drape budget nodes may fill with their own tiles; the rest is for shared ancestors
 const HB_REBUILD = 1000; // m: rebuild a node's vertices when its base height is this far from its height range's middle
 const EVICT_BATCH = 32;
 const EQUATOR = 2 * Math.PI * 6378137;
@@ -67,6 +68,9 @@ export class Terrain {
   private prevSplit = new Set<number>();
   private nextSplit = new Set<number>();
   private selected: NodeInfo[] = [];
+  private byDistance: number[] = []; // selection indices, nearest first
+  private drapeZoom = new Uint8Array(MAX_NODES); // per selection index: the drape page zoom it may want
+  private drapeGranted = new Set<number>();
   private pipeline: GPURenderPipeline;
   private bindGroup: GPUBindGroup;
   private nodeBuf: GPUBuffer;
@@ -208,6 +212,7 @@ export class Terrain {
     this.prevSplit = sel.split;
     const k = projScale(sv);
     const band = morphBand(this.tau, MERGE, k);
+    this.grantDrape(sel.nodes);
 
     // Cap apexes: the mean ground along the quadtree's edge (a cone from the edge row to it closes the pole).
     if (this.frameNo % 30 === 1)
@@ -225,6 +230,7 @@ export class Terrain {
     this.drapeStream.beginFrame();
     let lastDrapeWant = -1;
     let lastDrapeAncestor = -1;
+    let index = -1;
     let count = 0;
     let builds = 0;
     let missing = 0;
@@ -239,6 +245,7 @@ export class Terrain {
     const u = this.tableU;
     const eye = v.eye;
     for (const node of sel.nodes) {
+      index++;
       const slot = this.slotFor(node, builds < VERTEX_BUILDS_PER_FRAME);
       if (slot < 0) continue;
       if (slot >= SLOTS) builds++;
@@ -312,11 +319,12 @@ export class Terrain {
       } else f[o + 16] = f[o + 17] = f[o + 18] = f[o + 19] = 0;
       u[o + 21] = s;
       u[o + 22] = node.z;
-      // Drape page: the node's own tile up to DRAPE_MAX_ZOOM, ancestors standing in while it bakes.
-      const dpage = this.drape.best(node.z, node.x, node.y);
+      // Drape page: the tile grantDrape gave the node (its own up to DRAPE_MAX_ZOOM, or a shared ancestor when far),
+      // ancestors standing in while it bakes.
+      const dz = this.drapeZoom[index];
+      const dpage = this.drape.best(dz, node.x >> (node.z - dz), node.y >> (node.z - dz));
       writePage(f, u, o + 24, o + 27, node, dpage);
       for (let l = 0; l < OVERLAY_LEVELS; l++) this.overlay.nodeUv(l, node.z, node.x, node.y, f, o + 28 + l * 4);
-      const dz = Math.min(node.z, DRAPE_MAX_ZOOM);
       if (!dpage || dpage.z < dz) {
         const want = tileKey(dz, node.x >> (node.z - dz), node.y >> (node.z - dz));
         if (want !== lastDrapeWant && !this.drapeStream.isFailed(want)) {
@@ -345,6 +353,8 @@ export class Terrain {
           if (!this.pages.has(key)) this.stream.want(key, -1);
           if (!this.drape.has(key)) this.drapeStream.want(key, -1);
         }
+    // So are the pages held under seated meshes, wherever the camera is (HeightPages.hold).
+    for (const key of this.pages.heldKeys()) if (!this.pages.has(key) && !this.stream.isFailed(key)) this.stream.want(key, -1);
     this.stream.pump();
     this.drapeStream.pump();
     this.drawCount = count;
@@ -365,6 +375,35 @@ export class Terrain {
       drapePages: this.drape.resident,
       drapePending: this.drapeStream.pending,
     };
+  }
+
+  // Drape zoom per selected node, so a frame never wants more pages than the pool holds. A view along the ground
+  // selects hundreds of nodes out to the horizon, more than there are drape layers; asking each for its own tile made the
+  // pool evict pages on screen for ones that evicted them back, baking and uploading without end. Nearest first, a node
+  // gets its own tile while a share of the budget is left, then a coarser ancestor: the far rows, a few px tall each,
+  // share one page between many nodes.
+  private grantDrape(nodes: NodeInfo[]): void {
+    const order = this.byDistance;
+    order.length = nodes.length;
+    for (let i = 0; i < nodes.length; i++) order[i] = i;
+    order.sort((a, b) => nodes[a].dist - nodes[b].dist);
+    const granted = this.drapeGranted;
+    granted.clear();
+    const budget = this.drape.budget;
+    const own = budget * DRAPE_OWN_SHARE;
+    for (const i of order) {
+      const node = nodes[i];
+      let dz = Math.min(node.z, DRAPE_MAX_ZOOM);
+      for (let first = true; dz > DRAPE_PINNED_ZOOM; dz--, first = false) {
+        const key = tileKey(dz, node.x >> (node.z - dz), node.y >> (node.z - dz));
+        if (granted.has(key)) break;
+        if (granted.size < (first ? own : budget)) {
+          granted.add(key);
+          break;
+        }
+      }
+      this.drapeZoom[i] = dz;
+    }
   }
 
   draw(pass: GPURenderPassEncoder): void {

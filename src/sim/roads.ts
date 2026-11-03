@@ -1,6 +1,7 @@
 import type { Land } from "../world/landcover";
 import { bridgeSpanBonus } from "./tech";
 import type { ProgressState, RoadEdge, RoadGraph, RoadKind, Stock } from "./types";
+import { L as tr } from "../i18n";
 
 export interface RoadSpec {
   name: string;
@@ -13,12 +14,12 @@ export interface RoadSpec {
 }
 
 export const ROAD_KINDS: Record<RoadKind, RoadSpec> = {
-  path: { name: "Тропа", width: 2, labor: 0.1, maxGrade: 0.25, crossesWater: false },
-  dirt: { name: "Грунтовая дорога", width: 5, labor: 1.0, maxGrade: 0.12, crossesWater: false },
-  footbridge: { name: "Канатный мостик", width: 1.5, labor: 0.5, maxGrade: 0.3, crossesWater: true },
-  bridge: { name: "Свайный мост", width: 4, labor: 2.0, maxGrade: 0.1, crossesWater: true },
-  stone: { name: "Каменная дорога", width: 5, labor: 2.0, maxGrade: 0.2, crossesWater: false, stone: 0.01, unlock: "road:stone" },
-  stonebridge: { name: "Каменный мост", width: 5, labor: 4.0, maxGrade: 0.12, crossesWater: true, stone: 0.04, unlock: "road:stonebridge" },
+  path: { name: tr("Тропа", "Path"), width: 2, labor: 0.04, maxGrade: 0.25, crossesWater: false },
+  dirt: { name: tr("Грунтовая дорога", "Dirt road"), width: 5, labor: 0.4, maxGrade: 0.12, crossesWater: false },
+  footbridge: { name: tr("Канатный мостик", "Rope footbridge"), width: 1.5, labor: 0.2, maxGrade: 0.3, crossesWater: true },
+  bridge: { name: tr("Свайный мост", "Pile bridge"), width: 4, labor: 0.8, maxGrade: 0.1, crossesWater: true },
+  stone: { name: tr("Каменная дорога", "Stone road"), width: 5, labor: 0.8, maxGrade: 0.2, crossesWater: false, stone: 0.01, unlock: "road:stone" },
+  stonebridge: { name: tr("Каменный мост", "Stone bridge"), width: 5, labor: 1.6, maxGrade: 0.12, crossesWater: true, stone: 0.04, unlock: "road:stonebridge" },
 };
 
 // Longest span in metres a bridge kind covers before any technology.
@@ -37,7 +38,7 @@ export function effectiveSpans(progress?: Pick<ProgressState, "techs">): Spans {
 export function spanReason(kind: RoadKind, span: number, spans: Spans = BASE_SPAN): string | null {
   const limit = spans[kind] ?? BASE_SPAN[kind];
   if (!ROAD_KINDS[kind].crossesWater || limit === undefined || span <= limit + 1e-6) return null;
-  return `Пролёт ${Math.round(span)} м: ${ROAD_KINDS[kind].name.toLowerCase()} держит до ${Math.round(limit)} м`;
+  return tr(`Пролёт ${Math.round(span)} м: ${ROAD_KINDS[kind].name.toLowerCase()} держит до ${Math.round(limit)} м`, `Span ${Math.round(span)} m: a ${ROAD_KINDS[kind].name.toLowerCase()} holds up to ${Math.round(limit)} m`);
 }
 
 export const isRoadKind = (t: string): t is RoadKind => Object.hasOwn(ROAD_KINDS, t);
@@ -187,7 +188,7 @@ function overlapLength(ax: number, ay: number, bx: number, by: number, e: RoadEd
 export type AddResult = { ok: true; graph: RoadGraph } | { ok: false; reason: string };
 
 const fail = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
-const OVERLAP_REASON = "Здесь уже есть дорога";
+const OVERLAP_REASON = tr("Здесь уже есть дорога", "There is already a road here");
 
 // Adds a polyline as straight segments. All-or-nothing: on rejection the input is untouched.
 export function addRoad(
@@ -197,7 +198,7 @@ export function addRoad(
   snapTol: number,
   laborPerSegment: number[],
 ): AddResult {
-  if (pts.length < 2 || laborPerSegment.length !== pts.length - 1) return fail("Некорректная линия");
+  if (pts.length < 2 || laborPerSegment.length !== pts.length - 1) return fail(tr("Некорректная линия", "Invalid line"));
   const g = cloneGraph(graph);
   let prev: number | null = null;
   for (let i = 0; i + 1 < pts.length; i++) {
@@ -207,7 +208,7 @@ export function addRoad(
     const A = g.nodes[a];
     const B = g.nodes[b];
     const L = dist(A.x, A.y, B.x, B.y);
-    if (a === b || L < MIN_SEGMENT) return fail("Слишком коротко");
+    if (a === b || L < MIN_SEGMENT) return fail(tr("Слишком коротко", "Too short"));
 
     let overlap = 0;
     for (const e of Object.values(g.edges)) {
@@ -345,8 +346,8 @@ export function longestSpan(p: TerrainProfile): number {
 export function segmentCost(p: TerrainProfile, kind: RoadKind, spans?: Spans): SegmentCost {
   const spec = ROAD_KINDS[kind];
   const pieces = p.land.length;
-  if (p.length < MIN_SEGMENT) return { ok: false, reason: "Слишком коротко", labor: 0, maxGrade: 0, stone: 0, span: 0 };
-  if (pieces < 1 || p.elev.length !== pieces + 1) return { ok: false, reason: "Нет данных о местности", labor: 0, maxGrade: 0, stone: 0, span: 0 };
+  if (p.length < MIN_SEGMENT) return { ok: false, reason: tr("Слишком коротко", "Too short"), labor: 0, maxGrade: 0, stone: 0, span: 0 };
+  if (pieces < 1 || p.elev.length !== pieces + 1) return { ok: false, reason: tr("Нет данных о местности", "No terrain data"), labor: 0, maxGrade: 0, stone: 0, span: 0 };
   const pl = p.length / pieces;
   let labor = 0;
   let maxGrade = 0;
@@ -364,11 +365,11 @@ export function segmentCost(p: TerrainProfile, kind: RoadKind, spans?: Spans): S
   }
   const stone = (spec.stone ?? 0) * p.length;
   const span = longestSpan(p);
-  if (water && !spec.crossesWater) return { ok: false, reason: "Через воду нужен мост", labor, maxGrade, stone, span };
+  if (water && !spec.crossesWater) return { ok: false, reason: tr("Через воду нужен мост", "Crossing water needs a bridge"), labor, maxGrade, stone, span };
   const tooLong = spanReason(kind, span, spans);
   if (tooLong) return { ok: false, reason: tooLong, labor, maxGrade, stone, span };
   if (maxGrade > spec.maxGrade) {
-    return { ok: false, reason: `Слишком круто: ${Math.round(maxGrade * 100)} %`, labor, maxGrade, stone, span };
+    return { ok: false, reason: tr(`Слишком круто: ${Math.round(maxGrade * 100)} %`, `Too steep: ${Math.round(maxGrade * 100)}%`), labor, maxGrade, stone, span };
   }
   return { ok: true, labor, maxGrade, stone, span };
 }

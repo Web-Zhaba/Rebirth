@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { IconButton } from "./Button";
+import { L } from "../../i18n";
 
 // Modal dialog on the native <dialog> element: focus trap, Esc and inert background come from the browser.
 export function Dialog({ title, onClose, children, class: cls }: { title: string; onClose: () => void; children: ComponentChildren; class?: string }) {
@@ -14,7 +15,7 @@ export function Dialog({ title, onClose, children, class: cls }: { title: string
     <dialog ref={ref} class={cls ? `dialog ${cls}` : "dialog"} aria-label={title} onCancel={onClose}>
       <div class="dialog-head">
         <h2>{title}</h2>
-        <IconButton icon="close" label="Закрыть" onClick={onClose} />
+        <IconButton icon="close" label={L("Закрыть", "Close")} onClick={onClose} />
       </div>
       {children}
     </dialog>

@@ -28,7 +28,7 @@ describe("build menu", () => {
     expect(i.materials.map((m) => m.text)).toEqual(["2 м³", "0,5 м³", "3 т"]);
     expect(i.reach).toContain("150");
     expect(toolInfo("fisher").site).toContain("воды");
-    expect(toolInfo("path").labor).toContain("0,1");
+    expect(toolInfo("path").labor).toContain("0,04");
   });
   it("shows the chosen material on the road and bridge tools", () => {
     expect(roadKindOf("dirt", { dirt: "dirt", bridge: "bridge" })).toBe("dirt");

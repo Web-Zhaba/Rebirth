@@ -9,7 +9,9 @@ import { keyToTile, lngLatToTile, tileKey } from "../geo/mercator";
 // read by the tree scatter, and keeps what grows over 16 x 16 blocks of it on the CPU (the scatter's budget and
 // empty-tile skip).
 
-const PINNED_ZOOM = 2; // z0-z2 never evicted: the fallback of last resort
+export const PINNED_ZOOM = 2; // z0-z2 never evicted: the fallback of last resort
+const PINNED_PAGES = 1 + 4 + 16;
+const SPARE = 32; // layers kept free of a frame's pages, so arrivals always find one that is not on screen
 const CPU_COPIES = 64; // water masks kept on the CPU for isWaterAt
 
 export interface DrapePage {
@@ -57,6 +59,12 @@ export class DrapePages {
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     for (let i = layers - 1; i >= 0; i--) this.free.push(i);
+  }
+
+  // Pages above the pinned ones a frame may draw with. A frame that wants more than this evicts pages it is drawing for
+  // ones that evict them back: the pool thrashes and never settles (terrain.ts budgets its wants to this).
+  get budget(): number {
+    return this.layers - PINNED_PAGES - SPARE;
   }
 
   get resident(): number {

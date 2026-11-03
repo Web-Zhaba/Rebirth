@@ -1,3 +1,4 @@
+import { L } from "../i18n";
 export interface ResearchStatusView {
   title: string;
   next: string | null;
@@ -8,12 +9,12 @@ export interface ResearchStatusView {
 export function researchStatusView(activeName: string | null, share: number | null, queuedNames: readonly string[]): ResearchStatusView {
   const next = queuedNames[0] ?? null;
   if (!activeName || share === null) {
-    return { title: "Наука простаивает — выберите технологию", next: next ? `В очереди: ${next}` : null, progress: null, idle: true };
+    return { title: L("Наука простаивает — выберите технологию", "Research is idle — choose a technology"), next: next ? L(`В очереди: ${next}`, `Queued: ${next}`) : null, progress: null, idle: true };
   }
   const pct = Math.max(0, Math.min(100, Math.floor(share * 100)));
   return {
-    title: `Исследуется: ${activeName}, ${pct} %`,
-    next: next ? `Далее: ${next}` : null,
+    title: L(`Исследуется: ${activeName}, ${pct} %`, `Researching: ${activeName}, ${pct}%`),
+    next: next ? L(`Далее: ${next}`, `Next: ${next}`) : null,
     progress: Math.max(0, Math.min(1, share)),
     idle: false,
   };

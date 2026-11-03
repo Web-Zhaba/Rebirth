@@ -5,6 +5,7 @@ import { say } from "./production";
 import { grantInsight } from "./research";
 import { INSIGHT_BY_ID } from "./tech";
 import type { Building, FoundFoundation, SimState } from "./types";
+import { L } from "../i18n";
 
 // Restoring an old typed building (PLAN-research.ru.md section 7): the order, the finish and the loss.
 
@@ -17,14 +18,14 @@ const withFoundation = (s: SimState, id: string, patch: Partial<FoundFoundation>
 
 // The order: a planned building of the foundation's real shape, built by the artel like any placed building.
 export function restoreSite(s: SimState, siteId: unknown, mode: unknown): RestoreResult {
-  if (typeof siteId !== "string") return { ok: false, reason: "Некорректная постройка" };
-  if (mode !== "monument" && mode !== "working") return { ok: false, reason: "Некорректное назначение" };
+  if (typeof siteId !== "string") return { ok: false, reason: L("Некорректная постройка", "Invalid building") };
+  if (mode !== "monument" && mode !== "working") return { ok: false, reason: L("Некорректное назначение", "Invalid purpose") };
   const why = restoreBlocker(s, siteId, mode);
   if (why) return { ok: false, reason: why };
   const f = s.finds.foundations.find((x) => x.id === siteId)!;
   const id = s.nextBuildingId;
   const b = restoredBuilding(f, mode, s.roads, id, s.gameMinutes);
-  if (!b) return { ok: false, reason: "Нужна дорога" };
+  if (!b) return { ok: false, reason: L("Нужна дорога", "Needs a road") };
   return { ok: true, sim: withFoundation({ ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: b } }, siteId, { state: "restoring" }) };
 }
 
@@ -45,7 +46,7 @@ export function completeRestorations(s: SimState): SimState {
     cur = withFoundation({ ...cur, progress, buildings: { ...cur.buildings, [b.id]: { ...b, restoreWeight: weight } } }, f.id, { state: "restored" });
     if (ins) cur = grantInsight(cur, ins.id);
     const name = siteTitle(f);
-    const text = `Восстановлено: ${name}${ins ? ` — идея «${INSIGHT_BY_ID.get(ins.id)?.text ?? ins.text}»` : ""}`;
+    const text = `${L("Восстановлено", "Restored")}: ${name}${ins ? ` — ${L("идея", "idea")} «${INSIGHT_BY_ID.get(ins.id)?.text ?? ins.text}»` : ""}`;
     cur = { ...cur, events: say(cur.events, cur.gameMinutes, "heritage", text, [b.lot.cx, b.lot.cy]), chronicle: addChronicle(cur.chronicle, cur.gameMinutes, `heritage:${f.id}`, text) };
   }
   return cur;
@@ -66,6 +67,6 @@ export function loseSite(s: SimState, gone: Building): SimState {
     else delete restored[domain];
     out = { ...out, progress: { ...out.progress, restored } };
   }
-  return { ...out, chronicle: addChronicle(out.chronicle, out.gameMinutes, `heritage-lost:${f.id}`, `Утрачено: ${siteTitle(f)}`) };
+  return { ...out, chronicle: addChronicle(out.chronicle, out.gameMinutes, `heritage-lost:${f.id}`, L(`Утрачено: ${siteTitle(f)}`, `Lost: ${siteTitle(f)}`)) };
 }
 

@@ -3,6 +3,8 @@ import { queuedLabel, step } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { refreshServices } from "./coverage";
 import { EVENING, eveningRate, eveningStep, gatherHouses } from "./evening";
+import { NEEDS } from "./needs";
+import { CAMP, covers } from "./services";
 import { toSnapshot } from "./handler";
 import { emptyGrowth } from "./growth";
 import { computeLife } from "./life";
@@ -149,6 +151,24 @@ describe("gatherings", () => {
     const s = gather();
     const chapel = refreshServices({ ...s, buildings: { ...s.buildings, 5: bld(5, "chapel", 500) }, residents: { ...s.residents, 99: { ...s.residents[1], id: 99, job: 5 } } });
     expect(gatherHouses({ ...chapel, buildings: { ...chapel.buildings, 1: bld(1, "tavern", 100, "planned") } }).has(2)).toBe(true);
+  });
+  it("the tent camp gathers like a house: the tavern at the camp helps tent families, one far away does not", () => {
+    const camp = (tavernAt: number) =>
+      refreshServices(busy(folk(town([bld(1, "tavern", tavernAt), bld(4, "izba", 200)], at(13, 12)), [{ home: 4, job: 1 }, { home: null, adults: 1 }])));
+    expect(gatherHouses(camp(100)).has(CAMP)).toBe(true);
+    expect(gatherHouses(camp(1800)).has(CAMP)).toBe(false);
+    const social = (s: SimState) => dailyEconomy(s).residents[2].needs?.social ?? 100;
+    const tent = (s: SimState) => ({ ...s, residents: { ...s.residents, 2: { ...s.residents[2], needs: { food: 100, rest: 100, social: 50, warmth: 100 } } } });
+    expect(social(tent(camp(100))) - social(tent(camp(1800)))).toBeCloseTo(NEEDS.socialGather);
+  });
+  it("a chapel and a staffed market cover the camp", () => {
+    const s = gather();
+    const base = { ...s, households: { ...s.households, 9: { ...s.households[1], id: 9, home: null, members: [] } } };
+    const chapel = refreshServices({ ...base, buildings: { ...base.buildings, 5: bld(5, "chapel", 500) }, residents: { ...base.residents, 99: { ...base.residents[1], id: 99, job: 5 } } });
+    expect(covers(chapel.coverage[CAMP], "chapel")).toBe(true);
+    expect(gatherHouses({ ...chapel, buildings: { ...chapel.buildings, 1: bld(1, "tavern", 100, "planned") } }).has(CAMP)).toBe(true);
+    const market = refreshServices({ ...base, buildings: { ...base.buildings, 6: bld(6, "market", 400) }, residents: { ...base.residents, 98: { ...base.residents[1], id: 98, job: 6 } } });
+    expect(covers(market.coverage[CAMP], "market")).toBe(true);
   });
 });
 

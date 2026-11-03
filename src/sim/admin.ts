@@ -6,6 +6,7 @@ import { isCleared } from "./clearing";
 import { UPGRADE } from "./buildings";
 import { completeRestorations } from "./restore";
 import type { Building, RoadGraph, SimState } from "./types";
+import { L } from "../i18n";
 
 // Admin panel: cheats on the simulation. Nothing here is reachable from play, only from the admin panel's commands.
 export const ADMIN = {
@@ -73,7 +74,7 @@ export type AdminResult = { ok: true; sim: SimState } | { ok: false; reason: str
 
 // A disc of the old city revealed at once. Its id comes from the building counter so it never meets a real dig site.
 export function reveal(s: SimState, x: unknown, y: unknown, r: unknown): AdminResult {
-  if (!finite(x) || !finite(y) || !finite(r) || Math.abs(x) > 1e6 || Math.abs(y) > 1e6 || r <= 0 || r > ADMIN.maxRadius) return { ok: false, reason: "Некорректный круг" };
+  if (!finite(x) || !finite(y) || !finite(r) || Math.abs(x) > 1e6 || Math.abs(y) > 1e6 || r <= 0 || r > ADMIN.maxRadius) return { ok: false, reason: L("Некорректный круг", "Invalid circle") };
   const revealed = [...s.finds.revealed, { digId: s.nextBuildingId, x, y, r }].slice(-ADMIN.maxReveals);
   return { ok: true, sim: { ...s, nextBuildingId: s.nextBuildingId + 1, finds: { ...s.finds, revealed } } };
 }

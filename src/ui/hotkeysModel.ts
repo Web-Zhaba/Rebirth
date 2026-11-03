@@ -1,3 +1,4 @@
+import { L } from "../i18n";
 export interface HotkeyRow {
   keys: string[];
   desc: string;
@@ -10,29 +11,29 @@ export interface HotkeySection {
 
 export const HOTKEY_SECTIONS: HotkeySection[] = [
   {
-    title: "Время и перемещение",
+    title: L("Время и перемещение", "Time and movement"),
     rows: [
-      { keys: ["Space", "P"], desc: "Пауза / продолжить симуляцию" },
-      { keys: ["1", "2", "3"], desc: "Скорость игры (1×, 2×, 4×)" },
-      { keys: ["H", "Home"], desc: "К центру поселения" },
-      { keys: ["N"], desc: "Наука: дерево исследований" },
+      { keys: ["Space", "P"], desc: L("Пауза / продолжить симуляцию", "Pause / resume the simulation") },
+      { keys: ["1", "2", "3"], desc: L("Скорость игры (1×, 2×, 4×)", "Game speed (1×, 2×, 4×)") },
+      { keys: ["H", "Home"], desc: L("К центру поселения", "To the settlement centre") },
+      { keys: ["N"], desc: L("Наука: дерево исследований", "Research: the technology tree") },
     ],
   },
   {
-    title: "Строительство",
+    title: L("Строительство", "Building"),
     rows: [
-      { keys: ["F1 – F5"], desc: "Категории (Дороги, Зоны, Хозяйство, Службы, Прошлое)" },
-      { keys: ["Q – Y"], desc: "Выбор инструмента в выбранной категории" },
-      { keys: ["B"], desc: "Снос (Бульдозер)" },
+      { keys: ["F1 – F5"], desc: L("Категории (Дороги, Зоны, Хозяйство, Службы, Прошлое)", "Categories (Roads, Zones, Economy, Services, Past)") },
+      { keys: ["Q – Y"], desc: L("Выбор инструмента в выбранной категории", "Pick a tool in the open category") },
+      { keys: ["B"], desc: L("Снос (Бульдозер)", "Demolish (Bulldozer)") },
     ],
   },
   {
-    title: "Управление",
+    title: L("Управление", "Controls"),
     rows: [
-      { keys: ["Esc", "ПКМ"], desc: "Отмена инструмента / разрыв дороги / закрыть панель" },
-      { keys: ["Enter"], desc: "Быстрый безопасный выбор в карточке события" },
-      { keys: ["F10"], desc: "Скрыть / показать HUD (режим скриншота)" },
-      { keys: ["?"], desc: "Открыть эту шпаргалку клавиш" },
+      { keys: ["Esc", L("ПКМ", "RMB")], desc: L("Отмена инструмента / разрыв дороги / закрыть панель", "Cancel tool / break the road / close the panel") },
+      { keys: ["Enter"], desc: L("Быстрый безопасный выбор в карточке события", "Quick safe choice on an event card") },
+      { keys: ["F10"], desc: L("Скрыть / показать HUD (режим скриншота)", "Hide / show the HUD (screenshot mode)") },
+      { keys: ["?"], desc: L("Открыть эту шпаргалку клавиш", "Open this shortcut sheet") },
     ],
   },
 ];

@@ -10,7 +10,7 @@ import { dailyEconomy, economyStats, HAND_HOURS, payMaterials, produceStep } fro
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { FIELD } from "./fields";
-import { covers, learnPerDay, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
+import { CAMP, covers, learnPerDay, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
 import { SCHOOL_SEATS } from "./school";
 import { setTrade } from "./leverCmds";
 import type { TradeOrder } from "./trade";
@@ -172,9 +172,9 @@ describe("coverage by network distance", () => {
     const school = folk(town([bld(1, "school", 0), ...houses]), [{ home: null, job: 1 }]);
     expect(covers(computeCoverage(school)[2], "school")).toBe(true);
   });
-  it("covers only finished houses and is kept in the state by refreshServices", () => {
+  it("covers only finished houses and the tent camp, and is kept in the state by refreshServices", () => {
     const s = refreshServices(town([bld(1, "well", 0), bld(2, "izba", 100, "building"), bld(3, "izba", 100)]));
-    expect(Object.keys(s.coverage)).toEqual(["3"]);
+    expect(Object.keys(s.coverage)).toEqual([String(CAMP), "3"]);
     expect(s.landValue[3]).toBeGreaterThan(0);
   });
   it("is computed at the daily step", () => {
@@ -246,13 +246,13 @@ describe("market hand-out", () => {
         .join();
     expect(lifted(101)).not.toBe(lifted(102));
   });
-  it("tents and households outside the market's reach get nothing", () => {
+  it("a tent camp in the market's reach is served like a house; households outside the reach get nothing", () => {
     const far = bld(60, "izba", 1500);
     const s0 = mk([{ home: null, adults: 2 }, { home: 60, adults: 2 }]);
     const s = withCoverage({ ...s0, buildings: { ...s0.buildings, 60: far } });
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(s.stock.wares - d.stock.wares).toBeCloseTo(20 * 0.1);
-    expect(d.households[26].mood).toBeCloseTo(60 + (10 + 45 - 60) / 4); // tents, no wares
+    expect(d.households[26].mood).toBeCloseTo(60 + (10 + 45 + 10 - 60) / 4); // tents: wares, but no house
     expect(d.households[27].mood).toBeCloseTo(60 + (10 + 45 + 10 - 60) / 4); // a house, but out of reach
   });
   it("comes on top of shops: the shop trader serves 12, the market the next 20", () => {

@@ -2,6 +2,7 @@ import type { View } from "../view/view";
 import { effect, signal } from "@preact/signals";
 import { frame, sendCmd } from "../simClient";
 import { flash, tool } from "./tools";
+import { L } from "../i18n";
 
 // Admin: radius (m) of the next click that reveals the old city there; null = tool off.
 export const revealRadius = signal<number | null>(null);
@@ -40,7 +41,7 @@ export function attachRevealTool(view: View): void {
     if (r === null || !f) return;
     const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
     sendCmd({ type: "admin", op: { k: "reveal", x, y, r } }).then((res) => {
-      if (!res.ok) flash(res.reason ?? "Не вышло");
+      if (!res.ok) flash(res.reason ?? L("Не вышло", "That didn't work"));
     });
   });
   // Another build tool, or switching this one off, clears the circle.

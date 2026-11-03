@@ -1,5 +1,6 @@
 import { YEAR_MIN } from "./time";
 import type { Building, Household, Needs, NeedsStats, Resident } from "./types";
+import { L } from "../i18n";
 
 // Personal needs (design: docs/PLAN-needs.md). Every resident carries four 0..100 values; a satisfied need is 100.
 // Unmet needs cost work, walking speed, mood and, at the bottom, health; a low mood costs work, births, learning
@@ -9,10 +10,10 @@ import type { Building, Household, Needs, NeedsStats, Resident } from "./types";
 // town that keeps its people content behaves as before. Only a deficit changes anything.
 
 export const NEED_NAMES: Record<keyof Needs, string> = {
-  food: "Сытость",
-  rest: "Отдых",
-  social: "Общение",
-  warmth: "Тепло",
+  food: L("Сытость", "Food"),
+  rest: L("Отдых", "Rest"),
+  social: L("Общение", "Company"),
+  warmth: L("Тепло", "Warmth"),
 };
 
 export const NEEDS = {
@@ -158,10 +159,10 @@ export function crewEfficiency(s: Pick<{ residents: Record<number, Resident>; ho
 // What is short for one resident, in the words of the inspector; empty when nothing is.
 export function needProblems(n: Needs): string[] {
   const out: string[] = [];
-  if (n.food < NEEDS.warn.food) out.push("голод");
-  if (n.rest < NEEDS.warn.rest) out.push("усталость");
-  if (n.social < NEEDS.warn.social) out.push("одиночество");
-  if (n.warmth < NEEDS.warn.warmth) out.push("холод");
+  if (n.food < NEEDS.warn.food) out.push(L("голод", "hunger"));
+  if (n.rest < NEEDS.warn.rest) out.push(L("усталость", "fatigue"));
+  if (n.social < NEEDS.warn.social) out.push(L("одиночество", "loneliness"));
+  if (n.warmth < NEEDS.warn.warmth) out.push(L("холод", "cold"));
   return out;
 }
 

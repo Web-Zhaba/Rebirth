@@ -1,31 +1,36 @@
-/* World В«Р‘РµСЂРµСЃС‚Р° Рё РіСЂР°РјРѕС‚Р°В» вЂ” the build bar: a bark catalogue sheet at the foot of the field.
-   Tabs are pressed courses; the live item is inked solid. The hint and cost line sit on their own thin strip. */
+/* World «Береста и грамота» — the build dock: the bottom tar plate of the frame.
+   One row of categories is all that stays on screen; the live category opens its tray of tools above the row, joined
+   to it as one slab. The hint and cost of the live tool sit on a bark slip above. Shortcuts are not printed on the
+   tiles: they live in the titles, in aria-keyshortcuts and in the hotkeys dialog. */
 
 .build-bar {
   position: absolute;
   left: 50%;
-  bottom: 44px; /* clear the attribution bar */
-  transform: translateX(-50%);
+  bottom: var(--bb-bottom, 40px);
   z-index: var(--z-panel);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--sp-2);
   width: max-content;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - 16px);
+  transform: translateX(-50%);
   pointer-events: none;
 }
+
+/* ---- The slip above: messages, the hint, road mode and material, the cost ---- */
 
 .bb-lines {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  max-width: 720px;
-  padding: 4px var(--sp-3);
-  background: var(--paper-raised);
+  gap: 4px;
+  max-width: min(720px, calc(100vw - 16px));
+  box-sizing: border-box;
+  padding: 6px var(--sp-3);
   border: var(--bw) solid var(--rule);
   border-radius: 0;
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 80%);
   box-shadow: var(--shadow-hard-sm);
   pointer-events: auto;
 }
@@ -36,19 +41,18 @@
 
 .road-hint {
   font-size: var(--fs-sm);
-  color: var(--pencil);
   text-align: center;
+  color: var(--pencil);
 }
 
-/* Road drawing mode: straight or arc. */
 .bb-lines .seg {
   font-size: var(--fs-sm);
 }
 
 .road-msg {
   font-size: var(--fs-md);
-  color: var(--bad);
   font-weight: 700;
+  color: var(--bad);
 }
 
 .bb-cost {
@@ -60,97 +64,181 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- The slab: tray and dock ---- */
+
 .bb-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3) var(--sp-3);
-}
-
-.bb-tabs .tab {
-  padding: var(--sp-1) var(--sp-3);
-  font-size: var(--fs-sm);
-  font-family: var(--font-display);
-  font-weight: 600;
-}
-
-/* The live course is inked solid, not outlined: one tar block in a row of bare bark. */
-.bb-tabs .tab.on {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper-raised);
-}
-
-.bb-tabs .tab:not(.on):hover {
-  background: var(--paper-shade);
+  max-width: 100%;
+  box-sizing: border-box;
+  border: var(--bw) solid var(--frame-edge);
+  background: linear-gradient(180deg, var(--frame), var(--frame-deep) 85%);
+  box-shadow:
+    inset 0 1px 0 rgba(233, 236, 223, 0.08),
+    var(--shadow-panel);
+  color: var(--frame-text);
+  pointer-events: auto;
 }
 
 .bb-items {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
-  gap: var(--sp-1);
+  gap: 2px;
+  padding: 4px 4px 6px;
+  background: var(--frame-lenticel) left bottom / 100% 1px no-repeat;
+  animation: tray-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tray-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .build-btn {
   position: relative;
-  border: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   gap: 3px;
-  width: 100px;
-  padding: var(--sp-2) var(--sp-1) var(--sp-1);
+  width: 84px;
+  min-height: 54px;
+  padding: 7px var(--sp-1) 5px;
+  border: var(--bw-hair) solid transparent;
   border-radius: 0;
   background: transparent;
-  color: var(--ink);
+  color: var(--frame-text);
   font: inherit;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   cursor: pointer;
 }
 
+.build-btn .icon:not(.bb-lock) {
+  color: var(--frame-dim);
+}
+
 .build-btn:hover:not(:disabled) {
-  background: var(--paper-shade);
+  border-color: var(--frame-line);
+  background-color: var(--frame-raise);
+}
+
+.build-btn:hover .icon:not(.bb-lock) {
+  color: var(--frame-text);
 }
 
 .build-btn.on,
 .build-btn.on:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--paper-raised);
+  border-color: var(--resin);
+  background: var(--resin);
+  color: var(--on-resin);
+}
+
+.build-btn.on .icon:not(.bb-lock) {
+  color: var(--on-resin);
 }
 
 .bb-name {
   font-weight: 700;
-  white-space: normal;
-  text-align: center;
   line-height: 1.15;
+  text-align: center;
+  white-space: normal;
 }
 
-kbd {
-  position: absolute;
-  top: 2px;
-  right: 3px;
-  padding: 0 4px;
-  border: var(--bw-hair) solid var(--kbd-border);
-  border-radius: 0;
-  background: var(--paper-shade);
-  color: var(--ink-2);
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  line-height: 1.35;
+/* Tools closed until a tech pays them: dimmed, a lock in the corner, the goal in the hover card. */
+.build-btn.locked {
+  color: #9a9482;
+  cursor: not-allowed;
 }
+
+.build-btn.locked .icon:not(.bb-lock) {
+  opacity: 0.45;
+}
+
+.bb-lock {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  color: var(--frame-dim);
+}
+
+/* The dock: one row of categories. The live one is lit; with its tray open it carries a resin edge into the tray. */
+.bb-cats {
+  display: flex;
+}
+
+.bb-cat {
+  position: relative;
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--frame-dim);
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bb-cat:hover:not(:disabled) {
+  background-color: var(--frame-raise);
+  color: var(--frame-text);
+}
+
+.bb-cat.on {
+  color: var(--frame-text);
+}
+
+.bb-cat.open {
+  background: var(--frame-raise);
+}
+
+.bb-cat.open::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: var(--resin);
+}
+
+/* A tool of this category is live while its tray is closed. */
+.bb-cat-live {
+  width: 6px;
+  height: 6px;
+  margin-left: -2px;
+  background: var(--resin);
+}
+
+/* ---- The hover card of a tool ---- */
 
 .bb-items .tooltip {
-  width: 260px;
-  max-width: 260px;
   display: none;
   flex-direction: column;
   gap: 2px;
+  width: 260px;
+  max-width: 260px;
+  color: var(--ink);
+}
+
+/* The card follows the pointer. A clicked tile keeps focus, so focus alone must not hold it open:
+   the keyboard still gets the card through :focus-visible, a mouse click does not. */
+.bb-items .tooltip-wrap:focus-within .tooltip {
+  display: none;
 }
 
 .bb-items .tooltip-wrap:hover .tooltip,
-.bb-items .tooltip-wrap:focus-within .tooltip {
+.bb-items .tooltip-wrap:has(:focus-visible) .tooltip {
   display: flex;
 }
 
@@ -182,152 +270,9 @@ kbd {
   color: var(--pencil);
 }
 
-@media (max-width: 640px) {
-  .build-btn {
-    width: 64px;
-  }
-}
-
-/* Tools closed until a tech pays them: dimmed, a lock in the corner, the goal in the hover card. */
-.build-btn.locked {
-  color: var(--pencil);
-  cursor: not-allowed;
-}
-
-.build-btn.locked .icon:not(.bb-lock) {
-  opacity: 0.5;
-}
-
-.bb-lock {
-  position: absolute;
-  bottom: 3px;
-  right: 4px;
-  color: var(--ink-2);
-}
-
 .bc-lock {
   display: block;
   margin-bottom: var(--sp-1);
   font-weight: 700;
   color: var(--warn-text);
-}
-
-/* The bar is the bottom bracket of the frame: tar, like the top bar, so the map sits between two dark edges
-   and the bark sheets stay the only pale surfaces. */
-.panel.bb-panel {
-  background: linear-gradient(180deg, #26302b, var(--moss-deep) 72%);
-  border-color: #141a16;
-  color: var(--paper-raised);
-}
-
-.bb-panel .tabs {
-  border-bottom-color: #141a16;
-}
-
-.bb-panel .tab {
-  color: var(--paper-raised);
-}
-
-.bb-tabs .tab.on,
-.bb-tabs .tab.on:hover {
-  background: var(--resin);
-  border-color: var(--resin);
-  color: #1a1509;
-}
-
-.bb-tabs .tab:not(.on):hover {
-  background: #33403a;
-}
-
-.bb-panel .build-btn {
-  color: var(--paper-raised);
-}
-
-.bb-panel .build-btn:hover:not(:disabled) {
-  background: #33403a;
-  border-color: #56645c;
-}
-
-.bb-panel .build-btn.on,
-.bb-panel .build-btn.on:hover:not(:disabled) {
-  background: var(--resin);
-  border-color: var(--resin);
-  color: #1a1509;
-}
-
-.bb-panel .build-btn.locked {
-  color: #9a9482;
-}
-
-.bb-panel .build-btn.locked .bb-lock {
-  color: #c2bba8;
-}
-
-
-
-
-/* ---- States and finish of the bar ---- */
-
-/* Tabs span the whole bar: one course per category, the shortcut as a quiet mark in the corner. */
-.bb-tabs {
-  width: 100%;
-}
-
-.bb-tabs .tab {
-  position: relative;
-  flex: 1 1 0;
-  justify-content: center;
-}
-
-.bb-items .build-btn kbd,
-.bb-tabs .tab kbd {
-  position: absolute;
-  top: 3px;
-  right: 5px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: #9a9482;
-  font-family: var(--font-display);
-  font-size: 8px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.02em;
-}
-
-.bb-tabs .tab kbd {
-  top: 2px;
-  right: 6px;
-}
-
-.bb-tabs .tab.on kbd {
-  color: #1a1509;
-  opacity: 0.75;
-}
-
-/* Hover and the live tool belong to the tar bar, never to bark. */
-.bb-panel .build-btn:hover:not(:disabled) {
-  background: #33403a;
-}
-
-.bb-panel .build-btn.on,
-.bb-panel .build-btn.on:hover:not(:disabled) {
-  background: var(--resin);
-  color: #1a1509;
-}
-
-.bb-panel .build-btn.on kbd {
-  color: #1a1509;
-  opacity: 0.8;
-}
-
-/* The card follows the pointer. A clicked tile keeps focus, so focus alone must not hold it open:
-   the keyboard still gets the card through :focus-visible, a mouse click does not. */
-.bb-items .tooltip-wrap:focus-within .tooltip {
-  display: none;
-}
-
-.bb-items .tooltip-wrap:hover .tooltip,
-.bb-items .tooltip-wrap:has(:focus-visible) .tooltip {
-  display: flex;
 }

@@ -1,6 +1,7 @@
 import { addChronicle } from "./chronicle";
 import type { ArticleInput } from "./protocol";
 import type { SimState, StoredArticle } from "./types";
+import { L } from "../i18n";
 
 // Wikipedia articles unlocked by digs (PLAN.md section 13).
 export const ARTICLE_CAP = 500;
@@ -27,11 +28,11 @@ export type ArticlesResult = { ok: true; sim: SimState } | { ok: false; reason: 
 // Stores new articles (ids already stored are ignored), up to the cap, and writes one chronicle line each.
 // Returns the same state when nothing was new.
 export function addArticles(s: SimState, cmd: { articles: ArticleInput[] }): ArticlesResult {
-  if (!isRec(cmd) || !Array.isArray(cmd.articles) || cmd.articles.length > BATCH_MAX) return { ok: false, reason: "Некорректные статьи" };
+  if (!isRec(cmd) || !Array.isArray(cmd.articles) || cmd.articles.length > BATCH_MAX) return { ok: false, reason: L("Некорректные статьи", "Invalid articles") };
   const list: Omit<StoredArticle, "at">[] = [];
   for (const a of cmd.articles) {
     const c = clean(a);
-    if (!c) return { ok: false, reason: "Некорректная статья" };
+    if (!c) return { ok: false, reason: L("Некорректная статья", "Invalid article") };
     list.push(c);
   }
   const at = s.gameMinutes;
@@ -42,7 +43,7 @@ export function addArticles(s: SimState, cmd: { articles: ArticleInput[] }): Art
     if (have.has(a.id) || s.articles.length + added.length >= ARTICLE_CAP) continue;
     have.add(a.id);
     added.push({ ...a, at });
-    chronicle = addChronicle(chronicle, at, "article", `В записной книжке: «${a.title}»`);
+    chronicle = addChronicle(chronicle, at, "article", L(`В записной книжке: «${a.title}»`, `In the notebook: “${a.title}”`));
   }
   if (added.length === 0) return { ok: true, sim: s };
   return { ok: true, sim: { ...s, articles: [...s.articles, ...added], chronicle } };

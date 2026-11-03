@@ -1,9 +1,12 @@
-/* World В«Р‘РµСЂРµСЃС‚Р° Рё РіСЂР°РјРѕС‚Р°В» вЂ” the in-game frame.
-   The top bar is a bark ledger strip across the top of the field: tar ink, Bitter figures, columns divided by
-   vertical lenticels (dashed, like the rows inside the founding sheet). No radius, no offset block shadows. */
+/* World «Береста и грамота» — the top of the in-game frame.
+   Not a full-width bar: three tar plates laid on the field — the town and its day, the resource ledger, the actions —
+   with the map showing between them. A plate is tar with a lit top edge and a row of lenticels along its foot, the
+   bark rule redrawn in the frame's own colour. No radius, no offset block shadows. */
 
 :root {
-  --topbar-h: 64px;
+  --topbar-h: 56px; /* measured at run time (layout.ts); grows when the plates wrap */
+  --plate-h: 48px;
+  --frame-lenticel: repeating-linear-gradient(90deg, var(--frame-line) 0 3px, transparent 3px 10px);
 }
 
 .topbar {
@@ -11,43 +14,72 @@
   left: 0;
   right: 0;
   top: 0;
-  min-height: 64px; /* --topbar-h is the measured height (layout.ts); it grows when the bar wraps */
   z-index: var(--z-panel);
-  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) 0;
+  box-sizing: border-box;
+  pointer-events: none;
+  color: var(--frame-text);
+}
+
+.tb-plate,
+.topbar .stats,
+.tb-end {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  padding: 0 var(--sp-3);
+  height: var(--plate-h);
   box-sizing: border-box;
+  border: var(--bw) solid var(--frame-edge);
   background:
-    repeating-linear-gradient(0deg, rgba(31, 26, 19, 0.045) 0 1px, transparent 1px 18px),
-    linear-gradient(180deg, var(--paper-raised), var(--paper) 72%, var(--paper-shade));
-  border-bottom: 2px solid var(--rule);
-  box-shadow: 0 10px 22px rgba(12, 16, 10, 0.45);
+    var(--frame-lenticel) left bottom 3px / 100% 1px no-repeat,
+    linear-gradient(180deg, var(--frame), var(--frame-deep) 80%);
+  box-shadow:
+    inset 0 1px 0 rgba(233, 236, 223, 0.08),
+    var(--shadow-hard-sm);
+  pointer-events: auto;
+}
+
+/* ---- The town plate: mark, name and date, the clock with its day ruler, speed ---- */
+
+.tb-plate {
+  flex: none;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-2) 0 var(--sp-3);
+}
+
+.tb-mark {
+  width: 22px;
+  height: 22px;
+  color: var(--frame-text);
+  opacity: 0.85;
 }
 
 .tb-city {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  /* Natural width up to 260 px, and it yields first: a long name ellipsizes, the figures never get clipped. */
-  flex: 0 1 auto;
   min-width: 0;
-  max-width: 260px;
+  max-width: 220px;
 }
 
 button.city-name-btn {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ink);
+  color: var(--frame-text);
   font: inherit;
-  cursor: pointer;
   text-align: left;
-  min-width: 0;
-  max-width: 100%;
+  cursor: pointer;
+}
+
+button.city-name-btn:hover:not(:disabled) {
+  background: none;
 }
 
 button.city-name-btn:hover .city-name {
@@ -57,40 +89,87 @@ button.city-name-btn:hover .city-name {
 }
 
 .city-name {
+  overflow: hidden;
   font-family: var(--font-display);
-  font-size: var(--fs-xl);
+  font-size: var(--fs-lg);
   font-weight: 800;
   line-height: var(--lh-tight);
   letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--frame-text);
 }
 
 .city-date {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-display);
-  font-weight: 400;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-  letter-spacing: 0.04em;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--frame-dim);
+}
+
+.tb-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  flex: none;
+}
+
+.tb-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums;
 }
 
 .phase-morning,
 .phase-day,
 .phase-evening {
-  color: var(--warn-text);
+  color: var(--frame-warn);
 }
 
 .phase-night {
-  color: var(--info);
+  color: var(--frame-night);
 }
 
-/* Speed: one tar-outlined block, the live step pressed solid. */
+/* The day: night to 05:00, morning to 11:00, day to 17:00, evening to 22:00, night again (topbarModel dayPhase).
+   Six-hour ticks; the needle is resin, the frame's one warm signal. */
+.tb-ruler {
+  position: relative;
+  display: block;
+  width: 66px;
+  height: 5px;
+  border: var(--bw-hair) solid var(--frame-edge);
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--frame-edge) calc(25% - 1px) 25%),
+    linear-gradient(
+      90deg,
+      #0f1512 0 20.8%,
+      #56604c 20.8% 45.8%,
+      #8b947a 45.8% 70.8%,
+      #56604c 70.8% 91.7%,
+      #0f1512 91.7%
+    );
+}
+
+.tb-ruler i {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 11px;
+  margin-left: -1px;
+  background: var(--resin);
+  box-shadow: 0 0 0 1px var(--frame-edge);
+}
+
+/* Speed: one joined block; the live step is resin. */
 .speed {
   display: flex;
   align-items: center;
@@ -98,17 +177,18 @@ button.city-name-btn:hover .city-name {
 }
 
 .speed button {
-  min-width: 42px;
-  height: 34px;
   justify-content: center;
-  padding: 0 var(--sp-3);
+  min-width: 32px;
+  height: 30px;
   margin-left: calc(-1 * var(--bw));
-  border: var(--bw) solid var(--rule);
+  padding: 0 var(--sp-2);
+  border: var(--bw) solid var(--frame-line);
   border-radius: 0;
-  background: var(--paper-raised);
-  color: var(--ink);
+  background: transparent;
+  color: var(--frame-text);
   font: inherit;
   font-family: var(--font-display);
+  font-size: var(--fs-sm);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
@@ -118,73 +198,117 @@ button.city-name-btn:hover .city-name {
   margin-left: 0;
 }
 
-.speed button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--paper-raised);
+.speed button:hover:not(:disabled) {
+  background-color: var(--frame-raise);
+}
+
+.speed button[aria-pressed="true"],
+.speed button[aria-pressed="true"]:hover {
+  position: relative;
+  border-color: var(--resin);
+  background: var(--resin);
+  color: var(--on-resin);
 }
 
 .speed-note {
-  margin-left: var(--sp-2);
-  font-size: var(--fs-sm);
-  color: var(--pencil);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--frame-night);
   white-space: nowrap;
 }
 
-/* Resources: icon, number, daily delta and caption in a grid; columns divided by a vertical lenticel. */
-.stats {
-  display: flex;
-  gap: var(--sp-1);
-  margin-left: auto;
+/* ---- The ledger: weather, people, food, goods, mood ---- */
+
+.topbar .stats {
+  flex: 0 1 auto;
   min-width: 0;
+  margin-inline: auto;
+  padding: 0 var(--sp-1);
 }
 
 .bar-stat {
-  display: block;
-  padding: 3px 6px;
-  border-radius: 0;
+  display: flex;
+  align-items: center;
+  height: calc(var(--plate-h) - 8px);
+  padding: 0 var(--sp-2);
+  cursor: default;
 }
 
-.bar-stat:hover {
-  background: var(--paper-shade);
+.bar-stat:hover,
+.bar-stat:focus-visible {
+  background: var(--frame-raise);
 }
 
 .bar-stat .stat {
   display: grid;
-  grid-template-columns: 24px auto auto;
-  column-gap: 4px;
+  grid-template-columns: auto auto;
+  column-gap: 6px;
   align-items: center;
 }
 
 .bar-stat .stat .icon {
   grid-row: 1 / 3;
-  color: var(--ink-2);
+  width: 20px;
+  height: 20px;
+  color: var(--frame-dim);
 }
 
 .bar-stat .stat-num {
   grid-column: 2;
-  white-space: nowrap;
   font-family: var(--font-display);
+  font-size: var(--fs-md);
   font-weight: 800;
+  line-height: 1.1;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--frame-text);
 }
 
 .bar-stat .stat-delta {
-  grid-column: 3;
+  grid-column: 2;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: 1.2;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  color: var(--frame-dim);
 }
 
+.bar-stat .stat-delta.up {
+  color: var(--frame-up);
+  font-weight: 700;
+}
+
+.bar-stat .stat-delta.down {
+  color: var(--frame-down);
+}
+
+/* The caption is for screen readers and the tooltip: the icon names the column on the plate. */
 .bar-stat .stat-cap {
-  grid-column: 2 / 4;
-  grid-row: 2;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
-  letter-spacing: 0.06em;
 }
 
-.stat-bad .icon {
-  color: var(--bad);
+/* A short stock: the number takes the status colour, and the tooltip says why in words. */
+.bar-stat .stat-bad .stat-num,
+.bar-stat .stat-bad .icon {
+  color: var(--frame-down);
 }
 
+.bar-stat .stat-warn .stat-num,
+.bar-stat .stat-warn .icon {
+  color: var(--frame-warn);
+}
+
+/* Tooltips under the plates are bark notes. */
 .tip-title {
   display: block;
   margin-bottom: var(--sp-1);
@@ -198,7 +322,6 @@ button.city-name-btn:hover .city-name {
   gap: var(--sp-4);
 }
 
-/* The value of a weather factor: warning or broken, never colour alone (the words carry it too). */
 .tip-row.tip-warn > span:last-child {
   color: var(--warn-text);
 }
@@ -217,23 +340,233 @@ button.city-name-btn:hover .city-name {
   color: var(--pencil);
 }
 
-/* Left column under the bar: warnings, then the town panel. */
+.topbar .tooltip {
+  top: calc(100% + 10px);
+  max-width: 280px;
+  color: var(--ink);
+}
+
+/* ---- Actions: research with its status, the town, the menu ---- */
+
+.tb-end {
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+  padding: 0 var(--sp-1);
+}
+
+.stats ~ .tb-end {
+  margin-left: 0;
+}
+
+.tb-btn,
+.tb-research {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: calc(var(--plate-h) - 8px);
+  padding: 0 var(--sp-2);
+  border: var(--bw-hair) solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--frame-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tb-btn:hover:not(:disabled),
+.tb-research:hover:not(:disabled) {
+  border-color: var(--frame-line);
+  background-color: var(--frame-raise);
+}
+
+.tb-btn[aria-pressed="true"],
+.tb-btn[aria-expanded="true"],
+.tb-research[aria-pressed="true"] {
+  border-color: var(--resin);
+  background: var(--resin);
+  color: var(--on-resin);
+}
+
+.tb-btn[aria-pressed="true"]:hover,
+.tb-btn[aria-expanded="true"]:hover,
+.tb-research[aria-pressed="true"]:hover {
+  background: var(--resin);
+}
+
+.tb-research {
+  min-width: 0;
+  max-width: 230px;
+  text-align: left;
+}
+
+.tb-research-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tb-research-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.1;
+}
+
+.tb-research-what {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--frame-dim);
+}
+
+.tb-research-what b {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--frame-text);
+}
+
+.tb-research-track {
+  display: block;
+  width: 100%;
+  min-width: 96px;
+  height: 2px;
+  background: var(--frame-line);
+}
+
+.tb-research-track > span {
+  display: block;
+  height: 100%;
+  background: var(--resin);
+}
+
+/* Nothing under research: the line says so in words, in the warning colour. */
+.tb-research.is-idle .tb-research-what {
+  color: var(--frame-warn);
+  font-weight: 700;
+}
+
+.tb-research[aria-pressed="true"] .tb-research-what,
+.tb-research[aria-pressed="true"] .tb-research-what b {
+  color: var(--on-resin);
+}
+
+.tb-research[aria-pressed="true"] .tb-research-track {
+  background: rgba(26, 21, 9, 0.3);
+}
+
+.tb-research[aria-pressed="true"] .tb-research-track > span {
+  background: var(--on-resin);
+}
+
+.tb-badge {
+  padding: 0 5px;
+  border: var(--bw-hair) solid var(--ok-text);
+  background: var(--ok-fill);
+  color: var(--ok-text);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tb-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tb-menu-btn {
+  padding: 0 var(--sp-2);
+}
+
+/* The menu is a bark slip hung from the action plate. */
+.tb-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: -6px;
+  z-index: var(--z-tooltip);
+  display: flex;
+  flex-direction: column;
+  min-width: 230px;
+  margin: 0;
+  padding: var(--sp-1) 0;
+  list-style: none;
+  border: var(--bw) solid var(--rule);
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 80%);
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+  animation: sheet-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tb-menu button {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tb-menu button:hover,
+.tb-menu button:focus-visible {
+  background: var(--paper-shade);
+}
+
+.tb-menu kbd {
+  padding: 0 5px;
+  border: var(--bw-hair) solid var(--kbd-border);
+  background: var(--paper-shade);
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* ---- Left column under the plates: warnings, layers, news ---- */
+
 .side-col {
   position: absolute;
-  top: calc(var(--topbar-h) + 14px);
-  left: 12px;
-  width: 330px;
+  top: calc(var(--topbar-h) + var(--sp-2));
+  left: var(--sp-2);
+  width: 300px;
   max-width: calc(100vw - 80px);
-  max-height: calc(100vh - var(--topbar-h) - 230px); /* keep clear of the toolbar */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--sp-2);
   pointer-events: none;
 }
 
-.town {
-  flex: none;
+.side-col > * {
+  max-width: 100%;
 }
 
 .warns {
@@ -246,17 +579,19 @@ button.city-name-btn:hover .city-name {
 }
 
 .warn-chip {
-  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   align-self: flex-start;
   gap: 6px;
-  padding: 4px var(--sp-2);
+  padding: 5px var(--sp-2);
   border: var(--bw) solid var(--bad);
   border-radius: 0;
   background: var(--bad-fill);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--ink);
   font-size: var(--fs-sm);
   font-weight: 700;
+  pointer-events: auto;
 }
 
 .warn-chip .icon {
@@ -264,78 +599,105 @@ button.city-name-btn:hover .city-name {
 }
 
 button.warn-chip {
-  color: var(--ink);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-button.warn-chip:hover {
+button.warn-chip:hover:not(:disabled) {
   background: var(--paper-raised);
 }
 
-/* Layers: icon button group and legend, closed by a lenticel instead of a hairline. */
-.layerbar {
+/* Layers: a tar tag that names the live layer; open, a bark slip with the switches and the legend. */
+.layers {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
-  padding-bottom: var(--sp-2);
-  margin-bottom: var(--sp-1);
-  background-image: var(--lenticel);
-  background-repeat: repeat-x;
-  background-position: left bottom;
-  background-size: 100% 2px;
+  align-items: flex-start;
+  max-width: 100%;
+  pointer-events: auto;
 }
 
 .layer-head {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
+  gap: var(--sp-2);
+  min-height: 34px;
+  padding: 0 var(--sp-2) 0 var(--sp-3);
+  border: var(--bw) solid var(--frame-edge);
+  border-radius: 0;
+  background: linear-gradient(180deg, var(--frame), var(--frame-deep) 80%);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--frame-dim);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.layer-head:hover:not(:disabled) {
+  background: var(--frame-raise);
+}
+
+.layer-head[aria-expanded="true"] {
+  border-bottom-color: var(--frame-deep);
+}
+
+.layer-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--frame-text);
+}
+
+.layer-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 284px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: -1px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border: var(--bw) solid var(--rule);
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 80%);
+  box-shadow: var(--shadow-panel);
+  animation: sheet-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.layer-caption {
   font-family: var(--font-display);
   font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--pencil);
-  cursor: pointer;
-  text-align: left;
-}
-
-.layer-name {
-  margin-left: auto;
-  font-size: var(--fs-sm);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--ink);
 }
 
 .layer-group {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 34px);
   gap: 2px;
 }
 
-/* Between the exclusive overlays and the independent place names switch. */
-.layer-sep {
-  width: 2px;
-  align-self: stretch;
-  margin: 2px var(--sp-1);
-  background: repeating-linear-gradient(180deg, var(--rule-dotted) 0 3px, transparent 3px 8px);
-}
-
 .layer-group .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
 }
 
 .layer-group .icon-btn[aria-pressed="true"],
 .layer-group .icon-btn[aria-pressed="true"]:hover:not(:disabled) {
+  border-color: var(--ink);
   background-color: var(--ink);
   color: var(--paper-raised);
+}
+
+/* The legend of a live layer stays on screen when the slip is closed: a bark strip under the tag. */
+.layer-legend {
+  margin-top: -1px;
+  padding: 6px var(--sp-3);
+  border: var(--bw) solid var(--rule);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-hard-sm);
 }
 
 .legend {
@@ -368,7 +730,7 @@ button.warn-chip:hover {
   border-radius: 0;
 }
 
-/* В«РС‚РѕРіРё РґРЅСЏВ»: sits in the centre column (CentreColumn). */
+/* «Итоги дня»: sits in the centre column (CentreColumn). */
 .day-summary {
   pointer-events: auto;
 }
@@ -385,153 +747,13 @@ button.warn-chip:hover {
   padding: 2px 0;
 }
 
-/* В«РћР± РёРіСЂРµВ»: small, at the far right end; takes the free space itself when the resources are not shown yet. */
-.tb-end {
-  display: inline-flex;
-  gap: var(--sp-1);
-  margin-left: auto;
-  flex: none;
-}
-
-.stats ~ .tb-end {
-  margin-left: var(--sp-2);
-}
-
-.icon-btn[aria-pressed="true"] {
-  border-color: var(--rule);
-  background: var(--paper-shade);
-}
-
-/* В«РќР°СѓРєР°В» button with the badge: a finished tech or an idle science. The badge hangs below the button as a tied
-   tag, so it never covers the last resource column. */
-.tb-tech {
-  position: relative;
-  display: inline-flex;
-}
-.tb-badge {
-  position: absolute;
-  top: calc(100% + 5px);
-  right: 0;
-  padding: 1px 5px;
-  border: var(--bw-hair) solid var(--rule);
-  border-radius: 0;
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
-  font-weight: 800;
-  line-height: 14px;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: var(--shadow-hard-sm);
-}
-.tb-badge-done {
-  background: var(--ok-fill);
-  color: var(--ok-text);
-}
-.tb-badge-idle {
-  background: var(--warn-fill);
-  color: var(--warn-text);
-}
-
-/* ---- Surface hierarchy ----
-   The frame is tar, the records are bark, the ground is moss. The top bar and the build bar are the brackets of
-   the frame: dark, so the bark sheets read as pages laid on the interface instead of the whole screen being paper. */
-.topbar {
-  background: linear-gradient(180deg, #26302b, var(--moss-deep) 72%);
-  border-bottom: 2px solid #141a16;
-  color: var(--paper-raised);
-}
-
-button.city-name-btn,
-.city-name {
-  color: var(--paper-raised);
-}
-
-.city-date {
-  color: #d5cebb;
-}
-
-.phase-morning,
-.phase-day,
-.phase-evening {
-  color: #e8c27a;
-}
-
-.phase-night {
-  color: #a9c8dd;
-}
-
-.speed button {
-  background: transparent;
-  border-color: #56645c;
-  color: var(--paper-raised);
-}
-
-.speed button:hover:not(:disabled) {
-  background-color: #33403a;
-}
-
-.speed button[aria-pressed="true"],
-.speed button[aria-pressed="true"]:hover {
-  background: var(--resin);
-  border-color: var(--resin);
-  color: #1a1509;
-}
-
-.speed-note,
-.bar-stat .stat-cap,
-.bar-stat .stat-delta {
-  color: #c2bba8;
-}
-
-.bar-stat .stat .icon {
-  color: #d8d1be;
-}
-
-.bar-stat .stat-num {
-  color: var(--paper-raised);
-}
-
-.bar-stat:hover {
-  background: #33403a;
-}
-
-.topbar .icon-btn {
-  color: var(--paper-raised);
-}
-
-.topbar .icon-btn:hover:not(:disabled) {
-  background: #33403a;
-  border-color: #56645c;
-}
-
-.topbar .icon-btn[aria-pressed="true"] {
-  background: var(--resin);
-  border-color: var(--resin);
-  color: #1a1509;
-}
-
-
-
-
 /* ---- The mark ----
    The icon ships as bright green strokes, which belongs to no surface here. Used as a mask it takes the colour of
-   whatever it sits in: bark on the tar bar, ink on a sheet. */
+   whatever it sits in: bark on the tar plate, ink on a sheet. */
 .logo-mark {
   display: block;
   flex: none;
   background-color: currentColor;
-  -webkit-mask: url("/rebirth-icon.svg") center / contain no-repeat;
-  mask: url("/rebirth-icon.svg") center / contain no-repeat;
-}
-
-/* Always present, at the head of the frame, quieter than the city name it precedes. */
-.topbar::before {
-  content: "";
-  flex: none;
-  width: 22px;
-  height: 22px;
-  background-color: var(--paper-raised);
-  opacity: 0.85;
   -webkit-mask: url("/rebirth-icon.svg") center / contain no-repeat;
   mask: url("/rebirth-icon.svg") center / contain no-repeat;
 }

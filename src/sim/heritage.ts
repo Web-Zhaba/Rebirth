@@ -1,6 +1,7 @@
 import { INSIGHTS, type InsightDef } from "./tech";
 import type { FoundFoundation, ProgressState, SimState } from "./types";
 import type { DomainId } from "./domains";
+import { L } from "../i18n";
 
 // Which OpenMapTiles POI classes mark a notable old building and which knowledge domain it feeds
 // (PLAN-research.ru.md section 3). Static; the values were checked against real z14 tiles. A game
@@ -67,31 +68,31 @@ export const siteDomain = (cls: string | undefined): DomainId | null => heritage
 
 // What a kind is called on the map and in the panel (neutral wording, no historical claim).
 export const KIND_NAME: Record<string, string> = {
-  castle: "Замок",
-  monument: "Памятный знак",
-  town_hall: "Здание управления",
-  school: "Школа",
-  college: "Училище",
-  library: "Библиотека",
-  museum: "Музей",
-  theatre: "Театр",
-  place_of_worship: "Культовое здание",
-  hospital: "Больница",
-  doctors: "Медицинский кабинет",
-  pharmacy: "Аптека",
-  harbor: "Пристань",
-  ferry_terminal: "Паромная пристань",
-  bank: "Банк",
-  marketplace: "Рынок",
-  department_store: "Универмаг",
-  mall: "Торговый центр",
-  wholesale: "Оптовый склад",
-  station: "Вокзал",
-  halt: "Остановочный пункт",
-  bus_station: "Автовокзал",
-  car_repair: "Автомастерская",
+  castle: L("Замок", "Castle"),
+  monument: L("Памятный знак", "Memorial"),
+  town_hall: L("Здание управления", "Administration building"),
+  school: L("Школа", "School"),
+  college: L("Училище", "College"),
+  library: L("Библиотека", "Library"),
+  museum: L("Музей", "Museum"),
+  theatre: L("Театр", "Theatre"),
+  place_of_worship: L("Культовое здание", "Place of worship"),
+  hospital: L("Больница", "Hospital"),
+  doctors: L("Медицинский кабинет", "Doctor’s office"),
+  pharmacy: L("Аптека", "Pharmacy"),
+  harbor: L("Пристань", "Pier"),
+  ferry_terminal: L("Паромная пристань", "Ferry pier"),
+  bank: L("Банк", "Bank"),
+  marketplace: L("Рынок", "Marketplace"),
+  department_store: L("Универмаг", "Department store"),
+  mall: L("Торговый центр", "Shopping centre"),
+  wholesale: L("Оптовый склад", "Warehouse"),
+  station: L("Вокзал", "Railway station"),
+  halt: L("Остановочный пункт", "Railway halt"),
+  bus_station: L("Автовокзал", "Bus station"),
+  car_repair: L("Автомастерская", "Car workshop"),
 };
-export const kindName = (cls: string | undefined): string => (cls && KIND_NAME[cls]) || "Старая постройка";
+export const kindName = (cls: string | undefined): string => (cls && KIND_NAME[cls]) || L("Старая постройка", "Old building");
 
 // The template a kind works as in the "working" mode; every other kind is a monument only.
 const WORK_TEMPLATE: Record<string, string> = {

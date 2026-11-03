@@ -4,6 +4,7 @@ import { DebugCube } from "../debug/cube";
 import { Engine } from "../engine";
 import { WebGpuUnavailable } from "../gpu/device";
 import { runBench, type BenchHost } from "./bench";
+import { L } from "../../i18n";
 
 // N0 spike (docs/PLAN-engine.md section 5): globe terrain on raw WebGPU, camera, precision cube and benchmark. Dev page:
 // /next.html. URL: lat, lng, d (distance m), hd (heading), p (pitch), cube=lat,lng, orbit=deg/s, tau, lod=1,
@@ -35,7 +36,7 @@ async function main(): Promise<void> {
   try {
     engine = await Engine.create(canvas);
   } catch (e) {
-    fail(e instanceof WebGpuUnavailable ? `WebGPU недоступен: ${e.message}` : String(e));
+    fail(e instanceof WebGpuUnavailable ? L(`WebGPU недоступен: ${e.message}`, `WebGPU unavailable: ${e.message}`) : String(e));
     throw e;
   }
   const { device } = engine;

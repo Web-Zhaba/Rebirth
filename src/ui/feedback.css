@@ -73,126 +73,6 @@
   transition: width 60ms linear;
 }
 
-.event-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-}
-.event-card-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-}
-button.event-card-pause-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  background: var(--paper-shade);
-  border: var(--bw-hair) solid var(--rule);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--ink);
-  cursor: pointer;
-}
-button.event-card-pause-btn:hover {
-  background: var(--paper-raised);
-}
-.event-card-timer {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.event-card-timer.urgent {
-  color: var(--bad);
-  font-weight: 700;
-}
-.event-card-autopause {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  color: var(--pencil);
-  cursor: pointer;
-  user-select: none;
-}
-.event-card-autopause input {
-  margin: 0;
-  cursor: pointer;
-}
-
-.event-card {
-  border-color: var(--warn);
-}
-.event-card:focus-visible {
-  outline: 2px solid var(--info);
-  outline-offset: 2px;
-}
-.event-card-title {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-family: var(--font-display);
-  font-size: var(--fs-md);
-  font-weight: 700;
-}
-.event-card-text {
-  margin: var(--sp-1) 0 0;
-}
-.event-card-place {
-  margin-top: var(--sp-1);
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: var(--info);
-  text-decoration: underline;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-}
-.event-card-option {
-  display: block;
-  width: 100%;
-  margin-top: var(--sp-2);
-  text-align: left;
-}
-.event-card-effect {
-  display: block;
-  font-weight: 400;
-  font-size: var(--fs-sm);
-}
-.event-card-safe {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
-  color: var(--pencil);
-}
-.event-card-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-1);
-  margin-top: var(--sp-2);
-  padding-top: var(--sp-2);
-  border-top: var(--bw-hair) dotted var(--rule-dotted);
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-}
-.event-card-key {
-  flex-basis: 100%;
-  font-size: var(--fs-xs);
-  color: var(--pencil);
-}
-
 /* Toasts under the side column. */
 .toasts {
   flex: none;
@@ -280,6 +160,7 @@ button.toast-main:hover .toast-text {
   color: var(--ink);
   cursor: pointer;
   white-space: nowrap;
+  pointer-events: auto; /* the marker layer over the map lets clicks through */
 }
 .map-badge:hover {
   background: var(--paper);
@@ -367,44 +248,64 @@ button.toast-main:hover .toast-text {
   }
 }
 
-/* Builders' tasks, bottom-right of the HUD (BuilderTasks.tsx). */
+/* Builders' tasks (BuilderTasks.tsx): a tar tag in the bottom-left corner; open, a bark list rises above it. */
 .builder-tasks {
-  width: min(260px, calc(100vw - 16px));
-  padding: var(--sp-2) var(--sp-3);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  width: min(280px, calc(100vw - 16px));
   font-size: var(--fs-sm);
+  pointer-events: none;
 }
 .builder-tasks-head {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
+  align-items: center;
   gap: var(--sp-2);
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--frame-edge);
+  border-radius: 0;
+  background: linear-gradient(180deg, var(--frame), var(--frame-deep) 80%);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--frame-text);
   font: inherit;
   font-weight: 700;
-  color: var(--ink);
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
-  min-height: 24px;
+  pointer-events: auto;
+}
+.builder-tasks-head:hover:not(:disabled) {
+  background: var(--frame-raise);
+}
+.builder-tasks-head .icon {
+  color: var(--frame-dim);
+}
+.builder-tasks-head b {
+  font-family: var(--font-display);
 }
 .builder-tasks-count {
   font-weight: 400;
-  color: var(--ink-2);
-  white-space: nowrap;
+  color: var(--frame-dim);
 }
 .builder-tasks-list {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  margin: var(--sp-2) 0 0;
-  padding: 0;
+  align-self: stretch;
+  margin: 0 0 -1px;
+  padding: var(--sp-3);
   list-style: none;
+  border: var(--bw) solid var(--rule);
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 80%);
+  box-shadow: var(--shadow-panel);
+  pointer-events: auto;
+  animation: sheet-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .builder-task {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .builder-task-title {
   overflow: hidden;
@@ -428,6 +329,7 @@ button.toast-main:hover .toast-text {
 .builder-task-line .builder-task-title {
   flex: 1 1 auto;
   min-width: 0;
+  font-weight: 700;
 }
 .builder-task-first {
   font-size: var(--fs-xs);
@@ -451,58 +353,425 @@ button.toast-main:hover .toast-text {
   pointer-events: none;
 }
 
-.research-status {
-  flex: none;
+/* ---- World В«Р‘РµСЂРµСЃС‚Р° Рё РіСЂР°РјРѕС‚Р°В» вЂ” the feedback layer ----
+   Toasts and event cards are bark notes with tar edges; the kind of a note is carried by its icon, not by a
+   coloured side bar. Map badges are dark chips so they read on the moss floor. */
+
+.toast {
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 78%, var(--paper-shade));
+  border: var(--bw) solid var(--rule);
+  border-radius: 0;
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+}
+
+.toast-ok .toast-main .icon { color: var(--ok); }
+.toast-warn .toast-main .icon { color: var(--warn); }
+.toast-bad .toast-main .icon { color: var(--bad); }
+.toast-info .toast-main .icon { color: var(--info); }
+
+.toast-text { font-size: var(--fs-sm); line-height: 1.35; }
+
+/* Event card (EventCard.tsx): a tar strip with the title, the hours left and the card's tools over a bark note with
+   the text and the two choices. The safe choice carries a resin edge and its key, never colour alone. */
+.event-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: var(--bw) solid var(--frame-edge);
+  border-radius: 0;
+  background: linear-gradient(178deg, var(--paper-raised), var(--paper) 72%, var(--paper-shade));
+  box-shadow: var(--shadow-panel);
+  color: var(--ink);
+  pointer-events: auto; /* the left column lets the pointer through to the map */
+}
+
+.event-card:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+}
+
+.event-card-head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  min-height: 36px;
+  padding: 0 2px 0 var(--sp-3);
+  background: linear-gradient(180deg, var(--frame), var(--frame-deep) 80%);
+  color: var(--frame-text);
+}
+
+.event-card-head > .icon {
+  flex: none;
+  color: var(--resin);
+}
+
+.event-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 7px 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.event-card-timer {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--frame-dim);
+}
+
+.event-card-timer.urgent {
+  color: var(--frame-down);
+}
+
+.event-card-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+button.event-card-tool {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--frame-text);
+  cursor: pointer;
+}
+
+button.event-card-tool:hover {
+  background: var(--frame-raise);
+}
+
+button.event-card-tool[aria-pressed="true"] {
+  background: var(--resin);
+  color: var(--on-resin);
+}
+
+button.event-card-tool:focus-visible {
+  outline: 2px solid var(--frame-night);
+  outline-offset: -2px;
+}
+
+.event-card-text {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3) 0;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.event-card-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.event-card-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   width: 100%;
-  padding: var(--sp-1) var(--sp-2);
-  border: var(--bw-hair) solid var(--rule);
-  border-left: 0;
-  border-radius: var(--radius-sm);
+  padding: 6px var(--sp-2) 6px 10px;
+  border: var(--bw-hair) solid var(--rule-soft);
+  border-radius: 0;
   background: var(--paper-raised);
-  box-shadow: var(--shadow-hard-sm);
   color: var(--ink);
   font: inherit;
-  font-size: var(--fs-sm);
   text-align: left;
   cursor: pointer;
 }
-.research-status:hover {
+
+.event-card-option:hover {
+  background: var(--paper-sunk);
+}
+
+.event-card-option.is-safe::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 3px;
+  background: var(--resin);
+}
+
+.event-card-label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.event-card-label strong {
+  flex: 1 1 auto;
+}
+
+.event-card-label kbd {
+  flex: none;
+  padding: 0 4px;
+  border: var(--bw-hair) solid var(--kbd-border);
+  background: var(--paper-sunk);
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.event-card-effect {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--pencil);
+}
+
+.event-card-safe {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--resin-deep);
+}
+
+.event-card-autopause {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin: 0 var(--sp-3) var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--pencil);
+  cursor: pointer;
+  user-select: none;
+}
+
+.event-card-autopause input {
+  margin: 0;
+  accent-color: var(--resin-deep);
+  cursor: pointer;
+}
+
+.map-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px 1px 3px;
+  background: var(--paper-raised);
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-hard-sm);
+  font: 700 var(--fs-xs) / 1.2 var(--font-body);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  pointer-events: auto; /* the marker layer over the map lets clicks through */
+}
+.map-badge:hover {
   background: var(--paper);
 }
-.research-status .icon {
-  flex: none;
+.map-badge:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
 }
-.research-status-body {
-  flex: 1;
+.map-badge-bad {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.map-badge-warn {
+  border-color: var(--warn);
+}
+.map-badge-build {
+  color: var(--info);
+  border-color: var(--info);
+}
+
+/* Hotkeys cheat sheet (HotkeysDialog). */
+.hotkeys-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+.hotkeys-dialog .dialog-head,
+.hotkeys-dialog .dialog-head .icon-btn {
+  position: static;
+  inset: auto;
+  transform: none;
+}
+.hotkeys-dialog .dialog-head .icon-btn {
+  flex: 0 0 32px;
+  margin-left: auto;
+}
+.hotkeys-body {
+  display: grid;
+  gap: var(--sp-3);
+}
+.hotkeys-sec-title {
+  margin: 0 0 var(--sp-1);
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+}
+.hotkeys-table {
+  display: grid;
+}
+.hotkeys-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 9em) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 3px 0;
+  border-bottom: var(--bw-hair) dotted var(--rule-soft);
+}
+.hotkeys-keys {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
   min-width: 0;
+}
+.hotkey-kbd {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 var(--sp-1);
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hotkeys-desc {
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+@media (max-width: 520px) {
+  .hotkeys-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* Builders' tasks (BuilderTasks.tsx): a tar tag in the bottom-left corner; open, a bark list rises above it. */
+.builder-tasks {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  width: min(280px, calc(100vw - 16px));
+  font-size: var(--fs-sm);
+  pointer-events: none;
+}
+.builder-tasks-head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--frame-edge);
+  border-radius: 0;
+  background: linear-gradient(180deg, var(--frame), var(--frame-deep) 80%);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--frame-text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.builder-tasks-head:hover:not(:disabled) {
+  background: var(--frame-raise);
+}
+.builder-tasks-head .icon {
+  color: var(--frame-dim);
+}
+.builder-tasks-head b {
+  font-family: var(--font-display);
+}
+.builder-tasks-count {
+  font-weight: 400;
+  color: var(--frame-dim);
+}
+.builder-tasks-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-2);
+  align-self: stretch;
+  margin: 0 0 -1px;
+  padding: var(--sp-3);
+  list-style: none;
+  border: var(--bw) solid var(--rule);
+  background: linear-gradient(180deg, var(--paper-raised), var(--paper) 80%);
+  box-shadow: var(--shadow-panel);
+  pointer-events: auto;
+  animation: sheet-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.research-status-body small {
-  color: var(--pencil);
-  font-size: var(--fs-xs);
+.builder-task {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.builder-task-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.research-status-track {
-  display: block;
-  height: 3px;
-  overflow: hidden;
-  border-radius: 0;
-  background: var(--rule-soft);
+.builder-tasks-list[hidden] {
+  display: none;
 }
-.research-status-track > span {
-  display: block;
-  height: 100%;
-  background: var(--info);
+.builder-tasks-more {
+  color: var(--ink-2);
 }
-.research-idle {
-  border-left-color: transparent;
+
+/* One line per site: name, a "first" tag for the priority site, and the expected finish time on the right. */
+.builder-task-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.builder-task-line .builder-task-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+}
+.builder-task-first {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--warn-text);
+  white-space: nowrap;
+}
+.builder-task-eta {
+  margin-left: auto;
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ring over the site under a hovered builder task (BuilderTasks.tsx). */
+.builder-focus-ring {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--info);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 /* ---- World В«Р‘РµСЂРµСЃС‚Р° Рё РіСЂР°РјРѕС‚Р°В» вЂ” the feedback layer ----
@@ -592,4 +861,7 @@ button.toast-main:hover .toast-text {
 .map-badge-bad { background: var(--bad); color: var(--paper-raised); border-color: #05070c; }
 .map-badge-warn { background: var(--warn-fill); color: var(--warn-text); }
 .map-badge-build { background: var(--paper-raised); color: var(--ink); }
+.map-badge-article { background: var(--paper-raised); color: var(--info); border-color: var(--info); }
+.map-badge-in { display: inline-flex; align-items: center; gap: 3px; }
+.map-badge-text { display: inline-block; vertical-align: bottom; max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
 

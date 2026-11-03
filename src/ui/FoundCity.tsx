@@ -11,6 +11,7 @@ import { siteNotes, suggestNames } from "./foundModel";
 import { PlaceSearch } from "./PlaceSearch";
 import "./journal.css";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { L } from "../i18n";
 
 interface Point {
   lat: number;
@@ -26,13 +27,13 @@ interface Info {
 }
 
 const LAND_RU: Record<Land, string> = {
-  water: "вода",
-  forest: "лес",
-  meadow: "луг",
-  wetland: "болото",
-  sand: "песок",
-  rock: "скалы",
-  ice: "лёд",
+  water: L("вода", "water"),
+  forest: L("лес", "forest"),
+  meadow: L("луг", "meadow"),
+  wetland: L("болото", "marsh"),
+  sand: L("песок", "sand"),
+  rock: L("скалы", "rock"),
+  ice: L("лёд", "ice"),
 };
 
 const SITE_RADIUS = 150; // m around the clicked spot
@@ -59,7 +60,7 @@ export function FoundCity({ view }: { view: View }) {
   useEffect(() => {
     const onClick = (e: ViewPointer) => {
       if (view.isWaterAt(e.point)) {
-        setMsg("Здесь вода — выберите сушу");
+        setMsg(L("Здесь вода — выберите сушу", "This is water — pick dry land"));
         return;
       }
       setMsg("");
@@ -115,13 +116,13 @@ export function FoundCity({ view }: { view: View }) {
       <div class="logo-mark found-mark" role="img" aria-label="Rebirth" />
       <PlaceSearch view={view} />
       <div class="found-task" role="status" aria-live="polite">
-        {msg || "Выберите место для нового поселения"}
+        {msg || L("Выберите место для нового поселения", "Choose a site for the new settlement")}
       </div>
       {point && (
         <section class="found" aria-labelledby={SEMANTIC_IDS.foundCityTitle}>
           <div class="found-sheet">
             <div class="found-seal" aria-hidden="true">
-              ЗЕМЛЯ
+              {L("ЗЕМЛЯ", "LAND")}
             </div>
             <form
               class="found-form"
@@ -130,28 +131,28 @@ export function FoundCity({ view }: { view: View }) {
                 found();
               }}
             >
-              <h2 id={SEMANTIC_IDS.foundCityTitle}>Основать поселение</h2>
+              <h2 id={SEMANTIC_IDS.foundCityTitle}>{L("Основать поселение", "Found a settlement")}</h2>
               <div class="coords">
                 {point.lat.toFixed(4)}, {point.lng.toFixed(4)}
               </div>
               <div class="found-rule" aria-hidden="true" />
               <div class="found-land" aria-live="polite">
-                {failed && <div class="found-note">Не удалось осмотреть землю: карта ещё грузится.</div>}
-                {!info && !failed && <div class="found-note">Осматриваем землю…</div>}
+                {failed && <div class="found-note">{L("Не удалось осмотреть землю: карта ещё грузится.", "Could not survey the land: the map is still loading.")}</div>}
+                {!info && !failed && <div class="found-note">{L("Осматриваем землю…", "Surveying the land…")}</div>}
                 {info && (
                   <>
                     <dl class="found-facts">
-                      <dt>Под лагерем</dt>
+                      <dt>{L("Под лагерем", "Under the camp")}</dt>
                       <dd>{LAND_RU[info.land]}</dd>
-                      <dt>Высота</dt>
-                      <dd>{Math.round(info.elevation)} м</dd>
-                      <dt>Уклон</dt>
+                      <dt>{L("Высота", "Elevation")}</dt>
+                      <dd>{Math.round(info.elevation)} {L("м", "m")}</dd>
+                      <dt>{L("Уклон", "Slope")}</dt>
                       <dd>{Math.round(info.slope)}°</dd>
-                      <dt>Лес вокруг</dt>
+                      <dt>{L("Лес вокруг", "Forest around")}</dt>
                       <dd>{pct(info.site.forest)}</dd>
-                      <dt>Вода вокруг</dt>
+                      <dt>{L("Вода вокруг", "Water around")}</dt>
                       <dd>{pct(info.site.water)}</dd>
-                      <dt>Камень, песок</dt>
+                      <dt>{L("Камень, песок", "Stone, sand")}</dt>
                       <dd>{pct(info.site.rock)}</dd>
                     </dl>
                     {notes.length > 0 && (
@@ -164,7 +165,7 @@ export function FoundCity({ view }: { view: View }) {
                   </>
                 )}
               </div>
-              <div class="found-names" role="group" aria-label="Подходящие названия">
+              <div class="found-names" role="group" aria-label={L("Подходящие названия", "Suggested names")}>
                 {names.map((n) => (
                   <button
                     key={n}
@@ -184,13 +185,13 @@ export function FoundCity({ view }: { view: View }) {
                 ref={input}
                 type="text"
                 maxLength={40}
-                aria-label="Название поселения"
-                placeholder="Название поселения"
+                aria-label={L("Название поселения", "Settlement name")}
+                placeholder={L("Название поселения", "Settlement name")}
                 value={name}
                 onInput={(e) => setName((e.target as HTMLInputElement).value)}
               />
               <Button type="submit" variant="primary" disabled={!valid}>
-                Основать
+                {L("Основать", "Found")}
               </Button>
             </form>
           </div>

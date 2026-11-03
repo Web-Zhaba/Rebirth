@@ -354,8 +354,10 @@ button:hover:not(:disabled) {
   background-color: var(--paper-shade);
 }
 
-.speed button[aria-pressed="true"]:hover {
-  background-color: var(--ink);
+/* A pressed icon toggle reads as set. */
+.icon-btn[aria-pressed="true"] {
+  border-color: var(--rule);
+  background: var(--paper-shade);
 }
 
 .btn {
@@ -594,24 +596,39 @@ button:hover:not(:disabled) {
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   max-width: calc(100% - 12px);
-  padding: 0 0 0 6px;
+  padding: 0 6px 0 0;
   background-color: var(--paper);
   color: var(--ink);
-  border: var(--bw) solid var(--ink);
+  border: var(--bw) solid var(--frame-edge);
   font-size: var(--fs-xs);
+  line-height: 1.3;
 }
 
+/* Folded, the credits are one tar square in the corner, like the map controls. */
 .engine-attrib summary {
+  flex: none;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   list-style: none;
+  font-family: var(--font-display);
+  font-style: italic;
   font-weight: 700;
-  background-color: var(--paper-shade);
+  background-color: var(--frame-deep);
+  color: var(--frame-text);
   cursor: pointer;
+}
+
+.engine-attrib summary:hover {
+  background-color: var(--frame-raise);
+}
+
+.engine-attrib summary:focus-visible {
+  outline: 2px solid var(--frame-night);
+  outline-offset: -2px;
 }
 
 .engine-attrib summary::-webkit-details-marker {
@@ -619,7 +636,9 @@ button:hover:not(:disabled) {
 }
 
 .engine-attrib:not([open]) {
+  gap: 0;
   padding: 0;
+  background-color: var(--frame-deep);
 }
 
 .engine-stats {

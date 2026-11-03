@@ -6,6 +6,18 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "5173", "--strictPort", "--host", "127.0.0.1"],
       "port": 5173
+    },
+    {
+      "name": "villagers",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5180", "--strictPort", "--host", "127.0.0.1"],
+      "port": 5180
+    },
+    {
+      "name": "yandex-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--outDir", "dist-yandex", "--port", "5190", "--strictPort", "--host", "127.0.0.1"],
+      "port": 5190
     }
   ]
 }

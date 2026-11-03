@@ -39,6 +39,20 @@
   --moss-light: #38443a;
   --bark-edge: #a8946f;
 
+  /* Frame: the tar plates of the HUD that sit on the field (bar plates, build dock, builders' tag). */
+  --frame: #26302b;
+  --frame-deep: #1b241f;
+  --frame-edge: #111713;
+  --frame-raise: #33403a;
+  --frame-line: #4f5d55;
+  --frame-text: #e9ecdf;
+  --frame-dim: #c2bba8;
+  --frame-up: #a9d29a;
+  --frame-down: #f0a890;
+  --frame-warn: #e8c27a;
+  --frame-night: #a9c8dd;
+  --on-resin: #1a1509;
+
   /* Accents, one per meaning. Resin is the world's only warm signal. */
   --resin: #c98f22;
   --resin-deep: #a97b1e;

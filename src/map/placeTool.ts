@@ -16,6 +16,7 @@ import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
 import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
+import { decimal, L } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
 const BUCKET = 16;
@@ -26,7 +27,7 @@ type Pt = [number, number];
 const bucketKey = (bx: number, by: number) => bx * 65536 + by;
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 const pct = (v: number) => `${Math.round(v * 100)} %`;
-const gaText = (ha: number) => ha.toFixed(1).replace(".", ",");
+const gaText = (ha: number) => decimal(ha.toFixed(1));
 
 interface Verdict {
   ok: boolean;
@@ -118,9 +119,9 @@ export function attachPlaceTool(view: View): void {
 
   // ----- evaluation -----
   const siteText = (id: PlaceTool, site: Site, t: BuildingTemplate, center: Pt): string => {
-    if (id === "woodcutter") return `Лес вокруг: ${pct(site.forest)}`;
-    if (id === "fisher") return `Вода рядом: ${pct(site.water)}`;
-    if (id === "forager") return `Лес вокруг: ${pct(site.forest)}`;
+    if (id === "woodcutter") return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
+    if (id === "fisher") return L(`Вода рядом: ${pct(site.water)}`, `Water nearby: ${pct(site.water)}`);
+    if (id === "forager") return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
     if (id === "gumno") {
       let n = 0;
       let ha = 0;
@@ -131,9 +132,9 @@ export function attachPlaceTool(view: View): void {
           ha += haOf(f);
         }
       }
-      return n > 0 ? `${t.name} · поля рядом: ${n} (${gaText(ha)} га)` : `${t.name} · полей рядом нет`;
+      return n > 0 ? L(`${t.name} · поля рядом: ${n} (${gaText(ha)} га)`, `${t.name} · fields nearby: ${n} (${gaText(ha)} ha)`) : L(`${t.name} · полей рядом нет`, `${t.name} · no fields nearby`);
     }
-    if (isService(id)) return `${t.name} · охват ${SERVICES[id].reach} м по дорогам`;
+    if (isService(id)) return L(`${t.name} · охват ${SERVICES[id].reach} м по дорогам`, `${t.name} · reach ${SERVICES[id].reach} m by road`);
     return t.name;
   };
 
@@ -168,7 +169,7 @@ export function attachPlaceTool(view: View): void {
         site = { forest: 1, water: 1, rock: 0 }; // optimistic: only the lot itself is judged until sampled
         clearTimeout(timer);
         timer = window.setTimeout(() => {
-          siteAt(f, center[0], center[1], radius, state.value?.clearings).then(refresh, () => setLabel("Нет данных о местности"));
+          siteAt(f, center[0], center[1], radius, state.value?.clearings).then(refresh, () => setLabel(L("Нет данных о местности", "No terrain data")));
         }, SAMPLE_DELAY_MS);
       }
     }
@@ -232,13 +233,13 @@ export function attachPlaceTool(view: View): void {
     if (!id || !local) return;
     if (view.metersPerPixel() > ZONE_MAX_MPP) {
       draw(id, null);
-      setLabel("Приблизьте карту");
+      setLabel(L("Приблизьте карту", "Zoom in on the map"));
       return;
     }
     const v = evaluate(id, local[0], local[1]);
     draw(id, v);
     view.canvas.style.cursor = placementCursor(true, v ? (v.pending ? "pending" : v.ok ? "ok" : "bad") : "none");
-    setLabel(v ? v.text : "Здесь нет дороги");
+    setLabel(v ? v.text : L("Здесь нет дороги", "There is no road here"));
   }
 
   // ----- events -----
@@ -256,14 +257,14 @@ export function attachPlaceTool(view: View): void {
     const f = frame.value;
     if (!id || !f || busy || spaceDown) return;
     if (view.metersPerPixel() > ZONE_MAX_MPP) {
-      flash("Приблизьте карту");
+      flash(L("Приблизьте карту", "Zoom in on the map"));
       return;
     }
     const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
     local = [x, y];
     const v = evaluate(id, x, y);
     if (!v) {
-      flash("Здесь нет места вдоль дороги");
+      flash(L("Здесь нет места вдоль дороги", "No room along the road here"));
       return;
     }
     if (!v.ok) {
@@ -276,17 +277,17 @@ export function attachPlaceTool(view: View): void {
     measure
       .then((site) => {
         const st = state.value;
-        const check = st ? canPlace(st, t, v.edge, v.side, v.i, site) : { ok: false as const, reason: "Нет данных" };
+        const check = st ? canPlace(st, t, v.edge, v.side, v.i, site) : { ok: false as const, reason: L("Нет данных", "No data") };
         if (!check.ok) {
           flash(check.reason);
           return;
         }
         return sendCmd({ type: "placeBuilding", template: id, edge: v.edge, side: v.side, i: v.i, site }).then((r) => {
-          if (!r.ok) flash(r.reason ?? "Не удалось поставить здание");
+          if (!r.ok) flash(r.reason ?? L("Не удалось поставить здание", "Could not place the building"));
           else play("place");
         });
       })
-      .catch(() => flash("Нет данных о местности"))
+      .catch(() => flash(L("Нет данных о местности", "No terrain data")))
       .then(() => {
         busy = false;
         refresh();

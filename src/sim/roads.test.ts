@@ -155,8 +155,8 @@ describe("segmentCost", () => {
     elev: Array.from({ length: land.length + 1 }, () => 100),
   });
   it("applies land multipliers", () => {
-    expect(segmentCost(flat(["meadow", "meadow"]), "dirt").labor).toBeCloseTo(20);
-    expect(segmentCost(flat(["forest", "sand"]), "dirt").labor).toBeCloseTo(10 * 3 + 10 * 1.2);
+    expect(segmentCost(flat(["meadow", "meadow"]), "dirt").labor).toBeCloseTo(8);
+    expect(segmentCost(flat(["forest", "sand"]), "dirt").labor).toBeCloseTo(0.4 * 10 * 3 + 0.4 * 10 * 1.2);
     expect(segmentCost(flat(["wetland", "rock", "ice"]), "path").labor).toBeCloseTo(ROAD_KINDS.path.labor * 10 * (2.5 + 2 + 3));
   });
   it("adds a grade factor per piece", () => {
@@ -165,7 +165,7 @@ describe("segmentCost", () => {
     const c = segmentCost(p, "dirt");
     expect(c.ok).toBe(true);
     expect(c.maxGrade).toBeCloseTo(0.1);
-    expect(c.labor).toBeCloseTo(10 * (1 + 0.1 / 0.08) + 10);
+    expect(c.labor).toBeCloseTo(ROAD_KINDS.dirt.labor * 10 * (1 + 0.1 / 0.08) + ROAD_KINDS.dirt.labor * 10);
   });
   it("rejects water for roads, bridges cross it", () => {
     expect(segmentCost(flat(["meadow", "water"]), "path")).toMatchObject({ ok: false, reason: "Через воду нужен мост" });

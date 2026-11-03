@@ -11,7 +11,9 @@ import { ROAD_KINDS, stoneWaiting, workableEdges } from "../sim/roads";
 import { frame, gameClock, speed, state } from "../simClient";
 import { plural } from "./InspectorParts";
 import { ProgressBar } from "./kit";
+import { Icon } from "./Icon";
 import { LANDMARK_LABELS } from "./semanticModel";
+import { L } from "../i18n";
 
 const MAX_SHOWN = 6;
 const KEY = "rebirth.builders.collapsed";
@@ -65,7 +67,7 @@ export function BuilderTasks({ view }: { view: View }) {
     const name = site ? siteTitle(site) : (BUILDINGS[b.template]?.name ?? b.template);
     const at: [number, number] = [b.lot.cx, b.lot.cy];
     if (b.state === "building") tasks.push({ key: `b${b.id}`, title: name, value: b.labor > 0 ? b.done / b.labor : 0, left: Math.max(0, b.labor - b.done), at, building: b.id, prio: priority === b.id });
-    if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: перестройка`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), at, building: b.id, prio: priority === b.id });
+    if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: ${L("перестройка", "rebuild")}`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), at, building: b.id, prio: priority === b.id });
   }
   const reachable = new Set(workableEdges(s.roads));
   const noStone = stoneWaiting(s.roads, s.stock);
@@ -74,12 +76,12 @@ export function BuilderTasks({ view }: { view: View }) {
     const a = s.roads.nodes[e.a];
     const b = s.roads.nodes[e.b];
     const at: [number, number] = [(a.x + b.x) / 2, (a.y + b.y) / 2];
-    tasks.push({ key: `r${e.id}`, title: `${ROAD_KINDS[e.kind].name}, ${Math.round(e.length)} м`, value: e.labor > 0 ? e.done / e.labor : 0, left: Math.max(0, e.labor - e.done), at, prio: false, ...(noStone.has(e.id) ? { wait: "Нет камня" } : {}) });
+    tasks.push({ key: `r${e.id}`, title: `${ROAD_KINDS[e.kind].name}, ${Math.round(e.length)} ${L("м", "m")}`, value: e.labor > 0 ? e.done / e.labor : 0, left: Math.max(0, e.labor - e.done), at, prio: false, ...(noStone.has(e.id) ? { wait: L("Нет камня", "No stone") } : {}) });
   }
   for (const c of s.clearings) {
     if (isCleared(c)) continue;
     const at: [number, number] = [c.pts.reduce((t, p) => t + p[0], 0) / c.pts.length, c.pts.reduce((t, p) => t + p[1], 0) / c.pts.length];
-    tasks.push({ key: `c${c.id}`, title: "Вырубка", value: c.labor > 0 ? c.done / c.labor : 0, left: Math.max(0, c.labor - c.done), at, prio: priority === -c.id });
+    tasks.push({ key: `c${c.id}`, title: L("Вырубка", "Clearing"), value: c.labor > 0 ? c.done / c.labor : 0, left: Math.max(0, c.labor - c.done), at, prio: priority === -c.id });
   }
   // The priority site first; the rest keep their order.
   tasks.sort((p, q) => Number(q.prio) - Number(p.prio));
@@ -88,10 +90,10 @@ export function BuilderTasks({ view }: { view: View }) {
   const gm = gameClock.value;
   let ahead = 0;
   const etaText = (personHours: number): string => {
-    if (builders <= 0) return "некому строить";
+    if (builders <= 0) return L("некому строить", "no one to build");
     const ms = etaRealMs(personHours, builders, gm, speed.value, s.levers);
     if (Number.isFinite(ms)) return formatReal(ms);
-    return speed.value === 0 ? "пауза" : "нет срока";
+    return speed.value === 0 ? L("пауза", "paused") : L("нет срока", "no estimate");
   };
   const rows = tasks.slice(0, MAX_SHOWN).map((t) => {
     if (t.wait) return { ...t, eta: t.wait };
@@ -109,10 +111,22 @@ export function BuilderTasks({ view }: { view: View }) {
     }
   };
   return (
-    <aside class="panel builder-tasks" aria-label={LANDMARK_LABELS.builders}>
+    <aside class={`builder-tasks${collapsed || tasks.length === 0 ? "" : " is-open"}`} aria-label={LANDMARK_LABELS.builders}>
       <button type="button" class="builder-tasks-head" aria-expanded={!collapsed} aria-controls="builder-tasks-body" onClick={toggle}>
-        <span>Строители: {builders}</span>
-        <span class="builder-tasks-count">{tasks.length > 0 ? `${tasks.length} ${plural(tasks.length, "работа", "работы", "работ")}` : "работы нет"}</span>
+        <Icon name="build" size={16} />
+        <span>
+          <span class="builder-tasks-word">{L("Строители", "Builders")}</span> <b>{builders}</b>
+        </span>
+        <span class="builder-tasks-count">
+          {tasks.length > 0 ? (
+            <>
+              {tasks.length} <span class="builder-tasks-word">{plural(tasks.length, "работа", "работы", "работ", "task")}</span>
+            </>
+          ) : (
+            L("работы нет", "no work")
+          )}
+        </span>
+        {tasks.length > 0 && <Icon name={collapsed ? "caretUp" : "caretDown"} size={12} />}
       </button>
       {tasks.length > 0 && (
         <ul class="builder-tasks-list" id="builder-tasks-body" hidden={collapsed}>
@@ -123,7 +137,7 @@ export function BuilderTasks({ view }: { view: View }) {
                   <button
                     type="button"
                     class="link builder-task-title"
-                    title="Показать на карте"
+                    title={L("Показать на карте", "Show on the map")}
                     onClick={() => {
                       view.flyTo({ center: fl.toLngLat(t.at![0], t.at![1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) });
                       if (t.building !== undefined) selectedBuilding.value = t.building;
@@ -134,13 +148,13 @@ export function BuilderTasks({ view }: { view: View }) {
                 ) : (
                   <span class="builder-task-title">{t.title}</span>
                 )}
-                {t.prio && <span class="builder-task-first">первым</span>}
+                {t.prio && <span class="builder-task-first">{L("первым", "first")}</span>}
                 <span class="builder-task-eta">{t.eta}</span>
               </div>
               <ProgressBar value={t.value} label={t.title} />
             </li>
           ))}
-          {rest > 0 && <li class="builder-tasks-more">и ещё {rest}</li>}
+          {rest > 0 && <li class="builder-tasks-more">{L("и ещё", "and")} {rest}{L("", " more")}</li>}
         </ul>
       )}
     </aside>

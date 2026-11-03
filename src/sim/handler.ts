@@ -27,6 +27,7 @@ import { fieldProgress } from "./fields";
 import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
 import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
+import { L } from "../i18n";
 
 export interface Storage {
   get(): Promise<unknown>;
@@ -322,8 +323,8 @@ export class Handler {
       const day = dayOf(this.save.sim.gameMinutes);
       this.lifeDay = day;
       this.lifeIncoming = this.save.sim.incoming;
-      const { trips, traffic, lights } = computeLife(this.save.sim, day);
-      this.post({ t: "life", day, trips, traffic, lights });
+      const { trips, rests, traffic, lights } = computeLife(this.save.sim, day);
+      this.post({ t: "life", day, trips, rests, traffic, lights });
     } catch (e) {
       this.post({ t: "error", message: errorText(e) });
     }
@@ -394,7 +395,7 @@ export class Handler {
   private async command(id: number, cmd: Cmd): Promise<void> {
     const reject = (reason: string) => this.post({ t: "cmdResult", id, ok: false, reason });
     try {
-      if (!this.save) return reject("Нет поселения");
+      if (!this.save) return reject(L("Нет поселения", "No settlement"));
       const sim = this.save.sim;
       const roads = sim.roads;
       const z = sim.zones;
@@ -412,14 +413,14 @@ export class Handler {
         next = r.graph;
         zones = this.rezone(z, next, z.fields);
       } else if (cmd.type === "removeRoad") {
-        if (!Object.hasOwn(roads.edges, cmd.edgeId)) return reject("Участок уже убран");
+        if (!Object.hasOwn(roads.edges, cmd.edgeId)) return reject(L("Участок уже убран", "The section is already removed"));
         next = removeEdge(roads, cmd.edgeId);
         zones = this.rezone(z, next, z.fields);
       } else if (cmd.type === "paintZones") {
         if (!Array.isArray(cmd.keys) || cmd.keys.length > 50_000 || !cmd.keys.every((k) => typeof k === "string")) {
-          return reject("Некорректные клетки");
+          return reject(L("Некорректные клетки", "Invalid cells"));
         }
-        if (cmd.zone !== "none" && cmd.zone !== "res" && cmd.zone !== "craft" && cmd.zone !== "trade") return reject("Неизвестная зона");
+        if (cmd.zone !== "none" && cmd.zone !== "res" && cmd.zone !== "craft" && cmd.zone !== "trade") return reject(L("Неизвестная зона", "Unknown zone"));
         const locked = cmd.zone === "none" ? null : lockReason(sim, cmd.zone);
         if (locked) return reject(locked);
         zones = { ...z, cells: paintCells(z.cells, cmd.keys, cmd.zone), rev: z.rev + 1 };
@@ -428,7 +429,7 @@ export class Handler {
         if (!v.ok) return reject(v.reason);
         zones = this.rezone(z, roads, [...z.fields, { id: nextFieldId(z.fields), pts: v.pts, area: v.area }]);
       } else if (cmd.type === "removeField") {
-        if (!z.fields.some((f) => f.id === cmd.id)) return reject("Поле уже убрано");
+        if (!z.fields.some((f) => f.id === cmd.id)) return reject(L("Поле уже убрано", "The field is already removed"));
         zones = this.rezone(z, roads, z.fields.filter((f) => f.id !== cmd.id));
       } else if (cmd.type === "addClearing") {
         const v = validateClearing(cmd.pts, cmd.forest, roads, z.fields, sim.clearings);
@@ -438,17 +439,17 @@ export class Handler {
         return await this.finishCommand(id);
       } else if (cmd.type === "removeClearing") {
         const c = sim.clearings.find((x) => x.id === cmd.id);
-        if (!c) return reject("Вырубка уже убрана");
-        if (isCleared(c)) return reject("Участок уже расчищен");
+        if (!c) return reject(L("Вырубка уже убрана", "The clearing is already removed"));
+        if (isCleared(c)) return reject(L("Участок уже расчищен", "The area is already cleared"));
         this.save = { ...this.save, sim: { ...sim, clearings: sim.clearings.filter((x) => x !== c) } }; // logs already made stay in the stock
         return await this.finishCommand(id);
       } else if (cmd.type === "placeBuilding") {
         const t = typeof cmd.template === "string" && Object.hasOwn(BUILDINGS, cmd.template) ? BUILDINGS[cmd.template] : null;
-        if (!t || t.zone !== "placed") return reject("Это здание нельзя поставить");
+        if (!t || t.zone !== "placed") return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
         const locked = lockReason(sim, t.id);
         if (locked) return reject(locked);
         if (!Number.isInteger(cmd.edge) || !Number.isInteger(cmd.i) || (cmd.side !== 1 && cmd.side !== -1) || !validSite(cmd.site)) {
-          return reject("Некорректное место");
+          return reject(L("Некорректное место", "Invalid place"));
         }
         const ok = canPlace(sim, t, cmd.edge, cmd.side, cmd.i, cmd.site);
         if (!ok.ok) return reject(ok.reason);
@@ -493,17 +494,17 @@ export class Handler {
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
       } else if (cmd.type === "choose") {
-        if (!sim.pending || sim.pending.id !== cmd.id) return reject("Это событие уже решено");
-        if (cmd.option !== 0 && cmd.option !== 1) return reject("Некорректный ответ");
+        if (!sim.pending || sim.pending.id !== cmd.id) return reject(L("Это событие уже решено", "This event is already decided"));
+        if (cmd.option !== 0 && cmd.option !== 1) return reject(L("Некорректный ответ", "Invalid answer"));
         this.save = { ...this.save, sim: resolveChoice(sim, cmd.option, false) };
         return await this.finishCommand(id);
       } else if (import.meta.env.DEV && cmd.type === "admin") {
         // Production builds ship no admin panel; there this branch is compiled out and the command falls through to
         // the unknown-command rejection below, e.g. when sent from devtools.
         const op = cmd.op;
-        if (typeof op !== "object" || op === null) return reject("Некорректная команда");
+        if (typeof op !== "object" || op === null) return reject(L("Некорректная команда", "Invalid command"));
         if (op.k === "free") {
-          if (typeof op.on !== "boolean") return reject("Некорректная команда");
+          if (typeof op.on !== "boolean") return reject(L("Некорректная команда", "Invalid command"));
           this.free = op.on;
         } else if (op.k === "finish") this.save = { ...this.save, sim: finishAll(sim) };
         else if (op.k === "stock") this.save = { ...this.save, sim: grantStock(sim) };
@@ -513,7 +514,7 @@ export class Handler {
           const r = reveal(sim, op.x, op.y, op.r);
           if (!r.ok) return reject(r.reason);
           this.save = { ...this.save, sim: r.sim };
-        } else return reject("Неизвестная команда");
+        } else return reject(L("Неизвестная команда", "Unknown command"));
         return await this.finishCommand(id);
       } else if (cmd.type === "restoreSite") {
         const r = restoreSite(sim, cmd.siteId, cmd.mode);
@@ -521,14 +522,14 @@ export class Handler {
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
-        if (!Object.hasOwn(sim.buildings, cmd.id)) return reject("Здание уже снесено");
+        if (!Object.hasOwn(sim.buildings, cmd.id)) return reject(L("Здание уже снесено", "The building is already demolished"));
         const gone = sim.buildings[cmd.id];
         const rest = { ...sim.buildings };
         delete rest[cmd.id];
         this.save = { ...this.save, sim: refreshServices(syncPeople(loseSite({ ...sim, buildings: rest, finds: keepRevealed(sim.finds, gone) }, gone))) };
         return await this.finishCommand(id);
       } else {
-        return reject("Неизвестная команда");
+        return reject(L("Неизвестная команда", "Unknown command"));
       }
       const buildings = reconcile(sim.buildings, next, zones.cells);
       this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, roads: next, zones, buildings })) };
@@ -589,13 +590,13 @@ const validSite = (v: unknown): v is Site =>
 // The message crossed a thread boundary, so check the shape at runtime.
 function validateAddRoad(cmd: Extract<Cmd, { type: "addRoad" }>): string | null {
   const { pts, labor, kind, snapTol, span } = cmd;
-  if (span !== undefined && (!finite(span) || span < 0)) return "Некорректный пролёт";
-  if (typeof kind !== "string" || !Object.hasOwn(ROAD_KINDS, kind)) return "Неизвестный вид дороги";
-  if (!finite(snapTol) || snapTol <= 0 || snapTol > 1000) return "Некорректный допуск";
-  if (!Array.isArray(pts) || pts.length < 2 || pts.length > 512) return "Некорректная линия";
+  if (span !== undefined && (!finite(span) || span < 0)) return L("Некорректный пролёт", "Invalid span");
+  if (typeof kind !== "string" || !Object.hasOwn(ROAD_KINDS, kind)) return L("Неизвестный вид дороги", "Unknown road type");
+  if (!finite(snapTol) || snapTol <= 0 || snapTol > 1000) return L("Некорректный допуск", "Invalid tolerance");
+  if (!Array.isArray(pts) || pts.length < 2 || pts.length > 512) return L("Некорректная линия", "Invalid line");
   if (!pts.every((p) => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6)) {
-    return "Некорректная линия";
+    return L("Некорректная линия", "Invalid line");
   }
-  if (!Array.isArray(labor) || labor.length !== pts.length - 1 || !labor.every((l) => finite(l) && l >= 0)) return "Некорректная стоимость";
+  if (!Array.isArray(labor) || labor.length !== pts.length - 1 || !labor.every((l) => finite(l) && l >= 0)) return L("Некорректная стоимость", "Invalid cost");
   return null;
 }

@@ -8,6 +8,7 @@ import { articleDomId, notebookTabForArticle } from "./notebookFocusModel";
 import { notebookArticleFocus } from "./notebookFocus";
 import { tabId, tabPanelId } from "./tabSemantics";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { L } from "../i18n";
 
 export type { Article, ChronicleEntry, Find } from "./notebookLogic";
 
@@ -27,8 +28,8 @@ export interface NotebookProps {
 type Tab = "history" | "chronicle";
 
 const TABS: [Tab, string][] = [
-  ["history", "История"],
-  ["chronicle", "Хроника"],
+  ["history", L("История", "History")],
+  ["chronicle", L("Хроника", "Chronicle")],
 ];
 
 const yearOf = (at: number): number => calendar(at).year;
@@ -85,11 +86,11 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
   const shown = tab === "history" ? matchedArticles.length : matchedChronicle.length;
 
   return (
-    <aside class="notebook" aria-label="Записная книжка">
+    <aside class="notebook" aria-label={L("Записная книжка", "Notebook")}>
       <button
         class="notebook-toggle panel"
-        title="Записная книжка"
-        aria-label="Записная книжка"
+        title={L("Записная книжка", "Notebook")}
+        aria-label={L("Записная книжка", "Notebook")}
         aria-expanded={open}
         aria-controls={SEMANTIC_IDS.notebookPanel}
         onClick={() => onOpenChange(!open)}
@@ -102,11 +103,11 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
           <div class="notebook-head">
             <Icon name="notebook" size={20} />
             <h2 class="notebook-title" id={SEMANTIC_IDS.notebookTitle}>
-              Записная книжка
+              {L("Записная книжка", "Notebook")}
             </h2>
-            <IconButton icon="close" size={16} label="Закрыть записную книжку" onClick={() => onOpenChange(false)} />
+            <IconButton icon="close" size={16} label={L("Закрыть записную книжку", "Close the notebook")} onClick={() => onOpenChange(false)} />
           </div>
-          <div class="notebook-tabs" role="tablist" aria-label="Разделы записной книжки">
+          <div class="notebook-tabs" role="tablist" aria-label={L("Разделы записной книжки", "Notebook sections")}>
             {TABS.map(([id, label]) => (
               <button
                 key={id}
@@ -127,29 +128,29 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
             <Icon name="search" size={14} />
             <input
               type="search"
-              aria-label="Поиск по записной книжке"
-              placeholder="Найти запись"
+              aria-label={L("Поиск по записной книжке", "Search the notebook")}
+              placeholder={L("Найти запись", "Find an entry")}
               value={q}
               onInput={(e) => setQ((e.target as HTMLInputElement).value)}
             />
             {q && (
-              <IconButton icon="close" size={12} label="Очистить поиск" onClick={() => setQ("")} />
+              <IconButton icon="close" size={12} label={L("Очистить поиск", "Clear search")} onClick={() => setQ("")} />
             )}
           </div>
           <div class="notebook-body" role="tabpanel" id={tabPanelId("notebook", tab)} aria-labelledby={tabId("notebook", tab)}>
             {shown === 0 && (
               <div class="notebook-empty">
                 {q
-                  ? "Ничего не найдено."
+                  ? L("Ничего не найдено.", "Nothing found.")
                   : tab === "history"
-                    ? "Ведите раскопки — здесь появятся статьи о том, что стояло на этом месте."
-                    : "Хроника пуста: история города только начинается."}
+                    ? L("Ведите раскопки — здесь появятся статьи о том, что стояло на этом месте.", "Run digs — articles about what once stood here will appear.")
+                    : L("Хроника пуста: история города только начинается.", "The chronicle is empty: the town’s story is just beginning.")}
               </div>
             )}
             {tab === "history" &&
               byYear(matchedArticles).map(([year, list]) => (
-                <section class="notebook-year-group" key={year} aria-label={`Год ${year}`}>
-                  <div class="notebook-year">Год {year}</div>
+                <section class="notebook-year-group" key={year} aria-label={`${L("Год", "Year")} ${year}`}>
+                  <div class="notebook-year">{L("Год", "Year")} {year}</div>
                   {list.map((a) => (
                     <div class="notebook-entry" id={articleDomId(a.id)} key={a.id}>
                       <span class="notebook-kind">
@@ -159,7 +160,7 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
                         <button
                           type="button"
                           class="link notebook-entry-title notebook-map-link"
-                          title="Показать место статьи на карте"
+                          title={L("Показать место статьи на карте", "Show the article’s place on the map")}
                           onClick={() => onArticleMap(a)}
                         >
                           {a.title}
@@ -172,13 +173,13 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
                             target="_blank"
                             rel="noopener"
                             lang={a.lang}
-                            title="Открыть полную статью"
-                            aria-label={`Открыть полную статью «${a.title}»`}
+                            title={L("Открыть полную статью", "Open the full article")}
+                            aria-label={L(`Открыть полную статью «${a.title}»`, `Open the full article “${a.title}”`)}
                           >
                             ^
                           </a>
                         </div>
-                        <div class="notebook-date">{formatDate(a.at)} · Википедия, CC BY-SA 4.0</div>
+                        <div class="notebook-date">{formatDate(a.at)} · {L("Википедия", "Wikipedia")}, CC BY-SA 4.0</div>
                       </div>
                     </div>
                   ))}
@@ -186,8 +187,8 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
               ))}
             {tab === "chronicle" &&
               byYear(matchedChronicle).map(([year, list]) => (
-                <section class="notebook-year-group" key={year} aria-label={`Год ${year}`}>
-                  <div class="notebook-year">Год {year}</div>
+                <section class="notebook-year-group" key={year} aria-label={`${L("Год", "Year")} ${year}`}>
+                  <div class="notebook-year">{L("Год", "Year")} {year}</div>
                   {list.map((c, i) => (
                     <div class="notebook-entry" key={`${c.at}-${i}`}>
                       <span class="notebook-kind notebook-pen">

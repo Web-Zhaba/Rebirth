@@ -5,6 +5,7 @@ import { say } from "./production";
 import { DAY_MIN } from "./time";
 import { eraName, eraTwoMet, INSIGHT_BY_ID, initialProgress, MAX_ERA, MAX_QUEUE, TECH_BY_ID, TECHS, unlockNames, type TechDef } from "./tech";
 import type { ProgressState, ResearchView, SimState } from "./types";
+import { L } from "../i18n";
 
 // Research (PLAN-research.ru.md section 5): one tech under way and a queue of up to three. Progress is the work done in
 // game days, so a speed that changes midway (a school, a restored building) and a long offline catch-up need no special
@@ -38,10 +39,10 @@ export function workDays(p: Pick<ProgressState, "insights">, t: TechDef): number
 
 // Russian reason the tech cannot be started now, or null.
 export function startBlocker(p: ProgressState, t: TechDef): string | null {
-  if (p.techs.includes(t.id)) return "Уже изучено";
-  if (t.era > p.era) return `Нужна эпоха ${t.era === 2 ? "II" : t.era}`;
+  if (p.techs.includes(t.id)) return L("Уже изучено", "Already researched");
+  if (t.era > p.era) return `${L("Нужна эпоха", "Requires era")} ${t.era === 2 ? "II" : t.era}`;
   const need = t.requires.find((r) => !p.techs.includes(r));
-  if (need) return `Сначала: ${TECH_BY_ID.get(need)?.name ?? need}`;
+  if (need) return `${L("Сначала", "First")}: ${TECH_BY_ID.get(need)?.name ?? need}`;
   return null;
 }
 
@@ -61,24 +62,24 @@ function startNext(s: SimState): SimState {
 
 export function startResearch(s: SimState, techId: unknown): ResearchResult {
   const t = typeof techId === "string" ? TECH_BY_ID.get(techId) : undefined;
-  if (!t) return { ok: false, reason: "Неизвестная технология" };
+  if (!t) return { ok: false, reason: L("Неизвестная технология", "Unknown technology") };
   const why = startBlocker(s.progress, t);
   if (why) return { ok: false, reason: why };
-  if (s.progress.research.active) return { ok: false, reason: "Идёт другое исследование: поставьте это в очередь или отмените текущее" };
+  if (s.progress.research.active) return { ok: false, reason: L("Идёт другое исследование: поставьте это в очередь или отмените текущее", "Another research is under way: queue this one or cancel the current one") };
   return { ok: true, sim: begin(s, t.id) };
 }
 
 // Queues a tech (starts it at once when nothing is under way and it can start). A tech may wait behind its own prerequisite.
 export function queueResearch(s: SimState, techId: unknown): ResearchResult {
   const t = typeof techId === "string" ? TECH_BY_ID.get(techId) : undefined;
-  if (!t) return { ok: false, reason: "Неизвестная технология" };
+  if (!t) return { ok: false, reason: L("Неизвестная технология", "Unknown technology") };
   const p = s.progress;
-  if (p.techs.includes(t.id)) return { ok: false, reason: "Уже изучено" };
-  if (t.era > p.era) return { ok: false, reason: `Нужна эпоха ${t.era === 2 ? "II" : t.era}` };
-  if (p.research.active?.techId === t.id) return { ok: false, reason: "Уже исследуется" };
-  if (p.research.queue.includes(t.id)) return { ok: false, reason: "Уже в очереди" };
+  if (p.techs.includes(t.id)) return { ok: false, reason: L("Уже изучено", "Already researched") };
+  if (t.era > p.era) return { ok: false, reason: `${L("Нужна эпоха", "Requires era")} ${t.era === 2 ? "II" : t.era}` };
+  if (p.research.active?.techId === t.id) return { ok: false, reason: L("Уже исследуется", "Already being researched") };
+  if (p.research.queue.includes(t.id)) return { ok: false, reason: L("Уже в очереди", "Already queued") };
   if (!p.research.active && startBlocker(p, t) === null) return { ok: true, sim: begin(s, t.id) };
-  if (p.research.queue.length >= MAX_QUEUE) return { ok: false, reason: `В очереди не больше ${MAX_QUEUE}` };
+  if (p.research.queue.length >= MAX_QUEUE) return { ok: false, reason: L(`В очереди не больше ${MAX_QUEUE}`, `The queue holds at most ${MAX_QUEUE}`) };
   return { ok: true, sim: withResearch(s, { ...p.research, queue: [...p.research.queue, t.id] }) };
 }
 
@@ -87,12 +88,12 @@ export function cancelResearch(s: SimState, techId: unknown): ResearchResult {
   const r = s.progress.research;
   if (r.active && r.active.techId === techId) return { ok: true, sim: startNext(withResearch(s, { ...r, active: null })) };
   if (typeof techId === "string" && r.queue.includes(techId)) return { ok: true, sim: withResearch(s, { ...r, queue: r.queue.filter((q) => q !== techId) }) };
-  return { ok: false, reason: "Это исследование уже не идёт" };
+  return { ok: false, reason: L("Это исследование уже не идёт", "This research is no longer running") };
 }
 
 function finish(s: SimState, t: TechDef): SimState {
   const p = s.progress;
-  const text = `Изучено: ${t.name}${t.unlocks.length ? ` (открыто: ${unlockNames(t.unlocks)})` : ""}`;
+  const text = `${L("Изучено", "Researched")}: ${t.name}${t.unlocks.length ? ` (${L("открыто", "unlocked")}: ${unlockNames(t.unlocks)})` : ""}`;
   const progress: ProgressState = {
     ...p,
     techs: [...p.techs, t.id],
@@ -115,7 +116,7 @@ export function researchStep(s: SimState, dt: number): SimState {
 }
 
 function enterEra(s: SimState, era: number): SimState {
-  const text = `Новая эпоха: ${eraName(era)}`;
+  const text = `${L("Новая эпоха", "New era")}: ${eraName(era)}`;
   return { ...withProgress(s, { ...s.progress, era }), events: say(s.events, s.gameMinutes, "era", text), chronicle: addChronicle(s.chronicle, s.gameMinutes, `era:${era}`, text) };
 }
 
@@ -139,7 +140,7 @@ export function grantInsight(s: SimState, id: string): SimState {
   const i = INSIGHT_BY_ID.get(id);
   const p = s.progress;
   if (!i || p.insights.includes(id)) return s;
-  if (i.tech && p.techs.includes(i.tech)) return { ...s, events: say(s.events, s.gameMinutes, "tech", `Идея «${i.text}» уже известна`) };
+  if (i.tech && p.techs.includes(i.tech)) return { ...s, events: say(s.events, s.gameMinutes, "tech", L(`Идея «${i.text}» уже известна`, `The idea “${i.text}” is already known`)) };
   return withProgress(s, { ...p, insights: [...p.insights, id] });
 }
 

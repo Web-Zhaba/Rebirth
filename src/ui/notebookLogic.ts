@@ -1,5 +1,6 @@
 import { calendar } from "../sim/clock";
 import type { Finds } from "../sim/types";
+import { L, plural } from "../i18n";
 
 export interface Find {
   id: string;
@@ -23,7 +24,7 @@ export interface ChronicleEntry {
   text: string;
 }
 
-const SEASON_RU = ["весна", "лето", "осень", "зима"];
+const SEASONS = [L("весна", "spring"), L("лето", "summer"), L("осень", "autumn"), L("зима", "winter")];
 
 // Newest first; stable for equal times.
 export function newestFirst<T extends { at: number }>(list: readonly T[]): T[] {
@@ -36,7 +37,7 @@ export function newestFirst<T extends { at: number }>(list: readonly T[]): T[] {
 // "Год 1, весна, день 3" for a game-minute timestamp.
 export function formatDate(gameMinutes: number): string {
   const c = calendar(gameMinutes);
-  return `Год ${c.year}, ${SEASON_RU[c.season]}, день ${c.dayOfSeason}`;
+  return L(`Год ${c.year}, ${SEASONS[c.season]}, день ${c.dayOfSeason}`, `Year ${c.year}, ${SEASONS[c.season]}, day ${c.dayOfSeason}`);
 }
 
 // Entries of the "finds" and "articles" tabs the player has not opened yet (the chronicle is not counted).
@@ -44,19 +45,13 @@ export function unseenCount(finds: readonly unknown[], articles: readonly unknow
   return Math.max(0, finds.length + articles.length - Math.max(0, seen));
 }
 
-const plural = (n: number, one: string, few: string, many: string): string => {
-  const m = n % 100;
-  if (m >= 11 && m <= 14) return many;
-  return n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many;
-};
-
 // The notebook's "finds" tab from the sim finds: every named place and street on its own, plus one
 // "foundations" entry per dig. Digs are numbered by ascending building id (`digIds` adds digs without foundations yet).
 export function findsToEntries(finds: Finds | null, digIds: readonly number[] = []): Find[] {
   if (!finds) return [];
   const out: Find[] = [];
   for (const p of finds.pois) out.push({ id: `poi:${p.id}`, kind: "poi", title: p.name, detail: p.kind || undefined, at: p.at });
-  for (const t of finds.streets) out.push({ id: `street:${t.id}`, kind: "street", title: t.name, detail: "улица", at: t.at });
+  for (const t of finds.streets) out.push({ id: `street:${t.id}`, kind: "street", title: t.name, detail: L("улица", "street"), at: t.at });
   const perDig = new Map<number, { n: number; at: number }>();
   for (const f of finds.foundations) {
     const d = perDig.get(f.digId);
@@ -68,7 +63,7 @@ export function findsToEntries(finds: Finds | null, digIds: readonly number[] = 
   const order = [...new Set([...digIds, ...perDig.keys()])].sort((a, b) => a - b);
   for (const [digId, d] of perDig) {
     const no = order.indexOf(digId) + 1;
-    out.push({ id: `dig:${digId}`, kind: "foundations", title: `Раскоп №${no}: ${d.n} ${plural(d.n, "фундамент", "фундамента", "фундаментов")}`, at: d.at });
+    out.push({ id: `dig:${digId}`, kind: "foundations", title: `${L("Раскоп №", "Dig #")}${no}: ${d.n} ${plural(d.n, "фундамент", "фундамента", "фундаментов", "foundation")}`, at: d.at });
   }
   return out;
 }

@@ -1,11 +1,12 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import { calendar, DAYS_PER_SEASON } from "../sim/clock";
 import type { WeatherState } from "../sim/weather";
+import { L } from "../i18n";
 
 // Admin panel: the map drawn as in another season (crowns, snow, ice, the sun's height), the game itself untouched —
 // only what the map layers read goes through here.
 
-export const SEASON_NAMES = ["Весна", "Лето", "Осень", "Зима"];
+export const SEASON_NAMES = [L("Весна", "Spring"), L("Лето", "Summer"), L("Осень", "Autumn"), L("Зима", "Winter")];
 export const seasonPreview = signal<number | null>(null); // 0 spring .. 3 winter; null: the game's own
 
 const SEASON_MIN = DAYS_PER_SEASON * 1440;

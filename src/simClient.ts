@@ -1,5 +1,6 @@
+import { lang } from "./i18n";
 import { computed, effect, signal } from "@preact/signals";
-import type { Light, Trip } from "./map/life";
+import type { Light, Rest, Trip } from "./map/life";
 import { BASE_TICK, clockAt, tickMs, type Speed } from "./sim/clock";
 import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";
@@ -38,6 +39,7 @@ export const catchUp = signal<{ done: number; total: number } | null>(null);
 
 // Visual life of the current game day (cosmetic, from the worker; see PLAN.md section 10).
 export const lifeTrips = signal<Trip[]>([]);
+export const lifeRests = signal<Rest[]>([]);
 export const lifeTraffic = signal<Record<number, number>>({});
 export const lifeLights = signal<Light[]>([]);
 // Game speed of this session (0 = paused); not saved, 1x after every load.
@@ -66,7 +68,7 @@ export const gameNow = (): number => {
   return s ? clockAt(s.gameMinutes, s.realTime, Date.now(), speed.peek()) : gameClock.peek();
 };
 
-const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module" });
+const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module", name: lang }); // the worker reads its language from its name (i18n.ts)
 const send = (msg: ToWorker) => worker.postMessage(msg);
 
 let nextCmdId = 1;
@@ -148,6 +150,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
     }
     case "life":
       lifeTrips.value = m.trips;
+      lifeRests.value = m.rests;
       lifeTraffic.value = m.traffic;
       lifeLights.value = m.lights;
       break;

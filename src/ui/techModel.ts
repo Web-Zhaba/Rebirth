@@ -1,17 +1,18 @@
 import { DOMAINS, domainName, type DomainId } from "../sim/domains";
 import { ERA_TWO, ERAS, eraName, INSIGHTS, MAX_QUEUE, TECH_BY_ID, TECHS, UNLOCK_NAME, type TechDef, type TechModifiers } from "../sim/tech";
 import type { ProgressState, ResearchView, RoadKind } from "../sim/types";
+import { decimal, L } from "../i18n";
 
 // Pure view model of the tech panel: node states, times, what a tech opens, the era II conditions, the queue.
 
 export type NodeState = "done" | "active" | "queued" | "available" | "locked";
 
 export const STATE_LABEL: Record<NodeState, string> = {
-  done: "Изучено",
-  active: "Исследуется",
-  queued: "В очереди",
-  available: "Доступно",
-  locked: "Закрыто",
+  done: L("Изучено", "Researched"),
+  active: L("Исследуется", "Researching"),
+  queued: L("В очереди", "Queued"),
+  available: L("Доступно", "Available"),
+  locked: L("Закрыто", "Locked"),
 };
 
 export interface TechInput {
@@ -72,17 +73,17 @@ export interface TechView {
 
 export const eraLabel = (era: number): string => (era === 2 ? "II" : era === 1 ? "I" : String(era));
 
-const SPAN_NAME: Record<RoadKind, string> = { path: "тропа", dirt: "грунтовая дорога", footbridge: "канатный мостик", bridge: "свайный мост", stone: "каменная дорога", stonebridge: "каменный мост" };
+const SPAN_NAME: Record<RoadKind, string> = { path: L("тропа", "path"), dirt: L("грунтовая дорога", "dirt road"), footbridge: L("канатный мостик", "rope footbridge"), bridge: L("свайный мост", "pile bridge"), stone: L("каменная дорога", "stone road"), stonebridge: L("каменный мост", "stone bridge") };
 const pct = (n: number): string => `${Math.round(n * 100)} %`;
 
 // What a tech does besides the unlock keys, as player lines.
 export function modifierLines(m: TechModifiers | undefined): string[] {
   const out: string[] = [];
   if (!m) return out;
-  if (m.fieldYield) out.push(`урожай полей +${pct(m.fieldYield)}`);
-  if (m.workshopOutput) out.push(`выработка мастерских +${pct(m.workshopOutput)}`);
-  if (m.buildSpeed) out.push(`стройка быстрее на ${pct(m.buildSpeed)}`);
-  for (const [k, v] of Object.entries(m.bridgeSpan ?? {})) if (v) out.push(`${SPAN_NAME[k as RoadKind] ?? k}: пролёт +${v} м`);
+  if (m.fieldYield) out.push(L(`урожай полей +${pct(m.fieldYield)}`, `field yield +${pct(m.fieldYield)}`));
+  if (m.workshopOutput) out.push(L(`выработка мастерских +${pct(m.workshopOutput)}`, `workshop output +${pct(m.workshopOutput)}`));
+  if (m.buildSpeed) out.push(L(`стройка быстрее на ${pct(m.buildSpeed)}`, `building ${pct(m.buildSpeed)} faster`));
+  for (const [k, v] of Object.entries(m.bridgeSpan ?? {})) if (v) out.push(`${SPAN_NAME[k as RoadKind] ?? k}: ${L("пролёт", "span")} +${v} ${L("м", "m")}`);
   return out;
 }
 
@@ -90,9 +91,9 @@ export const opensOf = (t: TechDef): string[] => [...t.unlocks.map((k) => UNLOCK
 
 // «1 дн.», «2,5 дн.», «меньше дня».
 export function formatDays(d: number): string {
-  if (d < 0.1) return "меньше дня";
+  if (d < 0.1) return L("меньше дня", "under a day");
   const r = d >= 10 ? Math.round(d) : Math.round(d * 10) / 10;
-  return `${String(r).replace(".", ",")} дн.`;
+  return `${decimal(String(r))} ${L("дн.", "d")}`;
 }
 
 export const eraProgress = (pop: number, p: Pick<ProgressState, "techs">): EraProgress => {
@@ -106,7 +107,7 @@ export function techBadge(seenCount: number | null, techsCount: number, idle: bo
   if (seenCount !== null && techsCount > seenCount) return "done";
   return idle ? "idle" : null;
 }
-export const BADGE_TEXT: Record<Exclude<TechBadge, null>, string> = { done: "готово", idle: "простаивает" };
+export const BADGE_TEXT: Record<Exclude<TechBadge, null>, string> = { done: L("готово", "done"), idle: L("простаивает", "idle") };
 
 // Days of work after the best insight held for the tech (the same rule as workDays in sim/research.ts, which the UI
 // does not import: it pulls in the whole sim).
@@ -129,14 +130,14 @@ export function buildTechView(inp: TechInput): TechView {
     const need = workOf(p, t);
     const share = isActive && r.active ? r.active.share : 0;
     const days = isActive && r.active ? r.active.etaMinutes / 1440 : need / speed;
-    const reason = state === "locked" ? (eraBlocked ? `нужна эпоха ${eraLabel(t.era)}` : missing.length ? `нужна технология ${missing.map((x) => x.name).join(", ")}` : null) : null;
+    const reason = state === "locked" ? (eraBlocked ? `${L("нужна эпоха", "requires era")} ${eraLabel(t.era)}` : missing.length ? `${L("нужна технология", "requires")} ${missing.map((x) => x.name).join(", ")}` : null) : null;
     const insight = INSIGHTS.filter((i) => i.tech === t.id && p.insights.includes(i.id)).sort((a, b) => b.cut - a.cut)[0];
     const statusText =
-      state === "done" ? "Изучено"
-      : state === "active" ? `Исследуется, ${Math.floor(share * 100)} %`
-      : state === "queued" ? `В очереди, №${qi + 1}`
-      : state === "locked" ? `Закрыто${reason ? `: ${reason}` : ""}`
-      : `Доступно, ${formatDays(days)}`;
+      state === "done" ? L("Изучено", "Researched")
+      : state === "active" ? L(`Исследуется, ${Math.floor(share * 100)} %`, `Researching, ${Math.floor(share * 100)}%`)
+      : state === "queued" ? L(`В очереди, №${qi + 1}`, `Queued, #${qi + 1}`)
+      : state === "locked" ? `${L("Закрыто", "Locked")}${reason ? `: ${reason}` : ""}`
+      : `${L("Доступно", "Available")}, ${formatDays(days)}`;
     const startable = !r.active && blocker === null;
     return {
       id: t.id,
@@ -176,7 +177,7 @@ export function buildTechView(inp: TechInput): TechView {
     queue: p.research.queue
       .map((id) => nodes.get(id))
       .filter((n): n is TechNode => !!n)
-      .map((node) => ({ node, waits: node.era > p.era ? `эпоха ${eraLabel(node.era)}` : (node.requires.find((q) => !q.done)?.name ?? null) })),
+      .map((node) => ({ node, waits: node.era > p.era ? `${L("эпоха", "era")} ${eraLabel(node.era)}` : (node.requires.find((q) => !q.done)?.name ?? null) })),
     lanes,
     nodes,
     idle: r.active === null,

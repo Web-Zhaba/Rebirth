@@ -10,6 +10,7 @@ import { landAt } from "../world/landcover";
 import { fieldDraft, hoverKeys, paintPreview } from "../view/layers/zones";
 import { etaText } from "./buildCost";
 import { flash, isBrushTool, ZONE_MAX_MPP, setSpacePan, syncPan, tool, type BrushTool } from "./tools";
+import { decimal, L } from "../i18n";
 
 const BRUSH_PX = 16;
 const MIN_BRUSH_M = 6;
@@ -23,9 +24,9 @@ type Pt = [number, number];
 const bucketKey = (bx: number, by: number) => bx * 65536 + by;
 const brushZone = (t: BrushTool): "none" | ZoneType => (t === "clear" ? "none" : t);
 
-const areaText = (m2: number) => `${(m2 / 10000).toFixed(m2 < 10000 ? 2 : 1).replace(".", ",")} га`;
+const areaText = (m2: number) => `${decimal((m2 / 10000).toFixed(m2 < 10000 ? 2 : 1))} ${L("га", "ha")}`;
 const clearingText = (area: number, forest: number) =>
-  `${areaText(area)} · лес ${Math.round(forest * 100)} % · брёвна ~${Math.round(clearingLogs(area, forest))} м³ · ${Math.round(clearingLabor(area, forest))} чел.-ч · ${etaText(clearingLabor(area, forest))}`;
+  L(`${areaText(area)} · лес ${Math.round(forest * 100)} % · брёвна ~${Math.round(clearingLogs(area, forest))} м³ · ${Math.round(clearingLabor(area, forest))} чел.-ч · ${etaText(clearingLabor(area, forest))}`, `${areaText(area)} · forest ${Math.round(forest * 100)}% · logs ~${Math.round(clearingLogs(area, forest))} m³ · ${Math.round(clearingLabor(area, forest))} person-h · ${etaText(clearingLabor(area, forest))}`);
 
 interface Analysis {
   water: boolean;
@@ -135,7 +136,7 @@ export function attachZoneTool(view: View): void {
     void sendCmd({ type: "paintZones", keys, zone }).then((r) => {
       inflight--;
       if (inflight === 0 && !dragging) paintPreview.value = null; // the snapshot already arrived
-      if (!r.ok) flash(r.reason ?? "Не удалось разметить");
+      if (!r.ok) flash(r.reason ?? L("Не удалось разметить", "Could not mark the zone"));
       else play("place");
     });
   };
@@ -154,7 +155,7 @@ export function attachZoneTool(view: View): void {
   const onBrushMove = (e: ViewPointer, t: BrushTool) => {
     if (view.metersPerPixel() > ZONE_MAX_MPP) {
       hoverKeys.value = [];
-      setLabel("Приблизьте карту");
+      setLabel(L("Приблизьте карту", "Zoom in on the map"));
       return;
     }
     if (spaceDown) {
@@ -166,7 +167,7 @@ export function attachZoneTool(view: View): void {
     if (!b) return;
     const near = cellsNear(b.x, b.y, b.r);
     hoverKeys.value = near.map((c) => c.key);
-    setLabel(t === "clear" ? (fieldAt(b.x, b.y) ? "Убрать поле" : clearingAt(b.x, b.y) ? "Убрать вырубку" : null) : null);
+    setLabel(t === "clear" ? (fieldAt(b.x, b.y) ? L("Убрать поле", "Remove field") : clearingAt(b.x, b.y) ? L("Убрать вырубку", "Remove clearing") : null) : null);
     if (dragging) {
       // Mouse events are sparse on fast drags: sweep the brush along the stroke so no cells are skipped.
       const [px, py] = strokeEnd ?? [b.x, b.y];
@@ -215,7 +216,7 @@ export function attachZoneTool(view: View): void {
       const field = fieldAt(b.x, b.y);
       if (field) {
         void sendCmd({ type: "removeField", id: field.id }).then((r) => {
-          if (!r.ok) flash(r.reason ?? "Не удалось убрать поле");
+          if (!r.ok) flash(r.reason ?? L("Не удалось убрать поле", "Could not remove the field"));
           else play("place");
         });
         return;
@@ -223,7 +224,7 @@ export function attachZoneTool(view: View): void {
       const clearing = clearingAt(b.x, b.y);
       if (clearing) {
         void sendCmd({ type: "removeClearing", id: clearing.id }).then((r) => {
-          if (!r.ok) flash(r.reason ?? "Не удалось убрать вырубку");
+          if (!r.ok) flash(r.reason ?? L("Не удалось убрать вырубку", "Could not remove the clearing"));
           else play("place");
         });
         return;
@@ -307,7 +308,7 @@ export function attachZoneTool(view: View): void {
     const poly: Pt[] = [...pts, local];
     if (poly.length < 3) {
       fieldDraft.value = { pts: poly, ok: true };
-      setLabel("Клик — следующая точка");
+      setLabel(L("Клик — следующая точка", "Click — next point"));
       return;
     }
     const v = check(poly, g, z);
@@ -322,8 +323,8 @@ export function attachZoneTool(view: View): void {
     const s = sig(poly);
     const text = (a: Analysis | null) => {
       if (clearingActive()) return a ? clearingText(v.area, a.forest) : areaText(v.area);
-      if (a?.water) return "Поле заходит в воду";
-      return a ? `${areaText(v.area)} · лес ${Math.round(a.forest * 100)} %` : areaText(v.area);
+      if (a?.water) return L("Поле заходит в воду", "The field runs into water");
+      return a ? `${areaText(v.area)} · ${L("лес", "forest")} ${Math.round(a.forest * 100)}${L(" %", "%")}` : areaText(v.area);
     };
     if (analysis && analysis.sig === s) {
       setLabel(text(analysis.a));
@@ -341,7 +342,7 @@ export function attachZoneTool(view: View): void {
           if (a.water && !clearingActive()) fieldDraft.value = { pts: poly, ok: false };
         })
         .catch(() => {
-          if (mine === seq) setLabel(`${areaText(v.area)} · нет данных о местности`);
+          if (mine === seq) setLabel(`${areaText(v.area)} · ${L("нет данных о местности", "no terrain data")}`);
         });
     }, ANALYZE_MS);
   };
@@ -362,7 +363,7 @@ export function attachZoneTool(view: View): void {
     const z = zones.value;
     if (busy || !f || !g || !z) return;
     if (pts.length < 3) {
-      flash("Нужно минимум 3 точки");
+      flash(L("Нужно минимум 3 точки", "At least 3 points are needed"));
       return;
     }
     const v = check(pts, g, z);
@@ -376,18 +377,18 @@ export function attachZoneTool(view: View): void {
     analyzeField(f, poly)
       .then((a) => {
         if (a.water && !clearing) {
-          flash("Поле заходит в воду");
+          flash(L("Поле заходит в воду", "The field runs into water"));
           return false;
         }
         const cmd = clearing ? ({ type: "addClearing", pts: poly, forest: a.forest } as const) : ({ type: "addField", pts: poly } as const);
         return sendCmd(cmd).then((r) => {
-          if (!r.ok) flash(r.reason ?? (clearing ? "Не удалось создать вырубку" : "Не удалось создать поле"));
+          if (!r.ok) flash(r.reason ?? (clearing ? L("Не удалось создать вырубку", "Could not create the clearing") : L("Не удалось создать поле", "Could not create the field")));
           else play("place");
           return r.ok;
         });
       })
       .catch(() => {
-        flash("Нет данных о местности");
+        flash(L("Нет данных о местности", "No terrain data"));
         return false;
       })
       .then((ok) => {
@@ -428,7 +429,7 @@ export function attachZoneTool(view: View): void {
       const f = frame.value;
       if (!f) return;
       if (view.metersPerPixel() > FIELD_MAX_MPP) {
-        setLabel("Приблизьте карту");
+        setLabel(L("Приблизьте карту", "Zoom in on the map"));
         return;
       }
       local = f.toLocal(e.lngLat[0], e.lngLat[1]);

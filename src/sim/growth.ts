@@ -13,6 +13,7 @@ import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, Clearing, Demand, Finds, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
 import { emptyWeather } from "./weather";
 import { CELL_SIZE, paintCells, pointInPolygon, qkey, qpoint, regenerateCells } from "./zones";
+import { decimal, L } from "../i18n";
 
 export { nextRandom };
 export type { Demand };
@@ -299,12 +300,12 @@ const NO_PLACE = (reason: string): PlaceCheck => ({ ok: false, reason });
 export const PLACE_MIN = { forest: 0.1, water: 0.05, foragerForest: FORAGER_FOREST }; // site shares the woodcutter, the fisher and the forager need
 
 const BLOCK_REASON: Record<string, string> = {
-  road: "Здесь дорога",
-  overlap: "Здесь дорога",
-  field: "Здесь поле",
-  water: "Здесь вода",
-  steep: "Слишком крутой склон",
-  pending: "Местность ещё изучается",
+  road: L("Здесь дорога", "A road is here"),
+  overlap: L("Здесь дорога", "A road is here"),
+  field: L("Здесь поле", "A field is here"),
+  water: L("Здесь вода", "Water is here"),
+  steep: L("Слишком крутой склон", "The slope is too steep"),
+  pending: L("Местность ещё изучается", "The terrain is still being surveyed"),
 };
 
 // Can `t` stand on the lot whose depth-0 start cell is (edge, side, i)? The lot is t.w x t.d cells.
@@ -317,10 +318,10 @@ export function canPlace(
   i: number,
   site: Site,
 ): PlaceCheck {
-  if (t.zone !== "placed") return NO_PLACE("Это здание строится само");
+  if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
   const e = s.roads.edges[edge];
-  if (!e) return NO_PLACE("Нет такой дороги");
-  if (e.done < e.labor) return NO_PLACE("Дорога ещё не построена");
+  if (!e) return NO_PLACE(L("Нет такой дороги", "No such road"));
+  if (e.done < e.labor) return NO_PLACE(L("Дорога ещё не построена", "The road is not built yet"));
   const byKey = new Map<string, ZoneCell>();
   for (const c of s.zones.cells) if (c.edge === edge && c.side === side) byKey.set(c.key, c);
   const occ = occupancy(s.buildings);
@@ -329,20 +330,20 @@ export function canPlace(
   for (let a = 0; a < t.w; a++) {
     for (let d = 0; d < t.d; d++) {
       const c = byKey.get(`${edge}:${side}:${i + a}:${d}`);
-      if (!c) return NO_PLACE("Не хватает места вдоль дороги");
-      if (c.block) return NO_PLACE(BLOCK_REASON[c.block] ?? "Место занято");
-      if (occ(c.cx, c.cy)) return NO_PLACE("Место занято зданием");
+      if (!c) return NO_PLACE(L("Не хватает места вдоль дороги", "Not enough room along the road"));
+      if (c.block) return NO_PLACE(BLOCK_REASON[c.block] ?? L("Место занято", "The spot is taken"));
+      if (occ(c.cx, c.cy)) return NO_PLACE(L("Место занято зданием", "The spot is taken by a building"));
       if (old.length > 0 && overlapsHeritage(old, cellSquare(c))) return NO_PLACE(HERITAGE_TAKEN);
       cells.push(c);
     }
   }
-  if (t.id === "woodcutter" && site.forest < PLACE_MIN.forest) return NO_PLACE("Рядом мало леса (нужно от 10 %)");
-  if (t.id === "fisher" && site.water < PLACE_MIN.water) return NO_PLACE("Рядом нет воды (нужно от 5 %)");
-  if (t.id === "forager" && site.forest < PLACE_MIN.foragerForest) return NO_PLACE("Рядом мало леса (нужно от 20 %)");
+  if (t.id === "woodcutter" && site.forest < PLACE_MIN.forest) return NO_PLACE(L("Рядом мало леса (нужно от 10 %)", "Too little forest nearby (10% needed)"));
+  if (t.id === "fisher" && site.water < PLACE_MIN.water) return NO_PLACE(L("Рядом нет воды (нужно от 5 %)", "No water nearby (5% needed)"));
+  if (t.id === "forager" && site.forest < PLACE_MIN.foragerForest) return NO_PLACE(L("Рядом мало леса (нужно от 20 %)", "Too little forest nearby (20% needed)"));
   if (t.id === "quarry" || t.id === "garden" || t.id === "orchard" || t.id === "apiary") {
     for (const c of cells) {
       const land = s.zones.terrain[qkey(c.cx, c.cy)]?.land;
-      if (land === "water" || land === "wetland") return NO_PLACE(`${t.name} нельзя ставить на воде и болоте`);
+      if (land === "water" || land === "wetland") return NO_PLACE(L(`${t.name} нельзя ставить на воде и болоте`, `${t.name} can’t be placed on water or marsh`));
     }
   }
   return { ok: true };
@@ -395,8 +396,8 @@ export function reportBuilt(before: Record<number, Building>, after: Record<numb
     if (!was) continue;
     const pos: [number, number] = [b.lot.cx, b.lot.cy];
     if (b.siteId) continue; // a restoration has its own notice
-    if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `Достроено: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
-    else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", "Дом расширен", pos);
+    if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `${L("Достроено", "Finished")}: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
+    else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", L("Дом расширен", "House expanded"), pos);
   }
   return out;
 }
@@ -418,7 +419,7 @@ export function advanceClearings(s: SimState, use: Map<number, number>): SimStat
   });
   let events = s.events;
   for (const c of finished) {
-    events = say(events, s.gameMinutes, "clearing", `Вырубка закончена: ${(c.area / 10_000).toFixed(2).replace(".", ",")} га, брёвен +${Math.round(clearingLogs(c.area, c.forest))} м³`, fieldCentroid(c));
+    events = say(events, s.gameMinutes, "clearing", L(`Вырубка закончена: ${decimal((c.area / 10_000).toFixed(2))} га, брёвен +${Math.round(clearingLogs(c.area, c.forest))} м³`, `Clearing finished: ${decimal((c.area / 10_000).toFixed(2))} ha, logs +${Math.round(clearingLogs(c.area, c.forest))} m³`), fieldCentroid(c));
   }
   const zones = finished.length > 0 ? clearTerrain(s.zones, s.roads, finished) : s.zones;
   return { ...s, clearings, events, zones, stock: { ...s.stock, logs: s.stock.logs + logs } };

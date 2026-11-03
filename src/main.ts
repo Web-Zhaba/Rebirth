@@ -10,7 +10,7 @@ import { attachZoneTool } from "./map/zoneTool";
 import { attachToolRepeat } from "./map/tools";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
-import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
+import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeRests, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
 import type { Speed } from "./sim/clock";
 import { initPlatform } from "./platform";
 import { soundPaused } from "./ui/sound";
@@ -25,6 +25,12 @@ import { attachSitePick } from "./view/layers/ruins";
 import { attachClearingPick } from "./view/layers/zones";
 import { App } from "./ui/App";
 import { followResidentById } from "./ui/follow";
+import { lang } from "./i18n";
+import { LANDMARK_LABELS } from "./ui/semanticModel";
+
+document.documentElement.lang = lang;
+document.getElementById("map")!.setAttribute("aria-label", LANDMARK_LABELS.map);
+document.getElementById("ui")!.setAttribute("aria-label", LANDMARK_LABELS.interface);
 
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
 // Read it before creating the map, which writes its own hash on construction.
@@ -64,7 +70,7 @@ const engineMount = await tryMountEngineView({
   weather: weatherNow,
   cloudSite,
   debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1",
-  life: { trips: lifeTrips, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById },
+  life: { trips: lifeTrips, rests: lifeRests, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById },
 });
 // The portal's SDK is up before the game starts; it loads alongside the map.
 const platform = await platformInit;

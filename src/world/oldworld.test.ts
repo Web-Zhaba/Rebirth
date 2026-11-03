@@ -3,9 +3,11 @@ import type { VectorTile } from "@mapbox/vector-tile";
 import { makeFrame } from "./frame";
 import { lngLatToTile } from "./mercator";
 import {
+  buildingPieces,
   clipPolylineToDiscs,
   dedupeFoundations,
   inDiscs,
+  joinBuildings,
   matchStreetName,
   parseOldWorldTile,
   ringArea,
@@ -204,5 +206,73 @@ describe("parseOldWorldTile", () => {
 
   it("returns nothing for a missing tile", () => {
     expect(parseOldWorldTile(null, 14, 0, 0, frame, [])).toEqual({ foundations: [], streets: [], pois: [], spots: [] });
+  });
+});
+
+describe("joinBuildings", () => {
+  const frame = makeFrame(59.1244, 37.9189);
+  const f = lngLatToTile(37.9189, 59.1244, 14);
+  const tx = Math.floor(f.x);
+  const ty = Math.floor(f.y);
+  const rect = (x0: number, y0: number, x1: number, y1: number) => [
+    { x: x0, y: y0 },
+    { x: x1, y: y0 },
+    { x: x1, y: y1 },
+    { x: x0, y: y1 },
+  ];
+  // A tile as the server cuts it: everything clipped to the tile plus a 64 px buffer.
+  const tile = (features: { id: number; rings: { x: number; y: number }[][] }[]) =>
+    ({
+      layers: {
+        building: {
+          extent: 4096,
+          length: features.length,
+          feature: (i: number) => ({
+            type: 3,
+            id: features[i].id,
+            properties: {},
+            loadGeometry: () => features[i].rings.map((r) => r.map((p) => ({ x: Math.min(4160, Math.max(-64, p.x)), y: Math.min(4160, Math.max(-64, p.y)) }))),
+          }),
+        },
+      },
+    }) as unknown as VectorTile;
+  const far = [{ x: 0, y: 0, r: 1e7 }];
+  const both = (x: number, y: number) => y === ty && (x === tx || x === tx + 1);
+
+  it("joins a building cut by a tile border back into one foundation", () => {
+    // 150 px wide across the border: whole in the left tile's buffer, cut in the right one; a far part numbered 0 only on the left
+    const a = tile([{ id: 77, rings: [rect(100, 100, 120, 120), rect(4000, 100, 4150, 200)] }]);
+    const b = tile([{ id: 77, rings: [rect(-96, 100, 54, 200)] }]);
+    const pieces = [...buildingPieces(a, tx, ty, both), ...buildingPieces(b, tx + 1, ty, both)];
+    const out = joinBuildings(pieces, 14, frame, far);
+    expect(out.map((x) => x.id).sort()).toEqual(["osm:77", "osm:77.1"]);
+    const big = out.find((x) => x.id === "osm:77.1")!;
+    expect(big.ring).toHaveLength(4);
+    const solo = joinBuildings(buildingPieces(a, tx, ty, () => false), 14, frame, far).find((x) => x.id === "osm:77.1")!;
+    expect(big.area).toBeCloseTo(solo.area, 0); // the whole building, as the left tile alone had it
+  });
+
+  it("joins cuts whose border crossings differ by a fraction of a pixel", () => {
+    // a slanted wall: each tile computes its own crossing of the border
+    const a = tile([{ id: 5, rings: [[{ x: 3900, y: 100 }, { x: 4300, y: 101 }, { x: 4300, y: 300 }, { x: 3900, y: 299 }]] }]);
+    const b = tile([{ id: 5, rings: [[{ x: -196, y: 100 }, { x: 204, y: 101 }, { x: 204, y: 300 }, { x: -196, y: 299 }]] }]);
+    const out = joinBuildings([...buildingPieces(a, tx, ty, both), ...buildingPieces(b, tx + 1, ty, both)], 14, frame, far);
+    expect(out).toHaveLength(1);
+    expect(out[0].ring.length).toBeLessThanOrEqual(6); // the four corners and where each wall crosses the border
+  });
+
+  it("joins the cuts of one building that each tile names differently", () => {
+    const a = tile([{ id: 13, rings: [rect(4000, 100, 4150, 200)] }]);
+    const b = tile([{ id: 24, rings: [rect(-96, 100, 54, 200)] }]);
+    const out = joinBuildings([...buildingPieces(a, tx, ty, both), ...buildingPieces(b, tx + 1, ty, both)], 14, frame, far);
+    expect(out.map((x) => x.id)).toEqual(["osm:13"]);
+    expect(out[0].ring).toHaveLength(4);
+  });
+
+  it("keeps the buffer where the neighbour tile is not loaded", () => {
+    const a = tile([{ id: 9, rings: [rect(4000, 100, 4150, 200)] }]);
+    const cut = joinBuildings(buildingPieces(a, tx, ty, both), 14, frame, far)[0];
+    const kept = joinBuildings(buildingPieces(a, tx, ty, () => false), 14, frame, far)[0];
+    expect(cut.area).toBeLessThan(kept.area * 0.7);
   });
 });

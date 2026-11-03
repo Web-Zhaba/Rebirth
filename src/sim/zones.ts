@@ -1,5 +1,6 @@
 import { ROAD_KINDS } from "./roads";
 import type { Field, RoadEdge, RoadGraph, TerrainInfo, ZoneBlock, ZoneCell, ZoneState, ZoneType } from "./types";
+import { L } from "../i18n";
 
 export const CELL_SIZE = 8; // m, both along and across the road
 export const MAX_DEPTH = 4; // cells deep on each side
@@ -393,19 +394,19 @@ function touchesRoad(pts: readonly [number, number][], g: RoadGraph): boolean {
 
 // Returns the polygon in counter-clockwise order with its area, or a Russian reason.
 export function validateField(pts: [number, number][], graph: RoadGraph, fields: readonly Field[]): FieldCheck {
-  if (!Array.isArray(pts) || pts.length < 3) return bad("Нужно минимум 3 точки");
+  if (!Array.isArray(pts) || pts.length < 3) return bad(L("Нужно минимум 3 точки", "At least 3 points are needed"));
   if (!pts.every((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6)) {
-    return bad("Некорректный контур");
+    return bad(L("Некорректный контур", "Invalid outline"));
   }
-  if (pts.length > 256) return bad("Слишком много точек");
-  if (selfIntersects(pts)) return bad("Контур пересекает сам себя");
+  if (pts.length > 256) return bad(L("Слишком много точек", "Too many points"));
+  if (selfIntersects(pts)) return bad(L("Контур пересекает сам себя", "The outline crosses itself"));
   const signed = signedArea(pts);
   const area = Math.abs(signed);
-  if (area < MIN_FIELD_AREA) return bad("Слишком маленькое поле");
-  if (area > MAX_FIELD_AREA) return bad("Слишком большое поле");
+  if (area < MIN_FIELD_AREA) return bad(L("Слишком маленькое поле", "The field is too small"));
+  if (area > MAX_FIELD_AREA) return bad(L("Слишком большое поле", "The field is too large"));
   const ccw: [number, number][] = signed >= 0 ? pts.map((p) => [p[0], p[1]]) : pts.map((p) => [p[0], p[1]] as [number, number]).reverse();
-  if (touchesRoad(ccw, graph)) return bad("Поле пересекает дорогу");
-  if (fields.some((f) => polygonsOverlap(ccw, f.pts))) return bad("Поле накладывается на другое");
+  if (touchesRoad(ccw, graph)) return bad(L("Поле пересекает дорогу", "The field crosses a road"));
+  if (fields.some((f) => polygonsOverlap(ccw, f.pts))) return bad(L("Поле накладывается на другое", "The field overlaps another"));
   return { ok: true, pts: ccw, area };
 }
 

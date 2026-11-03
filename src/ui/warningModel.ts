@@ -1,4 +1,5 @@
 import type { ServiceId } from "../sim/types";
+import { L, plural } from "../i18n";
 
 export interface WarningLike {
   id: string;
@@ -22,7 +23,6 @@ export function warningAction(id: string): WarningAction {
 }
 
 export function serviceWarningText(name: string, uncovered: number): string {
-  const m = uncovered % 100;
-  const word = m >= 11 && m <= 14 ? "домов" : uncovered % 10 === 1 ? "дом" : uncovered % 10 >= 2 && uncovered % 10 <= 4 ? "дома" : "домов";
-  return `${uncovered} ${word} без услуги «${name}»`;
+  const word = plural(uncovered, "дом", "дома", "домов", "house");
+  return L(`${uncovered} ${word} без услуги «${name}»`, `${uncovered} ${word} without ${name}`);
 }

@@ -2,6 +2,7 @@ import type { Land } from "../world/landcover";
 import { fieldCentroid } from "./fields";
 import type { Clearing, Field, RoadGraph, TerrainInfo } from "./types";
 import { pointInPolygon, polygonsOverlap, selfIntersects, signedArea } from "./zones";
+import { L } from "../i18n";
 
 // Forest clearing («Вырубка», PLAN-pace.md section 6). Rates are per 100 m2.
 export const CLEARING = {
@@ -48,22 +49,22 @@ function nearBuiltRoad(x: number, y: number, g: RoadGraph): boolean {
 
 // Returns the polygon in counter-clockwise order with its area and labor, or a Russian reason.
 export function validateClearing(pts: [number, number][], forest: number, graph: RoadGraph, fields: readonly Field[], clearings: readonly Clearing[]): ClearingCheck {
-  if (!Array.isArray(pts) || pts.length < 3) return bad("Нужно минимум 3 точки");
+  if (!Array.isArray(pts) || pts.length < 3) return bad(L("Нужно минимум 3 точки", "At least 3 points are needed"));
   if (!pts.every((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6)) {
-    return bad("Некорректный контур");
+    return bad(L("Некорректный контур", "Invalid outline"));
   }
-  if (pts.length > 256) return bad("Слишком много точек");
-  if (!Number.isFinite(forest) || forest < 0 || forest > 1) return bad("Некорректная доля леса");
-  if (selfIntersects(pts)) return bad("Контур пересекает сам себя");
+  if (pts.length > 256) return bad(L("Слишком много точек", "Too many points"));
+  if (!Number.isFinite(forest) || forest < 0 || forest > 1) return bad(L("Некорректная доля леса", "Invalid forest share"));
+  if (selfIntersects(pts)) return bad(L("Контур пересекает сам себя", "The outline crosses itself"));
   const signed = signedArea(pts);
   const area = Math.abs(signed);
-  if (area < CLEARING.minArea) return bad("Слишком маленький участок");
-  if (area > CLEARING.maxArea) return bad("Слишком большой участок: до 5 га");
+  if (area < CLEARING.minArea) return bad(L("Слишком маленький участок", "The area is too small"));
+  if (area > CLEARING.maxArea) return bad(L("Слишком большой участок: до 5 га", "The area is too large: up to 5 ha"));
   const ccw: [number, number][] = signed >= 0 ? pts.map((p) => [p[0], p[1]]) : pts.map((p) => [p[0], p[1]] as [number, number]).reverse();
-  if (fields.some((f) => polygonsOverlap(ccw, f.pts))) return bad("Вырубка накладывается на поле");
-  if (clearings.some((c) => polygonsOverlap(ccw, c.pts))) return bad("Вырубка накладывается на другую");
+  if (fields.some((f) => polygonsOverlap(ccw, f.pts))) return bad(L("Вырубка накладывается на поле", "The clearing overlaps a field"));
+  if (clearings.some((c) => polygonsOverlap(ccw, c.pts))) return bad(L("Вырубка накладывается на другую", "The clearing overlaps another"));
   const [cx, cy] = fieldCentroid({ pts: ccw });
-  if (!nearBuiltRoad(cx, cy, graph)) return bad("Слишком далеко от построенной дороги (до 300 м)");
+  if (!nearBuiltRoad(cx, cy, graph)) return bad(L("Слишком далеко от построенной дороги (до 300 м)", "Too far from a built road (300 m max)"));
   return { ok: true, pts: ccw, area, labor: clearingLabor(area, forest) };
 }
 

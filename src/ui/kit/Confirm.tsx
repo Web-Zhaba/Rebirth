@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
+import { L } from "../../i18n";
 
 // In-app confirmation (never the native confirm()): a modal with a short question and two buttons.
 export function Confirm({
@@ -23,7 +24,7 @@ export function Confirm({
         <Button variant="danger" onClick={onOk}>
           {okLabel}
         </Button>
-        <Button onClick={onCancel}>Отмена</Button>
+        <Button onClick={onCancel}>{L("Отмена", "Cancel")}</Button>
       </div>
     </Dialog>
   );

@@ -3,11 +3,12 @@ import { isUnlocked } from "./tech";
 import { ageOf, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
 import { roadNet } from "./roadNetCache";
 import { servicePreviewIndex } from "./servicePreviewIndex";
-import { countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
+import { CAMP, countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import { classPupils, schoolSeats } from "./school";
 import { learningFactor, MOOD_NEUTRAL, needsOf } from "./needs";
 import { finishedMonuments, monumentLand, monumentsNear } from "./monuments";
 import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
+import { L } from "../i18n";
 
 // ---------- coverage ----------
 
@@ -22,6 +23,8 @@ export function computeCoverage(s: Pick<SimState, "buildings" | "roads" | "resid
 
   // Кэшируем позиции домов с их координатами для быстрой AABB-отсечки
   const spots: { id: number; spot: Spot; x: number; y: number }[] = [];
+  const camp = snapToRoad(net, 0, 0); // the tent families live in the camp at the founding point
+  if (camp) spots.push({ id: CAMP, spot: camp, x: 0, y: 0 });
   for (const b of Object.values(s.buildings)) {
     if (!isFinishedHouse(b)) continue;
     const [x, y] = lotFront(b);
@@ -144,15 +147,15 @@ export function upgradeShortfall(land: number, services: number | undefined, moo
   const out: string[] = [];
   if (land < SERVICE.upgradeLand) {
     const missing = SERVICE_LIST.filter((sv) => !covers(services, sv.id)).map((sv) => sv.name.toLowerCase());
-    out.push(`стоимость участка ${land} из ${SERVICE.upgradeLand}${missing.length ? `, нет: ${missing.join(", ")}` : ""}`);
+    out.push(L(`стоимость участка ${land} из ${SERVICE.upgradeLand}`, `land value ${land} of ${SERVICE.upgradeLand}`) + (missing.length ? `, ${L("нет", "missing")}: ${missing.join(", ")}` : ""));
   }
-  if (mood === undefined || mood < SERVICE.upgradeMood) out.push(`настроение ${mood === undefined ? 0 : mood} из ${SERVICE.upgradeMood}`);
+  if (mood === undefined || mood < SERVICE.upgradeMood) out.push(L(`настроение ${mood === undefined ? 0 : mood} из ${SERVICE.upgradeMood}`, `mood ${mood === undefined ? 0 : mood} of ${SERVICE.upgradeMood}`));
   return out;
 }
 
 export function upgradeBlockers(s: Pick<SimState, "progress" | "coverage" | "landValue">, b: Building, mood: number | undefined): string[] {
   if (b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) return [];
-  const out = isUnlocked(s.progress, "upgrade") ? [] : ["откроется с технологией «Просторное жильё»"];
+  const out = isUnlocked(s.progress, "upgrade") ? [] : [L("откроется с технологией «Просторное жильё»", "unlocks with the Spacious Housing technology")];
   return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood)];
 }
 

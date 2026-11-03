@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildView, rayDir, type CameraState } from "./camera";
 import { pickGround } from "./pick";
-import { panByPixels, rotateByPixels, solveGrab, zoomAbout, type PickFn } from "./grab";
+import { panAboutCentre, panByPixels, rotateByPixels, solveGrab, zoomAbout, type PickFn } from "./grab";
 
 const W = 1000;
 const H = 700;
@@ -74,5 +74,40 @@ describe("pixel fallbacks", () => {
     rotateByPixels(s, 10, -20);
     expect(s.heading).toBeCloseTo(18, 9);
     expect(s.pitch).toBe(80);
+  });
+});
+
+describe("panAboutCentre", () => {
+  const step = (s: CameraState, dx: number, dy: number, pick: PickFn): number => {
+    const before = { lat: s.lat, lng: s.lng };
+    panAboutCentre(s, dx, dy, W, H, pick);
+    return Math.hypot((s.lat - before.lat) * 111_000, (s.lng - before.lng) * 76_000);
+  };
+
+  for (const [name, ground] of [["flat", flat], ["hilly", hill]] as const) {
+    it(`moves the centre's ground with a short pointer step (${name})`, () => {
+      const pick = mk(ground);
+      const s = cam({ distance: 60, pitch: 80, lat: 47.262, h: ground(47.262, 11.4) });
+      const g = pick(s, W / 2, H / 2)!;
+      panAboutCentre(s, 4, -6, W, H, pick);
+      const after = pick(s, W / 2 + 4, H / 2 - 6)!;
+      expect((after.lat - g.lat) * 111_000).toBeCloseTo(0, 1);
+      expect((after.lng - g.lng) * 76_000).toBeCloseTo(0, 1);
+    });
+  }
+
+  it("keeps the same speed through a long drag towards the horizon", () => {
+    // Equal steps up the screen move the ground by equal amounts, unlike holding the point first grabbed.
+    const pick = mk(flat);
+    const s = cam({ distance: 60, pitch: 80 });
+    const steps = Array.from({ length: 20 }, () => step(s, 0, 10, pick));
+    expect(Math.max(...steps) / Math.min(...steps)).toBeLessThan(1.05);
+  });
+
+  it("scales a fast flick linearly instead of measuring it near the horizon", () => {
+    const pick = mk(flat);
+    const slow = step(cam({ distance: 60, pitch: 80 }), 0, 8, pick);
+    const fast = step(cam({ distance: 60, pitch: 80 }), 0, 80, pick);
+    expect(fast / slow).toBeCloseTo(10, 3);
   });
 });

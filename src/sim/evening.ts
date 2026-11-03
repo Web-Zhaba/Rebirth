@@ -1,6 +1,6 @@
 import { ADULT_MAX, ADULT_MIN, ageOf, buildNet, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Spot } from "./people";
 import { residentWorkFactor } from "./needs";
-import { covers } from "./services";
+import { CAMP, covers } from "./services";
 import { workHours, type Levers } from "./levers";
 import { calendar } from "./time";
 import type { SimState } from "./types";
@@ -42,10 +42,12 @@ export function eveningStep(s: SimState, dt: number): SimState {
   return { ...s, stock: { ...s.stock, wares: s.stock.wares + q }, prod: { ...s.prod, today: { ...s.prod.today, 0: (s.prod.today[0] ?? 0) + q } } };
 }
 
-// Houses whose households gather in the evening: covered by a chapel, or within reach of a staffed tavern.
+// Dwellings whose households gather in the evening: covered by a chapel, or within reach of a staffed tavern. A
+// dwelling is a finished house's id, or CAMP for the tent families.
 export function gatherHouses(s: Pick<SimState, "buildings" | "roads" | "residents" | "coverage">): Set<number> {
   const out = new Set<number>();
   for (const b of Object.values(s.buildings)) if (isFinishedHouse(b) && covers(s.coverage[b.id], "chapel")) out.add(b.id);
+  if (covers(s.coverage[CAMP], "chapel")) out.add(CAMP);
   const workers = new Set<number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) workers.add(r.job);
   const taverns = Object.values(s.buildings).filter((b) => b.template === "tavern" && b.state === "active" && workers.has(b.id));
@@ -53,6 +55,8 @@ export function gatherHouses(s: Pick<SimState, "buildings" | "roads" | "resident
   const net = buildNet(s.roads);
   if (net.edges.length === 0) return out;
   const spots: { id: number; spot: Spot }[] = [];
+  const camp = snapToRoad(net, 0, 0);
+  if (camp) spots.push({ id: CAMP, spot: camp });
   for (const b of Object.values(s.buildings)) {
     if (!isFinishedHouse(b)) continue;
     const [x, y] = lotFront(b);

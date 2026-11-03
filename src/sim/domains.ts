@@ -1,14 +1,15 @@
+import { L } from "../i18n";
 // Knowledge domains (PLAN-research.ru.md): every technology belongs to one, and a restored old building feeds the
 // domain of its type. Shared by the tech tree and the heritage finds.
 export type DomainId = "build" | "farm" | "craft" | "trade" | "learn" | "care";
 
 export const DOMAINS: { id: DomainId; name: string }[] = [
-  { id: "build", name: "Строительство" },
-  { id: "farm", name: "Земледелие" },
-  { id: "craft", name: "Ремесло" },
-  { id: "trade", name: "Торговля" },
-  { id: "learn", name: "Знание" },
-  { id: "care", name: "Вера и здоровье" },
+  { id: "build", name: L("Строительство", "Building") },
+  { id: "farm", name: L("Земледелие", "Farming") },
+  { id: "craft", name: L("Ремесло", "Crafts") },
+  { id: "trade", name: L("Торговля", "Trade") },
+  { id: "learn", name: L("Знание", "Knowledge") },
+  { id: "care", name: L("Вера и здоровье", "Faith and health") },
 ];
 
 export const DOMAIN_IDS: DomainId[] = DOMAINS.map((d) => d.id);

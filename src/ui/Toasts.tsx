@@ -7,6 +7,7 @@ import { IconButton } from "./kit";
 import { dismissToast, toasts } from "./toastStore";
 import { openPanel } from "./panels";
 import { KIND_ICON, KIND_TONE, opensScience, showMs, type Toast } from "./toastModel";
+import { L } from "../i18n";
 
 // One toast: dismisses itself after its time, which stops while the pointer or the focus is on it.
 function ToastItem({ t, view }: { t: Toast; view: View }) {
@@ -39,17 +40,17 @@ function ToastItem({ t, view }: { t: Toast; view: View }) {
       onFocusOut={() => setPaused(false)}
     >
       {fly ? (
-        <button class="toast-main" title="Показать на карте" onClick={fly}>
+        <button class="toast-main" title={L("Показать на карте", "Show on the map")} onClick={fly}>
           {body}
         </button>
       ) : opensScience(t.kind) ? (
-        <button class="toast-main" title="Открыть «Науку»" onClick={() => openPanel("tech")}>
+        <button class="toast-main" title={L("Открыть «Науку»", "Open Research")} onClick={() => openPanel("tech")}>
           {body}
         </button>
       ) : (
         <div class="toast-main">{body}</div>
       )}
-      <IconButton icon="close" label="Закрыть" size={14} onClick={() => dismissToast(t.id)} />
+      <IconButton icon="close" label={L("Закрыть", "Close")} size={14} onClick={() => dismissToast(t.id)} />
     </li>
   );
 }
@@ -57,7 +58,7 @@ function ToastItem({ t, view }: { t: Toast; view: View }) {
 // The live region stays mounted even when empty so that screen readers announce what appears in it.
 export function Toasts({ view }: { view: View }) {
   return (
-    <ul class="toasts" aria-live="polite" aria-label="Новости города">
+    <ul class="toasts" aria-live="polite" aria-label={L("Новости города", "Town news")}>
       {toasts.value.map((t) => (
         <ToastItem key={t.id} t={t} view={view} />
       ))}

@@ -1,19 +1,23 @@
-import type { Light, Trip } from "../map/life";
+import { unit, type Light, type Rest, type Trip } from "../map/life";
 import { BUILDINGS } from "./buildings";
 import { EVENING } from "./evening";
-import { workHours } from "./levers";
-import { WORKSHOP_INPUT } from "./fields";
+import { tolokaActive, workHours } from "./levers";
+import { idleWorkplaces, WORKSHOP_INPUT } from "./fields";
 import { polyLength, walkTo, type Walk } from "./paths";
-import { ageOf, buildNet, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
+import { ageOf, buildNet, constructionWork, isAdultAge, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
 import { residentMoveFactor } from "./needs";
 import { GOOD } from "./production";
+import { isCleared } from "./clearing";
+import { workableEdges } from "./roads";
+import { pointInPolygon } from "./zones";
 import { START_MINUTE_OF_DAY } from "./time";
-import type { Building, SimState, Stock } from "./types";
+import type { Building, Resident, SimState, Stock } from "./types";
 
 // Visual life (PLAN.md section 10): derived from the state once per game day and never stored in it.
 export interface LifeData {
   day: number;
   trips: Trip[];
+  rests: Rest[]; // every resident, where they stay off their walks
   traffic: Record<number, number>; // road edge id -> commuters using it per day
   lights: Light[];
 }
@@ -28,16 +32,12 @@ export const HOME_AT = 19 * 60; // earliest departure home (19:00)
 export const WORK_FROM = 7 * 60;
 export const WORK_TO = 19 * 60;
 export const MAX_GUESTS = 12; // evening walkers to one tavern
+export const CAMP_CLEAR = 3; // m around the founding point the tent folk leave free
+export const CAMP_PER = 1.6; // m of camp radius per square root of its people
+// Workplaces worked in the open, where the workers show on the plot: the rest work indoors, out of sight.
+export const OPEN_AIR: ReadonlySet<string> = new Set(["garden", "orchard", "apiary", "forager", "quarry", "dig", "woodcutter", "sawpit", "fisher", "market"]);
 const CART_ID0 = 2 ** 30;
 const EVENING_ID0 = 2 ** 29;
-
-// Deterministic 32-bit mix of an id (and a salt), as a number in [0, 1).
-function unit(id: number, salt: number): number {
-  let h = Math.imul(id ^ Math.imul(salt, 0x9e3779b1), 0x45d9f3b);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  h = (h ^ (h >>> 16)) >>> 0;
-  return h / 4294967296;
-}
 
 const round2 = (pts: [number, number][]): [number, number][] => pts.map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
 const centre = (b: Building): [number, number] => {
@@ -82,7 +82,8 @@ export function computeLife(s: SimState, day = 0): LifeData {
     const [x, y] = centre(b);
     lights.push({ id: b.id, x, y, kind: b.template === "tavern" ? "tavern" : "work" });
   }
-  if (net.adj.size === 0) return { day, trips, traffic, lights };
+  const rests = restsOf(s);
+  if (net.adj.size === 0) return { day, trips, rests, traffic, lights };
 
   // door -> its spot on the net, once per building
   const spot = new Map<number, Spot | null>();
@@ -236,5 +237,72 @@ export function computeLife(s: SimState, day = 0): LifeData {
       trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: (((depart + START_MINUTE_OF_DAY) % 1440) + 1440) % 1440, speed: CART_SPEED });
     }
   }
-  return { day, trips, traffic, lights };
+  return { day, trips, rests, traffic, lights };
+}
+
+// Where every resident stays off their walks: in their house (out of sight), else scattered about the camp at the
+// founding point; at work in work hours when they have a job (and are not in class), on the plot when it is worked in
+// the open. The builders (the artel: adults without work, or whose workplace stands idle; everyone in a toloka) work
+// on the construction sites instead, each at one of them.
+function restsOf(s: SimState): Rest[] {
+  const housed = (r: Resident) => {
+    const hh = s.households[r.household];
+    const b = hh && hh.home !== null ? s.buildings[hh.home] : undefined;
+    return isFinishedHouse(b);
+  };
+  const all = Object.values(s.residents);
+  const camp = CAMP_PER * Math.sqrt(all.filter((r) => !housed(r)).length);
+  const sites = constructionSites(s);
+  const toloka = tolokaActive(s.levers, s.gameMinutes);
+  const idle = sites.length ? idleWorkplaces(s) : new Set<number>();
+  return all.map((r) => {
+    const age = ageOf(r.born, s.gameMinutes);
+    const a = 2 * Math.PI * unit(r.id, 8);
+    const d = CAMP_CLEAR + camp * Math.sqrt(unit(r.id, 9));
+    const home: [number, number] | null = housed(r) ? null : [cm(d * Math.cos(a)), cm(d * Math.sin(a))];
+    const job = r.job !== null && !r.inClass ? s.buildings[r.job] : undefined;
+    const builder = sites.length > 0 && isAdultAge(age) && !r.inClass && (toloka || r.job === null || idle.has(r.job));
+    const at = builder ? sites[Math.floor(unit(r.id, 30) * sites.length)](r.id) : isWorkplace(job) ? (OPEN_AIR.has(job.template) ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
+    const work = at !== undefined ? { at, from: WORK_FROM, to: WORK_TO } : undefined;
+    return { who: r.id, sex: r.sex, age, home, ...(work && { work }) };
+  });
+}
+
+// The construction going on, each as a builder's spot on it: a building rising (on its footprint) or being rebuilt (by
+// its door, the house stands meanwhile), a forest being cleared, a road being laid (along the edge).
+function constructionSites(s: SimState): ((who: number) => [number, number])[] {
+  if (!constructionWork(s.buildings, s.roads, s.clearings, s.stock)) return [];
+  const out: ((who: number) => [number, number])[] = [];
+  for (const b of Object.values(s.buildings)) {
+    if (b.state !== "active") out.push((who) => spotOn(b.footprint, who, centre(b)));
+    else if (b.upgrade) {
+      const [x, y] = lotFront(b);
+      out.push((who) => [cm(x + 3 * (unit(who, 31) - 0.5)), cm(y + 3 * (unit(who, 32) - 0.5))]);
+    }
+  }
+  for (const c of s.clearings ?? []) if (!isCleared(c)) out.push((who) => spotOn(c.pts, who, c.pts[0]));
+  for (const id of workableEdges(s.roads, s.stock)) {
+    const e = s.roads.edges[id];
+    const [p, q] = [s.roads.nodes[e.a], s.roads.nodes[e.b]];
+    out.push((who) => {
+      const t = unit(who, 33);
+      return [cm(p.x + (q.x - p.x) * t), cm(p.y + (q.y - p.y) * t)];
+    });
+  }
+  return out;
+}
+
+const cm = (v: number) => Math.round(v * 100) / 100; // to the centimetre, as the trips
+
+// A resident's own spot in an area: a point of its outline picked by their id, `fallback` if none is hit.
+function spotOn(pts: [number, number][], who: number, fallback: [number, number]): [number, number] {
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  for (let k = 0; k < 8; k++) {
+    const x = x0 + (x1 - x0) * unit(who, 20 + 2 * k);
+    const y = y0 + (y1 - y0) * unit(who, 21 + 2 * k);
+    if (pointInPolygon(x, y, pts)) return [cm(x), cm(y)];
+  }
+  return fallback;
 }

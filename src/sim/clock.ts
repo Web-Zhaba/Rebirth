@@ -19,6 +19,7 @@ import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
 import type { SimState } from "./types";
 import { weatherStep } from "./weather";
 import { buildFactor } from "./weatherEffects";
+import { L } from "../i18n";
 
 export { START_MINUTE_OF_DAY };
 
@@ -62,7 +63,7 @@ export function clockAt(gameMinutes: number, realTime: number, now: number, spee
 // «начнут в 07:00» while the artel is off work (evening, night, early morning), else null; for queued roads and sites.
 export function queuedLabel(gameMinutes: number, levers?: Levers): string | null {
   const h = calendar(gameMinutes).hour;
-  return isWorkHour(h, levers) ? null : `начнут в ${String(workHours(levers).start).padStart(2, "0")}:00`;
+  return isWorkHour(h, levers) ? null : L(`начнут в ${String(workHours(levers).start).padStart(2, "0")}:00`, `starts at ${String(workHours(levers).start).padStart(2, "0")}:00`);
 }
 
 // A dig site that has revealed everything it can goes away: its diggers return to the artel, its finds stay on the map.
@@ -75,7 +76,7 @@ function retireDigs(s: SimState): SimState {
   for (const b of done) {
     delete buildings[b.id];
     finds = keepRevealed(finds, b);
-    events = say(events, s.gameMinutes, "built", "Раскоп завершён: открытое остаётся на карте и в тетради", [b.lot.cx, b.lot.cy]);
+    events = say(events, s.gameMinutes, "built", L("Раскоп завершён: открытое остаётся на карте и в тетради", "Dig finished: what was found stays on the map and in the notebook"), [b.lot.cx, b.lot.cy]);
   }
   return refreshServices(syncPeople({ ...s, buildings, finds, events }));
 }

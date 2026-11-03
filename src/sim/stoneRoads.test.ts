@@ -66,8 +66,8 @@ describe("bridge span", () => {
 
 describe("stone roads", () => {
   it("are priced with their own stone and accept 20 % where dirt fails", () => {
-    expect(ROAD_KINDS.stone).toMatchObject({ width: 5, labor: 2, stone: 0.01, maxGrade: 0.2, crossesWater: false });
-    expect(ROAD_KINDS.stonebridge).toMatchObject({ width: 5, labor: 4, stone: 0.04, maxGrade: 0.12, crossesWater: true });
+    expect(ROAD_KINDS.stone).toMatchObject({ width: 5, labor: 0.8, stone: 0.01, maxGrade: 0.2, crossesWater: false });
+    expect(ROAD_KINDS.stonebridge).toMatchObject({ width: 5, labor: 1.6, stone: 0.04, maxGrade: 0.12, crossesWater: true });
     const steep = profile(["meadow", "meadow"], 20, 0.15);
     expect(segmentCost(steep, "dirt").ok).toBe(false);
     const c = segmentCost(steep, "stone");
