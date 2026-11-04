@@ -95,23 +95,23 @@ describe("capacity", () => {
   it("is the jobs, cut by the staff limit, and zero at priority none", () => {
     const b = s.buildings[2];
     expect(groupOf(b)).toBe("crafts");
-    expect(capacityOf(b, s)).toBe(3);
+    expect(capacityOf(b, s)).toBe(6);
     expect(capacityOf({ ...b, staff: 1 }, s)).toBe(1);
     expect(capacityOf({ ...b, staff: 0 }, s)).toBe(0);
-    expect(capacityOf({ ...b, staff: 9 }, s)).toBe(3);
+    expect(capacityOf({ ...b, staff: 9 }, s)).toBe(6);
     expect(capacityOf(b, withJobs(s, { crafts: 0 }))).toBe(0);
-    expect(capacityOf(b, withJobs(s, { crafts: 1 }))).toBe(3);
+    expect(capacityOf(b, withJobs(s, { crafts: 1 }))).toBe(6);
   });
 });
 
 describe("assignment", () => {
-  // Craft work near the house, wood work farther away.
-  const base = () => people(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "woodcutter", 1000)]), 4);
+  // Craft work near the house (6 jobs), wood work farther away (5 jobs), 8 workers.
+  const base = () => people(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "woodcutter", 1000)]), 8);
 
   it("at normal priority takes the nearest vacancy", () => {
     const a = day(base());
-    expect(at(a, 2)).toBe(3);
-    expect(at(a, 3)).toBe(1);
+    expect(at(a, 2)).toBe(6);
+    expect(at(a, 3)).toBe(2);
   });
   it("a house mid-road walks from its own place on the road: 110 m to the work is 1.7 min, not 4.4", () => {
     const s = people(town([building(1, "izba", 50), building(2, "smithy", 160)]), 1, [2]);
@@ -121,27 +121,27 @@ describe("assignment", () => {
   });
   it("takes the highest priority first, then the nearest", () => {
     const a = day(withJobs(base(), { materials: 3 }));
-    expect(at(a, 3)).toBe(2); // the woodcutter holds 2
-    expect(at(a, 2)).toBe(2);
+    expect(at(a, 3)).toBe(5); // the woodcutter holds 5
+    expect(at(a, 2)).toBe(3);
     const b = day(withJobs(base(), { materials: 1 }));
-    expect(at(b, 2)).toBe(3);
+    expect(at(b, 2)).toBe(6);
   });
   it("priority none closes the group", () => {
     const a = day(withJobs(base(), { crafts: 0 }));
     expect(at(a, 2)).toBe(0);
-    expect(at(a, 3)).toBe(2);
-    expect(peopleStats(a).employed).toBe(2);
+    expect(at(a, 3)).toBe(5);
+    expect(peopleStats(a).employed).toBe(5);
   });
   it("rebalances toward a higher priority at once, from a command", () => {
     const a = day(base());
-    expect(at(a, 2)).toBe(3);
+    expect(at(a, 2)).toBe(6);
     const b = must(setJobPriority(a, "materials", 3));
-    expect(at(b, 3)).toBe(2);
-    expect(at(b, 2)).toBe(2);
-    expect(peopleStats(b).employed).toBe(4);
+    expect(at(b, 3)).toBe(5);
+    expect(at(b, 2)).toBe(3);
+    expect(peopleStats(b).employed).toBe(8);
     // nobody moves down while their job is fine
     const c = must(setJobPriority(b, "materials", 2));
-    expect(at(c, 3)).toBe(2);
+    expect(at(c, 3)).toBe(5);
   });
   it("releases the farthest workers above a lowered capacity", () => {
     const a = day(base());
@@ -221,11 +221,11 @@ describe("commands", () => {
     expect(setStaff(s, 1, 0).ok).toBe(false); // a house
     expect(setStaff(s, 2, -1).ok).toBe(false);
     expect(setStaff(s, 2, 1.5).ok).toBe(false);
-    expect(setStaff(s, 2, 4).ok).toBe(false); // the smithy has 3 jobs
+    expect(setStaff(s, 2, 7).ok).toBe(false); // the smithy has 6 jobs
     const one = must(setStaff(s, 2, 1));
     expect(one.buildings[2].staff).toBe(1);
     expect(at(one, 2)).toBe(1);
-    const full = must(setStaff(one, 2, 3));
+    const full = must(setStaff(one, 2, 6));
     expect(full.buildings[2].staff).toBeUndefined();
     expect(at(full, 2)).toBe(3);
     const unfinished = { ...s, buildings: { ...s.buildings, 2: building(2, "smithy", 400, "building") } };
@@ -241,11 +241,11 @@ describe("report", () => {
     const r = jobReport(s);
     const crafts = r.groups.find((g) => g.key === "crafts")!;
     const mat = r.groups.find((g) => g.key === "materials")!;
-    expect(crafts).toMatchObject({ places: 3, closedByPriority: 0 });
-    expect(mat).toMatchObject({ places: 1, closedByStaff: 1 });
+    expect(crafts).toMatchObject({ places: 6, closedByPriority: 0 });
+    expect(mat).toMatchObject({ places: 1, closedByStaff: 4 });
     expect(r.adults).toBe(4);
     const closed = jobReport(must(setJobPriority(s, "crafts", 0)));
-    expect(closed.groups.find((g) => g.key === "crafts")).toMatchObject({ places: 0, workers: 0, closedByPriority: 3 });
+    expect(closed.groups.find((g) => g.key === "crafts")).toMatchObject({ places: 0, workers: 0, closedByPriority: 6 });
     expect(closed.jobless).toBeGreaterThanOrEqual(3);
   });
 });

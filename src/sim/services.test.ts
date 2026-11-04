@@ -120,7 +120,7 @@ describe("placing services", () => {
     }
   });
   it("footprints fit their lots and the table matches the design", () => {
-    const want: Record<string, [number, number, number, number]> = { well: [1, 1, 0, 150], market: [2, 2, 4, 800], chapel: [1, 2, 1, 1000], school: [1, 2, 2, 800], healer: [1, 1, 1, 1000] };
+    const want: Record<string, [number, number, number, number]> = { well: [1, 1, 0, 150], market: [2, 3, 8, 800], chapel: [1, 2, 1, 1000], school: [2, 2, 2, 800], healer: [1, 2, 1, 1000] };
     for (const [id, [w, d, jobs, range]] of Object.entries(want)) {
       expect(SERVICES[id as keyof typeof SERVICES].reach).toBe(range);
       const t = BUILDINGS[id];
@@ -549,8 +549,8 @@ describe("house upgrade", () => {
   it("level 2 houses hold two more people: births continue up to the new capacity", () => {
     const s = rich();
     const big: Building = { ...s.buildings[4], level: 2 };
-    expect(houseCapacity(big)).toBe(7);
-    expect(houseCapacity(s.buildings[4])).toBe(5);
+    expect(houseCapacity(big)).toBe(BUILDINGS.izba.residents + 2);
+    expect(houseCapacity(s.buildings[4])).toBe(BUILDINGS.izba.residents);
   });
 });
 

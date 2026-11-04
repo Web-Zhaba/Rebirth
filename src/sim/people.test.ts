@@ -177,15 +177,24 @@ describe("moving in", () => {
     expect(kinds(a)).toEqual(["movein", "movein"]);
     expect(vacantHouses(a.buildings, a.households)).toEqual([]);
   });
+  it("a large house takes two families, and a promise holds one of its homes", () => {
+    const a = day(town([building(1, "izba5", 100)]));
+    expect(Object.values(a.households).filter((h) => h.home === 1)).toHaveLength(2);
+    expect(vacantHouses(a.buildings, a.households)).toEqual([]);
+    const s = town([building(1, "izba5", 100)]);
+    const p = day({ ...s, incoming: [{ house: 1, arrive: s.gameMinutes + 600 }] });
+    expect(Object.values(p.households).filter((h) => h.home === 1)).toHaveLength(1);
+  });
   it("leaves a house promised to a family on its way alone", () => {
     const s = custom(town([building(1, "izba", 100), building(2, "izba", 200)]), [{ home: null, people: [{}] }, { home: null, people: [{}] }]);
     const a = day({ ...s, incoming: [{ house: 1, arrive: s.gameMinutes + 600 }] });
     expect(Object.values(a.households).map((h) => h.home).sort()).toEqual([2, null]);
   });
   it("a household that does not fit waits for a bigger house", () => {
-    const big = custom(town([building(1, "izba", 100), building(2, "izba5", 200)]), [{ home: null, people: Array(6).fill({}) }]);
+    // an izba holds a family of 6, each of the two homes of a large house one of 7
+    const big = custom(town([building(1, "izba", 100), building(2, "izba5", 200)]), [{ home: null, people: Array(7).fill({}) }]);
     expect(day(big).households[1].home).toBe(2);
-    const small = custom(town([building(1, "izba", 100)]), [{ home: null, people: Array(6).fill({}) }]);
+    const small = custom(town([building(1, "izba", 100)]), [{ home: null, people: Array(7).fill({}) }]);
     expect(day(small).households[1].home).toBeNull();
   });
   it("a removed house sends its household back to the tents", () => {
@@ -303,10 +312,10 @@ describe("births", () => {
     const kid = Object.values(a.residents).find((r) => r.born === a.gameMinutes)!;
     expect(kid.last).toBe(surnameFor(a.households[kid.household].last, kid.sex));
     expect(a.households[kid.household].members).toContain(kid.id);
-    // a full house stops births: an izba holds 5
+    // a full house stops births: an izba holds 6
     let c = a;
-    for (let i = 0; i < 3; i++) c = day(c, { rand: always, only: ["birth"] });
-    for (const h of Object.values(c.households)) expect(h.members).toHaveLength(5);
+    for (let i = 0; i < 4; i++) c = day(c, { rand: always, only: ["birth"] });
+    for (const h of Object.values(c.households)) expect(h.members).toHaveLength(6);
   });
   it("not in tents, not for unmarried women", () => {
     expect(Object.keys(day(town([]), { rand: always, only: ["birth"] }).residents)).toHaveLength(14);
@@ -404,18 +413,18 @@ describe("jobs", () => {
     expect(day(s).residents[1].job).toBeNull();
   });
   it("assigns the nearest reachable workplace, then the next one when it is full", () => {
-    const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "smithy", 1000)]), [adults(4)]);
+    const s = custom(town([building(1, "izba", 100), building(2, "smithy", 400), building(3, "smithy", 1000)]), [adults(7)]);
     const a = day(s);
     const rs = Object.values(a.residents);
-    expect(rs.filter((r) => r.job === 2)).toHaveLength(3); // the smithy holds 3
+    expect(rs.filter((r) => r.job === 2)).toHaveLength(6); // the smithy holds 6
     expect(rs.filter((r) => r.job === 3)).toHaveLength(1);
     const near = rs.find((r) => r.job === 2)!;
     const far = rs.find((r) => r.job === 3)!;
     expect(near.commute).toBeCloseTo((3 + 300 + 3) / WALK, 1);
     expect(far.commute).toBeCloseTo((3 + 900 + 3) / WALK, 1);
     const st = peopleStats(a);
-    expect(st.employed).toBe(4);
-    expect(st.avgCommute).toBeCloseTo((near.commute! * 3 + far.commute!) / 4, 5);
+    expect(st.employed).toBe(7);
+    expect(st.avgCommute).toBeCloseTo((near.commute! * 6 + far.commute!) / 7, 5);
   });
   it("households in tents take no regular jobs (they build their homes); once housed they do", () => {
     const s = custom(town([building(1, "smithy", 200), building(2, "izba", 100)]), [adults(1, null), adults(1, 2)]);
@@ -478,12 +487,12 @@ describe("builders and unemployment", () => {
   });
   it("demand counts vacancies, vacant and unfinished houses and tents", () => {
     const s = town([building(1, "izba", 100), building(2, "izba", 200), building(3, "smithy", 300)]);
-    // 4 tents, 2 vacant houses, 3 open jobs: 1.5 + 3 / 2 - 2 + 4
-    expect(demand(s).res).toBeCloseTo(5);
+    // 4 tents, 2 vacant houses, 6 open jobs: 1.5 + 6 / 2 - 2 + 4
+    expect(demand(s).res).toBeCloseTo(6.5);
     const t = day(s);
     // two families moved in, two are still in tents, and the smithy has staff
     const employed = peopleStats(t).employed;
-    expect(demand(t).res).toBeCloseTo(1.5 + (3 - employed) / 2 + 2);
+    expect(demand(t).res).toBeCloseTo(1.5 + (BUILDINGS.smithy.jobs - employed) / 2 + 2);
   });
 });
 
@@ -695,8 +704,8 @@ describe("query", () => {
     if (calm.kind === "house") expect(calm.households[0].people[1].role).toBe("без работы");
   });
   it("lists the workers of a workplace with their commute", () => {
-    expect(queryBuilding(base(), 2)).toEqual({ kind: "workplace", capacity: 3, workers: [{ id: 1, name: "Иван Тестов", age: 30, commute: 4.6, idle: false }] });
-    expect(queryBuilding(town([building(1, "shop", 100)]), 1)).toMatchObject({ kind: "workplace", capacity: 2, workers: [] });
+    expect(queryBuilding(base(), 2)).toEqual({ kind: "workplace", capacity: 6, workers: [{ id: 1, name: "Иван Тестов", age: 30, commute: 4.6, idle: false }] });
+    expect(queryBuilding(town([building(1, "shop", 100)]), 1)).toMatchObject({ kind: "workplace", capacity: 4, workers: [] });
   });
   it("an empty house and a missing building", () => {
     expect(queryBuilding(town(houses(1)), 1)).toEqual({ kind: "house", households: [], level: 1, landValue: 0, services: [], upgrading: false });

@@ -163,11 +163,10 @@ describe("the building", () => {
     expect(s.buildings[1]).toMatchObject({ template: "chapel", restoreMode: "working", height: 25 });
     expect(order(s, "h", "working").buildings[2]).toMatchObject({ template: "healer", height: 4 });
   });
-  it("is paid by its own materials and gets no old-foundation discount", () => {
+  it("is paid by its own materials", () => {
     let s = order(mk([church]), "a", "monument");
     s = { ...s, stock: { food: 0, logs: 100, planks: 100, stone: 100, wares: 0 } };
     const b = s.buildings[1];
-    expect(b.onRuins).toBeUndefined();
     const done = advanceBuildings({ 1: { ...b, paid: true } }, 1000);
     expect(done[1].state).toBe("active");
   });

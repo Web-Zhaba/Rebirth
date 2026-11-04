@@ -2,7 +2,7 @@ import { BUILDINGS, isJobKey, isPriority, remainingClearing, remainingLabor, typ
 import { jobsOf } from "./fields";
 import { withChronicle } from "./chronicle";
 import { CALL, RATIONS, TOLOKA_COOLDOWN, tolokaActive, workEndAt, workHours, isWorkHour, type Levers, type Rations } from "./levers";
-import { countResidents, isWorkplace, rebalanceJobs, vacantHouses } from "./people";
+import { countResidents, freeHomes, isWorkplace, rebalanceJobs } from "./people";
 import { say } from "./production";
 import { classPupils } from "./school";
 import { nextRandom } from "./rng";
@@ -114,8 +114,7 @@ export function setStaff(s: SimState, id: number, staff: number): LeverResult {
 
 // Why a call for settlers cannot be made now, or null.
 export function callBlock(s: Pick<SimState, "stock" | "buildings" | "households" | "incoming">): string | null {
-  const promised = new Set(s.incoming.map((f) => f.house));
-  if (!vacantHouses(s.buildings, s.households).some((id) => !promised.has(id))) return L("Нет свободного дома для новой семьи", "No free house for a new family");
+  if (freeHomes(s.buildings, s.households, s.incoming).length === 0) return L("Нет свободного дома для новой семьи", "No free house for a new family");
   if (s.stock.food < CALL.food) return L(`Не хватает еды: нужно ${CALL.food} кг`, `Not enough food: ${CALL.food} kg needed`);
   if (s.stock.wares < CALL.wares) return L(`Не хватает товаров: нужно ${CALL.wares} шт`, `Not enough goods: ${CALL.wares} pcs needed`);
   return null;
@@ -124,8 +123,7 @@ export function callBlock(s: Pick<SimState, "stock" | "buildings" | "households"
 export function callSettlers(s: SimState): LeverResult {
   const bad = callBlock(s);
   if (bad) return fail(bad);
-  const promised = new Set(s.incoming.map((f) => f.house));
-  const house = vacantHouses(s.buildings, s.households).find((id) => !promised.has(id))!;
+  const house = freeHomes(s.buildings, s.households, s.incoming)[0];
   const [r, rng] = nextRandom(s.rng);
   const arrive = s.gameMinutes + CALL.minMinutes + r * (CALL.maxMinutes - CALL.minMinutes);
   const incoming = [...s.incoming, { house, arrive }].sort((a, b) => a.arrive - b.arrive);

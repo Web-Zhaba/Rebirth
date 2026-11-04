@@ -295,10 +295,10 @@ export function BuildingPanel() {
   return (
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
       <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
-      {(b.siteId || b.onRuins) && (
+      {(b.siteId || b.foundationId) && (
         <Section>
           {b.siteId && <Restored b={b} site={site} />}
-          {b.onRuins && <div class="people-note">{b.state === "active" ? L("Стоит на старом фундаменте", "Stands on an old foundation") : L("Строится на старом фундаменте", "Being built on an old foundation")}</div>}
+          {b.foundationId && <div class="people-note">{b.state === "active" ? L("Стоит на старом фундаменте", "Stands on an old foundation") : L("Строится на старом фундаменте", "Being built on an old foundation")}</div>}
         </Section>
       )}
       {(left > 0 || b.state !== "active") && (

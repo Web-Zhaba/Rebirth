@@ -1,4 +1,4 @@
-import { BUILDINGS } from "./buildings";
+import { BUILDINGS, scaled } from "./buildings";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
 import { cropOf } from "./tech";
 import { fieldWork } from "./weatherEffects";
@@ -86,9 +86,9 @@ export function assignedHa(gumno: number, fields: readonly Field[], assign: Map<
   return ha;
 }
 
-// Job capacity of a building: fixed by the template, except a gumno, which needs one hand per 2.5 ha.
+// Job capacity of a building: fixed by the template (or its own, scaled by an old foundation), except a gumno, which needs one hand per 2.5 ha.
 export function jobsOf(b: Building, s: Pick<SimState, "buildings" | "zones">, assign?: Map<number, number>): number {
-  if (b.template !== "gumno") return BUILDINGS[b.template]?.jobs ?? 0;
+  if (b.template !== "gumno") return scaled(BUILDINGS[b.template]?.jobs ?? 0, b);
   const a = assign ?? assignFields(s.zones.fields, s.buildings);
   return Math.max(0, Math.min(FIELD.maxJobs, Math.ceil(assignedHa(b.id, s.zones.fields, a) / FIELD.haPerJob - 1e-9)));
 }

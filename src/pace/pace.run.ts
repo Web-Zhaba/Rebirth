@@ -2,7 +2,7 @@ import { it } from "vitest";
 import { BUILDINGS } from "../sim/buildings";
 import { calendar } from "../sim/clock";
 import { canPlace } from "../sim/growth";
-import { vacantHouses } from "../sim/people";
+import { freeHomes } from "../sim/people";
 import { Handler, type Storage } from "../sim/handler";
 import { isFinishedHouse } from "../sim/people";
 import type { Cmd, FromWorker } from "../sim/protocol";
@@ -229,8 +229,7 @@ it("pacing harness", async () => {
     // A house stands empty and there are wares to pay: call settlers (the wares of the founding cart pay for two calls).
     if (st.stock.wares >= 10 && dayOf(st.gameMinutes) > lastCallDay) {
       const sim = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
-      const promised = new Set(sim.incoming.map((f) => f.house));
-      if (vacantHouses(sim.buildings, sim.households).some((id) => !promised.has(id))) {
+      if (freeHomes(sim.buildings, sim.households, sim.incoming).length > 0) {
         lastCallDay = dayOf(st.gameMinutes);
         await send("call settlers", { type: "callSettlers" });
       }

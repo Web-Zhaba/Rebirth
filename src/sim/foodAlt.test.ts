@@ -64,32 +64,32 @@ const food = (s: SimState, hours = 1) => produceStep(s, hours).stock.food - 1750
 describe("templates", () => {
   it("the new producers are food workplaces, the cellar a services building without jobs", () => {
     for (const id of ["forager", "orchard", "apiary"]) expect(BUILDINGS[id]).toMatchObject({ zone: "placed", group: "food" });
-    expect(BUILDINGS.forager.jobs).toBe(3);
-    expect(BUILDINGS.orchard.jobs).toBe(2);
-    expect(BUILDINGS.apiary.jobs).toBe(1);
+    expect(BUILDINGS.forager.jobs).toBe(6);
+    expect(BUILDINGS.orchard.jobs).toBe(4);
+    expect(BUILDINGS.apiary.jobs).toBe(3);
     expect(BUILDINGS.cellar).toMatchObject({ jobs: 0, group: "services" });
   });
-  it("a staffed producer feeds a few adults a year, none replaces fields", () => {
+  it("a staffed producer feeds a handful of adults a year, none replaces fields", () => {
     const adultYear = 0.7 * YEAR_DAYS;
     const yearly = (t: string) => {
       const r = FOOD_RATE[t];
       return r.season.reduce((m, f) => m + f, 0) * DAYS_PER_SEASON * r.kgHour * BUILDINGS[t].jobs * workLength();
     };
-    expect(yearly("forager") / adultYear).toBeGreaterThan(3);
-    expect(yearly("forager") / adultYear).toBeLessThan(5.5);
-    expect(yearly("orchard") / adultYear).toBeGreaterThan(5);
-    expect(yearly("orchard") / adultYear).toBeLessThan(8);
-    expect(yearly("apiary") / adultYear).toBeGreaterThan(1);
-    expect(yearly("apiary") / adultYear).toBeLessThan(3);
+    expect(yearly("forager") / adultYear).toBeGreaterThan(6);
+    expect(yearly("forager") / adultYear).toBeLessThan(11);
+    expect(yearly("orchard") / adultYear).toBeGreaterThan(10);
+    expect(yearly("orchard") / adultYear).toBeLessThan(16);
+    expect(yearly("apiary") / adultYear).toBeGreaterThan(3);
+    expect(yearly("apiary") / adultYear).toBeLessThan(9);
   });
 });
 
 describe("forager", () => {
   it("seasons: 0.3 spring, 1 summer, 1.4 autumn, nothing in winter", () => {
-    const rate = FOOD_RATE.forager.kgHour;
-    expect(food(staffed("forager", SPRING))).toBeCloseTo(3 * rate * 0.3);
-    expect(food(staffed("forager", SUMMER))).toBeCloseTo(3 * rate);
-    expect(food(staffed("forager", AUTUMN))).toBeCloseTo(3 * rate * 1.4);
+    const rate = FOOD_RATE.forager.kgHour * BUILDINGS.forager.jobs;
+    expect(food(staffed("forager", SPRING))).toBeCloseTo(rate * 0.3);
+    expect(food(staffed("forager", SUMMER))).toBeCloseTo(rate);
+    expect(food(staffed("forager", AUTUMN))).toBeCloseTo(rate * 1.4);
     expect(food(staffed("forager", WINTER))).toBeCloseTo(0);
   });
   it("rain halves it, a storm cuts it to 0.3, snow cover stops it", () => {
@@ -104,7 +104,7 @@ describe("forager", () => {
 
 describe("apiary", () => {
   it("seasons 0.3 / 1 / 0.7 / 0", () => {
-    const rate = FOOD_RATE.apiary.kgHour;
+    const rate = FOOD_RATE.apiary.kgHour * BUILDINGS.apiary.jobs;
     expect(food(staffed("apiary", SPRING))).toBeCloseTo(rate * 0.3);
     expect(food(staffed("apiary", SUMMER))).toBeCloseTo(rate);
     expect(food(staffed("apiary", AUTUMN))).toBeCloseTo(rate * 0.7);
@@ -138,7 +138,7 @@ describe("orchard", () => {
   it("gives nothing before it bears, then only in autumn", () => {
     const young = orchardTown(AUTUMN, { ripe: AUTUMN + 10 });
     expect(food(young)).toBe(0);
-    expect(food(orchardTown(AUTUMN, { ripe: AUTUMN - 1 }))).toBeCloseTo(2 * FOOD_RATE.orchard.kgHour);
+    expect(food(orchardTown(AUTUMN, { ripe: AUTUMN - 1 }))).toBeCloseTo(BUILDINGS.orchard.jobs * FOOD_RATE.orchard.kgHour);
     for (const gm of [SPRING, SUMMER, WINTER]) expect(food(orchardTown(gm, { ripe: 0 }))).toBe(0);
     expect(productionInfo(young, young.buildings[1])!.orchard).toMatchObject({ ripeDays: 1, quality: 1 });
   });
@@ -179,7 +179,7 @@ describe("orchard", () => {
     expect(dailyEconomy(s).prod.orchard.frost).toBe(1);
     const a = orchardTown(AUTUMN, { ripe: 0 });
     const sad = { ...a, prod: { ...a.prod, orchard: { year: 1, frost: 3, stress: 0, days: 0, hot: 0 } } };
-    expect(food(sad)).toBeCloseTo(2 * FOOD_RATE.orchard.kgHour * 0.6);
+    expect(food(sad)).toBeCloseTo(BUILDINGS.orchard.jobs * FOOD_RATE.orchard.kgHour * 0.6);
   });
   it("the food outlook counts a bearing orchard only", () => {
     // 2 gardeners and 6 mouths at a building site (no foraging), little in the stock: the orchard's year is the difference

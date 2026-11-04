@@ -3,9 +3,11 @@ import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { emptyLevers } from "./levers";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
-import { createFounders, peopleStats, vacantHouses } from "./people";
+import { createFounders, freeHomes, peopleStats } from "./people";
 import { clearingLogs } from "./clearing";
-import { cellSquare, HERITAGE_TAKEN, overlapsHeritage, standing } from "./heritageGeo";
+import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReservedGround } from "./foundationLots";
+import { isHeritage } from "./heritage";
+import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
 import { nextRandom } from "./rng";
 import { distToEdge, ROAD_KINDS } from "./roads";
@@ -24,10 +26,10 @@ export const DEMAND = {
   resBase: 1.5,
   resPerVacancy: 0.5, // per unfilled job
   craftShare: 0.2, // craft jobs wanted per resident
-  craftJobs: 3, // jobs per workshop, for the craft demand count
+  craftJobs: 7, // jobs per workshop, for the craft demand count
   craftPerUnemployed: 1 / 6,
   tradeShare: 0.07,
-  tradeJobs: 2,
+  tradeJobs: 4,
 };
 
 const ZONE_ORDER: ZoneType[] = ["res", "craft", "trade"];
@@ -111,8 +113,7 @@ export const UNFINISHED_WEIGHT = 0.5;
 export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes" | "zones" | "prod" | "stock" | "incoming">): Demand {
   const st = townStats(s.buildings, (b) => jobsOf(b, s));
   const ps = peopleStats(s);
-  const promised = new Set(s.incoming.map((f) => f.house));
-  const vacant = vacantHouses(s.buildings, s.households).filter((id) => !promised.has(id)).length;
+  const vacant = freeHomes(s.buildings, s.households, s.incoming).length;
   const jobVacancies = st.jobsFinished - ps.employed;
   return {
     res: DEMAND.resBase + DEMAND.resPerVacancy * jobVacancies - vacant - (st.unfinishedHouses - st.startedHouses) - UNFINISHED_WEIGHT * st.startedHouses + ps.tents,
@@ -217,13 +218,13 @@ interface Lot {
 }
 
 function findLots(s: Pick<SimState, "roads" | "buildings" | "zones"> & { finds?: Finds }, zone: ZoneType): Lot[] {
-  const old = s.finds ? standing(s.finds) : [];
+  const old = s.finds?.foundations ?? [];
   const built = new Set<number>();
   for (const e of Object.values(s.roads.edges)) if (e.done >= e.labor) built.add(e.id);
   const occ = occupancy(s.buildings);
   const free = new Map<string, ZoneCell>();
   for (const c of s.zones.cells) {
-    if (c.zone === zone && !c.block && built.has(c.edge) && !occ(c.cx, c.cy) && !(old.length > 0 && overlapsHeritage(old, cellSquare(c)))) free.set(c.key, c);
+    if (c.zone === zone && !c.block && built.has(c.edge) && !occ(c.cx, c.cy) && !onReservedGround(old, cellSquare(c))) free.set(c.key, c);
   }
   const starts = [...free.values()].filter((c) => c.depth === 0);
   starts.sort((p, q) => p.edge - q.edge || q.side - p.side || p.i - q.i);
@@ -257,7 +258,7 @@ export function growthAdvice(s: SimState, dem: Demand, builders: number): Growth
       if (sites.some((b) => !b.paid && b.state === "planned" && handHours(materialsOf(b) ?? { logs: 0, planks: 0, stone: 0 }, s.stock) > 0)) return "materials";
     }
     if (dem[zone] < 1) return sites.length > 0 ? "ok" : "demand";
-    return findLots(s, zone).length > 0 ? "ok" : "lots";
+    return foundationLots(s, zone).length > 0 || findLots(s, zone).length > 0 ? "ok" : "lots";
   };
   return { res: why("res"), craft: why("craft"), trade: why("trade") };
 }
@@ -270,18 +271,28 @@ export function spawnBuildings(s: SimState): SimState {
     const key = zoneKey(zone);
     if (key && !isUnlocked(cur.progress, key)) continue; // a zone still locked does not grow
     if (demand(cur)[zone] < 1) continue;
-    const lots = findLots(cur, zone);
-    if (lots.length === 0) continue;
+    // Old foundations in the zone are built on first; regular lots only when none is free.
+    const old = foundationLots(cur, zone);
+    const lots = old.length > 0 ? [] : findLots(cur, zone);
+    if (old.length === 0 && lots.length === 0) continue;
     const [r1, rng1] = nextRandom(cur.rng);
     const [r2, rng2] = nextRandom(rng1);
-    const lot = lots[Math.min(lots.length - 1, Math.floor(r1 * lots.length))];
-    const [t, far] = lot.fits[Math.min(lot.fits.length - 1, Math.floor(r2 * lot.fits.length))];
+    const pick = <T>(list: readonly T[], r: number): T => list[Math.min(list.length - 1, Math.floor(r * list.length))];
     const id = cur.nextBuildingId;
+    let b: Building;
+    if (old.length > 0) {
+      const lot = pick(old, r1);
+      b = foundationBuilding(pick(lot.fits, r2), lot.f, lot.door, id, cur.gameMinutes);
+    } else {
+      const lot = pick(lots, r1);
+      const [t, far] = pick(lot.fits, r2);
+      b = makeBuilding(t, lot.c0, far, id, cur.gameMinutes);
+    }
     cur = {
       ...cur,
       rng: rng2,
       nextBuildingId: id + 1,
-      buildings: { ...cur.buildings, [id]: makeBuilding(t, lot.c0, far, id, cur.gameMinutes) },
+      buildings: { ...cur.buildings, [id]: b },
       lastSpawn: { ...cur.lastSpawn, [zone]: cur.gameMinutes },
     };
   }
@@ -321,7 +332,7 @@ export function canPlace(
   const byKey = new Map<string, ZoneCell>();
   for (const c of s.zones.cells) if (c.edge === edge && c.side === side) byKey.set(c.key, c);
   const occ = occupancy(s.buildings);
-  const old = s.finds ? standing(s.finds) : [];
+  const old = s.finds?.foundations ?? [];
   const cells: ZoneCell[] = [];
   for (let a = 0; a < t.w; a++) {
     for (let d = 0; d < t.d; d++) {
@@ -329,7 +340,8 @@ export function canPlace(
       if (!c) return NO_PLACE(L("Не хватает места вдоль дороги", "Not enough room along the road"));
       if (c.block) return NO_PLACE(BLOCK_REASON[c.block] ?? L("Место занято", "The spot is taken"));
       if (occ(c.cx, c.cy)) return NO_PLACE(L("Место занято зданием", "The spot is taken by a building"));
-      if (old.length > 0 && overlapsHeritage(old, cellSquare(c))) return NO_PLACE(HERITAGE_TAKEN);
+      const under = onReservedGround(old, cellSquare(c));
+      if (under) return NO_PLACE(isHeritage(under) ? HERITAGE_TAKEN : FOUNDATION_TAKEN);
       cells.push(c);
     }
   }
@@ -343,6 +355,24 @@ export function canPlace(
     }
   }
   return { ok: true };
+}
+
+// Can the player put `t` on the old foundation `foundationId`? (Shared by the worker and the placement tool.)
+export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds">, t: BuildingTemplate, foundationId: string): PlaceCheck {
+  if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
+  const f = s.finds.foundations.find((x) => x.id === foundationId);
+  if (!f) return NO_PLACE(L("Нет такого фундамента", "No such foundation"));
+  const r = lotCheck(s, f, t);
+  return r.ok ? { ok: true } : NO_PLACE(r.reason);
+}
+
+// Adds a planned building on the old foundation. Call canPlaceOnFoundation first.
+export function placeOnFoundation(s: SimState, t: BuildingTemplate, foundationId: string): SimState {
+  const f = s.finds.foundations.find((x) => x.id === foundationId)!;
+  const r = lotCheck(s, f, t);
+  if (!r.ok) return s;
+  const id = s.nextBuildingId;
+  return { ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: foundationBuilding(t, f, r.door, id, s.gameMinutes) } };
 }
 
 // Adds a planned building on the lot and clears the painted zone under it. Call canPlace first.
@@ -454,7 +484,7 @@ export function reconcile(buildings: Record<number, Building>, roads: RoadGraph,
 }
 
 function survives(b: Building, edges: RoadEdge[], roads: RoadGraph, hash: Map<number, ZoneCell[]>): boolean {
-  if (b.siteId) return true; // a restored old building stands on its own ring, not on a lot
+  if (b.siteId || b.foundationId) return true; // a building on an old foundation stands on its own ring, not on a lot
   const [vx, vy] = away(b.lot.angle, b.side);
   const front = (CELL_SIZE * b.lot.d) / 2;
   const fx = b.lot.cx - vx * front;

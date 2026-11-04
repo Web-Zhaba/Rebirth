@@ -1,10 +1,12 @@
 import { play } from "../ui/sound";
 import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect, untracked } from "@preact/signals";
-import { BUILDINGS, type BuildingTemplate } from "../sim/buildings";
-import { DIG } from "../sim/excavation";
+import { BUILDINGS, materialsOf, scaled, storageOf, type BuildingTemplate } from "../sim/buildings";
+import { centroid, DIG } from "../sim/excavation";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
+import { foundationBuilding, foundationIndex, lotCheck, lotRing, usesFoundation } from "../sim/foundationLots";
 import { canPlace, makeBuilding } from "../sim/growth";
+import { isHeritage } from "../sim/heritage";
 import { previewServiceCoverage } from "../sim/coverage";
 import { lotFront } from "../sim/people";
 import { isService, SERVICES } from "../sim/services";
@@ -16,7 +18,7 @@ import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
 import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
-import { decimal, L } from "../i18n";
+import { decimal, L, plural } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
 const BUCKET = 16;
@@ -40,6 +42,7 @@ interface Verdict {
   i: number;
   radius: number | undefined; // site radius of the template
   front: Pt | null; // door of the lot, for the reach preview of services
+  foundationId?: string; // the lot is this old foundation, not cells along a road
 }
 
 // Lot hover and placement of the six player-built buildings.
@@ -139,9 +142,32 @@ export function attachPlaceTool(view: View): void {
     return t.name;
   };
 
+  // The cursor on an old foundation: the building would take the foundation's own shape.
+  const onFoundation = (id: PlaceTool, x: number, y: number): Verdict | null => {
+    const st = state.value;
+    const t = BUILDINGS[id];
+    if (!st || !usesFoundation(t)) return null;
+    const fd = foundationIndex(st.finds.foundations).at(x, y);
+    if (!fd || (isHeritage(fd) && fd.state !== "lost")) return null; // a notable building keeps its restoration
+    const check = lotCheck(st, fd, t);
+    const base = { footprint: lotRing(fd), center: centroid(fd.ring), edge: -1, side: 1 as const, i: -1, radius: undefined, foundationId: fd.id };
+    if (!check.ok) return { ...base, front: null, ok: false, pending: false, text: check.reason };
+    let detail = siteText(id, NO_SITE, t, base.center);
+    if (isService(id)) detail += `\n${coveragePreviewText(previewServiceCoverage(st, id, check.door[0], check.door[1]))}`;
+    // The building grows with the foundation: its crew or storage and its cost.
+    const b = foundationBuilding(t, fd, check.door, 0, 0);
+    const jobs = scaled(t.jobs, b);
+    const store = storageOf(b);
+    const holds = store > 0 ? L(`склад ${Math.round(store / 1000)} т`, `stores ${Math.round(store / 1000)} t`) : jobs > 0 ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}` : "";
+    const size = L(`Старый фундамент ${Math.round(fd.area)} м²`, `Old foundation ${Math.round(fd.area)} m²`) + (holds ? ` · ${holds}` : "");
+    return { ...base, front: check.door, ok: true, pending: false, text: `${detail}\n${size}\n${costText(b.labor, materialsOf(b))}` };
+  };
+
   const evaluate = (id: PlaceTool, x: number, y: number): Verdict | null => {
     const st = state.value;
     const f = frame.value;
+    const onOld = onFoundation(id, x, y);
+    if (onOld) return onOld;
     const c0 = nearestStart(x, y);
     if (!st || !f || !c0) return null;
     const t = BUILDINGS[id];
@@ -270,7 +296,7 @@ export function attachPlaceTool(view: View): void {
     }
     // A finger has no hover: the first tap shows the lot and its verdict, a second tap on the same lot places.
     if (e.pointerType === "touch") {
-      const key = `${v.edge}:${v.side}:${v.i}`;
+      const key = v.foundationId ?? `${v.edge}:${v.side}:${v.i}`;
       if (tapped !== key) {
         tapped = key;
         cursor = { x: e.point[0], y: e.point[1] };
@@ -284,6 +310,19 @@ export function attachPlaceTool(view: View): void {
       return;
     }
     busy = true;
+    if (v.foundationId) {
+      sendCmd({ type: "placeOnFoundation", template: id, foundationId: v.foundationId })
+        .then((r) => {
+          if (!r.ok) flash(r.reason ?? L("Не удалось поставить здание", "Could not place the building"));
+          else play("place");
+        })
+        .catch(() => flash(L("Не удалось поставить здание", "Could not place the building")))
+        .then(() => {
+          busy = false;
+          refresh();
+        });
+      return;
+    }
     const t = BUILDINGS[id];
     const measure = v.radius !== undefined ? siteAt(f, v.center[0], v.center[1], v.radius, state.value?.clearings) : Promise.resolve(NO_SITE);
     measure

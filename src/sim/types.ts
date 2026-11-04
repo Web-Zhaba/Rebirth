@@ -106,7 +106,6 @@ export interface Building {
   streak: number; // days in a row a house met the upgrade conditions
   upgrade?: Upgrade; // the rebuild into level 2 in progress; the house stays active meanwhile
   radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
-  onRuins?: boolean; // started on an old foundation: no stone, less labor
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
@@ -116,6 +115,9 @@ export interface Building {
   restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
   door?: [number, number]; // point of the ring nearest to the road: where services, jobs and walks reach the building
   materials?: Materials; // cost by area, instead of the template's
+  // A building put on an old foundation (sim/foundationLots.ts): the footprint is its simplified ring, the lot its oriented box.
+  foundationId?: string;
+  scale?: number; // the foundation's area against the template's footprint: capacity, families and storage grow by it
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.

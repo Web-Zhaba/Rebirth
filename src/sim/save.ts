@@ -1,5 +1,6 @@
 import { LANDS } from "../world/landcover";
-import { BUILDINGS, isPriority, JOB_KEYS, UPGRADE } from "./buildings";
+import { BUILDINGS, homesOf, isPriority, JOB_KEYS, UPGRADE } from "./buildings";
+import { FOUNDATION_LOT } from "./foundationLots";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
@@ -167,8 +168,11 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (!isRecord(lot) || !isNum(lot.cx) || !isNum(lot.cy) || !isNum(lot.angle)) return null;
     // A restored old building has the real ring as its footprint and a lot that is a free-sized box (PLAN-research.ru.md section 7).
     const isSite = typeof raw.siteId === "string" && raw.siteId.length > 0 && raw.siteId.length <= 200;
-    if (isSite ? !isNum(lot.w) || !isNum(lot.d) || (lot.w as number) <= 0 || (lot.d as number) <= 0 : !Number.isInteger(lot.w) || !Number.isInteger(lot.d) || (lot.w as number) < 1 || (lot.d as number) < 1) return null;
-    if (!Array.isArray(raw.footprint) || (isSite ? raw.footprint.length < 3 || raw.footprint.length > 64 : raw.footprint.length !== 4) || !raw.footprint.every(isPoint)) return null;
+    // A building on an old foundation (sim/foundationLots.ts) has the same free shape.
+    const onFoundation = !isSite && typeof raw.foundationId === "string" && raw.foundationId.length > 0 && raw.foundationId.length <= 200;
+    const ringShaped = isSite || onFoundation;
+    if (ringShaped ? !isNum(lot.w) || !isNum(lot.d) || (lot.w as number) <= 0 || (lot.d as number) <= 0 : !Number.isInteger(lot.w) || !Number.isInteger(lot.d) || (lot.w as number) < 1 || (lot.d as number) < 1) return null;
+    if (!Array.isArray(raw.footprint) || (ringShaped ? raw.footprint.length < 3 || raw.footprint.length > 64 : raw.footprint.length !== 4) || !raw.footprint.every(isPoint)) return null;
     if (!isNum(raw.height) || raw.height <= 0) return null;
     if (typeof raw.state !== "string" || !STATES.includes(raw.state)) return null;
     if (!isNum(raw.labor) || raw.labor <= 0 || !isNum(raw.done) || raw.done < 0 || raw.done > raw.labor) return null;
@@ -201,11 +205,16 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (site) out[id].site = site;
     // Saves from before excavation: a dig site starts at its first radius.
     if (raw.template === DIG.template) out[id].radius = isNum(raw.radius) && raw.radius >= DIG.startRadius ? Math.min(DIG.maxRadius, raw.radius) : DIG.startRadius;
-    if (raw.onRuins === true) out[id].onRuins = true;
     if (isSite) {
       out[id].siteId = raw.siteId as string;
       if (raw.restoreMode === "monument" || raw.restoreMode === "working") out[id].restoreMode = raw.restoreMode;
       if (isNum(raw.restoreWeight) && raw.restoreWeight > 0) out[id].restoreWeight = Math.min(1000, raw.restoreWeight);
+    }
+    if (onFoundation) {
+      out[id].foundationId = raw.foundationId as string;
+      if (isNum(raw.scale) && raw.scale >= FOUNDATION_LOT.fitMin && raw.scale <= FOUNDATION_LOT.fitMax) out[id].scale = raw.scale;
+    }
+    if (ringShaped) {
       if (isPoint(raw.door)) out[id].door = [raw.door[0], raw.door[1]];
       const m = raw.materials;
       if (isRecord(m) && isNum(m.logs) && isNum(m.planks) && isNum(m.stone) && m.logs >= 0 && m.planks >= 0 && m.stone >= 0) out[id].materials = { logs: m.logs, planks: m.planks, stone: m.stone };
@@ -277,7 +286,7 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     };
   }
   const households: Record<number, Household> = {};
-  const homes = new Set<number>();
+  const homes = new Map<number, number>(); // house id -> families placed in it
   const seen = new Set<number>();
   for (const [key, h] of Object.entries(rawH)) {
     if (!isRecord(h) || !Number.isInteger(h.id) || String(h.id) !== key) return null;
@@ -294,9 +303,10 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     let home: number | null = null;
     if (h.home !== null) {
       if (!Number.isInteger(h.home)) return null;
-      if (isFinishedHouse(buildings[h.home as number]) && !homes.has(h.home as number)) {
+      const n = homes.get(h.home as number) ?? 0;
+      if (isFinishedHouse(buildings[h.home as number]) && n < homesOf(buildings[h.home as number])) {
         home = h.home as number;
-        homes.add(home);
+        homes.set(home, n + 1);
       }
     }
     const mood = isNum(h.mood) ? Math.min(100, Math.max(0, h.mood)) : MOOD_START;

@@ -17,7 +17,8 @@ export interface BuildingTemplate {
   deep: number; // footprint size across, m
   height: number; // m
   labor: number; // person-hours
-  residents: number; // capacity of a house
+  residents: number; // capacity of a house (all its families)
+  homes: number; // families a house holds (0 for any other building)
   jobs: number; // capacity of a workplace (a gumno's depends on its fields, see fields.ts)
   materials: Materials;
   group: JobGroup | null; // job group of a workplace (houses: null); a new template must declare one
@@ -50,6 +51,7 @@ const T = (
   capacity: number,
   materials: [number, number, number],
   group: JobGroup | null,
+  homes = zone === "res" ? 1 : 0,
 ): BuildingTemplate => ({
   id,
   name,
@@ -61,6 +63,7 @@ const T = (
   height,
   labor,
   residents: zone === "res" ? capacity : 0,
+  homes,
   jobs: zone === "res" ? 0 : capacity,
   materials: { logs: materials[0], planks: materials[1], stone: materials[2] },
   group,
@@ -70,35 +73,37 @@ const T = (
 // izba should take about one game day of the founding party's work. Materials are m3 / m3 / t
 // (logs, planks, stone); the labor of placed buildings is not in the design table, chosen here.
 export const BUILDINGS: Record<string, BuildingTemplate> = {
-  izba: T("izba", L("Дом", "House"), "res", 2, 3, 6, 7, 5, 26, 5, [15, 1.5, 1], null),
-  izba5: T("izba5", L("Большой дом", "Large house"), "res", 2, 4, 7, 9, 6, 40, 7, [22, 2, 1.5], null),
-  smithy: T("smithy", L("Кузница", "Smithy"), "craft", 2, 2, 6, 5, 4, 90, 3, [10, 1, 5], "crafts"),
-  carpentry: T("carpentry", L("Столярная мастерская", "Carpentry workshop"), "craft", 2, 3, 8, 6, 5, 110, 4, [22, 3, 2], "crafts"),
-  pottery: T("pottery", L("Гончарня", "Pottery"), "craft", 2, 2, 6, 5, 4, 75, 3, [10, 1, 4], "crafts"),
-  shop: T("shop", L("Магазин", "Shop"), "trade", 1, 2, 6, 6, 5, 60, 2, [14, 2, 1], "trade"),
-  tavern: T("tavern", L("Таверна", "Tavern"), "trade", 3, 3, 12, 10, 7, 220, 5, [90, 10, 8], "trade"),
-  gumno: T("gumno", L("Ферма", "Farm"), "placed", 1, 2, 8, 10, 6, 50, 0, [16, 2, 2], "food"),
-  woodcutter: T("woodcutter", L("Лесозаготовка", "Woodcutter"), "placed", 1, 1, 4, 4, 3, 24, 2, [6, 0.5, 0], "materials"),
-  sawpit: T("sawpit", L("Лесопилка", "Sawmill"), "placed", 1, 1, 6, 4, 3, 30, 2, [5, 1, 0], "materials"),
-  quarry: T("quarry", L("Карьер", "Quarry"), "placed", 1, 2, 8, 8, 3, 70, 3, [4, 0.5, 0], "materials"),
-  fisher: T("fisher", L("Рыболовный причал", "Fishing pier"), "placed", 1, 1, 4, 4, 3, 40, 2, [6, 1, 0], "food"),
-  barn: T("barn", L("Амбар", "Barn"), "placed", 1, 1, 6, 6, 6, 100, 0, [20, 6, 2], "services"),
+  // Sizes are real-world ones (a log house of 8 x 9 m, a workshop of 10 x 8 m) and a workplace employs a real crew, so a
+  // town needs a few buildings of a kind, not dozens. A large house holds two families.
+  izba: T("izba", L("Дом", "House"), "res", 2, 3, 8, 9, 5, 30, 6, [17, 1.5, 1], null),
+  izba5: T("izba5", L("Большой дом", "Large house"), "res", 2, 4, 11, 13, 7, 70, 14, [40, 4, 3], null, 2),
+  smithy: T("smithy", L("Кузница", "Smithy"), "craft", 2, 2, 10, 8, 5, 160, 6, [18, 2, 9], "crafts"),
+  carpentry: T("carpentry", L("Столярная мастерская", "Carpentry workshop"), "craft", 2, 3, 12, 9, 6, 190, 8, [38, 5, 3], "crafts"),
+  pottery: T("pottery", L("Гончарня", "Pottery"), "craft", 2, 2, 10, 8, 5, 130, 6, [18, 2, 7], "crafts"),
+  shop: T("shop", L("Магазин", "Shop"), "trade", 1, 2, 7, 8, 5, 100, 4, [24, 3, 2], "trade"),
+  tavern: T("tavern", L("Таверна", "Tavern"), "trade", 3, 3, 16, 12, 8, 330, 8, [130, 15, 12], "trade"),
+  gumno: T("gumno", L("Ферма", "Farm"), "placed", 2, 2, 12, 14, 7, 70, 0, [24, 3, 3], "food"),
+  woodcutter: T("woodcutter", L("Лесозаготовка", "Woodcutter"), "placed", 1, 1, 7, 6, 3, 45, 5, [10, 1, 0], "materials"),
+  sawpit: T("sawpit", L("Лесопилка", "Sawmill"), "placed", 1, 1, 7, 6, 4, 55, 4, [9, 2, 0], "materials"),
+  quarry: T("quarry", L("Карьер", "Quarry"), "placed", 2, 2, 14, 14, 3, 120, 8, [7, 1, 0], "materials"),
+  fisher: T("fisher", L("Рыболовный причал", "Fishing pier"), "placed", 1, 1, 6, 6, 3, 70, 4, [10, 2, 0], "food"),
+  barn: T("barn", L("Амбар", "Barn"), "placed", 2, 2, 12, 10, 7, 160, 0, [32, 10, 3], "services"),
   // Services (PLAN.md section 9); labor and materials chosen here, like the placed buildings above.
   well: T("well", L("Колодец", "Well"), "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3], "services"),
-  market: T("market", L("Рынок", "Market"), "placed", 2, 2, 12, 12, 4, 160, 4, [30, 6, 2], "trade"),
-  chapel: T("chapel", L("Храм", "Temple"), "placed", 1, 2, 6, 8, 8, 180, 1, [35, 4, 6], "services"),
-  school: T("school", L("Школа", "School"), "placed", 1, 2, 8, 10, 5, 150, 2, [40, 5, 3], "services"),
-  healer: T("healer", L("Лечебница", "Infirmary"), "placed", 1, 1, 6, 6, 4, 80, 1, [14, 2, 1], "services"),
+  market: T("market", L("Рынок", "Market"), "placed", 2, 3, 15, 16, 5, 260, 8, [50, 10, 3], "trade"),
+  chapel: T("chapel", L("Храм", "Temple"), "placed", 1, 2, 7, 12, 10, 180, 1, [35, 4, 6], "services"),
+  school: T("school", L("Школа", "School"), "placed", 2, 2, 10, 12, 6, 150, 2, [40, 5, 3], "services"),
+  healer: T("healer", L("Лечебница", "Infirmary"), "placed", 1, 2, 8, 8, 5, 80, 1, [14, 2, 1], "services"),
   // Food without fields (fields.ts FOOD_RATE): a kitchen garden by the houses, a hunter's hut.
-  garden: T("garden", L("Огород", "Vegetable garden"), "placed", 1, 1, 3, 3, 1, 20, 3, [2, 0.5, 0], "food"),
-  hunter: T("hunter", L("Охотничий пост", "Hunting post"), "placed", 1, 1, 4, 4, 3, 30, 2, [4, 1, 0], "food"),
+  garden: T("garden", L("Огород", "Vegetable garden"), "placed", 2, 2, 10, 10, 1, 35, 6, [3, 1, 0], "food"),
+  hunter: T("hunter", L("Охотничий пост", "Hunting post"), "placed", 1, 1, 6, 6, 3, 50, 4, [7, 2, 0], "food"),
   // Alternative food (fields.ts FOOD_RATE): picking in the forest, fruit trees, bees; and a cellar that keeps the stock.
-  forager: T("forager", L("Сбор в лесу", "Forager"), "placed", 1, 1, 4, 4, 2, 24, 3, [2, 0.5, 0], "food"),
-  orchard: T("orchard", L("Сад", "Orchard"), "placed", 1, 2, 8, 10, 3, 60, 2, [4, 0.5, 0], "food"),
-  apiary: T("apiary", L("Пасека", "Apiary"), "placed", 1, 1, 4, 4, 2, 30, 1, [3, 1, 0], "food"),
-  cellar: T("cellar", L("Погреб", "Cellar"), "placed", 1, 1, 5, 5, 2, 70, 0, [10, 3, 4], "services"),
+  forager: T("forager", L("Сбор в лесу", "Forager"), "placed", 1, 1, 6, 6, 2, 40, 6, [3, 1, 0], "food"),
+  orchard: T("orchard", L("Сад", "Orchard"), "placed", 2, 3, 15, 20, 3, 100, 4, [7, 1, 0], "food"),
+  apiary: T("apiary", L("Пасека", "Apiary"), "placed", 1, 1, 7, 6, 2, 50, 3, [5, 2, 0], "food"),
+  cellar: T("cellar", L("Погреб", "Cellar"), "placed", 1, 1, 6, 6, 2, 110, 0, [16, 5, 6], "services"),
   // Excavation (PLAN.md section 12).
-  dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 3, [2, 0.5, 0], "services"),
+  dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 6, [2, 0.5, 0], "services"),
   // A restored old building kept as a monument (sim/restore.ts): no jobs, no residents; its size, cost and shape come from the foundation.
   restored: T("restored", L("Памятник", "Monument"), "placed", 1, 1, 8, 8, 8, 100, 0, [10, 2, 3], null),
 };
@@ -109,9 +114,16 @@ export const materialsOf = (b: Pick<Building, "template" | "materials">): Materi
 // Rebuilding an izba into level 2 (PLAN.md section 9): taken like construction, the family stays.
 export const UPGRADE = { template: "izba", labor: 60, materials: { logs: 10, planks: 2, stone: 0 } as Materials, residents: 2, height: 1.5 };
 
-// People a house holds: the template's capacity, plus the upgrade's.
-export const houseCapacity = (b: Pick<Building, "template" | "level">): number =>
-  (BUILDINGS[b.template]?.residents ?? 0) + (b.level >= 2 ? UPGRADE.residents : 0);
+// A template's capacity on a building whose old foundation scaled it (`scale`: its area against the template's footprint).
+export const scaled = (v: number, b: Pick<Building, "scale">): number => (b.scale && v > 0 ? Math.max(1, Math.round(v * b.scale)) : v);
+
+// People a house holds: the template's capacity (scaled), plus the upgrade's.
+export const houseCapacity = (b: Pick<Building, "template" | "level" | "scale">): number =>
+  scaled(BUILDINGS[b.template]?.residents ?? 0, b) + (b.level >= 2 ? UPGRADE.residents : 0);
+
+// Families a house holds, and the people each of them may grow to.
+export const homesOf = (b: Pick<Building, "template" | "scale">): number => scaled(BUILDINGS[b.template]?.homes ?? 0, b);
+export const familyCapacity = (b: Pick<Building, "template" | "level" | "scale">): number => Math.floor(houseCapacity(b) / Math.max(1, homesOf(b)));
 
 // Templates of one zone type, in table order.
 export const templatesOf = (zone: ZoneType | "placed"): BuildingTemplate[] => Object.values(BUILDINGS).filter((t) => t.zone === zone);
@@ -121,18 +133,18 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 // ---------- storage ----------
 
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp
-export const BARN_CAP = 30_000; // kg per finished barn
-export const CELLAR_CAP = 10_000; // kg per finished cellar; it keeps food better than a barn (weatherEffects spoilage)
+export const BARN_CAP = 60_000; // kg per finished barn
+export const CELLAR_CAP = 20_000; // kg per finished cellar; it keeps food better than a barn (weatherEffects spoilage)
 export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, wares: 20 };
 
 export function foodCapacity(buildings: Record<number, Building>): number {
   let cap = FOOD_CAMP_CAP;
-  for (const b of Object.values(buildings)) if (b.state === "active") cap += storageOf(b.template);
+  for (const b of Object.values(buildings)) if (b.state === "active") cap += storageOf(b);
   return cap;
 }
 
-// Kg of food a finished building of the template holds on top of the camp.
-export const storageOf = (template: string): number => (template === "barn" ? BARN_CAP : template === "cellar" ? CELLAR_CAP : 0);
+// Kg of food a finished building holds on top of the camp (scaled with its old foundation).
+export const storageOf = (b: Pick<Building, "template" | "scale">): number => (b.template === "barn" ? BARN_CAP : b.template === "cellar" ? CELLAR_CAP : 0) * (b.scale ?? 1);
 
 // ---------- construction labor ----------
 
