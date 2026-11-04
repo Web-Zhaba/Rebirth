@@ -1,7 +1,7 @@
 import { BUILDINGS, templatesOf, type BuildingTemplate, type Materials } from "./buildings";
 import { centroid, pointInRing } from "./excavation";
 import { isHeritage } from "./heritage";
-import { orientedBox, polysOverlap, ringDoor, simplifyRing } from "./heritageGeo";
+import { RESTORE, orientedBox, polysOverlap, ringDoor, simplifyRing } from "./heritageGeo";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, FoundFoundation, RoadGraph, Site, SimState, ZoneCell, ZoneType } from "./types";
 import { CELL_SIZE } from "./zones";
@@ -19,19 +19,25 @@ export const FOUNDATION_LOT = {
   fitMin: 0.4, // a template fits a ring of fitMin..fitMax times its own footprint area
   fitMax: 4,
   roadReach: 30, // m from the ring to a built road
-  maxPoints: 12, // points of the footprint: the ring is simplified to this, so roofs stay buildable
+  maxPoints: RESTORE.maxPoints, // points of the footprint: the walls follow the old ring, only tiny corners are cut
   probe: 2, // m between the points along the ring tested against roads
 };
 
 // Templates that are open ground or depend on their surroundings (a garden, a pier, a log yard...): never on a foundation.
 const OPEN_GROUND = new Set(["garden", "orchard", "apiary", "quarry", "dig", "forager", "fisher", "well", "woodcutter", "sawpit", "restored"]);
 
+// Templates that take a foundation of any size: a store or a market hall just grows with the old building.
+const NO_SIZE_CAP = new Set(["barn", "market"]);
+
 export const usesFoundation = (t: BuildingTemplate): boolean => !OPEN_GROUND.has(t.id);
 const nominal = (t: BuildingTemplate): number => t.along * t.deep;
-export const fitsArea = (t: BuildingTemplate, area: number): boolean => area >= Math.max(FOUNDATION_LOT.minArea, nominal(t) * FOUNDATION_LOT.fitMin) && area <= nominal(t) * FOUNDATION_LOT.fitMax;
+// The largest size of a building of template `t` on a foundation, against its own footprint.
+export const fitMaxOf = (t: BuildingTemplate): number => (NO_SIZE_CAP.has(t.id) ? Infinity : FOUNDATION_LOT.fitMax);
+export const fitsArea = (t: BuildingTemplate, area: number): boolean => area >= Math.max(FOUNDATION_LOT.minArea, nominal(t) * FOUNDATION_LOT.fitMin) && area <= nominal(t) * fitMaxOf(t);
 
-// The largest ring any template can take; bigger ones are no lots (and regular lots may cover them).
-const MAX_FIT = Math.max(...Object.values(BUILDINGS).filter(usesFoundation).map((t) => nominal(t) * FOUNDATION_LOT.fitMax));
+// The largest ring a template with a size cap can take; bigger ones are no lots (regular lots may cover them), though
+// the player can still put a building without a cap on them.
+const MAX_FIT = Math.max(...Object.values(BUILDINGS).filter((t) => usesFoundation(t) && !NO_SIZE_CAP.has(t.id)).map((t) => nominal(t) * FOUNDATION_LOT.fitMax));
 
 // A heritage site keeps its own restoration; every other foundation of a usable size is a lot.
 const isLotFoundation = (f: FoundFoundation): boolean => f.area >= FOUNDATION_LOT.minArea && f.area <= MAX_FIT && !(isHeritage(f) && f.state !== "lost");
@@ -123,7 +129,12 @@ export const FOUNDATION_TAKEN = L("Здесь старый фундамент: �
 // ---------- one foundation ----------
 
 // The footprint a building on the foundation gets: the old ring, simplified, counter-clockwise.
-export const lotRing = (f: Pick<FoundFoundation, "ring">): Pt[] => simplifyRing(f.ring, FOUNDATION_LOT.maxPoints);
+const rings = new WeakMap<readonly Pt[], Pt[]>();
+export function lotRing(f: Pick<FoundFoundation, "ring">): Pt[] {
+  let r = rings.get(f.ring);
+  if (!r) rings.set(f.ring, (r = simplifyRing(f.ring, FOUNDATION_LOT.maxPoints)));
+  return r.map((p): Pt => [p[0], p[1]]); // a copy: a building owns its footprint
+}
 
 // The roads built so far.
 function builtRoads(roads: RoadGraph): RoadGraph {
@@ -171,7 +182,7 @@ export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate):
   if (t) {
     if (!usesFoundation(t)) return no(L(`${t.name} не ставится на старый фундамент`, `${t.name} can’t stand on an old foundation`));
     if (f.area < nominal(t) * FOUNDATION_LOT.fitMin) return no(L(`Фундамент мал для этой постройки (${Math.round(f.area)} м²)`, `The foundation is too small for this (${Math.round(f.area)} m²)`));
-    if (f.area > nominal(t) * FOUNDATION_LOT.fitMax) return no(L(`Фундамент велик для этой постройки (${Math.round(f.area)} м²)`, `The foundation is too large for this (${Math.round(f.area)} m²)`));
+    if (f.area > nominal(t) * fitMaxOf(t)) return no(L(`Фундамент велик для этой постройки (${Math.round(f.area)} м²)`, `The foundation is too large for this (${Math.round(f.area)} m²)`));
   } else if (f.area > MAX_FIT) return no(L("Фундамент слишком велик для постройки", "The foundation is too large to build on"));
   const ring = lotRing(f);
   for (const b of Object.values(s.buildings)) if (b.foundationId === f.id || b.siteId === f.id || polysOverlap(ring, b.footprint)) return no(L("Место занято зданием", "The spot is taken by a building"));
@@ -183,7 +194,7 @@ export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate):
 }
 
 // The size of a building of template `t` on the foundation against the template's own footprint.
-export const foundationScale = (t: BuildingTemplate, f: Pick<FoundFoundation, "area">): number => Math.round(Math.min(FOUNDATION_LOT.fitMax, Math.max(FOUNDATION_LOT.fitMin, f.area / nominal(t))) * 100) / 100;
+export const foundationScale = (t: BuildingTemplate, f: Pick<FoundFoundation, "area">): number => Math.round(Math.min(fitMaxOf(t), Math.max(FOUNDATION_LOT.fitMin, f.area / nominal(t))) * 100) / 100;
 
 // A planned building of template `t` on the foundation. It scales with the ring: its capacity (residents, families, jobs,
 // storage), labor and materials follow the area against the template's own footprint, so a size costs the same per m².

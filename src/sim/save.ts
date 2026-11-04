@@ -1,6 +1,6 @@
 import { LANDS } from "../world/landcover";
 import { BUILDINGS, homesOf, isPriority, JOB_KEYS, UPGRADE } from "./buildings";
-import { FOUNDATION_LOT } from "./foundationLots";
+import { FOUNDATION_LOT, fitMaxOf } from "./foundationLots";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
@@ -212,7 +212,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     }
     if (onFoundation) {
       out[id].foundationId = raw.foundationId as string;
-      if (isNum(raw.scale) && raw.scale >= FOUNDATION_LOT.fitMin && raw.scale <= FOUNDATION_LOT.fitMax) out[id].scale = raw.scale;
+      if (isNum(raw.scale) && raw.scale >= FOUNDATION_LOT.fitMin && raw.scale <= fitMaxOf(BUILDINGS[raw.template as string])) out[id].scale = raw.scale;
     }
     if (ringShaped) {
       if (isPoint(raw.door)) out[id].door = [raw.door[0], raw.door[1]];

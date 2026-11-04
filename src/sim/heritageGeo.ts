@@ -19,23 +19,32 @@ export const ringArea = (r: readonly Pt[]): number => {
   return a / 2;
 };
 
+const cross = (a: Pt, b: Pt, c: Pt): number => (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+// Segments ab and cd cross at a point inside both (touching at shared ends does not count).
+const segsCross = (a: Pt, b: Pt, c: Pt, d: Pt): boolean => cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0;
+
 // Open ring (no repeated closing point), counter-clockwise, at most `max` points: the vertex whose corner adds the
-// least area goes first.
+// least area goes first, unless cutting it would make the ring cross itself or the cut chord pass over another vertex.
 export function simplifyRing(ring: readonly Pt[], max = RESTORE.maxPoints): Pt[] {
   let p: Pt[] = ring.map((q): Pt => [q[0], q[1]]);
   if (p.length > 1 && p[0][0] === p[p.length - 1][0] && p[0][1] === p[p.length - 1][1]) p = p.slice(0, -1);
   if (ringArea(p) < 0) p.reverse();
-  const tri = (a: Pt, b: Pt, c: Pt) => Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
-  while (p.length > Math.max(3, max)) {
-    let k = 0;
-    let best = Infinity;
-    for (let i = 0; i < p.length; i++) {
-      const t = tri(p[(i + p.length - 1) % p.length], p[i], p[(i + 1) % p.length]);
-      if (t < best) {
-        best = t;
-        k = i;
-      }
+  const at = (i: number) => p[(i + p.length) % p.length];
+  // Cutting vertex i is safe when no other vertex lies in the cut-off triangle and no other edge crosses the chord.
+  const safe = (i: number): boolean => {
+    const a = at(i - 1), b = at(i), c = at(i + 1);
+    const s = Math.sign(cross(a, b, c));
+    for (let j = 0; j < p.length; j++) {
+      const q = p[j], r = at(j + 1);
+      if (q !== a && q !== b && q !== c && s !== 0 && Math.sign(cross(a, b, q)) === s && Math.sign(cross(b, c, q)) === s && Math.sign(cross(c, a, q)) === s) return false;
+      if (q !== a && q !== c && r !== a && r !== c && segsCross(a, c, q, r)) return false;
     }
+    return true;
+  };
+  while (p.length > Math.max(3, max)) {
+    const order = p.map((_, i) => ({ i, t: Math.abs(cross(at(i - 1), p[i], at(i + 1))) })).sort((x, y) => x.t - y.t);
+    const k = order.find((o) => safe(o.i))?.i;
+    if (k === undefined) break; // every cut would tangle the ring: keep it as it is
     p.splice(k, 1);
   }
   return p;

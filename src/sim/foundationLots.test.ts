@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILDINGS, familyCapacity, homesOf, houseCapacity, storageOf } from "./buildings";
 import { FOUNDATION_TAKEN, foundationBuilding, foundationLots, lotCheck, lotRing } from "./foundationLots";
+import { simplifyRing } from "./heritageGeo";
 import { vacantHouses } from "./people";
 import { canPlace, canPlaceOnFoundation, emptyGrowth, placeOnFoundation, spawnBuildings } from "./growth";
 import { parseSave } from "./save";
@@ -103,6 +104,42 @@ describe("foundations as lots", () => {
     expect(homesOf(house5)).toBe(Math.round(2 * house5.scale!));
     expect(vacantHouses({ 1: house5 }, {})).toEqual(Array(homesOf(house5)).fill(1));
     expect(familyCapacity(house5)).toBe(Math.floor(houseCapacity(house5) / homesOf(house5)));
+  });
+
+  it("a barn or a market takes a foundation of any size; others keep their cap", () => {
+    const huge = found("x", rect(0, 46, 60, 55)); // 3300 m²
+    const s = mk([huge]);
+    expect(canPlaceOnFoundation(s, BUILDINGS.school, "x")).toMatchObject({ ok: false, reason: "Фундамент велик для этой постройки (3300 м²)" });
+    for (const t of [BUILDINGS.barn, BUILDINGS.market]) {
+      expect(canPlaceOnFoundation(s, t, "x").ok).toBe(true);
+      const b = placeOnFoundation(s, t, "x").buildings[1];
+      const k = Math.round((3300 / (t.along * t.deep)) * 100) / 100;
+      expect(b.scale).toBe(k);
+      expect(b.labor).toBe(Math.round(t.labor * k));
+      const back = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: placeOnFoundation(s, t, "x") })), NOW + 1)!;
+      expect(back.sim.buildings[1].scale).toBe(k);
+    }
+    expect(storageOf(placeOnFoundation(s, BUILDINGS.barn, "x").buildings[1])).toBe(Math.round((3300 / 120) * 100) / 100 * storageOf({ template: "barn" }));
+    // Zone growth leaves such a foundation alone: no grown template fits it.
+    expect(foundationLots(mk([huge], "res"), "res")).toEqual([]);
+  });
+
+  it("the footprint keeps the old ring's shape and never crosses itself", () => {
+    // A comb: a 4 m spine along y = 0..4 with 10 teeth 2 m wide and 20 m long, 2 m apart (42 points, counter-clockwise).
+    const comb: Pt[] = [[0, 0], [40, 0]];
+    for (let i = 9; i >= 0; i--) comb.push([4 * i + 4, 24], [4 * i + 2, 24], [4 * i + 2, 4], [4 * i, 4]);
+    expect(lotRing({ ring: comb })).toEqual(comb); // under the cap: the walls follow the ring exactly
+    const cross = (a: Pt, b: Pt, c: Pt) => (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+    for (const max of [24, 12, 6]) {
+      const r = simplifyRing(comb, max);
+      const e = r.map((p, i): [Pt, Pt] => [p, r[(i + 1) % r.length]]);
+      for (let i = 0; i < e.length; i++)
+        for (let j = i + 2; j < e.length; j++) {
+          if (i === 0 && j === e.length - 1) continue;
+          const [a, b] = e[i], [c, d] = e[j];
+          expect(cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0).toBe(false);
+        }
+    }
   });
 
   it("a notable old building is no lot", () => {
