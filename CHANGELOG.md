@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.3.0...rebirth-v0.3.2) (2026-11-04)
+
+
+### Features
+
+* road and bridge upgrades, road fixes, foundation sizes (0.3.2) ([ea73f0c](https://github.com/Web-Zhaba/Rebirth/commit/ea73f0cdfd6e39e5d0dc4c6a180de0cb7b4d2863))
+* **roads:** upgrade roads and bridges by hovering them with a better kind ([fb290d9](https://github.com/Web-Zhaba/Rebirth/commit/fb290d93c4a91f82936cee08bb480182e56f2426))
+* **sim:** old foundations are building lots; buildings get real sizes ([ef1ed43](https://github.com/Web-Zhaba/Rebirth/commit/ef1ed43e2d69213ebe9eebc821281c8ba1914494))
+* **sim:** stores and market halls take old foundations of any size ([98778ff](https://github.com/Web-Zhaba/Rebirth/commit/98778ffa1f45733e617981ab92a20f64f0f598a3))
+
 ## [0.3.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.2.0...rebirth-v0.3.0) (2026-11-03)
 
 
