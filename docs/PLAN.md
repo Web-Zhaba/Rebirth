@@ -115,7 +115,7 @@ Each milestone ends with something playable in the browser.
 | S6 | Services | Wells, market, chapel, school, healer; network-distance coverage; land value; info overlays. **Done** (section 9). |
 | S7 | Visible life | Walkers and carts on roads, night lights, overlays for traffic, coverage and happiness. **Done** (section 10). Worker posts a cosmetic `life` message per game day and on load (up to 300 walkers, carts per load capped at 6 per producer, traffic over all commuters, lights); nothing of it is in `SimState` or saves; the «движение» overlay joins the S6 switch. |
 | S8 | Idle and chronicle | Offline catch-up in the worker with progress, "while you were away" chronicle. **Done** (section 11). Catch-up runs in one-day chunks with `progress` messages (commands queue until it ends); `SimState.chronicle` (cap 1000, `addChronicle` in `sim/chronicle.ts` for E1) is saved and sent in snapshots only when it grows; the `Away` summary is counted step by step in `sim/away.ts`; a full 24 h catch-up of ~165 people took ~0.6 s in Node. |
-| E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. **Done** (section 12). The disc grows 40 m² × PACE = 160 m² per digger-hour from 15 to 120 m (about 8 days with 3 diggers); the main thread reports finds with `recordFinds` (saved in `SimState.finds`), and a rebuild on a foundation skips stone and saves 25 % labor. |
+| E1 | Excavation | Dig sites reveal real OSM footprints and streets at real scale; rebuild on old foundations; old streets suggest road alignments. **Done** (section 12). The disc grows 40 m² × PACE = 160 m² per digger-hour from 15 to 120 m (about 8 days with 3 diggers); the main thread reports finds with `recordFinds` (saved in `SimState.finds`), and a revealed foundation is a building lot (section 12). |
 | E2 | Notebook | Real Wikipedia entries tied to excavated places, plus the town chronicle. **Done** (section 13). `NotebookHost` feeds the panel from `SimState.finds` (mapped by `findsToEntries`), the new persisted `SimState.articles` (cap 500, `addArticles` command, one chronicle line each) and the chronicle; finds and articles reach the main thread only when they change; `map/articles.ts` queries Wikipedia per dig disc (`world/wikiSelect.ts` keeps hits within disc + 300 m); `seen` lives in localStorage; the notebook and the building panel never open together. |
 
 ## 8. S5 design: production
@@ -328,8 +328,16 @@ selected service is drawn as its covered road edges.
 - **Finds:** the main thread reports newly revealed foundations and POIs to the worker
   (`recordFinds`); each foundation yields salvaged stone (0.05 t per m² of footprint,
   capped at 20 t each). Recorded finds are saved so the notebook and rewards never repeat.
-- **Rebuild on old foundations:** a building whose footprint overlaps a recorded foundation
-  needs no stone and 25 % less labor.
+- **Foundations are lots** (`sim/foundationLots.ts`): a foundation of 20 m² up to 4× the
+  largest template's footprint is a lot of its own. A zone builds on its free foundations
+  first (zone = the painted cells the ring holds, a built road within 30 m, no road or field
+  over it); the placement tool snaps to a foundation under the cursor and fills it. The
+  building's footprint is the ring simplified to 12 points; a template fits rings of 0.4–4×
+  its own footprint, and the building's `scale` (that ratio) multiplies its residents,
+  families, jobs, storage, labor and materials, so a size costs the same per m². There is no
+  discount for building on a foundation. Regular rectangular lots never cover such a
+  foundation. A building's `foundationId` marks it built on: its ruins are hidden once
+  construction starts and come back on demolition. Heritage sites keep their own restoration.
 - **Old streets suggest roads:** the road tool also snaps to revealed old street lines
   (vertices and nearest point), shown as guides.
 

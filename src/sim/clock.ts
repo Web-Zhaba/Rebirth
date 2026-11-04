@@ -101,7 +101,7 @@ export function step(s: SimState): SimState {
     const lever = { priority: s.levers.priority, focus: toloka ? s.levers.toloka!.site : null };
     const crew = (CREW * BASE_TICK * bf) / 60; // person-hours of one crew in a tick
     const first = clearingsFirst(s.stock);
-    const paid = payMaterials(s.buildings, roadStock, r.left, s.finds.foundations, crew, s.clearings, first, lever);
+    const paid = payMaterials(s.buildings, roadStock, r.left, crew, s.clearings, first, lever);
     clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first, lever);
     buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings, first, lever);
     stock = paid.stock;

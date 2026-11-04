@@ -13,7 +13,7 @@ import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
-import { canPlace, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
+import { canPlace, canPlaceOnFoundation, placeOnFoundation, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
 import { peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
@@ -49,13 +49,17 @@ const CHUNK_TICKS = 144; // one game day per chunk
 // What the main thread sees: aggregates instead of individual residents.
 export function toSnapshot(sim: SimState): SimSnapshot {
   const { zones: _z, chronicle: _c, residents: _r, households: _h, nextPersonId: _p, nextHouseholdId: _n, prod: _pr, finds: _f, articles: _a, ...rest } = sim;
-  const houseMood: Record<number, number> = {};
+  const houseMood: Record<number, number> = {}; // the mean of the families of a house
   const houseResidents: Record<number, number> = {};
+  const families: Record<number, number> = {};
   for (const h of Object.values(sim.households)) {
     if (h.home === null) continue;
-    houseMood[h.home] = Math.round(h.mood);
+    const n = (families[h.home] ?? 0) + 1;
+    families[h.home] = n;
+    houseMood[h.home] = ((houseMood[h.home] ?? 0) * (n - 1) + h.mood) / n;
     houseResidents[h.home] = (houseResidents[h.home] ?? 0) + h.members.length;
   }
+  for (const id in houseMood) houseMood[id] = Math.round(houseMood[id]);
   const ps = peopleStats(sim);
   const dem = demand(sim);
   return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
@@ -454,6 +458,16 @@ export class Handler {
         if (!ok.ok) return reject(ok.reason);
         const placed = placeBuilding(sim, t, cmd.edge, cmd.side, cmd.i, cmd.site);
         this.save = { ...this.save, sim: placed };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "placeOnFoundation") {
+        const t = typeof cmd.template === "string" && Object.hasOwn(BUILDINGS, cmd.template) ? BUILDINGS[cmd.template] : null;
+        if (!t || t.zone !== "placed") return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
+        const locked = lockReason(sim, t.id);
+        if (locked) return reject(locked);
+        if (typeof cmd.foundationId !== "string") return reject(L("Некорректное место", "Invalid place"));
+        const ok = canPlaceOnFoundation(sim, t, cmd.foundationId);
+        if (!ok.ok) return reject(ok.reason);
+        this.save = { ...this.save, sim: placeOnFoundation(sim, t, cmd.foundationId) };
         return await this.finishCommand(id);
       } else if (cmd.type === "recordFinds") {
         const r = recordFinds(sim, cmd);

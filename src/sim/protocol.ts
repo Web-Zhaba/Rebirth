@@ -31,6 +31,7 @@ export type Cmd =
   | { type: "removeClearing"; id: number }
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
+  | { type: "placeOnFoundation"; template: string; foundationId: string }
   | { type: "demolish"; id: number }
   // Order the restoration of a typed old building (a foundation with a kind), as a monument or in working order.
   | { type: "restoreSite"; siteId: string; mode: RestoreMode }

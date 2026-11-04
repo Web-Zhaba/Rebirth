@@ -10,7 +10,6 @@ export const DIG = {
   areaPerHour: 160, // m2 of revealed area per digger-hour: 40 m2 × PACE (4), like other construction work
   stonePerM2: 0.001, // t of salvaged stone per m2 of foundation
   stoneCap: 1, // t per foundation
-  laborCut: 0.25, // share of labor saved when building on an old foundation
   batch: 200, // foundations per recordFinds command
 };
 
@@ -50,7 +49,7 @@ export function pointInRing(x: number, y: number, ring: readonly Pt[]): boolean 
   return inside;
 }
 
-function centroid(ring: readonly Pt[]): Pt {
+export function centroid(ring: readonly Pt[]): Pt {
   let a = 0;
   let cx = 0;
   let cy = 0;
@@ -65,38 +64,6 @@ function centroid(ring: readonly Pt[]): Pt {
     return [ring.reduce((s, p) => s + p[0], 0) / n, ring.reduce((s, p) => s + p[1], 0) / n];
   }
   return [cx / (3 * a), cy / (3 * a)];
-}
-
-// Does a footprint overlap an old foundation: a footprint corner inside its ring, or its centroid inside the footprint.
-export function onOldFoundation(footprint: readonly Pt[], foundations: readonly Pick<FoundFoundation, "ring">[]): boolean {
-  if (foundations.length === 0) return false;
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (const [x, y] of footprint) {
-    x0 = Math.min(x0, x);
-    y0 = Math.min(y0, y);
-    x1 = Math.max(x1, x);
-    y1 = Math.max(y1, y);
-  }
-  for (const f of foundations) {
-    let a0 = Infinity;
-    let b0 = Infinity;
-    let a1 = -Infinity;
-    let b1 = -Infinity;
-    for (const [x, y] of f.ring) {
-      a0 = Math.min(a0, x);
-      b0 = Math.min(b0, y);
-      a1 = Math.max(a1, x);
-      b1 = Math.max(b1, y);
-    }
-    if (a1 < x0 || a0 > x1 || b1 < y0 || b0 > y1) continue;
-    if (footprint.some(([x, y]) => pointInRing(x, y, f.ring))) return true;
-    const [cx, cy] = centroid(f.ring);
-    if (pointInRing(cx, cy, footprint)) return true;
-  }
-  return false;
 }
 
 // ---------- snapshot ----------

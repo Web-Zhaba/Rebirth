@@ -22,9 +22,24 @@ const EMPTY = fc([]);
 
 // The broken wall pieces of every foundation in town metres (null: too thin for walls, drawn as an outline): the 2D
 // walls below and the engine's 3D walls (view/engine/models.ts) are built from the same pieces.
-export const ruinWallPieces: ReadonlySignal<{ ring: XY[]; pieces: { quad: XY[]; h: number }[] | null }[]> = computed(() => {
+const allPieces = computed(() => {
   const w = oldWorld.value;
-  return w ? w.foundations.filter((fd) => fd.ring.length >= 3).map((fd) => ({ ring: fd.ring, pieces: brokenWalls(fd.ring, fd.id, fd.height) })) : [];
+  return w ? w.foundations.filter((fd) => fd.ring.length >= 3).map((fd) => ({ id: fd.id, ring: fd.ring, pieces: brokenWalls(fd.ring, fd.id, fd.height) })) : [];
+});
+
+// Foundations a building stands on once its construction has started: their ruins are not drawn, and come back when the
+// building is demolished. A string, so the ruins are rebuilt only when this set changes, not on every construction tick.
+const builtOn = computed(() => {
+  const ids: string[] = [];
+  for (const b of Object.values(buildings.value ?? {})) if (b.foundationId && b.state !== "planned") ids.push(b.foundationId);
+  return ids.sort().join(" ");
+});
+
+export const ruinWallPieces: ReadonlySignal<{ ring: XY[]; pieces: { quad: XY[]; h: number }[] | null }[]> = computed(() => {
+  const key = builtOn.value;
+  if (!key) return allPieces.value;
+  const hidden = new Set(key.split(" "));
+  return allPieces.value.filter((p) => !hidden.has(p.id));
 });
 
 const foundations = computed(() => {

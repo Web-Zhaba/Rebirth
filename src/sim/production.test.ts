@@ -592,7 +592,7 @@ describe("placement", () => {
     const e = edgeId(s);
     s = placeBuilding(s, t("barn"), e, 1, 3, NO_SITE);
     expect(canPlace(s, t("barn"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false, reason: "Место занято зданием" });
-    expect(canPlace(s, t("barn"), e, 1, 4, NO_SITE)).toEqual({ ok: true });
+    expect(canPlace(s, t("barn"), e, 1, 5, NO_SITE)).toEqual({ ok: true }); // the barn is two cells wide
     expect(canPlace(s, t("gumno"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
   });
   it("site thresholds: woodcutter forest >= 10 %, fisher water >= 5 %, quarry not on water or wetland", () => {
@@ -607,7 +607,7 @@ describe("placement", () => {
     const terrain = { ...s.zones.terrain, [qkey(cell.cx, cell.cy)]: { land: "wetland", slope: 0 } as TerrainInfo };
     const wet = { ...s, zones: { ...s.zones, terrain } };
     expect(canPlace(wet, t("quarry"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
-    expect(canPlace(wet, t("barn"), e, 1, 3, NO_SITE)).toEqual({ ok: true }); // the barn lot is one cell deep
+    expect(canPlace(wet, t("barn"), e, 1, 3, NO_SITE)).toEqual({ ok: true }); // a barn may stand on wet ground
   });
   it("forager needs 20 % forest; orchard and apiary stay off water and wetland", () => {
     const s = base();
@@ -628,13 +628,13 @@ describe("placement", () => {
     const placed = placeBuilding(s, t("gumno"), e, 1, 3, { forest: 0.2, water: 0.1, rock: 0 });
     const b = placed.buildings[1];
     expect(b).toMatchObject({ template: "gumno", zone: "placed", state: "planned", paid: false, done: 0, labor: BUILDINGS.gumno.labor, site: { forest: 0.2, water: 0.1, rock: 0 } });
-    expect(b.lot).toMatchObject({ w: 1, d: 2 });
+    expect(b.lot).toMatchObject({ w: 2, d: 2 });
     expect(placed.nextBuildingId).toBe(2);
     expect(placed.zones.rev).toBe(s.zones.rev + 1);
-    const under = placed.zones.cells.filter((c) => c.edge === e && c.side === 1 && c.i === 3 && c.depth < 2);
-    expect(under).toHaveLength(2);
+    const under = placed.zones.cells.filter((c) => c.edge === e && c.side === 1 && (c.i === 3 || c.i === 4) && c.depth < 2);
+    expect(under).toHaveLength(4);
     expect(under.every((c) => c.zone === "none")).toBe(true);
-    expect(placed.zones.cells.find((c) => c.edge === e && c.side === 1 && c.i === 4 && c.depth === 0)!.zone).toBe("res");
+    expect(placed.zones.cells.find((c) => c.edge === e && c.side === 1 && c.i === 5 && c.depth === 0)!.zone).toBe("res");
   });
   it("growth never builds under a placed building", () => {
     let s = base();
@@ -737,7 +737,7 @@ describe("handler: placeBuilding and demolish", () => {
     expect(q.data).toMatchObject({ kind: "workplace", capacity: 4, production: { good: "food", fields: { count: 1, ha: 10 } } });
     await h.handle({ t: "query", id: 6, q: { type: "building", id: 2 } });
     const q2 = out.filter((m) => m.t === "queryResult")[1] as Extract<FromWorker, { t: "queryResult" }>;
-    expect(q2.data).toMatchObject({ kind: "workplace", capacity: 2, production: { good: "planks", missing: "брёвна" } });
+    expect(q2.data).toMatchObject({ kind: "workplace", capacity: BUILDINGS.sawpit.jobs, production: { good: "planks", missing: "брёвна" } });
   });
 });
 

@@ -2,8 +2,8 @@ import { allUnlocked } from "./tech";
 import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
-import { allocateLabor, BUILDINGS, CREW } from "./buildings";
-import { advanceBuildings, demand, emptyGrowth, growthAdvice, nextRandom, reconcile, seedOf, townStats } from "./growth";
+import { allocateLabor, BUILDINGS, CREW, homesOf } from "./buildings";
+import { advanceBuildings, DEMAND, demand, emptyGrowth, growthAdvice, nextRandom, reconcile, seedOf, townStats } from "./growth";
 import { builderCount, peopleStats } from "./people";
 import { addRoad, emptyRoads, removeEdge } from "./roads";
 import { payMaterials, reportShortages } from "./production";
@@ -71,7 +71,7 @@ describe("demand", () => {
     const d = demand(s);
     expect(d.res).toBeCloseTo(1.5 + 4);
     // nobody is busy building anything, so the founders count as unemployed
-    expect(d.craft).toBeCloseTo((0.2 * 14) / 3 + peopleStats(s).unemployed / 6);
+    expect(d.craft).toBeCloseTo((0.2 * 14) / DEMAND.craftJobs + peopleStats(s).unemployed / 6);
     expect(d.trade).toBeLessThan(1);
   });
   it("vacant and unfinished houses cut res demand, vacancies raise it", () => {
@@ -82,9 +82,10 @@ describe("demand", () => {
     const started = { ...s, buildings: { 1: { ...b, state: "building" as const } } };
     expect(demand(started).res).toBeCloseTo(1.5 + 4 - 0.5); // a house under construction counts half
     const active = { ...s, buildings: { 1: { ...b, state: "active" as const } } };
-    expect(demand(active).res).toBeCloseTo(1.5 + 4 - 1); // one vacant house
+    const homes = homesOf(b);
+    expect(demand(active).res).toBeCloseTo(1.5 + 4 - homes); // one vacant house, a home per family it holds
     const shop = { ...b, id: 2, zone: "trade" as const, template: "shop", state: "active" as const };
-    expect(demand({ ...active, buildings: { ...active.buildings, 2: shop } }).res).toBeCloseTo(1.5 + 4 - 1 + 1); // 2 vacancies / 2
+    expect(demand({ ...active, buildings: { ...active.buildings, 2: shop } }).res).toBeCloseTo(1.5 + 4 - homes + BUILDINGS.shop.jobs / 2); // vacancies / 2
     expect(townStats(active.buildings)).toMatchObject({ houseCap: BUILDINGS[b.template].residents, unfinishedHouses: 0 });
   });
   it("a house promised to a family on its way counts as occupied", () => {
@@ -218,7 +219,7 @@ describe("construction", () => {
     const stock = { food: 0, logs: 100, planks: 10, stone: 10, wares: 0 };
     const crew = (CREW * BASE_TICK) / 60;
     const hours = (8 * BASE_TICK) / 60; // 8 hands
-    const paid = payMaterials(three, stock, hours, [], crew);
+    const paid = payMaterials(three, stock, hours, crew);
     expect(Object.values(paid.buildings).map((b) => b.paid)).toEqual([true, true, false]);
     const out = advanceBuildings(paid.buildings, hours, crew);
     expect(Object.values(out).map((b) => b.done > 0)).toEqual([true, true, false]);

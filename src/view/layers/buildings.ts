@@ -54,8 +54,16 @@ function tintOf(b: Building, ov: Overlay, st: ClientState): string {
   return covers(st.coverage[b.id], ov) ? GOOD : BAD;
 }
 
-// Unit vector from a lot towards its road (the door side): the opposite of growth.ts `away`.
-const towardsRoad = (b: Building): [number, number] => [Math.sin(b.lot.angle) * b.side, -Math.cos(b.lot.angle) * b.side];
+// Unit vector from a lot towards its road (the door side): the opposite of growth.ts `away`; towards its door when it has one.
+const towardsRoad = (b: Building): [number, number] => {
+  if (b.door) {
+    const dx = b.door[0] - b.lot.cx;
+    const dy = b.door[1] - b.lot.cy;
+    const l = Math.hypot(dx, dy);
+    if (l > 1e-6) return [dx / l, dy / l];
+  }
+  return [Math.sin(b.lot.angle) * b.side, -Math.cos(b.lot.angle) * b.side];
+};
 
 // What the model layer draws of the buildings: every one that is not just planned. A restored old building is drawn by its OSM class.
 // The same list comes back while nothing visible changed, so the layer does not rebuild every tick.

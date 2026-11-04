@@ -1,4 +1,4 @@
-import { BUILDINGS, foodCapacity, houseCapacity } from "./buildings";
+import { BUILDINGS, familyCapacity, foodCapacity, homesOf } from "./buildings";
 import { buildFloor, buildingPriority, capacityOf } from "./jobs";
 import { isCleared } from "./clearing";
 import { assignFields, bears, expectedKg, FIELD, FOOD_RATE, foodKgHour, idleGumnos, idleOrchards, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
@@ -383,14 +383,30 @@ export function buildingCentre(b: Pick<Building, "footprint">): [number, number]
 
 export const isFinishedHouse = (b: Building | undefined): b is Building => !!b && b.zone === "res" && b.state === "active";
 export const isWorkplace = (b: Building | undefined): b is Building => !!b && b.zone !== "res" && b.state === "active";
-const houseCap = (b: Building): number => houseCapacity(b);
+const houseCap = (b: Building): number => familyCapacity(b);
 
+// Free homes of the finished houses: a house id once per family it still has room for (a large house holds several).
 export function vacantHouses(buildings: Record<number, Building>, households: Record<number, Household>): number[] {
-  const taken = new Set<number>();
-  for (const h of Object.values(households)) if (h.home !== null) taken.add(h.home);
+  const taken = new Map<number, number>();
+  for (const h of Object.values(households)) if (h.home !== null) taken.set(h.home, (taken.get(h.home) ?? 0) + 1);
   const out: number[] = [];
-  for (const b of Object.values(buildings)) if (isFinishedHouse(b) && !taken.has(b.id)) out.push(b.id);
+  for (const b of Object.values(buildings)) {
+    if (!isFinishedHouse(b)) continue;
+    for (let k = homesOf(b) - (taken.get(b.id) ?? 0); k > 0; k--) out.push(b.id);
+  }
   return out;
+}
+
+// The free homes no family on its way has been promised.
+export function freeHomes(buildings: Record<number, Building>, households: Record<number, Household>, incoming: readonly Pick<Incoming, "house">[]): number[] {
+  const promised = new Map<number, number>();
+  for (const f of incoming) promised.set(f.house, (promised.get(f.house) ?? 0) + 1);
+  return vacantHouses(buildings, households).filter((id) => {
+    const n = promised.get(id) ?? 0;
+    if (n === 0) return true;
+    promised.set(id, n - 1);
+    return false;
+  });
 }
 
 export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph, clearings: readonly Clearing[] = [], stock?: Pick<Stock, "stone">): boolean {
@@ -845,9 +861,8 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
     }
   }
 
-  // houses promised to families on their way stay theirs
-  const promised = new Set(s.incoming.map((f) => f.house));
-  const freeHouses = () => vacantHouses(buildings, w.households).filter((id) => !promised.has(id));
+  // homes promised to families on their way stay theirs
+  const freeHouses = () => freeHomes(buildings, w.households, s.incoming);
 
   if (on("marriage")) {
     const vacant = freeHouses();
@@ -966,11 +981,10 @@ export function immigrationStep(s: SimState, dt: number): SimState {
   let stock = s.stock;
   if (incoming.some((f) => f.arrive <= now)) {
     const wk = (w = cloneW(s, now));
-    const promised = new Set(incoming.map((f) => f.house));
     for (const f of incoming) {
       if (f.arrive > now) continue;
       const free = vacantHouses(s.buildings, wk.households);
-      const house = free.includes(f.house) ? f.house : (free.find((id) => !promised.has(id)) ?? null);
+      const house = free.includes(f.house) ? f.house : (freeHomes(s.buildings, wk.households, incoming)[0] ?? null);
       const room = house === null ? 3 : Math.max(0, houseCap(s.buildings[house]) - 2);
       const kids = Math.floor(rand() * (Math.min(3, room) + 1));
       const h = makeFamily(wk, rand, 18, 45, kids, house);
@@ -983,9 +997,8 @@ export function immigrationStep(s: SimState, dt: number): SimState {
   }
   const p = 1 - (1 - Math.min(1, RATES.immigrationDay * s.attract)) ** (dt / 1440);
   if (p > 0) {
-    const promised = new Set(incoming.map((f) => f.house));
-    for (const id of vacantHouses(s.buildings, w ? w.households : s.households)) {
-      if (promised.has(id) || !(rand() < p)) continue;
+    for (const id of freeHomes(s.buildings, w ? w.households : s.households, incoming)) {
+      if (!(rand() < p)) continue;
       incoming = [...incoming, { house: id, arrive: now + ARRIVE_MIN + rand() * ARRIVE_SPAN } satisfies Incoming];
     }
   }
@@ -1002,10 +1015,11 @@ export function immigrationStep(s: SimState, dt: number): SimState {
 export function syncPeople<T extends Pick<SimState, "buildings" | "residents" | "households">>(s: T): T {
   let households = s.households;
   let residents = s.residents;
-  const taken = new Set<number>();
+  const taken = new Map<number, number>(); // house id -> families living there
   for (const h of Object.values(s.households)) {
     if (h.home === null) continue;
-    if (isFinishedHouse(s.buildings[h.home]) && !taken.has(h.home)) taken.add(h.home);
+    const n = taken.get(h.home) ?? 0;
+    if (isFinishedHouse(s.buildings[h.home]) && n < homesOf(s.buildings[h.home])) taken.set(h.home, n + 1);
     else {
       if (households === s.households) households = { ...households };
       households[h.id] = { ...h, home: null };

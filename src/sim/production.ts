@@ -2,7 +2,7 @@ import { leverMood, workHours } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
 import { allocateLabor, BUILDINGS, CELLAR_CAP, FOUNDING_STOCK, foodCapacity, materialsOf, storageOf, UPGRADE, type Materials, type SiteLever } from "./buildings";
 import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
-import { DIG, growDig, onOldFoundation, radiusOf } from "./excavation";
+import { DIG, growDig, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
 import { buildingPriority } from "./jobs";
 import { cropOf, fieldYieldMul, workshopMul } from "./tech";
@@ -68,7 +68,7 @@ export function reportShortages(before: Record<number, Building>, after: Record<
     if (!m) continue;
     const hand = up ? up.labor > (wasUp?.labor ?? 0) : (b.hand ?? 0) > 0;
     for (const g of ["logs", "planks", "stone"] as const) {
-      const need = !up && b.onRuins && g === "stone" ? 0 : m[g];
+      const need = m[g];
       if (hand && need > st[g]) {
         const text = L(`Не хватает ${SHORT_OF[g]}: часть работы делают вручную`, `Short of ${SHORT_OF[g]}: part of the work is done by hand`);
         if (!out.some((e) => e.kind === "shortage" && e.text === text && dayOf(e.at) === dayOf(now))) out = say(out, now, "shortage", text, [b.lot.cx, b.lot.cy]);
@@ -116,10 +116,10 @@ function workersByJob(residents: Record<number, Resident>, households: Record<nu
 
 // ---------- construction materials ----------
 
-// Person-hours of hand work that the stock's shortfall of `m` adds to a building (stone is free on old foundations).
-export function handHours(m: Materials, st: Stock, ruins = false): number {
+// Person-hours of hand work that the stock's shortfall of `m` adds to a building.
+export function handHours(m: Materials, st: Stock): number {
   let hours = 0;
-  for (const g of ["logs", "planks", "stone"] as const) hours += Math.max(0, (ruins && g === "stone" ? 0 : m[g]) - st[g]) * HAND_HOURS[g];
+  for (const g of ["logs", "planks", "stone"] as const) hours += Math.max(0, m[g] - st[g]) * HAND_HOURS[g];
   return hours;
 }
 
@@ -129,7 +129,6 @@ export function payMaterials(
   buildings: Record<number, Building>,
   stock: Stock,
   personHours: number,
-  foundations: readonly { ring: [number, number][] }[] = [],
   crewHours = Infinity, // no crew limit: sites are served one after another
   clearings: readonly Clearing[] = [],
   first = false, // the clearings take their crews before the buildings (see clearingsFirst)
@@ -143,19 +142,15 @@ export function payMaterials(
     const up = b.state === "active" ? b.upgrade : undefined;
     if (up ? up.paid : b.paid) continue;
     const m = up ? UPGRADE.materials : materialsOf(b);
-    // A new building whose footprint overlaps an old foundation needs no stone and 25 % less labor (a restoration has its own price).
-    const ruins = !up && !b.siteId && onOldFoundation(b.footprint, foundations);
     let hand = 0;
     const next = { ...st };
     if (m) {
-      hand = handHours(m, st, ruins);
-      for (const g of ["logs", "planks", "stone"] as const) next[g] -= Math.min(next[g], ruins && g === "stone" ? 0 : m[g]);
+      hand = handHours(m, st);
+      for (const g of ["logs", "planks", "stone"] as const) next[g] -= Math.min(next[g], m[g]);
     }
     st = next;
-    const cut = ruins ? 1 - DIG.laborCut : 1;
-    const labor = ((up ? up.labor : b.labor) + hand) * cut;
-    hand *= cut;
-    b = up ? { ...b, upgrade: { ...up, paid: true, labor } } : { ...b, paid: true, labor, ...(hand > 0 ? { hand } : {}), ...(ruins ? { onRuins: true } : {}) };
+    const labor = (up ? up.labor : b.labor) + hand;
+    b = up ? { ...b, upgrade: { ...up, paid: true, labor } } : { ...b, paid: true, labor, ...(hand > 0 ? { hand } : {}) };
     if (out === buildings) out = { ...buildings };
     out[id] = b;
   }
@@ -375,7 +370,7 @@ export function dailyEconomy(s: SimState): SimState {
   // heat and damp spoil the stock; what lies in cellars and barns suffers less (cellars hold the best)
   let barns = 0;
   let cellars = 0;
-  for (const b of Object.values(s.buildings)) if (b.state === "active") b.template === "cellar" ? (cellars += CELLAR_CAP) : (barns += storageOf(b.template));
+  for (const b of Object.values(s.buildings)) if (b.state === "active") b.template === "cellar" ? (cellars += storageOf(b)) : (barns += storageOf(b));
   const inCellar = stock.food > 0 ? Math.min(1, cellars / stock.food) : 0;
   const inBarn = stock.food > 0 ? Math.min(1 - inCellar, barns / stock.food) : 0;
   const spoiled = stock.food * spoilage(s.weather, inBarn, inCellar);
@@ -615,10 +610,10 @@ export function economyStats(s: SimState): EconomyStats {
 // Production details for the inspector; undefined for buildings that produce nothing (houses, shops).
 export function productionInfo(s: SimState, b: Building): ProductionInfo | undefined {
   const good = GOOD[b.template];
-  if (!good && !storageOf(b.template)) return undefined;
+  if (!good && !storageOf(b)) return undefined;
   const info: ProductionInfo = { good: good ?? null, yesterday: s.prod.yesterday[b.id] ?? 0 };
   if (b.site) info.site = b.site;
-  if (storageOf(b.template)) info.storage = storageOf(b.template);
+  if (storageOf(b)) info.storage = storageOf(b);
   if (b.template === "orchard") info.orchard = { ripeDays: b.ripe === undefined ? ORCHARD_YEARS * YEAR_DAYS : Math.max(0, Math.ceil((b.ripe - s.gameMinutes) / DAY_MIN)), quality: orchardQuality(s.prod.orchard) };
   if (b.template === "sawpit" && s.stock.logs <= EPS) info.missing = L("брёвна", "logs");
   if (b.template === "smithy" && s.stock.logs <= EPS) info.missing = L("брёвна (на уголь)", "logs (for charcoal)");

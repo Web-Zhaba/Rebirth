@@ -85,8 +85,8 @@ function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<
     ? L(`Ведите пальцем — закрасить, двумя пальцами — двигать карту; ${EXIT_TOUCH}`, `Drag a finger to paint, two fingers to move the map; ${EXIT_TOUCH}`)
     : L("Тяните — закрасить, Shift+клик — вся сторона дороги, Пробел — двигать карту, Esc — выйти", "Drag to paint, Shift+click — the whole side of a road, Space — pan the map, Esc — exit");
   const place = touch
-    ? L(`Тап — показать участок у дороги, второй тап — поставить; ${EXIT_TOUCH}`, `Tap to show a lot by a road, tap it again to place; ${EXIT_TOUCH}`)
-    : L("Клик — поставить у дороги, ПКМ или Esc — выйти", "Click to place by a road, RMB or Esc — exit");
+    ? L(`Тап — показать участок у дороги или старый фундамент, второй тап — поставить; ${EXIT_TOUCH}`, `Tap to show a lot by a road or an old foundation, tap it again to place; ${EXIT_TOUCH}`)
+    : L("Клик — поставить у дороги или на старый фундамент, ПКМ или Esc — выйти", "Click to place by a road or on an old foundation, RMB or Esc — exit");
   const service = (id: keyof typeof SERVICES, tail: string) => `${place}. ${L(`Подсветка дорог — охват ${SERVICES[id].reach} м по дорогам`, `Highlighted roads — reach ${SERVICES[id].reach} m by road`)}${tail}`;
   const tool: Partial<Record<Tool, string>> = {
     bulldoze: touch ? L(`Тап по участку — снести; ${EXIT_TOUCH}`, `Tap a section to demolish; ${EXIT_TOUCH}`) : L("Клик по участку — снести, Esc — выйти", "Click a section to demolish, Esc — exit"),
