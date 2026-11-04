@@ -1,6 +1,6 @@
 import type { Land } from "../world/landcover";
 import { bridgeSpanBonus } from "./tech";
-import type { ProgressState, RoadEdge, RoadGraph, RoadKind, Stock } from "./types";
+import type { ProgressState, RoadEdge, RoadGraph, RoadKind, RoadUpgrade, Stock } from "./types";
 import { L as tr } from "../i18n";
 
 export interface RoadSpec {
@@ -49,7 +49,7 @@ export const WORKERS = 10;
 export const WORK_START = 7; // hour of day
 export const WORK_END = 19;
 export const ORIGIN_RADIUS = 30; // m: edges this close to the founding point can be started
-const OVERLAP_BAND = 1; // m
+const OVERLAP_BAND = 1; // m, the least band (narrow roads)
 const NODE_EPS = 0.5; // m: crossings this close to a node reuse it
 const EPS = 1e-9;
 
@@ -144,6 +144,12 @@ function splitEdge(g: RoadGraph, id: number, x: number, y: number): number {
     g.edges[id].stone = owed1;
     g.edges[edge].stone = e.stone - owed1;
   }
+  if (e.upgrade) {
+    // so is a rebuilding under way
+    const [u1, u2] = splitUpgrade(e.upgrade, f);
+    g.edges[id].upgrade = u1;
+    g.edges[edge].upgrade = u2;
+  }
   return node;
 }
 
@@ -156,8 +162,13 @@ function nodeAt(g: RoadGraph, p: [number, number], tol: number): number {
   return id;
 }
 
-// Length of `e` lying within OVERLAP_BAND of the line through A-B, measured along A-B.
-function overlapLength(ax: number, ay: number, bx: number, by: number, e: RoadEdge, g: RoadGraph): number {
+// How close two roads' centre lines may run before one lies over the other: half of their half widths together, so
+// the ribbons overlap by more than half (a 2 m path and a 5 m dirt road: 1.75 m), never under OVERLAP_BAND. The restore
+// tool counts a stretch of old street as already built by the same measure (map/roadRestoreModel.ts).
+export const overlapBand = (a: RoadKind, b: RoadKind): number => Math.max(OVERLAP_BAND, (ROAD_KINDS[a].width + ROAD_KINDS[b].width) / 4);
+
+// Length of `e` lying within `band` of the line through A-B, measured along A-B.
+function overlapLength(ax: number, ay: number, bx: number, by: number, e: RoadEdge, g: RoadGraph, band: number): number {
   const L = dist(ax, ay, bx, by);
   if (L < EPS) return 0;
   const ux = (bx - ax) / L;
@@ -172,10 +183,10 @@ function overlapLength(ax: number, ay: number, bx: number, by: number, e: RoadEd
   let hi = 1;
   const dd = pd - pc;
   if (Math.abs(dd) < 1e-12) {
-    if (Math.abs(pc) > OVERLAP_BAND) return 0;
+    if (Math.abs(pc) > band) return 0;
   } else {
-    const u1 = (-OVERLAP_BAND - pc) / dd;
-    const u2 = (OVERLAP_BAND - pc) / dd;
+    const u1 = (-band - pc) / dd;
+    const u2 = (band - pc) / dd;
     lo = Math.max(lo, Math.min(u1, u2));
     hi = Math.min(hi, Math.max(u1, u2));
     if (lo >= hi) return 0;
@@ -213,7 +224,7 @@ export function addRoad(
     let overlap = 0;
     for (const e of Object.values(g.edges)) {
       if ((e.a === a && e.b === b) || (e.a === b && e.b === a)) return fail(OVERLAP_REASON);
-      overlap += overlapLength(A.x, A.y, B.x, B.y, e, g);
+      overlap += overlapLength(A.x, A.y, B.x, B.y, e, g, overlapBand(kind, e.kind));
     }
     if (overlap > MIN_SEGMENT) return fail(OVERLAP_REASON);
 
@@ -284,13 +295,81 @@ export function removeEdge(graph: RoadGraph, id: number): RoadGraph {
   return g;
 }
 
+function splitUpgrade(u: RoadUpgrade, f: number): [RoadUpgrade, RoadUpgrade] {
+  const labor1 = u.labor * f;
+  const done1 = u.done * f;
+  const one: RoadUpgrade = { kind: u.kind, labor: labor1, done: done1 };
+  const two: RoadUpgrade = { kind: u.kind, labor: u.labor - labor1, done: Math.min(u.labor - labor1, u.done - done1) };
+  if (u.stone !== undefined) {
+    one.stone = u.stone * f;
+    two.stone = u.stone - one.stone;
+  }
+  return [one, two];
+}
+
+// ---------- upgrades ----------
+
+// Rank of a kind among roads on the ground and among bridges: a road is rebuilt as a better one of its own sort.
+const LEVEL: Record<RoadKind, number> = { path: 0, dirt: 1, stone: 2, footbridge: 0, bridge: 1, stonebridge: 2 };
+// Rebuilding a built road costs what the better one would cost beyond the old one, but never under this share of it.
+const UPGRADE_SHARE = 0.25;
+
+// The kind an edge will be once the work ordered on it is done.
+export const plannedKind = (e: RoadEdge): RoadKind => e.upgrade?.kind ?? e.kind;
+
+// Russian reason the edge cannot be rebuilt as `kind`, or null when it can.
+export function upgradeReason(e: RoadEdge, kind: RoadKind): string | null {
+  if (isBridge(e.kind) !== isBridge(kind)) return isBridge(kind) ? tr("Дорогу нельзя заменить мостом", "A road can’t become a bridge") : tr("Мост меняется только на мост", "A bridge can only become another bridge");
+  if (LEVEL[kind] <= LEVEL[plannedKind(e)]) return tr("Здесь уже не хуже", "This one is already as good");
+  return null;
+}
+
+// Person-hours of rebuilding `e` as a kind that would cost `full` to build anew on its ground.
+export const upgradeWork = (e: RoadEdge, full: number): number => (unfinished(e) ? Math.max(0, full - e.done) : Math.max(full - e.labor, full * UPGRADE_SHARE));
+
+// Rebuilds edges `ids` as `kind`; `full[i]` is what edge ids[i] would cost built anew as `kind` (segmentCost).
+// An unfinished edge simply becomes the new kind, keeping the work done on it; a built one stays in service and gets
+// the rebuilding as a job of its own (`upgrade`), done by the road builders like any other. All-or-nothing.
+export function upgradeRoads(graph: RoadGraph, ids: readonly number[], kind: RoadKind, full: readonly number[]): AddResult {
+  if (ids.length === 0 || ids.length !== full.length || new Set(ids).size !== ids.length) return fail(tr("Некорректный участок", "Invalid section"));
+  const edges = { ...graph.edges };
+  const perM = ROAD_KINDS[kind].stone;
+  for (let i = 0; i < ids.length; i++) {
+    const e = edges[ids[i]];
+    if (!e) return fail(tr("Участок уже убран", "The section is already removed"));
+    const why = upgradeReason(e, kind);
+    if (why) return fail(why);
+    const stone = perM ? { stone: perM * e.length } : {};
+    if (unfinished(e)) {
+      const { stone: _old, upgrade: _none, ...rest } = e;
+      edges[e.id] = { ...rest, kind, labor: Math.max(full[i], e.done), ...stone };
+    } else {
+      const labor = upgradeWork(e, full[i]);
+      edges[e.id] = { ...e, upgrade: { kind, labor, done: e.upgrade ? Math.min(e.upgrade.done, labor) : 0, ...stone } };
+    }
+  }
+  return { ok: true, graph: { ...graph, edges } };
+}
+
+// Whether some edge of `b` is of another kind than in `a` (an upgrade finished): the roads changed width.
+export function kindsChanged(a: RoadGraph, b: RoadGraph): boolean {
+  if (a === b || a.edges === b.edges) return false;
+  for (const e of Object.values(b.edges)) {
+    const o = a.edges[e.id];
+    if (o && o.kind !== e.kind) return true;
+  }
+  return false;
+}
+
 // ---------- cost ----------
 
-// land: one entry per piece (at its midpoint); elev: piece boundaries (land.length + 1 values).
+// land: one entry per piece (at its midpoint); elev: piece boundaries (land.length + 1 values); ends: the land right at
+// the two ends of the line, when sampled.
 export interface TerrainProfile {
   length: number;
   land: Land[];
   elev: number[];
+  ends?: [Land, Land];
 }
 
 // Piers and pillars standing in the water, per metre of bridge.
@@ -305,10 +384,22 @@ export function oldStreetKind(cls: string, bridge: boolean): RoadKind {
   return foot ? "path" : "dirt";
 }
 
-// A road drawn along a revealed old bridge is that bridge; elsewhere the kind stands as chosen.
+// A road drawn along a revealed old bridge is that bridge (a stone road a stone bridge); elsewhere the kind stands as chosen.
 export function segmentKind(kind: RoadKind, along: { cls: string; bridge: boolean } | null): RoadKind {
   if (!along?.bridge || isBridge(kind)) return kind;
-  return oldStreetKind(along.cls, true);
+  return kind === "stone" ? "stonebridge" : oldStreetKind(along.cls, true);
+}
+
+const BRIDGE_LADDER: RoadKind[] = ["footbridge", "bridge", "stonebridge"];
+
+// The bridge kind to build over `span` metres of water when `kind` was meant: `kind` itself if it holds and is open,
+// else the next heavier open kind that holds, else a lighter one that does; with none that holds, the first open one
+// (so the refusal names the span). `locked` says whether a kind is still closed.
+export function fitBridgeKind(kind: RoadKind, span: number, spans: Spans, locked: (k: RoadKind) => boolean): RoadKind {
+  const i = BRIDGE_LADDER.indexOf(kind);
+  if (i < 0) return kind;
+  const order = [...BRIDGE_LADDER.slice(i), ...BRIDGE_LADDER.slice(0, i).reverse()].filter((k) => !locked(k));
+  return order.find((k) => spanReason(k, span, spans) === null) ?? order[0] ?? kind;
 }
 
 const LAND_MULT: Record<Exclude<Land, "water">, number> = {
@@ -366,6 +457,10 @@ export function segmentCost(p: TerrainProfile, kind: RoadKind, spans?: Spans): S
   const stone = (spec.stone ?? 0) * p.length;
   const span = longestSpan(p);
   if (water && !spec.crossesWater) return { ok: false, reason: tr("Через воду нужен мост", "Crossing water needs a bridge"), labor, maxGrade, stone, span };
+  // A bridge stands on both banks: its span is measured bank to bank, so it cannot end in the water and be carried on
+  // by another one. Its deck runs straight between its ends (map/groundSeat.ts): that slope is its grade, not the banks'.
+  if (spec.crossesWater && p.ends?.includes("water")) return { ok: false, reason: tr("Мост должен опираться на берега", "A bridge must rest on both banks"), labor, maxGrade, stone, span };
+  if (spec.crossesWater) maxGrade = Math.abs(p.elev[pieces] - p.elev[0]) / p.length;
   const tooLong = spanReason(kind, span, spans);
   if (tooLong) return { ok: false, reason: tooLong, labor, maxGrade, stone, span };
   if (maxGrade > spec.maxGrade) {
@@ -377,6 +472,15 @@ export function segmentCost(p: TerrainProfile, kind: RoadKind, spans?: Spans): S
 // ---------- construction ----------
 
 const unfinished = (e: RoadEdge) => e.done < e.labor;
+// Work is waiting on the edge: building it, or rebuilding it as a better kind.
+export const needsWork = (e: RoadEdge): boolean => unfinished(e) || e.upgrade !== undefined;
+// The person-hours still to spend on the edge.
+export const workLeft = (e: RoadEdge): number => (unfinished(e) ? e.labor - e.done : e.upgrade ? Math.max(0, e.upgrade.labor - e.upgrade.done) : 0);
+// The share of the work on the edge that is done (its building, or its rebuilding).
+export const workShare = (e: RoadEdge): number => {
+  const job = unfinished(e) || !e.upgrade ? e : e.upgrade;
+  return job.labor > 0 ? Math.min(1, job.done / job.labor) : 1;
+};
 
 function reachedNodes(g: RoadGraph): Set<number> {
   const r = new Set<number>();
@@ -390,14 +494,17 @@ function reachedNodes(g: RoadGraph): Set<number> {
   return r;
 }
 
+// The stone the edge's next work still owes: its own while unbuilt, else its rebuilding's.
+export const stoneOwed = (e: RoadEdge): number => (unfinished(e) ? e.stone : e.upgrade?.stone) ?? 0;
 // An edge that still owes stone the stock cannot cover waits for it.
-const lacksStone = (e: RoadEdge, stock: Pick<Stock, "stone"> | undefined): boolean => !!stock && (e.stone ?? 0) > stock.stone + EPS;
+const lacksStone = (e: RoadEdge, stock: Pick<Stock, "stone"> | undefined): boolean => !!stock && stoneOwed(e) > stock.stone + EPS;
 
-// Unfinished edges a work party can reach, lowest id first. With a `stock`, edges short of stone are left out.
+// Edges with work waiting (unbuilt, or being rebuilt) a work party can reach, lowest id first. With a `stock`, edges
+// short of stone are left out.
 export function workableEdges(g: RoadGraph, stock?: Pick<Stock, "stone">): number[] {
   const reached = reachedNodes(g);
   return Object.values(g.edges)
-    .filter((e) => unfinished(e) && (reached.has(e.a) || reached.has(e.b)) && !lacksStone(e, stock))
+    .filter((e) => needsWork(e) && (reached.has(e.a) || reached.has(e.b)) && !lacksStone(e, stock))
     .map((e) => e.id)
     .sort((p, q) => p - q);
 }
@@ -452,6 +559,25 @@ export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock): 
       copied = true;
     }
     let e = edges[ids[0]];
+    if (!unfinished(e) && e.upgrade) {
+      // rebuilding a built edge: the same, on its own job; when done the edge is the new kind
+      let up = e.upgrade;
+      if (up.stone !== undefined) {
+        if (st) st = { ...st, stone: Math.max(0, st.stone - up.stone) };
+        const { stone: _taken, ...rest } = up;
+        up = rest;
+      }
+      const remain = up.labor - up.done;
+      if (left >= remain) {
+        const { upgrade: _done, ...rest } = e;
+        edges[e.id] = { ...rest, kind: up.kind, labor: e.labor + up.labor, done: e.labor + up.labor };
+        left -= remain;
+      } else {
+        edges[e.id] = { ...e, upgrade: { ...up, done: Math.min(up.labor, up.done + left) } };
+        left = 0;
+      }
+      continue;
+    }
     if (e.stone !== undefined) {
       if (st) st = { ...st, stone: Math.max(0, st.stone - e.stone) };
       const { stone: _taken, ...rest } = e;

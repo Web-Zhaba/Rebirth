@@ -5,6 +5,8 @@ import {
   advanceConstruction,
   cutOffEdges,
   emptyRoads,
+  fitBridgeKind,
+  overlapBand,
   removeEdge,
   ROAD_KINDS,
   segmentCost,
@@ -116,6 +118,13 @@ describe("addRoad", () => {
     // a steep branch off the same node is fine
     expect(addRoad(g0, [[0, 0], [40, 40]], "dirt", TOL, [50]).ok).toBe(true);
   });
+  it("measures overlap by the widths of both roads", () => {
+    expect(overlapBand("path", "path")).toBe(1);
+    expect(overlapBand("dirt", "dirt")).toBe(2.5);
+    const g0 = add(emptyRoads(), [[0, 0], [100, 0]], [50], "dirt");
+    expect(addRoad(g0, [[10, 2], [90, 2]], "dirt", 0.1, [50]).ok).toBe(false); // a dirt road 2 m off lies on it
+    expect(addRoad(g0, [[10, 6], [90, 6]], "dirt", 0.1, [50]).ok).toBe(true);
+  });
   it("rejects a duplicate of a short edge", () => {
     const g0 = add(emptyRoads(), [[0, 0], [9, 0]], [5]);
     expect(addRoad(g0, [[0, 0], [9, 0]], "path", TOL, [5])).toMatchObject({ ok: false });
@@ -177,11 +186,22 @@ describe("segmentCost", () => {
     expect(segmentCost(flat(["water", "meadow"]), "bridge").labor).toBeCloseTo(ROAD_KINDS.bridge.labor * 10 * (1.5 + 1));
     expect(segmentCost(flat(["water", "meadow"]), "footbridge").labor).toBeCloseTo(ROAD_KINDS.footbridge.labor * 10 * (1.5 + 1));
   });
-  it("bridges keep their grade limits", () => {
+  it("bridges keep their grade limits, measured on the deck from end to end", () => {
     const p = flat(["meadow", "meadow"]);
-    p.elev = [100, 101.5, 101.5]; // 15 %
+    p.elev = [100, 101.5, 103]; // the deck climbs 15 %
     expect(segmentCost(p, "bridge")).toMatchObject({ ok: false, reason: "Слишком круто: 15 %" });
     expect(segmentCost(p, "footbridge").ok).toBe(true);
+  });
+  it("a bridge over steep banks is fine when its deck is level", () => {
+    const p = flat(["meadow", "water", "meadow"]);
+    p.elev = [100, 97, 97, 100]; // 30 % banks, a level deck
+    expect(segmentCost(p, "bridge").ok).toBe(true);
+    expect(segmentCost(p, "dirt").ok).toBe(false);
+  });
+  it("a bridge has to end on the banks, not in the water", () => {
+    const p = { ...flat(["meadow", "water"]), ends: ["meadow", "water"] as TerrainProfile["ends"] };
+    expect(segmentCost(p, "footbridge")).toMatchObject({ ok: false, reason: "Мост должен опираться на берега" });
+    expect(segmentCost({ ...p, ends: ["meadow", "sand"] }, "footbridge").ok).toBe(true);
   });
   it("rejects steep grades per kind", () => {
     const p = flat(["meadow", "meadow"]);
@@ -257,6 +277,19 @@ describe("old streets as roads", () => {
   it("a road drawn along an old bridge is that bridge", () => {
     expect(segmentKind("path", { cls: "path", bridge: true })).toBe("footbridge");
     expect(segmentKind("path", { cls: "minor", bridge: true })).toBe("bridge");
+  });
+  it("a stone road along an old bridge is a stone bridge", () => {
+    expect(segmentKind("stone", { cls: "minor", bridge: true })).toBe("stonebridge");
+  });
+  it("fits the bridge kind to the span and to what is open", () => {
+    const spans = { footbridge: 25, bridge: 30, stonebridge: 60 };
+    const none = () => false;
+    expect(fitBridgeKind("footbridge", 20, spans, none)).toBe("footbridge");
+    expect(fitBridgeKind("footbridge", 28, spans, none)).toBe("bridge");
+    expect(fitBridgeKind("bridge", 50, spans, none)).toBe("stonebridge");
+    expect(fitBridgeKind("bridge", 50, spans, (k) => k === "stonebridge")).toBe("bridge"); // nothing holds: as meant
+    expect(fitBridgeKind("stonebridge", 20, spans, (k) => k === "stonebridge")).toBe("bridge"); // closed: a lighter one
+    expect(fitBridgeKind("dirt", 50, spans, none)).toBe("dirt");
   });
   it("keeps the chosen kind off old bridges, or when it is already a bridge", () => {
     expect(segmentKind("dirt", { cls: "minor", bridge: false })).toBe("dirt");

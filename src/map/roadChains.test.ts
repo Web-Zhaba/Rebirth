@@ -127,4 +127,43 @@ describe("roadChains", () => {
       [3, 4],
     ]);
   });
+
+  it("keeps a bridge one chain while part of it is still being built, in its least finished state", () => {
+    const g = graph(
+      [
+        [1, 0, 0],
+        [2, 10, 0],
+        [3, 20, 0],
+      ],
+      [
+        [10, 1, 2, "bridge", 1, 1],
+        [11, 2, 3, "bridge", 0, 1],
+      ],
+    );
+    const out = roadChains(g, state);
+    expect(out.map((c) => c.nodes)).toEqual([[1, 2, 3]]);
+    expect(out[0].state).toBe("waiting");
+  });
+
+  it("runs a bridge straight on where another bridge crosses it", () => {
+    const g = graph(
+      [
+        [1, 0, 0],
+        [2, 10, 0],
+        [3, 20, 0],
+        [4, 10, -10],
+        [5, 10, 10],
+      ],
+      [
+        [10, 1, 2, "bridge"],
+        [11, 2, 3, "bridge"],
+        [12, 4, 2, "bridge"],
+        [13, 2, 5, "bridge"],
+      ],
+    );
+    expect(chains(g)).toEqual([
+      [1, 2, 3],
+      [4, 2, 5],
+    ]);
+  });
 });

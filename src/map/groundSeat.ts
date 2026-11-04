@@ -6,7 +6,8 @@ import { Mesh, PATTERN, prepareRing, rgb, triangulate, type Model, type XY } fro
 //   down to below the lowest ground (the terrain mesh and our samples differ a little between DEM pixels);
 // - ground road: every vertex follows the ground under it (the ribbons are resampled finely, roadModels.ts);
 // - bridge: the deck runs straight between the ground at its two ends, and what stands on the riverbed (piles, piers,
-//   the foot of the arches, z near 0) reaches down to the ground under it.
+//   the foot of the arches, z at or below 0) reaches down to the ground under it; it rides ROAD_LIFT up like a ground
+//   road, so a ramp meets the road at its end without a step, and feet start below 0 to stay in the ground.
 
 const PLINTH_BELOW = 0.4; // m below the lowest ground under the lot
 const MIN_STEP = 0.05; // m; flatter lots get no plinth
@@ -60,7 +61,7 @@ export function seatBridge(model: Model, pts: readonly XY[], ground: Ground): Mo
   const line = along(pts);
   return shifted(model, (x, y, z) => {
     const deck = a + (b - a) * line(x, y);
-    return z <= BASE_Z ? Math.min(deck, ground(x, y)) + z : z + deck;
+    return (z <= BASE_Z ? Math.min(deck, ground(x, y)) : deck) + z + ROAD_LIFT;
   });
 }
 

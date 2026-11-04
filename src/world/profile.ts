@@ -47,6 +47,9 @@ export async function samplePathProfile(frame: Frame, pts: readonly [number, num
     const [lng, lat] = frame.toLngLat(x, y);
     lands.push(landAt(lng, lat).then((l) => landOver(l, x, y, clearings))); // cleared forest is meadow
   }
-  const [elev, land] = await Promise.all([Promise.all(elevs), Promise.all(lands)]);
-  return { length, land, elev };
+  // the land right under both ends: a bridge has to stand on the banks (sim/roads.ts segmentCost)
+  const endLand = (q: [number, number]) => landAt(...frame.toLngLat(q[0], q[1])).then((l) => landOver(l, q[0], q[1], clearings));
+  const ends = Promise.all([endLand(clean[0]), endLand(clean[clean.length - 1])]);
+  const [elev, land, endLands] = await Promise.all([Promise.all(elevs), Promise.all(lands), ends]);
+  return { length, land, elev, ends: endLands };
 }

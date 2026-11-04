@@ -1,4 +1,4 @@
-import { cutOffEdges } from "../sim/roads";
+import { cutOffEdges, needsWork, workLeft } from "../sim/roads";
 import type { EconomyStats, NeedsStats, RoadGraph } from "../sim/types";
 import { decimal, L } from "../i18n";
 
@@ -66,9 +66,9 @@ export function roadQueue(g: RoadGraph | null | undefined): { cut: Set<number>; 
   let remaining = 0;
   if (g) {
     for (const e of Object.values(g.edges)) {
-      if (e.done < e.labor && !cut.has(e.id)) {
+      if (needsWork(e) && !cut.has(e.id)) {
         queue++;
-        remaining += e.labor - e.done;
+        remaining += workLeft(e);
       }
     }
   }

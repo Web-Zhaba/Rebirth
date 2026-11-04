@@ -60,8 +60,8 @@ describe("groundSeat", () => {
     const s = seatBridge(m, pts, valley);
     for (let k = 0; k < s.positions.length; k += 3) {
       const z0 = m.positions[k + 2], z = s.positions[k + 2];
-      if (z0 > 0.01) expect(z - z0).toBeCloseTo(15, 6); // both banks at 15: a level deck
-      else expect(z).toBeCloseTo(Math.min(15, valley(s.positions[k])) + z0, 6);
+      if (z0 > 0.01) expect(z - z0).toBeCloseTo(15 + ROAD_LIFT, 6); // both banks at 15: a level deck, lifted like a road
+      else expect(z).toBeCloseTo(Math.min(15, valley(s.positions[k])) + z0 + ROAD_LIFT, 6);
     }
     expect(Math.min(...zs(s))).toBeLessThan(11);
   });

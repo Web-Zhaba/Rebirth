@@ -3,11 +3,12 @@ import type { View, ViewPointer } from "../view/view";
 import { effect, signal } from "@preact/signals";
 import { queuedLabel } from "../sim/clock";
 import { lockReason } from "../sim/tech";
-import { addRoad, cutOffEdges, distToEdge, effectiveSpans, isRoadKind, MIN_SEGMENT, oldStreetKind, ROAD_KINDS, segmentCost, segmentKind, snapPoint, type Snap } from "../sim/roads";
-import type { RoadKind } from "../sim/types";
+import { addRoad, cutOffEdges, distToEdge, effectiveSpans, fitBridgeKind, isBridge, isRoadKind, longestSpan, MIN_SEGMENT, oldStreetKind, ROAD_KINDS, segmentCost, segmentKind, snapPoint, stoneOwed, upgradeReason, upgradeWork, workShare, type Snap, type TerrainProfile } from "../sim/roads";
+import type { RoadGraph, RoadKind } from "../sim/types";
+import { roadChains } from "./roadChains";
 import { frame, gameClock, roads, sendCmd, state } from "../simClient";
 import { oldWorld } from "./excavation";
-import { roadLine, snapToOldStreets, streetJunctions } from "../world/oldStreets";
+import { roadLine, snapToOldStreets, streetJunctions, stretchShort } from "../world/oldStreets";
 import type { Street } from "../world/oldworld";
 import { samplePathProfile } from "../world/profile";
 import { PALETTE } from "../ui/palette";
@@ -26,6 +27,7 @@ const DRAG_PX = 4; // screen pixels: beyond this a press is a drag, not a click
 const TOUCH_DRAG_PX = 15; // a finger drifts: the same slack the map gives a tap (view/engine/scale.ts)
 const ANGLE_STEP_DEG = 15;
 const CURVE_SNAP_M = 1; // curve ends are already resolved; interior points must not jump onto nearby roads
+const SHORT_WAY_M = MIN_SEGMENT + 2.5; // an old way shorter than a road segment is laid this long, over the ways it joins
 
 // The active tool when it is a road tool, else null (zone tools are handled by zoneTool.ts).
 const roadT = (): RoadTool | null => {
@@ -86,6 +88,52 @@ const laborByLength = (pts: readonly Pt[], labor: number): number[] => {
   return out;
 };
 
+// A built (or planned) stretch of road under a drawing tool of a better kind of its sort: a click rebuilds it as that
+// kind (sim/roads.ts upgradeRoads). `labor`: each edge built anew as `kind`; `work`: the rebuilding, all edges together.
+interface Upgrade {
+  key: string;
+  kind: RoadKind;
+  from: RoadKind;
+  edges: number[];
+  pts: Pt[];
+  length: number;
+  priced: boolean;
+  ok: boolean;
+  reason: string | null;
+  labor: number[];
+  work: number;
+  stone: number;
+  span: number;
+}
+
+// The stretches of road between branches, per edge: what one upgrade click takes.
+interface Run {
+  edges: number[];
+  nodes: number[];
+}
+let runsOf: RoadGraph | null = null;
+let runOfEdge = new Map<number, Run>();
+function runAt(g: RoadGraph, edge: number): Run | undefined {
+  if (runsOf !== g) {
+    runsOf = g;
+    runOfEdge = new Map();
+    const byEnds = new Map<string, number>();
+    for (const e of Object.values(g.edges)) byEnds.set(e.a < e.b ? `${e.a},${e.b}` : `${e.b},${e.a}`, e.id);
+    for (const ch of roadChains(g, () => "built")) {
+      const edges: number[] = [];
+      for (let i = 0; i + 1 < ch.nodes.length; i++) {
+        const [p, q] = [ch.nodes[i], ch.nodes[i + 1]];
+        const id = byEnds.get(p < q ? `${p},${q}` : `${q},${p}`);
+        if (id !== undefined) edges.push(id);
+      }
+      if (edges.length !== ch.nodes.length - 1) continue; // a doubled stretch: leave it out
+      const run = { edges, nodes: ch.nodes };
+      for (const id of edges) runOfEdge.set(id, run);
+    }
+  }
+  return runOfEdge.get(edge);
+}
+
 // Where the cursor points: a snapped node/edge, an old street vertex, or free ground; Shift locks the angle from the anchor.
 interface Aim {
   snap: Snap;
@@ -131,6 +179,9 @@ export function attachRoadTool(view: View): void {
   let spaceDown = false;
   let shiftDown = false;
   let restore: Restore | null = null;
+  let gen = 0; // bumped when the tool or the drawing mode changes: a road sent before then does not continue the chain
+  let upgrade: Upgrade | null = null; // the stretch of road a click would rebuild
+  let upgradeOnPrice: Upgrade | null = null; // clicked before it was priced: rebuild it once it is
 
   const setLabel = (raw: string | null) => {
     const base = raw === null ? (streetHint ? streetHint.slice(3) : null) : raw + streetHint;
@@ -152,6 +203,8 @@ export function attachRoadTool(view: View): void {
     pendingCost = null;
     verdict = null;
     hoverEdge = null;
+    upgrade = null;
+    upgradeOnPrice = null;
     streetHint = "";
     angleHint = "";
     view.overlay("road-preview").setData(empty());
@@ -200,6 +253,12 @@ export function attachRoadTool(view: View): void {
   const costText = (len: number, labor: number, stone = 0) =>
     `${Math.round(len)} ${L("м", "m")} · ${Math.round(labor)} ${L("чел.-ч", "person-h")}${stone > 0 ? ` · ${L("камня", "stone")} ${decimal(String(Math.round(stone * 10) / 10))} ${L("т", "t")}` : ""} · ${etaText(labor)}`;
   const spans = () => effectiveSpans(state.peek()?.progress);
+  const locked = (k: RoadKind) => lockOf(k) !== null;
+  // The kind a drawn piece is built as: along an old bridge that bridge, of a kind that spans the water and is open.
+  const kindFor = (t: RoadKind, along: OldRef | null, p: TerrainProfile): RoadKind => {
+    const k = segmentKind(t, along);
+    return k === t ? k : fitBridgeKind(k, longestSpan(p), spans(), locked);
+  };
 
   // Terrain sampling is throttled; results of superseded requests are dropped.
   const requestCost = (pts: Pt[], along: OldRef | null) => {
@@ -215,7 +274,7 @@ export function attachRoadTool(view: View): void {
       samplePathProfile(f, req.pts, state.value?.clearings)
         .then((p) => {
           if (mine !== seq) return;
-          const c = segmentCost(p, segmentKind(t, req.along), spans());
+          const c = segmentCost(p, kindFor(t, req.along, p), spans());
           const queued = queuedLabel(gameClock.peek(), state.peek()?.levers);
           verdict = c.ok ? { ok: true, text: costText(p.length, c.labor, c.stone) + (queued ? ` · ${queued}` : "") } : { ok: false, text: c.reason ?? L("Нельзя", "Not allowed") };
           drawPreview(req.pts);
@@ -323,10 +382,11 @@ export function attachRoadTool(view: View): void {
       return;
     }
     const along = sameOldStreet(startOld, old);
+    const mine = gen;
     busy = true;
     samplePathProfile(f, pts, state.value?.clearings)
       .then((p) => {
-        const kind = segmentKind(t, along);
+        const kind = kindFor(t, along, p);
         const c = segmentCost(p, kind, spans());
         if (!c.ok) {
           flash(c.reason ?? L("Нельзя", "Not allowed"));
@@ -352,6 +412,7 @@ export function attachRoadTool(view: View): void {
         return false;
       })
       .then((ok) => {
+        if (mine !== gen) return; // the tool or the mode changed meanwhile: that reset the chain already
         busy = false;
         if (ok) {
           if (chain) {
@@ -366,6 +427,124 @@ export function attachRoadTool(view: View): void {
           if (lastEvent) onMove(lastEvent);
         }
       });
+  };
+
+  // ---------- upgrading built roads ----------
+
+  // The stretch of road under the cursor that drawing tool kind `t` can rebuild: the edge nearest within `tol` and the
+  // edges before and after it up to the next branch that can be rebuilt as `t` too. Null over a node (a new road
+  // starts there) or a road that is already as good, of the other sort, or while `t` is closed.
+  const upgradeRunAt = (g: RoadGraph, x: number, y: number, tol: number, t: RoadKind, snap: Snap): Run | null => {
+    if (snap.kind === "node" || lockOf(t)) return null;
+    const id = nearestEdge(x, y, tol);
+    if (id === null || upgradeReason(g.edges[id], t)) return null;
+    const run = runAt(g, id);
+    if (!run) return { edges: [id], nodes: [g.edges[id].a, g.edges[id].b] };
+    const at = run.edges.indexOf(id);
+    let lo = at;
+    let hi = at;
+    while (lo > 0 && !upgradeReason(g.edges[run.edges[lo - 1]], t)) lo--;
+    while (hi + 1 < run.edges.length && !upgradeReason(g.edges[run.edges[hi + 1]], t)) hi++;
+    return { edges: run.edges.slice(lo, hi + 1), nodes: run.nodes.slice(lo, hi + 2) };
+  };
+
+  const upgradeText = (u: Upgrade): string => {
+    const title = `${ROAD_KINDS[u.from].name} · ${L("улучшение", "upgrade")}: ${ROAD_KINDS[u.kind].name.toLowerCase()}`;
+    if (!u.priced) return `${title} · …`;
+    if (!u.ok) return `${title} · ${u.reason ?? L("Нельзя", "Not allowed")}`;
+    return `${title} · ${costText(u.length, u.work, u.stone)} · ${L("клик — улучшить", "click to upgrade")}`;
+  };
+
+  const drawUpgrade = (u: Upgrade) => {
+    const f = frame.value;
+    if (!f) return;
+    view.overlay("road-hover").setData({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { up: true, ok: u.priced ? u.ok : null },
+          geometry: { type: "LineString", coordinates: u.pts.map(([x, y]) => f.toLngLat(x, y)) },
+        },
+      ],
+    });
+    if (cursor) setLabel(upgradeText(u));
+  };
+
+  const clearUpgrade = () => {
+    if (!upgrade) return;
+    upgrade = null;
+    upgradeOnPrice = null;
+    view.overlay("road-hover").setData(empty());
+  };
+
+  // Shows the stretch and prices it: the whole line for the verdict (slope, water, span, banks), each edge for its work.
+  const pickUpgrade = (g: RoadGraph, t: RoadKind, run: Run) => {
+    const key = `${t}:${run.edges.join(",")}`;
+    if (upgrade?.key === key) {
+      drawUpgrade(upgrade);
+      return;
+    }
+    const f = frame.value;
+    if (!f) return;
+    const pts = run.nodes.map((id): Pt => [g.nodes[id].x, g.nodes[id].y]);
+    const u: Upgrade = { key, kind: t, from: g.edges[run.edges[0]].kind, edges: run.edges, pts, length: lengthOf(pts), priced: false, ok: false, reason: null, labor: [], work: 0, stone: 0, span: 0 };
+    upgrade = u;
+    upgradeOnPrice = null;
+    drawUpgrade(u);
+    const clearings = state.value?.clearings;
+    const edgeLine = (id: number): Pt[] => {
+      const e = g.edges[id];
+      return [[g.nodes[e.a].x, g.nodes[e.a].y], [g.nodes[e.b].x, g.nodes[e.b].y]];
+    };
+    Promise.all([samplePathProfile(f, pts, clearings), ...run.edges.map((id) => samplePathProfile(f, edgeLine(id), clearings))])
+      .then(([whole, ...each]) => {
+        if (upgrade !== u) return;
+        const c = segmentCost(whole, t, spans());
+        u.labor = each.map((p, i) => {
+          const full = segmentCost(p, t).labor; // a sliver edge has no cost of its own: it goes by the metre
+          return full > 0 ? full : ROAD_KINDS[t].labor * g.edges[run.edges[i]].length;
+        });
+        u.work = run.edges.reduce((s, id, i) => s + upgradeWork(g.edges[id], u.labor[i]), 0);
+        u.stone = c.stone;
+        u.span = c.span;
+        u.ok = c.ok || (whole.length < MIN_SEGMENT && !isBridge(t)); // a stretch too short to check is fine on the ground
+        u.reason = u.ok ? null : (c.reason ?? null);
+      })
+      .catch(() => {
+        u.ok = false;
+        u.reason = L("Нет данных о местности", "No terrain data");
+      })
+      .then(() => {
+        if (upgrade !== u) return;
+        u.priced = true;
+        drawUpgrade(u);
+        if (upgradeOnPrice === u) commitUpgrade();
+      });
+  };
+
+  const commitUpgrade = () => {
+    const u = upgrade;
+    if (!u || busy) return;
+    if (!u.priced) {
+      upgradeOnPrice = u; // a click right after the cursor came onto the road: go on once it is priced
+      return;
+    }
+    upgradeOnPrice = null;
+    if (!u.ok) {
+      flash(u.reason ?? L("Нельзя", "Not allowed"));
+      return;
+    }
+    const mine = gen;
+    busy = true;
+    void sendCmd({ type: "upgradeRoad", kind: u.kind, edges: u.edges, labor: u.labor, ...(isBridge(u.kind) ? { span: u.span } : {}) }).then((res) => {
+      if (mine !== gen) return;
+      busy = false;
+      if (!res.ok) flash(res.reason ?? L("Не удалось улучшить", "Could not upgrade"));
+      else play("place");
+      clearUpgrade();
+      if (lastEvent) onMove(lastEvent);
+    });
   };
 
   // Restore tool: the old street under the cursor is drawn whole and priced; a click builds every way of it that fits.
@@ -412,7 +591,7 @@ export function attachRoadTool(view: View): void {
     const r: Restore = { key, title: name ? L(`Улица «${name}»`, `${name} street`) : L("Старая дорога", "Old road"), lines: [], priced: false, reason: null };
     let hadGeometry = false;
     for (const w of ways) {
-      const pts = roadLine(w.pts, MIN_SEGMENT, junctions);
+      const pts = roadLine(w.pts, MIN_SEGMENT, junctions) ?? stretchShort(w.pts, SHORT_WAY_M);
       if (!pts) continue;
       hadGeometry = true;
       // An old way comes back as the road it was: a footway as a path, anything wider as a dirt road, and a bridge
@@ -420,7 +599,7 @@ export function attachRoadTool(view: View): void {
       let kind: RoadKind = oldStreetKind(w.cls, w.bridge === true);
       if (lockOf(kind)) kind = kind === "bridge" ? "footbridge" : kind === "dirt" ? "path" : kind;
       // Existing parallel road pieces are not an error: restore only the missing gaps of the old street.
-      for (const piece of restoreMissingPieces(g, pts)) {
+      for (const piece of restoreMissingPieces(g, pts, kind)) {
         const local = addRoad(g, piece, kind, CURVE_SNAP_M, laborByLength(piece, 1));
         if (!local.ok && !r.reason) r.reason = local.reason;
         r.lines.push({ pts: piece, cls: w.cls, kind, labor: 0, span: 0, ok: local.ok });
@@ -435,6 +614,7 @@ export function attachRoadTool(view: View): void {
         .map(async (l) => {
           try {
             const p = await samplePathProfile(f, l.pts, state.value?.clearings);
+            if (isBridge(l.kind)) l.kind = fitBridgeKind(l.kind, longestSpan(p), spans(), locked); // the bridge that spans it
             const c = segmentCost(p, l.kind, spans());
             const lock = lockOf(l.kind);
             l.labor = c.labor;
@@ -535,8 +715,10 @@ export function attachRoadTool(view: View): void {
         type: "FeatureCollection",
         features: [line(f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y))],
       });
-      const pct = edge.labor > 0 ? Math.floor((100 * edge.done) / edge.labor) : 100;
-      setLabel(`${ROAD_KINDS[edge.kind].name} · ${Math.round(edge.length)} ${L("м", "m")} · ${pct >= 100 ? L("построено", "built") : `${pct}${L(" %", "%")}`}${(edge.stone ?? 0) > (state.peek()?.stock.stone ?? Infinity) ? L(" · Нет камня", " · No stone") : ""}`);
+      const pct = Math.floor(100 * workShare(edge));
+      const up = edge.done >= edge.labor && edge.upgrade ? ` · ${L("улучшение", "upgrade")}: ${ROAD_KINDS[edge.upgrade.kind].name.toLowerCase()}` : "";
+      const progress = up ? `${pct}${L(" %", "%")}` : pct >= 100 ? L("построено", "built") : `${pct}${L(" %", "%")}`;
+      setLabel(`${ROAD_KINDS[edge.kind].name}${up} · ${Math.round(edge.length)} ${L("м", "m")} · ${progress}${stoneOwed(edge) > (state.peek()?.stock.stone ?? Infinity) ? L(" · Нет камня", " · No stone") : ""}`);
       return;
     }
     if (spaceDown) {
@@ -557,6 +739,7 @@ export function attachRoadTool(view: View): void {
       if (!dragging && Math.hypot(e.point[0] - pressScreen.x, e.point[1] - pressScreen.y) >= dragPx(e)) dragging = true;
       const anchor = pressSnap;
       if (dragging && anchor) {
+        clearUpgrade(); // a drag from a road lays a new one off it
         const a = aim(e, ctx, anchor);
         angleHint = a.deg === null ? "" : `${a.deg}°`;
         streetHint = "";
@@ -568,11 +751,22 @@ export function attachRoadTool(view: View): void {
     const a = aim(e, ctx, start);
     angleHint = a.deg === null ? "" : `${a.deg}°`;
     streetHint = a.name && a.old ? L(` · по старой улице ${a.name}`, ` · along the old street ${a.name}`) : "";
-    setSnap(a.snap, a.guide);
     if (!start) {
+      // Over a road of a lesser kind of its sort: it lights up, and a click rebuilds it.
+      const k = drawT();
+      const run = k && a.deg === null ? upgradeRunAt(g, x, y, tol, k, a.snap) : null;
+      if (run && k) {
+        streetHint = "";
+        setSnap(null);
+        pickUpgrade(g, k, run);
+        return;
+      }
+      clearUpgrade();
+      setSnap(a.snap, a.guide);
       setLabel(null);
       return;
     }
+    setSnap(a.snap, a.guide);
     showPath([[start.x, start.y], [a.snap.x, a.snap.y]], sameOldStreet(startOld, a.old));
   };
 
@@ -619,6 +813,17 @@ export function attachRoadTool(view: View): void {
     }
     const a = aim(e, ctx, start);
     if (!start) {
+      // The click picks the road under it to rebuild (a finger has no hover); a click on the stretch already picked does it.
+      const k = drawT();
+      const run = k && a.deg === null ? upgradeRunAt(g, x, y, tol, k, a.snap) : null;
+      if (run && k) {
+        const picked = upgrade;
+        cursor = { x: e.point[0], y: e.point[1] };
+        lastEvent = e;
+        pickUpgrade(g, k, run);
+        if (upgrade && upgrade === picked) commitUpgrade();
+        return;
+      }
       start = a.snap;
       startOld = a.old;
       return;
@@ -850,6 +1055,7 @@ export function attachRoadTool(view: View): void {
   // Tool switched on or off from the toolbar.
   effect(() => {
     const t = tool.value;
+    gen++;
     start = null;
     startOld = null;
     arcEnd = null;
@@ -869,6 +1075,7 @@ export function attachRoadTool(view: View): void {
   // A different drawing mode starts a fresh chain.
   effect(() => {
     void roadMode.value;
+    gen++;
     start = null;
     startOld = null;
     arcEnd = null;

@@ -7,7 +7,7 @@ import { etaRealMs, formatReal } from "../sim/buildEta";
 import { BUILDINGS } from "../sim/buildings";
 import { siteTitle } from "../sim/heritage";
 import { isCleared } from "../sim/clearing";
-import { ROAD_KINDS, stoneWaiting, workableEdges } from "../sim/roads";
+import { ROAD_KINDS, stoneWaiting, workableEdges, workLeft, workShare } from "../sim/roads";
 import { frame, gameClock, speed, state } from "../simClient";
 import { plural } from "./InspectorParts";
 import { ProgressBar } from "./kit";
@@ -76,7 +76,9 @@ export function BuilderTasks({ view }: { view: View }) {
     const a = s.roads.nodes[e.a];
     const b = s.roads.nodes[e.b];
     const at: [number, number] = [(a.x + b.x) / 2, (a.y + b.y) / 2];
-    tasks.push({ key: `r${e.id}`, title: `${ROAD_KINDS[e.kind].name}, ${Math.round(e.length)} ${L("м", "m")}`, value: e.labor > 0 ? e.done / e.labor : 0, left: Math.max(0, e.labor - e.done), at, prio: false, ...(noStone.has(e.id) ? { wait: L("Нет камня", "No stone") } : {}) });
+    const upgrading = e.done >= e.labor && e.upgrade;
+    const title = upgrading ? `${ROAD_KINDS[e.kind].name} · ${L("улучшение", "upgrade")}: ${ROAD_KINDS[e.upgrade!.kind].name.toLowerCase()}` : ROAD_KINDS[e.kind].name;
+    tasks.push({ key: `r${e.id}`, title: `${title}, ${Math.round(e.length)} ${L("м", "m")}`, value: workShare(e), left: workLeft(e), at, prio: false, ...(noStone.has(e.id) ? { wait: L("Нет камня", "No stone") } : {}) });
   }
   for (const c of s.clearings) {
     if (isCleared(c)) continue;

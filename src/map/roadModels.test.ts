@@ -76,7 +76,7 @@ describe("buildRoadModel", () => {
   it("raises bridges over the water and brings them down to the banks", () => {
     for (const kind of ["footbridge", "bridge", "stonebridge"] as RoadKind[]) {
       const m = buildRoadModel(STRAIGHT, kind);
-      expect(Math.min(...zs(m))).toBeGreaterThanOrEqual(0);
+      expect(Math.min(...zs(m))).toBeGreaterThanOrEqual(-0.3); // only the feet go below the ground
       expect(Math.max(...zs(m))).toBeGreaterThan(1);
       // the deck is at the ground at both ends
       for (const x0 of [0, 40]) {

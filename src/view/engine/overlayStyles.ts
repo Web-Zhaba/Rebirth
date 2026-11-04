@@ -7,7 +7,9 @@ import { PALETTE } from "../../ui/palette";
 const placeColour = (p: Record<string, unknown>) => (p.pending ? PALETTE.warn : p.ok ? PALETTE.ok : PALETTE.bad);
 
 export const TOOL_OVERLAYS: OverlayLayer[] = [
-  { source: "road-hover", style: { kind: "line", color: PALETTE.bad, widthPx: 6, opacity: 0.75 } },
+  // red under the bulldozer; a road a drawing tool would rebuild: on a paper halo, green, amber while priced, red when it can't be
+  { source: "road-hover", style: { kind: "line", color: PALETTE.paperRaised, widthPx: 10, opacity: 0.8, filter: (p) => p.up === true } },
+  { source: "road-hover", style: { kind: "line", color: (p) => (!p.up ? PALETTE.bad : p.ok === null ? PALETTE.warn : p.ok ? PALETTE.ok : PALETTE.bad), widthPx: (p) => (p.up ? 5 : 6), opacity: (p) => (p.up ? 0.95 : 0.75) } },
   // A paper halo under the preview: on the green land its dark green alone hardly reads.
   { source: "road-preview", style: { kind: "line", color: PALETTE.paperRaised, widthPx: 6, opacity: 0.55 } },
   { source: "road-preview", style: { kind: "line", color: (p) => (p.ok ? PALETTE.ok : PALETTE.bad), widthPx: 3, dash: [2, 1.5] } },

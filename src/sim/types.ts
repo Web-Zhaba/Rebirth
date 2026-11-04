@@ -30,6 +30,15 @@ export interface RoadEdge {
   labor: number; // person-hours to build
   done: number; // person-hours spent; built when done >= labor
   stone?: number; // t of stone still owed to the stock; taken when work starts, then gone
+  upgrade?: RoadUpgrade; // a built edge being rebuilt as a better kind; it serves as it is until that is done
+}
+
+// The rebuilding of a built edge as `kind` (sim/roads.ts upgradeRoads): its own person-hours and stone.
+export interface RoadUpgrade {
+  kind: RoadKind;
+  labor: number;
+  done: number;
+  stone?: number; // t still owed; taken when the work starts
 }
 
 export interface RoadGraph {
