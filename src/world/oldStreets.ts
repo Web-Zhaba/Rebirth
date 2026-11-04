@@ -103,3 +103,21 @@ export function roadLine(pts: readonly XY[], minSeg: number, keep: ReadonlySet<s
   }
   return out.length >= 2 ? out : null;
 }
+
+// A way too short for one road segment (a footbridge over a creek, a link between two streets) as a straight line from
+// end to end, lengthened at both ends to `len` m so a road can be laid on it; it then reaches over the ways it joins.
+// Null for a way that comes back to its start. Pure.
+export function stretchShort(pts: readonly XY[], len: number): XY[] | null {
+  if (pts.length < 2) return null;
+  const a = pts[0];
+  const b = pts[pts.length - 1];
+  const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (l < 1) return null;
+  const k = Math.max(0, (len - l) / 2) / l;
+  const dx = (b[0] - a[0]) * k;
+  const dy = (b[1] - a[1]) * k;
+  return [
+    [a[0] - dx, a[1] - dy],
+    [b[0] + dx, b[1] + dy],
+  ];
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { roadLine, snapToOldStreets, streetJunctions, streetPolylines } from "./oldStreets";
+import { roadLine, snapToOldStreets, streetJunctions, streetPolylines, stretchShort } from "./oldStreets";
 
 const streets = [
   { name: "Милютина", pts: [[0, 0], [100, 0], [100, 100]] as [number, number][] },
@@ -59,5 +59,14 @@ describe("roadLine", () => {
   });
   it("collects the ends of every street", () => {
     expect(streetJunctions([{ pts: [[0, 0], [1, 1], [2, 2]] }, { pts: [] }])).toEqual(new Set(["0,0", "2,2"]));
+  });
+});
+
+describe("stretchShort", () => {
+  it("lengthens a short way evenly at both ends", () => {
+    expect(stretchShort([[0, 0], [2, 0], [6, 0]], 10)).toEqual([[-2, 0], [8, 0]]);
+  });
+  it("leaves a way back to its start", () => {
+    expect(stretchShort([[0, 0], [3, 0], [0, 0.5]], 10)).toBeNull();
   });
 });

@@ -30,9 +30,12 @@ const buildingDone = (b: Building): boolean => b.state === "active" && !b.upgrad
 function finishRoads(g: RoadGraph): RoadGraph {
   let edges = g.edges;
   for (const e of Object.values(g.edges)) {
-    if (e.done >= e.labor) continue;
+    if (e.done >= e.labor && !e.upgrade) continue;
     if (edges === g.edges) edges = { ...g.edges };
-    edges[e.id] = { ...e, done: e.labor };
+    if (e.done >= e.labor && e.upgrade) {
+      const { upgrade: up, ...rest } = e;
+      edges[e.id] = { ...rest, kind: up.kind, labor: e.labor + up.labor, done: e.labor + up.labor };
+    } else edges[e.id] = { ...e, done: e.labor };
   }
   return edges === g.edges ? g : { ...g, edges };
 }

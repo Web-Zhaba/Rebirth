@@ -18,7 +18,7 @@ import { peopleStats, queryBuilding, queryResident, syncPeople } from "./people"
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
-import { addRoad, effectiveSpans, emptyRoads, removeEdge, ROAD_KINDS, spanReason } from "./roads";
+import { addRoad, effectiveSpans, emptyRoads, kindsChanged, removeEdge, ROAD_KINDS, spanReason, upgradeRoads } from "./roads";
 import { migrateLegacy, parseSave } from "./save";
 import { dayOf } from "./time";
 import { startWeather, type WeatherState } from "./weather";
@@ -225,7 +225,7 @@ export class Handler {
   private settle(sim: SimState): SimState {
     const z = sim.zones;
     const cells = regenerateCells(sim.roads, z.cells, z.fields, z.terrain);
-    return refreshServices(syncPeople({ ...sim, zones: { ...z, cells }, buildings: reconcile(sim.buildings, sim.roads, cells) }));
+    return refreshServices(syncPeople({ ...sim, zones: { ...z, cells, rev: z.rev + 1 }, buildings: reconcile(sim.buildings, sim.roads, cells) }));
   }
 
   // The tab came back after a long gap: catch up with progress, then one snapshot, one life and the summary.
@@ -415,6 +415,17 @@ export class Handler {
         if (!r.ok) return reject(r.reason);
         next = r.graph;
         zones = this.rezone(z, next, z.fields);
+      } else if (cmd.type === "upgradeRoad") {
+        const bad = validateUpgradeRoad(cmd);
+        if (bad) return reject(bad);
+        const locked = lockReason(sim, cmd.kind);
+        if (locked) return reject(locked);
+        const tooLong = cmd.span === undefined ? null : spanReason(cmd.kind, cmd.span, effectiveSpans(sim.progress));
+        if (tooLong) return reject(tooLong);
+        const r = upgradeRoads(roads, cmd.edges, cmd.kind, cmd.labor);
+        if (!r.ok) return reject(r.reason);
+        next = r.graph;
+        zones = this.rezone(z, next, z.fields);
       } else if (cmd.type === "removeRoad") {
         if (!Object.hasOwn(roads.edges, cmd.edgeId)) return reject(L("Участок уже убран", "The section is already removed"));
         next = removeEdge(roads, cmd.edgeId);
@@ -574,7 +585,9 @@ export class Handler {
     }
     const prev = this.save.sim.gameMinutes;
     const advanced = advanceTo(this.save.sim, now, pace);
-    const sim = this.free ? finishAll(advanced) : advanced;
+    let sim = this.free ? finishAll(advanced) : advanced;
+    // a road rebuilt as a wider kind moves the lots beside it
+    if (kindsChanged(this.save.sim.roads, sim.roads)) sim = this.settle(sim);
     if (sim.gameMinutes === prev) {
       if (sim.realTime !== this.save.sim.realTime) this.save = { ...this.save, sim }; // paused: the wall time just follows
       return;
@@ -595,6 +608,15 @@ const validSpeed = (v: unknown): v is Speed => v === 0 || v === 1 || v === 2 || 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const validSite = (v: unknown): v is Site =>
   typeof v === "object" && v !== null && ["forest", "water", "rock"].every((k) => finite((v as Record<string, unknown>)[k]) && (v as Record<string, number>)[k] >= 0 && (v as Record<string, number>)[k] <= 1);
+
+function validateUpgradeRoad(cmd: Extract<Cmd, { type: "upgradeRoad" }>): string | null {
+  const { kind, edges, labor, span } = cmd;
+  if (span !== undefined && (!finite(span) || span < 0)) return L("Некорректный пролёт", "Invalid span");
+  if (typeof kind !== "string" || !Object.hasOwn(ROAD_KINDS, kind)) return L("Неизвестный вид дороги", "Unknown road type");
+  if (!Array.isArray(edges) || edges.length < 1 || edges.length > 512 || !edges.every((id) => Number.isInteger(id))) return L("Некорректный участок", "Invalid section");
+  if (!Array.isArray(labor) || labor.length !== edges.length || !labor.every((l) => finite(l) && l >= 0)) return L("Некорректная стоимость", "Invalid cost");
+  return null;
+}
 
 // The message crossed a thread boundary, so check the shape at runtime.
 function validateAddRoad(cmd: Extract<Cmd, { type: "addRoad" }>): string | null {

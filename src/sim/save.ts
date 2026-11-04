@@ -1,6 +1,6 @@
 import { LANDS } from "../world/landcover";
 import { BUILDINGS, homesOf, isPriority, JOB_KEYS, UPGRADE } from "./buildings";
-import { FOUNDATION_LOT } from "./foundationLots";
+import { FOUNDATION_LOT, fitMaxOf } from "./foundationLots";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
@@ -91,6 +91,7 @@ function parseRoads(v: unknown): RoadGraph | null {
     if (!isNum(raw.done) || raw.done < 0 || raw.done > raw.labor) return null;
     // `stone`: absent in saves from before stone roads and once the stone is taken
     if (raw.stone !== undefined && (!isNum(raw.stone) || raw.stone < 0)) return null;
+    const upgrade = parseRoadUpgrade(raw.upgrade);
     edges[id] = {
       id,
       a: raw.a as number,
@@ -100,9 +101,18 @@ function parseRoads(v: unknown): RoadGraph | null {
       labor: raw.labor,
       done: raw.done,
       ...(raw.stone !== undefined ? { stone: raw.stone } : {}),
+      ...(upgrade ? { upgrade } : {}),
     };
   }
   return { nodes, edges, nextId };
+}
+
+// A rebuilding under way on a road edge; a malformed one is dropped (the road stays as it is), not the save.
+function parseRoadUpgrade(v: unknown): RoadEdge["upgrade"] | null {
+  if (!isRecord(v) || typeof v.kind !== "string" || !Object.hasOwn(ROAD_KINDS, v.kind)) return null;
+  if (!isNum(v.labor) || v.labor < 0 || !isNum(v.done) || v.done < 0 || v.done > v.labor) return null;
+  if (v.stone !== undefined && (!isNum(v.stone) || v.stone < 0)) return null;
+  return { kind: v.kind as RoadEdge["kind"], labor: v.labor, done: v.done, ...(v.stone !== undefined ? { stone: v.stone } : {}) };
 }
 
 const ZONES = ["none", "res", "craft", "trade"];
@@ -212,7 +222,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     }
     if (onFoundation) {
       out[id].foundationId = raw.foundationId as string;
-      if (isNum(raw.scale) && raw.scale >= FOUNDATION_LOT.fitMin && raw.scale <= FOUNDATION_LOT.fitMax) out[id].scale = raw.scale;
+      if (isNum(raw.scale) && raw.scale >= FOUNDATION_LOT.fitMin && raw.scale <= fitMaxOf(BUILDINGS[raw.template as string])) out[id].scale = raw.scale;
     }
     if (ringShaped) {
       if (isPoint(raw.door)) out[id].door = [raw.door[0], raw.door[1]];

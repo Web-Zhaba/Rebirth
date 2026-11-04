@@ -17,6 +17,7 @@ import { Mesh, PATTERN, prism, rgb, shade, square, type Model, type RGB, type XY
 const GROUND_Z: Partial<Record<RoadKind, number>> = { path: 0.02, dirt: 0.035, stone: 0.05 }; // apart, so junctions do not flicker
 const GROUND_STEP = 6; // m; ground ribbons get a point this often, so they can follow the relief (groundSeat.ts)
 const JOINT_TURN = 0.35; // rad: bends sharper than this get a round joint
+const FOOT = -0.3; // m: posts, piles and piers start this far down, so on the relief they stand in the ground (groundSeat.ts)
 
 // Height and surface of a ground road: the junction aprons (roadJunctions.ts) lie at the same heights and paint the same
 // colours, so an apron meets the ribbons at its rim without a step.
@@ -183,7 +184,7 @@ function footbridge(mesh: Mesh, pts: readonly XY[]): void {
     }
     for (const q of [st[0], st[st.length - 1]]) {
       const p = at(q, side * (hw + 0.15));
-      prism(mesh, square(p[0], p[1], 0.18), 0, 1.6, rope, shade(rope, 1.2));
+      prism(mesh, square(p[0], p[1], 0.18), FOOT, 1.6, rope, shade(rope, 1.2));
     }
   }
 }
@@ -213,7 +214,7 @@ function pileBridge(mesh: Mesh, pts: readonly XY[]): void {
     if (zi < 0.8) continue;
     for (const side of [1, -1]) {
       const p = at(q, side * (hw - 0.35));
-      prism(mesh, square(p[0], p[1], 0.3), 0, zi - 0.3, shade(wood, 0.9), wood);
+      prism(mesh, square(p[0], p[1], 0.3), FOOT, zi - 0.3, shade(wood, 0.9), wood);
     }
     const a = at(q, hw - 0.2), b = at(q, -(hw - 0.2));
     const tx = q.t[0] * 0.15, ty = q.t[1] * 0.15;
@@ -239,7 +240,10 @@ function stoneBridge(mesh: Mesh, pts: readonly XY[]): void {
     const r = l % (span + PIER);
     return r < span ? Math.max(0, zDeck - CROWN) * Math.pow(Math.sin((Math.PI * r) / span), 0.6) : 0;
   };
-  const zb = st.map((q, i) => Math.min(arch(q.s, z[i]), z[i]));
+  const zb = st.map((q, i) => {
+    const a = arch(q.s, z[i]);
+    return a > 0 ? Math.min(a, z[i]) : FOOT; // solid under the ramps and the piers: down into the ground
+  });
   strip(mesh, st, hw - 0.35, -(hw - 0.35), z, stone, PATTERN.cobbles, hw * 2);
   strip(mesh, st, hw, -hw, zb, shade(stone, 0.7), PATTERN.plain, hw * 2, true); // the underside of the arches
   for (const side of [1, -1] as const) {
