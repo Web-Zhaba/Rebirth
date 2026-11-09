@@ -6,6 +6,7 @@ import { Icon } from "./Icon";
 import type { IconName } from "./icons";
 import { Button, Panel, ProgressBar } from "./kit";
 import { currentWarnings } from "./TopBar";
+import { SuppliesOffer } from "./SuppliesOffer";
 import "./journal.css";
 import { L, plural } from "../i18n";
 
@@ -116,6 +117,7 @@ export function AwayNotice() {
           </ul>
         </details>
       )}
+      <SuppliesOffer />
       <Button variant="primary" onClick={() => (away.value = null)}>
         {L("Продолжить", "Continue")}
       </Button>

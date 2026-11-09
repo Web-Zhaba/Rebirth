@@ -6,12 +6,13 @@ import { clearingLabor } from "./clearing";
 import { isEvening } from "./evening";
 import { etaRealMs } from "./buildEta";
 import { emptyGrowth, seedOf } from "./growth";
-import { callBlock, callSettlers, callToloka, setPriority, setRations, setSchedule, tolokaWait } from "./leverCmds";
-import { CALL, emptyLevers, RATIONS, STRADA_MOOD, TOLOKA_COOLDOWN, workHours } from "./levers";
+import { callBlock, callSettlers, callToloka, grantSupplies, setPriority, setRations, setSchedule, tolokaWait } from "./leverCmds";
+import { CALL, SUPPLIES, emptyLevers, RATIONS, STRADA_MOOD, TOLOKA_COOLDOWN, workHours } from "./levers";
 import { builderCount, countResidents, foodOutlook, foodPerDay, forageKg, productionScale } from "./people";
 import { dailyEconomy } from "./production";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
+import { withStock } from "./storage";
 import type { Building, City, Clearing, SimState } from "./types";
 import { YEAR_DAYS } from "./time";
 import { emptyZones } from "./zones";
@@ -209,6 +210,31 @@ describe("call for settlers", () => {
     for (let i = 0; i < 144 && cur.incoming.length > 0; i++) cur = step(cur);
     expect(cur.incoming).toHaveLength(0);
     expect(Object.keys(cur.residents).length).toBeGreaterThan(pop);
+  });
+});
+
+describe("supplies for a watched ad", () => {
+  it("add days of the town's food (a floor for a small town) and building materials, and say so", () => {
+    const s0 = world([house(1)]);
+    const s = ok(grantSupplies(s0));
+    const food = Math.round(Math.max(SUPPLIES.minFood, SUPPLIES.foodDays * foodPerDay(s0.residents, s0.gameMinutes, s0.levers)));
+    expect(s.stock.food).toBe(s0.stock.food + food);
+    expect(s.stock.food - s0.stock.food).toBeGreaterThanOrEqual(SUPPLIES.minFood);
+    expect(s.stock.logs).toBe(s0.stock.logs + SUPPLIES.logs);
+    expect(s.stock.planks).toBe(s0.stock.planks + SUPPLIES.planks);
+    expect(s.stock.stone).toBe(s0.stock.stone + SUPPLIES.stone);
+    expect(s.stock.tools).toBe(s0.stock.tools + SUPPLIES.tools);
+    expect(s.stock.clothes).toBe(s0.stock.clothes);
+    expect(s.chronicle.at(-1)?.text).toContain("припасы");
+  });
+  it("are kept at the camp when the stores are full, and stay there over a tick", () => {
+    const full = withStock(world([house(1)]), { ...world([house(1)]).stock, food: 50_000 });
+    const s = ok(grantSupplies(full));
+    const held = (x: SimState) => Object.values(x.stores ?? {}).reduce((n, h) => n + (h.food ?? 0), 0);
+    expect(s.stock.food).toBeGreaterThan(full.stock.food);
+    expect(held(s)).toBeCloseTo(s.stock.food);
+    const next = step(s);
+    expect(next.stock.food).toBeGreaterThan(full.stock.food); // nothing spilled; a tick eats far less than the grant
   });
 });
 

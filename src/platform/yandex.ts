@@ -4,6 +4,9 @@ import { NO_PLATFORM, type Platform } from "./index";
 // game; anywhere else (local preview) it is missing and the game runs without the portal.
 interface YaSdk {
   environment: { i18n: { lang: string } };
+  adv: {
+    showRewardedVideo(opts: { callbacks: { onRewarded?(): void; onClose?(): void; onError?(e: unknown): void } }): void;
+  };
   features: {
     LoadingAPI?: { ready(): void };
     GameplayAPI?: { start(): void; stop(): void };
@@ -47,6 +50,21 @@ export async function initYandex(): Promise<Platform> {
       ysdk.on?.("game_api_pause", hooks.pause);
       ysdk.on?.("game_api_resume", hooks.resume);
     },
+    // The portal pauses the game around the ad itself (game_api_pause / game_api_resume).
+    rewarded: () =>
+      new Promise((resolve) => {
+        let earned = false;
+        ysdk.adv.showRewardedVideo({
+          callbacks: {
+            onRewarded: () => (earned = true),
+            onClose: () => resolve(earned),
+            onError: (e) => {
+              console.warn("Rewarded ad failed:", e);
+              resolve(false);
+            },
+          },
+        });
+      }),
     ready: () => ysdk.features.LoadingAPI?.ready(),
     gameplay: (on) => (on ? ysdk.features.GameplayAPI?.start() : ysdk.features.GameplayAPI?.stop()),
   };

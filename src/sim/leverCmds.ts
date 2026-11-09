@@ -2,8 +2,10 @@ import { homeGoods, takeGoods } from "./goods";
 import { BUILDINGS, isJobKey, isPriority, remainingClearing, remainingLabor, type JobKey, type Priority } from "./buildings";
 import { jobsOf } from "./fields";
 import { withChronicle } from "./chronicle";
-import { CALL, RATIONS, TOLOKA_COOLDOWN, tolokaActive, workEndAt, workHours, isWorkHour, type Levers, type Rations } from "./levers";
-import { countResidents, freeHomes, isWorkplace, rebalanceJobs } from "./people";
+import { CALL, RATIONS, SUPPLIES, TOLOKA_COOLDOWN, tolokaActive, workEndAt, workHours, isWorkHour, type Levers, type Rations } from "./levers";
+import { countResidents, foodPerDay, freeHomes, isWorkplace, rebalanceJobs } from "./people";
+import { Ledger } from "./storage";
+import { massText } from "./units";
 import { say } from "./production";
 import { classPupils } from "./school";
 import { nextRandom } from "./rng";
@@ -130,6 +132,24 @@ export function callSettlers(s: SimState): LeverResult {
   const incoming = [...s.incoming, { house, arrive }].sort((a, b) => a.arrive - b.arrive);
   const next: SimState = { ...s, rng, incoming, stock: { ...takeGoods(s.stock, CALL.goods)!, food: s.stock.food - CALL.food } };
   return done(next, L(`Позвали поселенцев: ушло ${CALL.food} кг еды и ${CALL.goods} шт товаров, семья будет в течение суток`, `Settlers called: ${CALL.food} kg of food and ${CALL.goods} goods spent; a family will arrive within a day`));
+}
+
+// Supplies for a watched ad, laid into the stores nearest to the camp; what finds no room is kept at the camp all the
+// same, so a reward is never lost to full stores.
+export function grantSupplies(s: SimState): LeverResult {
+  const food = Math.round(Math.max(SUPPLIES.minFood, SUPPLIES.foodDays * foodPerDay(s.residents, s.gameMinutes, s.levers)));
+  const l = new Ledger(s);
+  l.stock.food += food;
+  l.stock.logs += SUPPLIES.logs;
+  l.stock.planks += SUPPLIES.planks;
+  l.stock.stone += SUPPLIES.stone;
+  l.stock.tools += SUPPLIES.tools;
+  l.sync(true);
+  const what = L(
+    `еда ${massText(food)}, брёвна ${SUPPLIES.logs} м³, доски ${SUPPLIES.planks} м³, камень ${SUPPLIES.stone} т, инструменты ${SUPPLIES.tools} шт.`,
+    `food ${massText(food)}, logs ${SUPPLIES.logs} m³, planks ${SUPPLIES.planks} m³, stone ${SUPPLIES.stone} t, tools ${SUPPLIES.tools} pcs`,
+  );
+  return done({ ...s, stock: l.stock, stores: l.stores }, L(`Прибыли припасы: ${what}`, `Supplies arrived: ${what}`));
 }
 
 // End of each tick: a priority whose site is finished is dropped; a толока ends with the workday or with its site.

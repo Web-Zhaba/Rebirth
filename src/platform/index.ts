@@ -10,6 +10,8 @@ export interface Platform {
   gameplay(on: boolean): void;
   // What the portal may ask of the game, e.g. around its ads and overlays.
   listen(hooks: PlatformHooks): void;
+  // Shows a rewarded ad; true once the player has earned the reward. Null where the portal has no such ads.
+  rewarded: (() => Promise<boolean>) | null;
 }
 
 export interface PlatformHooks {
@@ -17,7 +19,7 @@ export interface PlatformHooks {
   resume(): void;
 }
 
-export const NO_PLATFORM: Platform = { lang: null, ready() {}, gameplay() {}, listen() {} };
+export const NO_PLATFORM: Platform = { lang: null, ready() {}, gameplay() {}, listen() {}, rewarded: null };
 
 // Set once by initPlatform, before the game's modules load (boot.ts): the language is read from it at their start.
 export let platform: Platform = NO_PLATFORM;
