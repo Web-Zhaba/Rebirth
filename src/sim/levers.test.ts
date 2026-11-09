@@ -1,3 +1,4 @@
+import { homeGoods } from "./goods";
 import { describe, expect, it } from "vitest";
 import { allocateClearings, allocateLabor, BUILDINGS, CREW } from "./buildings";
 import { BASE_TICK, queuedLabel, step } from "./clock";
@@ -184,18 +185,19 @@ describe("rations", () => {
 });
 
 describe("call for settlers", () => {
-  const stocked = (s: SimState): SimState => ({ ...s, stock: { ...s.stock, food: 1000, wares: 20 } });
-  it("refuses without a vacant house, food or wares", () => {
+  const stocked = (s: SimState): SimState => ({ ...s, stock: { ...s.stock, food: 1000, clothes: 20, dishes: 20, furniture: 20, tools: 20 } });
+  it("refuses without a vacant house, food or goods", () => {
     expect(callSettlers(stocked(world([site(1)])))).toMatchObject({ ok: false, reason: expect.stringContaining("дома") });
     const h = world([house(1)]);
-    expect(callSettlers({ ...h, stock: { ...h.stock, food: 100, wares: 20 } })).toMatchObject({ ok: false, reason: expect.stringContaining("еды") });
-    expect(callSettlers({ ...h, stock: { ...h.stock, food: 1000, wares: 2 } })).toMatchObject({ ok: false, reason: expect.stringContaining("товаров") });
+    expect(callSettlers({ ...h, stock: { ...h.stock, food: 100, clothes: 20, dishes: 20, furniture: 20, tools: 20 } })).toMatchObject({ ok: false, reason: expect.stringContaining("еды") });
+    expect(callSettlers({ ...h, stock: { ...h.stock, food: 1000, clothes: 1, dishes: 1, furniture: 0, tools: 50 } })).toMatchObject({ ok: false, reason: expect.stringContaining("одежды") });
   });
-  it("spends food and wares, promises the house and the family arrives within a day", () => {
+  it("spends food and household goods (not tools), promises the house and the family arrives within a day", () => {
     const s0 = stocked(world([house(1)]));
     const s = ok(callSettlers(s0));
     expect(s.stock.food).toBe(1000 - CALL.food);
-    expect(s.stock.wares).toBe(20 - CALL.wares);
+    expect(homeGoods(s.stock)).toBeCloseTo(60 - CALL.goods);
+    expect(s.stock.tools).toBe(20);
     expect(s.incoming).toHaveLength(1);
     expect(s.incoming[0].house).toBe(1);
     expect(s.incoming[0].arrive).toBeGreaterThan(s.gameMinutes);
@@ -220,10 +222,13 @@ describe("saving", () => {
   });
   it("the market's trade order and yesterday's trade survive a round trip; a broken one is dropped", () => {
     const s = world([site(1)]);
-    const trade = { give: "stone", get: "wares", gave: 25, got: 4.5 };
-    const back = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "wares" } }, prod: { ...s.prod, trade }, realTime: NOW }), NOW + 1000);
-    expect(back?.sim.levers.trade).toEqual({ give: "stone", get: "wares" });
+    const trade = { give: "stone", get: "tools", gave: 25, got: 4.5 };
+    const back = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "tools" } }, prod: { ...s.prod, trade }, realTime: NOW }), NOW + 1000);
+    expect(back?.sim.levers.trade).toEqual({ give: "stone", get: "tools" });
     expect(back?.sim.prod.trade).toEqual(trade);
+    // saves from before goods groups trade wares: clothing now
+    const old = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "wares" } as never }, realTime: NOW }), NOW + 1000);
+    expect(old?.sim.levers.trade).toEqual({ give: "stone", get: "clothes" });
     const bad = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "stone" } }, prod: { ...s.prod, trade: { ...trade, get: "gold" } }, realTime: NOW }), NOW + 1000);
     expect(bad?.sim.levers.trade).toBeNull();
     expect(bad?.sim.prod.trade).toBeUndefined();

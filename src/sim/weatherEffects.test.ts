@@ -139,7 +139,7 @@ const base = (gm: number, weather: WeatherState, bs: Building[], fields: Field[]
     roads: emptyRoads(),
     zones: { ...emptyZones(), fields },
     ...emptyGrowth(7, gm),
-    stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 },
+    stock: { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 20, dishes: 20, furniture: 20, tools: 20 },
     buildings,
     weather,
   };

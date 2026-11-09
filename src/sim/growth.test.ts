@@ -217,7 +217,7 @@ describe("construction", () => {
   it("payMaterials and advanceBuildings serve the same sites", () => {
     const base = ticks(world(straight(), "res"), 1).buildings[1];
     const three = Object.fromEntries([1, 2, 3].map((id) => [id, { ...base, id, labor: 100, done: 0, paid: false, state: "planned" as const }]));
-    const stock = { food: 0, logs: 100, planks: 10, stone: 10, wares: 0 };
+    const stock = { food: 0, logs: 100, planks: 10, stone: 10, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
     const crew = (CREW * BASE_TICK) / 60;
     const hours = (8 * BASE_TICK) / 60; // 8 hands
     const paid = payMaterials(three, stock, hours, crew);
@@ -244,7 +244,7 @@ describe("construction", () => {
   });
 });
 
-const hand = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 }; // an empty stock: every material is made by hand
+const hand = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 }; // an empty stock: every material is made by hand
 
 describe("notices", () => {
   const at7 = 60;

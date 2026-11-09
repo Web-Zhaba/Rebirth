@@ -5,9 +5,9 @@ import { L } from "../i18n";
 // workers swap them every day at fixed values minus a margin. Only what lies above the reserve is given.
 
 export type TradeGood = keyof Stock;
-export const TRADE_GOODS: readonly TradeGood[] = ["food", "logs", "planks", "stone", "wares"];
+export const TRADE_GOODS: readonly TradeGood[] = ["food", "logs", "planks", "stone", "clothes", "dishes", "furniture", "tools"];
 
-export const TRADE_NAME: Record<TradeGood, string> = { food: L("еду", "food"), logs: L("брёвна", "logs"), planks: L("доски", "planks"), stone: L("камень", "stone"), wares: L("товары", "goods") };
+export const TRADE_NAME: Record<TradeGood, string> = { food: L("еду", "food"), logs: L("брёвна", "logs"), planks: L("доски", "planks"), stone: L("камень", "stone"), clothes: L("одежду", "clothing"), dishes: L("посуду", "dishes"), furniture: L("утварь", "furnishings"), tools: L("инструменты", "tools") };
 
 export interface TradeOrder {
   give: TradeGood;
@@ -16,8 +16,8 @@ export interface TradeOrder {
 
 export const TRADE = {
   // Worth of one unit (kg, m3, m3, t, piece) in the same abstract points; felt, not labor-derived, because building materials come PACE times faster.
-  value: { food: 3, logs: 4, planks: 10, stone: 6, wares: 25 } satisfies Record<TradeGood, number>,
-  keep: { food: 1500, logs: 80, planks: 20, stone: 20, wares: 10 } satisfies Record<TradeGood, number>, // never given away
+  value: { food: 3, logs: 4, planks: 10, stone: 6, clothes: 20, dishes: 20, furniture: 35, tools: 40 } satisfies Record<TradeGood, number>,
+  keep: { food: 1500, logs: 80, planks: 20, stone: 20, clothes: 10, dishes: 6, furniture: 4, tools: 8 } satisfies Record<TradeGood, number>, // never given away
   margin: 0.25, // share of the worth the neighbours keep
   perWorker: 150, // points of the given good a market worker moves in a day
 };

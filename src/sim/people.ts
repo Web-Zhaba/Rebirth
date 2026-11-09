@@ -1039,6 +1039,7 @@ const WORK_TEXT: Record<string, string> = {
   smithy: L("кузнец — Кузница", "smith — Smithy"),
   carpentry: L("столяр — Столярная мастерская", "carpenter — Carpentry workshop"),
   pottery: L("гончар — Гончарня", "potter — Pottery"),
+  weaver: L("ткач — Ткацкая мастерская", "weaver — Weaving workshop"),
   shop: L("работает в Магазине", "works at the Shop"),
   tavern: L("работает в Таверне", "works at the Tavern"),
   gumno: L("фермер — Ферма", "farmer — Farm"),

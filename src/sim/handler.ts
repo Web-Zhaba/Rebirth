@@ -1,3 +1,4 @@
+import { houseGoods } from "./coverage";
 import { finishAll, grantStock, nextEra, reveal, unlockAll } from "./admin";
 import { newTally, observe, summarize, type Tally } from "./away";
 import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed } from "./clock";
@@ -60,9 +61,10 @@ export function toSnapshot(sim: SimState): SimSnapshot {
     houseResidents[h.home] = (houseResidents[h.home] ?? 0) + h.members.length;
   }
   for (const id in houseMood) houseMood[id] = Math.round(houseMood[id]);
+  const houseGoodsShare = Object.fromEntries(houseGoods(sim.households));
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
 }
 
 // Who lives or works in a building, with production details for producers.

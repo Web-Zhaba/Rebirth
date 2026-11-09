@@ -80,6 +80,7 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   smithy: T("smithy", L("Кузница", "Smithy"), "craft", 2, 2, 10, 8, 5, 160, 6, [18, 2, 9], "crafts"),
   carpentry: T("carpentry", L("Столярная мастерская", "Carpentry workshop"), "craft", 2, 3, 12, 9, 6, 190, 8, [38, 5, 3], "crafts"),
   pottery: T("pottery", L("Гончарня", "Pottery"), "craft", 2, 2, 10, 8, 5, 130, 6, [18, 2, 7], "crafts"),
+  weaver: T("weaver", L("Ткацкая мастерская", "Weaving workshop"), "craft", 2, 2, 10, 8, 5, 120, 6, [20, 3, 1], "crafts"),
   shop: T("shop", L("Магазин", "Shop"), "trade", 1, 2, 7, 8, 5, 100, 4, [24, 3, 2], "trade"),
   tavern: T("tavern", L("Таверна", "Tavern"), "trade", 3, 3, 16, 12, 8, 330, 8, [130, 15, 12], "trade"),
   gumno: T("gumno", L("Ферма", "Farm"), "placed", 2, 2, 12, 14, 7, 70, 0, [24, 3, 3], "food"),
@@ -155,7 +156,7 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp
 export const BARN_CAP = 60_000; // kg per finished barn
 export const CELLAR_CAP = 20_000; // kg per finished cellar; it keeps food better than a barn (weatherEffects spoilage)
-export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, wares: 20 };
+export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, clothes: 12, dishes: 6, furniture: 2, tools: 10 };
 
 export function foodCapacity(buildings: Record<number, Building>): number {
   let cap = FOOD_CAMP_CAP;

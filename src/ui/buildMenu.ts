@@ -94,7 +94,7 @@ const PURPOSE: Record<Tool, string> = {
   bulldoze: L("Снести участок дороги вместе с планами вдоль него", "Demolish a road section along with the plans beside it"),
   restore: L("Проложить заново раскопанную улицу целиком: старая тропа станет тропой, улица — дорогой", "Rebuild an excavated street whole: an old path becomes a path, a street becomes a road"),
   res: L("Размечает участки под жильё: сюда придут новые семьи", "Zones plots for housing: new families will come here"),
-  craft: L("Размечает участки под мастерские: кузница, столярня, гончарня", "Zones plots for workshops: smithy, carpentry, pottery"),
+  craft: L("Размечает участки под мастерские: ткацкая (одежда), гончарня (посуда), столярня (утварь), кузница (инструменты)", "Zones plots for workshops: weaving (clothing), pottery (dishes), carpentry (furnishings), smithy (tools)"),
   trade: L("Размечает участки под магазины и таверну", "Zones plots for shops and a tavern"),
   field: L("Поле: контур для зерна, его обрабатывают фермеры", "Field: an outline for grain, worked by farmers"),
   clearing: L("Вырубка леса: брёвна на склад, на месте леса будет луг", "Forest clearing: logs to the store, meadow where the forest was"),

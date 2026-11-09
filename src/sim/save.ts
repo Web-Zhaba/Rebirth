@@ -1,3 +1,4 @@
+import { GOODS, WARES_SPLIT } from "./goods";
 import { LANDS } from "../world/landcover";
 import { BUILDINGS, homesOf, isPriority, JOB_KEYS, maxLevel, startLevel, UPGRADE } from "./buildings";
 import { FOUNDATION_LOT, fitMaxOf } from "./foundationLots";
@@ -327,7 +328,7 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     const mood = isNum(h.mood) ? Math.min(100, Math.max(0, h.mood)) : MOOD_START;
     // Saves from before the flag: the founding households arrived at minute 0.
     const founder = typeof h.founder === "boolean" ? h.founder : h.arrived === 0;
-    households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood, ...(h.cold === true ? { cold: true as const } : {}) };
+    households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood, ...(h.cold === true ? { cold: true as const } : {}), ...(isNum(h.served) && h.served >= 0 && h.served <= 1 ? { served: h.served } : {}) };
   }
   if (seen.size !== Object.keys(residents).length) return null; // a resident in no household
   // A house holds as many families as its level: one with more (saved before house levels) is raised to them, so no family is evicted.
@@ -358,11 +359,23 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
   return { residents, households, nextPersonId: nextPerson, nextHouseholdId: nextHouse, events: events.slice(-MAX_EVENTS) };
 }
 
-// A stock with any broken figure gives back the founding stock.
+// Saves from before goods groups (B3) trade "wares": they trade clothing now.
+function oldTrade(v: unknown): unknown {
+  if (!isRecord(v)) return v;
+  const fix = (g: unknown) => (g === "wares" ? "clothes" : g);
+  return { ...v, give: fix(v.give), get: fix(v.get) };
+}
+
+// A stock with any broken figure gives back the founding stock. Saves from before goods groups (docs/PLAN-balance.md B3)
+// carry one `wares` figure: it is split by WARES_SPLIT.
 function parseStock(v: unknown): Stock {
-  const keys = ["food", "logs", "planks", "stone", "wares"] as const;
-  if (!isRecord(v) || !keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0)) return emptyStock();
-  return { food: v.food as number, logs: v.logs as number, planks: v.planks as number, stone: v.stone as number, wares: v.wares as number };
+  const ok = (k: string) => isRecord(v) && isNum(v[k]) && (v[k] as number) >= 0;
+  if (!isRecord(v) || !["food", "logs", "planks", "stone"].every(ok)) return emptyStock();
+  const base = { food: v.food as number, logs: v.logs as number, planks: v.planks as number, stone: v.stone as number };
+  if (GOODS.every(ok)) return { ...base, clothes: v.clothes as number, dishes: v.dishes as number, furniture: v.furniture as number, tools: v.tools as number };
+  if (!ok("wares")) return emptyStock();
+  const w = v.wares as number;
+  return { ...base, clothes: w * WARES_SPLIT.clothes, dishes: w * WARES_SPLIT.dishes, furniture: w * WARES_SPLIT.furniture, tools: w * WARES_SPLIT.tools };
 }
 
 const numRecord = (v: unknown): Record<number, number> => {
@@ -397,7 +410,7 @@ function parseProd(v: unknown): ProdState {
   // Saves from before the orchard: a year with nothing counted.
   const o = v.orchard;
   if (isRecord(o) && Number.isInteger(o.year)) out.orchard = { year: o.year as number, frost: num(o.frost, 0, 400, 0), stress: num(o.stress, 0, 400, 0), days: num(o.days, 0, 400, 0), hot: num(o.hot, 0, 400, 0) };
-  const t = v.trade;
+  const t = oldTrade(v.trade);
   if (isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0) out.trade = { give: t.give, get: t.get, gave: t.gave, got: t.got };
   return out;
 }
@@ -417,7 +430,8 @@ function parseLevers(v: unknown): Levers {
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
   const j = v.jobs;
   if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
-  if (isTradeOrder(v.trade)) out.trade = { give: v.trade.give, get: v.trade.get };
+  const order = oldTrade(v.trade);
+  if (isTradeOrder(order)) out.trade = { give: order.give, get: order.get };
   return out;
 }
 

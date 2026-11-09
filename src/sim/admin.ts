@@ -67,7 +67,7 @@ export function finishAll(s: SimState): SimState {
 
 export const grantStock = (s: SimState): SimState => ({
   ...s,
-  stock: { food: s.stock.food + ADMIN.grant, logs: s.stock.logs + ADMIN.grant, planks: s.stock.planks + ADMIN.grant, stone: s.stock.stone + ADMIN.grant, wares: s.stock.wares + ADMIN.grant },
+  stock: { food: s.stock.food + ADMIN.grant, logs: s.stock.logs + ADMIN.grant, planks: s.stock.planks + ADMIN.grant, stone: s.stock.stone + ADMIN.grant, clothes: s.stock.clothes + ADMIN.grant, dishes: s.stock.dishes + ADMIN.grant, furniture: s.stock.furniture + ADMIN.grant, tools: s.stock.tools + ADMIN.grant },
 });
 
 export const unlockAll = (s: SimState): SimState => researchAll(s);

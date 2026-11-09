@@ -1,4 +1,4 @@
-import { BUILDINGS, CREW, remainingLabor } from "../sim/buildings";
+import { BUILDINGS, CREW, FOCUS_CREWS, remainingLabor } from "../sim/buildings";
 import type { Building, BuildingQuery, Clearing, Stock } from "../sim/types";
 import { clearingLogs } from "../sim/clearing";
 import type { IconName } from "./icons";
@@ -28,7 +28,7 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
   return { label: b.template === "dig" ? L("раскоп готов", "dig finished") : L("работает", "working"), tone: "ok" };
 }
 
-const CRAFT = new Set(["smithy", "carpentry", "pottery"]);
+const CRAFT = new Set(["smithy", "carpentry", "pottery", "weaver"]);
 const TRADE = new Set(["shop", "tavern"]);
 
 // Icon of a building template: houses and zone buildings share their zone's icon, placed ones have their own.
@@ -46,11 +46,14 @@ export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: Ico
   logs: { name: L("брёвна", "logs"), unit: L("м³", "m³"), icon: "log" },
   planks: { name: L("доски", "planks"), unit: L("м³", "m³"), icon: "planks" },
   stone: { name: L("камень", "stone"), unit: L("т", "t"), icon: "stone" },
-  wares: { name: L("товары", "goods"), unit: L("шт", "pcs"), icon: "wares" },
+  clothes: { name: L("одежда", "clothing"), unit: L("шт", "pcs"), icon: "wares" },
+  dishes: { name: L("посуда", "dishes"), unit: L("шт", "pcs"), icon: "wares" },
+  furniture: { name: L("утварь", "furnishings"), unit: L("шт", "pcs"), icon: "wares" },
+  tools: { name: L("инструменты", "tools"), unit: L("шт", "pcs"), icon: "wares" },
 };
 
-// Hands one site can use at once (a толока lifts the limit).
-export const siteHands = (artel: number, toloka: boolean): number => (toloka ? artel : Math.min(artel, CREW));
+// Hands one site can use at once: its crew (`crew`, siteCrew of a building, CREW of a clearing), two crews in a толока.
+export const siteHands = (artel: number, toloka: boolean, crew = CREW): number => Math.min(artel, toloka ? crew * FOCUS_CREWS : crew);
 
 // Person-hours still to spend on a building, 0 when finished.
 export const buildingRemaining = (b: Building): number => remainingLabor(b);

@@ -57,6 +57,7 @@ const FORMS: Record<string, TownForm> = {
   smithy: "workshop",
   carpentry: "workshop",
   pottery: "workshop",
+  weaver: "workshop",
   gumno: "farm",
   barn: "store",
   woodcutter: "logyard",

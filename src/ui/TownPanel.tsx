@@ -331,7 +331,7 @@ function OrdersTab() {
           {L("Призвать поселенцев", "Call settlers")}
         </Button>
       </div>
-      <div class={block ? "people-note" : "hud-date"}>{block ?? L(`Стоит ${CALL.food} кг еды и ${CALL.wares} шт товаров`, `Costs ${CALL.food} kg of food and ${CALL.wares} goods`)}</div>
+      <div class={block ? "people-note" : "hud-date"}>{block ?? L(`Стоит ${CALL.food} кг еды и ${CALL.goods} шт одежды, посуды или утвари`, `Costs ${CALL.food} kg of food and ${CALL.goods} pieces of clothing, dishes or furnishings`)}</div>
       <div class="rs-danger">
         <Button variant="danger" icon="trash" onClick={() => setConfirming(true)}>
           {L("Начать заново", "Start over")}

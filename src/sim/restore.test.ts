@@ -165,7 +165,7 @@ describe("the building", () => {
   });
   it("is paid by its own materials", () => {
     let s = order(mk([church]), "a", "monument");
-    s = { ...s, stock: { food: 0, logs: 100, planks: 100, stone: 100, wares: 0 } };
+    s = { ...s, stock: { food: 0, logs: 100, planks: 100, stone: 100, clothes: 0, dishes: 0, furniture: 0, tools: 0 } };
     const b = s.buildings[1];
     const done = advanceBuildings({ 1: { ...b, paid: true } }, 1000);
     expect(done[1].state).toBe("active");

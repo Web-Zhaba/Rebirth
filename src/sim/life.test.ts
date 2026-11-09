@@ -246,7 +246,7 @@ describe("carts", () => {
         expect(c.pts[c.pts.length - 1]).toEqual([0, 0]);
       }
     }
-    expect(LOAD).toEqual({ logs: 5, planks: 2, stone: 3, food: 500, wares: 20 });
+    expect(LOAD).toEqual({ logs: 5, planks: 2, stone: 3, food: 500, clothes: 20, dishes: 20, furniture: 6, tools: 15 });
   });
   it("caps at 6 carts a producer and sends none when nothing was made", () => {
     expect(carts(computeLife(withMade(1, "woodcutter", 10_000)).trips)).toHaveLength(MAX_CARTS);

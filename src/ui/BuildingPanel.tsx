@@ -1,3 +1,4 @@
+import { GOOD_NAMES, GOODS_UPGRADE, needsAt } from "../sim/goods";
 import { useEffect, useState } from "preact/hooks";
 import { BUILDINGS, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, type JobGroup, type Materials, upgradable } from "../sim/buildings";
 import { domainName } from "../sim/domains";
@@ -172,9 +173,9 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
   );
 }
 
-const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
+const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
 
-const TRADE_LABEL: Record<TradeGood, string> = { food: L("Еда", "Food"), logs: L("Брёвна", "Logs"), planks: L("Доски", "Planks"), stone: L("Камень", "Stone"), wares: L("Товары", "Goods") };
+const TRADE_LABEL: Record<TradeGood, string> = { food: L("Еда", "Food"), logs: L("Брёвна", "Logs"), planks: L("Доски", "Planks"), stone: L("Камень", "Stone"), clothes: GOOD_NAMES.clothes, dishes: GOOD_NAMES.dishes, furniture: GOOD_NAMES.furniture, tools: GOOD_NAMES.tools };
 const TRADE_OFF = { id: "none", label: "—", title: L("Не меняем", "No trade") } as const;
 
 // The town's trade order, shown in every market: one good given, one got, swapped each day by the market workers.
@@ -195,7 +196,7 @@ function MarketTrade({ workers }: { workers: number }) {
         onChange={(id) => {
           if (id === TRADE_OFF.id) return set(null);
           const give = id as TradeGood;
-          set({ give, get: order && order.get !== give ? order.get : give === "wares" ? "food" : "wares" });
+          set({ give, get: order && order.get !== give ? order.get : give === "food" ? "tools" : "food" });
         }}
       />
       {order && (
@@ -252,7 +253,7 @@ export function BuildingPanel() {
   const shown = !!b && !!t && !tool.value && rightPanel.value === "inspector";
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const snap = state.value;
-  const upgradeNote = b && snap && upgradable(b) ? upgradeBlockers(snap, b, snap.houseMood[b.id]) : null;
+  const upgradeNote = b && snap && upgradable(b) ? upgradeBlockers(snap, b, snap.houseMood[b.id], snap.houseGoods?.[b.id]) : null;
   const group = t?.group ?? null;
   const info = useResidents(id, shown && b?.state === "active", `${b?.staff ?? "-"}|${group ? (state.value?.levers.jobs?.[group] ?? 2) : "-"}`);
   const ws = snap?.weather;
@@ -339,6 +340,12 @@ export function BuildingPanel() {
               </Line>
               <Line label={L("Семьи", "Families")}>
                 {info.households.length} {L("из", "of")} {homesOf(b)}
+              </Line>
+              <Line label={L("Нужны товары", "Goods needed")} tone={(snap?.houseGoods?.[b.id] ?? 1) < GOODS_UPGRADE ? "warn" : undefined}>
+                {needsAt(b.level)
+                  .map((g) => GOOD_NAMES[g].toLowerCase())
+                  .join(", ")}
+                {snap?.houseGoods?.[b.id] !== undefined && ` · ${L("получено", "served")} ${Math.round(snap.houseGoods[b.id] * 100)} %`}
               </Line>
               <Line icon="value" label={L("Стоимость земли", "Land value")}>
                 {info.landValue}

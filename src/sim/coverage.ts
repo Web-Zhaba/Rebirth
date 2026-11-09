@@ -1,3 +1,4 @@
+import { GOODS_UPGRADE } from "./goods";
 import { BUILDINGS, upgradable, upgradeLabor } from "./buildings";
 import { isUnlocked } from "./tech";
 import { ageOf, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
@@ -7,7 +8,7 @@ import { CAMP, countServices, covers, isService, learnPerDay, SERVICE, SERVICE_I
 import { classPupils, schoolSeats } from "./school";
 import { learningFactor, MOOD_NEUTRAL, needsOf } from "./needs";
 import { finishedMonuments, monumentLand, monumentsNear } from "./monuments";
-import type { Building, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
+import type { Building, Household, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
 import { L } from "../i18n";
 
 // ---------- coverage ----------
@@ -143,20 +144,29 @@ export function refreshServices<T extends SimState>(s: T): T {
   return { ...s, coverage, landValue: computeLandValue(s, coverage) };
 }
 
-export function upgradeShortfall(land: number, services: number | undefined, mood: number | undefined): string[] {
+// The least share of its goods any family of a house got at the last midnight (docs/PLAN-balance.md B3); houses whose
+// families have not been served yet are left out.
+export function houseGoods(households: Record<number, Household>): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const h of Object.values(households)) if (h.home !== null && h.served !== undefined) out.set(h.home, Math.min(out.get(h.home) ?? 1, h.served));
+  return out;
+}
+
+export function upgradeShortfall(land: number, services: number | undefined, mood: number | undefined, goods?: number): string[] {
   const out: string[] = [];
   if (land < SERVICE.upgradeLand) {
     const missing = SERVICE_LIST.filter((sv) => !covers(services, sv.id)).map((sv) => sv.name.toLowerCase());
     out.push(L(`стоимость участка ${land} из ${SERVICE.upgradeLand}`, `land value ${land} of ${SERVICE.upgradeLand}`) + (missing.length ? `, ${L("нет", "missing")}: ${missing.join(", ")}` : ""));
   }
   if (mood === undefined || mood < SERVICE.upgradeMood) out.push(L(`настроение ${mood === undefined ? 0 : mood} из ${SERVICE.upgradeMood}`, `mood ${mood === undefined ? 0 : mood} of ${SERVICE.upgradeMood}`));
+  if (goods !== undefined && goods < GOODS_UPGRADE - 1e-9) out.push(L(`товары получены на ${Math.round(goods * 100)} % из ${Math.round(GOODS_UPGRADE * 100)} %`, `goods served ${Math.round(goods * 100)}% of ${Math.round(GOODS_UPGRADE * 100)}%`));
   return out;
 }
 
-export function upgradeBlockers(s: Pick<SimState, "progress" | "coverage" | "landValue">, b: Building, mood: number | undefined): string[] {
+export function upgradeBlockers(s: Pick<SimState, "progress" | "coverage" | "landValue">, b: Building, mood: number | undefined, goods?: number): string[] {
   if (!upgradable(b)) return [];
   const out = isUnlocked(s.progress, "upgrade") ? [] : [L("откроется с технологией «Просторное жильё»", "unlocks with the Spacious Housing technology")];
-  return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood)];
+  return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood, goods)];
 }
 
 export function dailyServices(s: SimState): SimState {
@@ -179,11 +189,12 @@ export function dailyServices(s: SimState): SimState {
   }
 
   const moodAt = new Map<number, number>();
-  for (const h of Object.values(s.households)) if (h.home !== null) moodAt.set(h.home, h.mood);
+  for (const h of Object.values(s.households)) if (h.home !== null) moodAt.set(h.home, Math.min(moodAt.get(h.home) ?? 100, h.mood));
+  const goodsAt = houseGoods(s.households);
   let buildings = s.buildings;
   for (const b of Object.values(s.buildings)) {
     if (!isUnlocked(s.progress, "upgrade") || !upgradable(b)) continue;
-    const good = upgradeShortfall(landValue[b.id] ?? 0, coverage[b.id], moodAt.get(b.id)).length === 0;
+    const good = upgradeShortfall(landValue[b.id] ?? 0, coverage[b.id], moodAt.get(b.id), goodsAt.get(b.id)).length === 0;
     const streak = good ? b.streak + 1 : 0;
     let next: Building = b;
     if (streak >= SERVICE.upgradeDays) next = { ...b, streak: 0, upgrade: { labor: upgradeLabor(b), done: 0, paid: false } };

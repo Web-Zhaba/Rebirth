@@ -10,7 +10,7 @@ import { emptyZones } from "./zones";
 
 const NOW = 1_800_000_000_000;
 const city: City = { name: "Тест", lat: 59, lng: 37, foundedAt: NOW - 1e6 };
-const stockOf = (stone: number): Stock => ({ food: 100, logs: 0, planks: 0, stone, wares: 0 });
+const stockOf = (stone: number): Stock => ({ food: 100, logs: 0, planks: 0, stone, clothes: 0, dishes: 0, furniture: 0, tools: 0 });
 
 const road = (kind: RoadKind, pts: [number, number][], labor: number[], g: RoadGraph = emptyRoads()): RoadGraph => {
   const r = addRoad(g, pts, kind, 1, labor);

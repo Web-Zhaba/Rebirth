@@ -21,7 +21,7 @@ export const isEvening = (hour: number, levers?: Levers): boolean => hour >= wor
 // Adults living in a finished house (tent dwellers have no hearth to sit at) — the evening's hands are counted in
 // eveningRate below, each with their own working strength.
 
-// Pieces of wares an hour the adults at home make in the evening, at the season of `gameMinutes`.
+// Pieces of clothing an hour the adults at home make in the evening, at the season of `gameMinutes`.
 // A hungry or unhappy household works slower; a content one (needs and mood full) gives the nominal rate.
 export const eveningRate = (s: Pick<SimState, "residents" | "households" | "buildings" | "gameMinutes">): number => {
   let hands = 0;
@@ -35,11 +35,11 @@ export const eveningRate = (s: Pick<SimState, "residents" | "households" | "buil
   return hands * EVENING.waresPerAdultHour * (calendar(s.gameMinutes).season === 3 ? EVENING.winter : 1);
 };
 
-// One tick of `dt` hours of вечерние ремёсла. Call in evening hours only. The wares count toward the day's output under key 0.
+// One tick of `dt` hours of вечерние ремёсла. Call in evening hours only. The clothing counts toward the day's output under key 0.
 export function eveningStep(s: SimState, dt: number): SimState {
   const q = eveningRate(s) * dt;
   if (!(q > 0)) return s;
-  return { ...s, stock: { ...s.stock, wares: s.stock.wares + q }, prod: { ...s.prod, today: { ...s.prod.today, 0: (s.prod.today[0] ?? 0) + q } } };
+  return { ...s, stock: { ...s.stock, clothes: s.stock.clothes + q }, prod: { ...s.prod, today: { ...s.prod.today, 0: (s.prod.today[0] ?? 0) + q } } };
 }
 
 // Dwellings whose households gather in the evening: covered by a chapel, or within reach of a staffed tavern. A

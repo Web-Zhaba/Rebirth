@@ -177,6 +177,7 @@ export interface Household {
   founder: boolean; // came with the founding party: never emigrates
   mood: number; // 0..100
   cold?: true; // no firewood at the last midnight: mood target down, death rate up (weather only)
+  served?: number; // share of its goods the household got at the last midnight, 0..1 (none yet: not counted)
 }
 
 export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage"; // goal and unlock are no longer made: old saves still carry them
@@ -273,7 +274,11 @@ export interface Stock {
   logs: number; // m3
   planks: number; // m3
   stone: number; // t
-  wares: number; // pieces
+  // goods, pieces (sim/goods.ts)
+  clothes: number;
+  dishes: number;
+  furniture: number;
+  tools: number;
 }
 
 // A field's progress in one year (rye is sown in spring and reaped in autumn of the same year).
@@ -378,7 +383,7 @@ export interface EconomyStats {
   forage: number; // kg of food a day the idle adults gather
   brushwood: number; // m3 of firewood a day the idle adults gather (only while the town is short of fuel)
   outlook: number; // 0..1, can the food last to the end of the next harvest window
-  eveningWares: number; // pieces an hour the adults at home make at 19-22 (doubles in winter)
+  eveningWares: number; // pieces of clothing an hour the adults at home make at 19-22 (doubles in winter)
   trade?: ProdState["trade"]; // what the markets swapped yesterday
   fieldWork: number; // share of the field work the weather allows right now (1 = calm)
   buildFactor: number; // share of the artel's hours the weather allows right now
@@ -460,6 +465,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
+  houseGoods: Record<number, number>; // house id -> least share of its goods a family got at the last midnight (houses served at least once)
   houseResidents: Record<number, number>; // house id -> residents, compact input for service placement previews
   research: ResearchView;
   fieldProgress: Record<number, { sown: number; harv: number }>; // field id -> share of its area sown / harvested this year (steps of 0.02), for the 3D fields

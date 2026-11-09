@@ -26,7 +26,7 @@ export const WORKDAY = { start: 7, end: 19 };
 export const STRADA = { start: 5, end: 21 };
 export const STRADA_MOOD = -8;
 export const TOLOKA_COOLDOWN = 3 * 1440; // game minutes
-export const CALL = { food: 300, wares: 10, minMinutes: 360, maxMinutes: 1440 }; // cost of a call for settlers; arrival window
+export const CALL = { food: 300, goods: 10, minMinutes: 360, maxMinutes: 1440 }; // cost of a call for settlers; arrival window
 
 export const RATIONS: Record<Rations, { name: string; food: number; mood: number }> = {
   reduced: { name: L("Урезанные", "Reduced"), food: 0.75, mood: -10 },

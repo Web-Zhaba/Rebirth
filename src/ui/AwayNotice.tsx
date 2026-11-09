@@ -1,3 +1,4 @@
+import { goodsTotal } from "../sim/goods";
 import type { Away } from "../sim/protocol";
 import { DAY_MIN } from "../sim/time";
 import { away, catchUp } from "../simClient";
@@ -32,7 +33,8 @@ function produced(a: Away): string[] {
   if (p.logs >= 0.05) out.push(L(`брёвна ${NUM.format(p.logs)} м³`, `logs ${NUM.format(p.logs)} m³`));
   if (p.planks >= 0.05) out.push(L(`доски ${NUM.format(p.planks)} м³`, `planks ${NUM.format(p.planks)} m³`));
   if (p.stone >= 0.05) out.push(L(`камень ${NUM.format(p.stone)} т`, `stone ${NUM.format(p.stone)} t`));
-  if (p.wares >= 0.5) out.push(L(`товары ${Math.round(p.wares)} шт.`, `goods ${Math.round(p.wares)} pcs`));
+  const goods = goodsTotal(p);
+  if (goods >= 0.5) out.push(L(`товары ${Math.round(goods)} шт.`, `goods ${Math.round(goods)} pcs`));
   return out;
 }
 

@@ -88,8 +88,8 @@ describe("allocation: roads, buildings and clearings", () => {
     expect(allocateLabor(bs, 15, 10, cs, true).get(2)).toBeUndefined();
   });
   it("first while the stock cannot pay the logs of an izba", () => {
-    expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs, planks: 0, stone: 0, wares: 0 })).toBe(false);
-    expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs - 1, planks: 0, stone: 0, wares: 0 })).toBe(true);
+    expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 })).toBe(false);
+    expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs - 1, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 })).toBe(true);
   });
   it("hands no crew has room for stay idle", () => {
     const a = allocateLabor(bs, 100, 10, cs);

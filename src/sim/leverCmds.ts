@@ -1,3 +1,4 @@
+import { homeGoods, takeGoods } from "./goods";
 import { BUILDINGS, isJobKey, isPriority, remainingClearing, remainingLabor, type JobKey, type Priority } from "./buildings";
 import { jobsOf } from "./fields";
 import { withChronicle } from "./chronicle";
@@ -116,7 +117,7 @@ export function setStaff(s: SimState, id: number, staff: number): LeverResult {
 export function callBlock(s: Pick<SimState, "stock" | "buildings" | "households" | "incoming">): string | null {
   if (freeHomes(s.buildings, s.households, s.incoming).length === 0) return L("Нет свободного дома для новой семьи", "No free house for a new family");
   if (s.stock.food < CALL.food) return L(`Не хватает еды: нужно ${CALL.food} кг`, `Not enough food: ${CALL.food} kg needed`);
-  if (s.stock.wares < CALL.wares) return L(`Не хватает товаров: нужно ${CALL.wares} шт`, `Not enough goods: ${CALL.wares} pcs needed`);
+  if (homeGoods(s.stock) < CALL.goods) return L(`Не хватает одежды, посуды и утвари: нужно ${CALL.goods} шт`, `Not enough clothing, dishes and furnishings: ${CALL.goods} pcs needed`);
   return null;
 }
 
@@ -127,8 +128,8 @@ export function callSettlers(s: SimState): LeverResult {
   const [r, rng] = nextRandom(s.rng);
   const arrive = s.gameMinutes + CALL.minMinutes + r * (CALL.maxMinutes - CALL.minMinutes);
   const incoming = [...s.incoming, { house, arrive }].sort((a, b) => a.arrive - b.arrive);
-  const next: SimState = { ...s, rng, incoming, stock: { ...s.stock, food: s.stock.food - CALL.food, wares: s.stock.wares - CALL.wares } };
-  return done(next, L(`Позвали поселенцев: ушло ${CALL.food} кг еды и ${CALL.wares} шт товаров, семья будет в течение суток`, `Settlers called: ${CALL.food} kg of food and ${CALL.wares} goods spent; a family will arrive within a day`));
+  const next: SimState = { ...s, rng, incoming, stock: { ...takeGoods(s.stock, CALL.goods)!, food: s.stock.food - CALL.food } };
+  return done(next, L(`Позвали поселенцев: ушло ${CALL.food} кг еды и ${CALL.goods} шт товаров, семья будет в течение суток`, `Settlers called: ${CALL.food} kg of food and ${CALL.goods} goods spent; a family will arrive within a day`));
 }
 
 // End of each tick: a priority whose site is finished is dropped; a толока ends with the workday or with its site.

@@ -1,3 +1,5 @@
+import { homeGoods } from "../sim/goods";
+import { CALL } from "../sim/levers";
 import { it } from "vitest";
 import { BUILDINGS } from "../sim/buildings";
 import { calendar } from "../sim/clock";
@@ -226,8 +228,8 @@ it("pacing harness", async () => {
     if (done.size === steps.length && st.stock.logs < BUILDINGS.izba.materials.logs && cutters > 0 && cutters < 1 + Math.floor(houses() / 5)) {
       await place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 });
     }
-    // A house stands empty and there are wares to pay: call settlers (the wares of the founding cart pay for two calls).
-    if (st.stock.wares >= 10 && dayOf(st.gameMinutes) > lastCallDay) {
+    // A house stands empty and there are goods to pay: call settlers (the goods of the founding cart pay for two calls).
+    if (homeGoods(st.stock) >= CALL.goods && dayOf(st.gameMinutes) > lastCallDay) {
       const sim = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
       if (freeHomes(sim.buildings, sim.households, sim.incoming).length > 0) {
         lastCallDay = dayOf(st.gameMinutes);

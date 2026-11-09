@@ -1,3 +1,4 @@
+import { goodsTotal } from "./goods";
 import { peopleStats } from "./people";
 import { GOOD } from "./production";
 import { massText } from "./units";
@@ -14,13 +15,13 @@ const MAX_BUILT = 4; // built lines before the rest are folded into one
 
 const volume = (v: number): string => decimal((Math.round(v * 10) / 10).toString());
 
-// What the town made today: workshop output by good, plus the wares of the evening crafts (key 0 of prod.today).
+// What the town made today: workshop output by good, plus the clothing of the evening crafts (key 0 of prod.today).
 export function madeToday(s: Pick<SimState, "prod" | "buildings">): Stock {
-  const out: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
+  const out: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
   for (const [key, n] of Object.entries(s.prod.today)) {
     const id = Number(key);
     const b = s.buildings[id];
-    const g = b ? GOOD[b.template] : id === 0 ? "wares" : undefined;
+    const g = b ? GOOD[b.template] : id === 0 ? "clothes" : undefined;
     if (g) out[g] += n;
   }
   return out;
@@ -51,7 +52,8 @@ export function daySummary(s: SimState): DaySummary {
   if (made.logs >= 0.05) parts.push(L(`брёвен ${volume(made.logs)} м³`, `logs ${volume(made.logs)} m³`));
   if (made.planks >= 0.05) parts.push(L(`досок ${volume(made.planks)} м³`, `planks ${volume(made.planks)} m³`));
   if (made.stone >= 0.05) parts.push(L(`камня ${volume(made.stone)} т`, `stone ${volume(made.stone)} t`));
-  if (made.wares >= 0.05) parts.push(L(`товаров ${volume(made.wares)} шт.`, `goods ${volume(made.wares)} pcs`));
+  const goods = goodsTotal(made);
+  if (goods >= 0.05) parts.push(L(`товаров ${volume(goods)} шт.`, `goods ${volume(goods)} pcs`));
   if (parts.length > 0) lines.push({ kind: "made", text: L(`Сделано: ${parts.join(", ")}`, `Made: ${parts.join(", ")}`) });
 
   const seen = new Set<string>();

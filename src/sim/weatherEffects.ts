@@ -28,7 +28,7 @@ export const EFFECTS = {
   brush: { m3: 0.03, snow: 0.4 },
   cellarHeat: 0.9, // share of the heat spoilage a cellar removes (a barn: 0.5)
   dig: { frozen: 0.3, frozenBelow: -5, rain: 0.7 },
-  shop: { cold: 0.8, coldBelow: -10, hot: 0.85 }, // pottery, carpentry, smithy
+  shop: { cold: 0.8, coldBelow: -10, hot: 0.85 }, // pottery, weaving, carpentry, smithy
   build: { rain: 0.6, heavy: 0.3, snow: 0.5, storm: 0.3, cold: 0.4, coldBelow: -15, hot: 0.8, thaw: 0.7 },
   // firewood: m³ per household per real year, spread over the heating degree-days of a real year (base 12 °C)
   firewoodYear: 10,
@@ -109,6 +109,7 @@ export function workFactor(template: string, w: WeatherState): number {
     case "dig":
       return (w.frozen > 0.5 && t < E.dig.frozenBelow ? E.dig.frozen : 1) * (rainy(w) ? E.dig.rain : 1);
     case "pottery":
+    case "weaver":
     case "carpentry":
     case "smithy":
       return t < E.shop.coldBelow ? E.shop.cold : t > E.hot ? E.shop.hot : 1;

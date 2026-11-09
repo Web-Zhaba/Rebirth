@@ -30,7 +30,8 @@ describe("helpers", () => {
   });
   it("limits hands to a crew except on a toloka", () => {
     expect(siteHands(20, false)).toBe(6);
-    expect(siteHands(20, true)).toBe(20);
+    expect(siteHands(20, true)).toBe(12); // two crews
+    expect(siteHands(20, false, 16)).toBe(16);
     expect(siteHands(3, false)).toBe(3);
   });
   it("computes clearing numbers", () => {

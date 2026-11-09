@@ -21,7 +21,7 @@ const profile = (land: TerrainProfile["land"], length = land.length * 10, grade 
 });
 const water = (n: number): TerrainProfile["land"] => Array.from({ length: n }, () => "water" as const);
 
-const stockOf = (stone: number): Stock => ({ food: 100, logs: 0, planks: 0, stone, wares: 0 });
+const stockOf = (stone: number): Stock => ({ food: 100, logs: 0, planks: 0, stone, clothes: 0, dishes: 0, furniture: 0, tools: 0 });
 const road = (kind: "stone" | "dirt" | "stonebridge", pts: [number, number][], labor: number[], g: RoadGraph = emptyRoads()): RoadGraph => {
   const r = addRoad(g, pts, kind, 1, labor);
   if (!r.ok) throw new Error(r.reason);

@@ -1,3 +1,4 @@
+import { GOODS as GOOD_LIST, GOOD_NAMES, goodsTotal } from "../sim/goods";
 import type { View } from "../view/view";
 import { TOWN_VIEW_MPP } from "../view/scale";
 import type { ComponentChildren } from "preact";
@@ -77,7 +78,8 @@ function BarStat({ title, tip, align, ...stat }: { title: string; tip: Component
   );
 }
 
-type Good = Exclude<keyof Stock, "food">;
+// Materials have a chip each; the goods (sim/goods.ts) share one chip with a line per good.
+type Good = "logs" | "planks" | "stone" | "wares";
 const GOOD_UNIT: Record<Good, string> = { logs: L("м³", "m³"), planks: L("м³", "m³"), stone: L("т", "t"), wares: L("шт", "pcs") };
 const GOODS: { id: Good; icon: IconName; title: string; cap: string }[] = [
   { id: "logs", icon: "log", title: L("Брёвна", "Logs"), cap: L("брёвна", "logs") },
@@ -85,6 +87,7 @@ const GOODS: { id: Good; icon: IconName; title: string; cap: string }[] = [
   { id: "stone", icon: "stone", title: L("Камень", "Stone"), cap: L("камень", "stone") },
   { id: "wares", icon: "wares", title: L("Товары", "Goods"), cap: L("товары", "goods") },
 ];
+const figure = (st: Stock, id: Good): number => (id === "wares" ? goodsTotal(st) : st[id]);
 
 export function TopBar({ city, view }: { city: City; view?: View }) {
   const gm = useGameMinutes();
@@ -125,7 +128,7 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
   const mood = eco ? Math.round(eco.avgMood) : 0;
   const net = eco ? foodNet(eco) : 0;
   const wx = weatherChip(state.value?.weather, cal.season, eco);
-  const text = (id: Good) => (st ? (id === "wares" ? String(Math.floor(st[id])) : amount(st[id])) : "");
+  const text = (id: Good) => (st ? (id === "wares" ? String(Math.floor(goodsTotal(st))) : amount(st[id])) : "");
 
   const time = `${pad(cal.hour)}:${pad(cal.minute)}`;
 
@@ -234,7 +237,7 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
             }
           />
           {GOODS.map((g) => {
-            const made = eco.yesterday[g.id];
+            const made = figure(eco.yesterday, g.id);
             return (
               <BarStat
                 key={g.id}
@@ -251,7 +254,12 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
                     {g.id === "logs" && clearing.length > 0 && <Row label={L("Вырубка уже дала", "Clearing has yielded")} value={L(`+${amount(clearGot)} из ${amount(clearAll)} м³`, `+${amount(clearGot)} of ${amount(clearAll)} m³`)} />}
                     {g.id === "logs" && eco.brushwood > 0 && <Row label={L("Хворост, без дров в запасе", "Brushwood, no firewood in store")} value={L(`+${amount(eco.brushwood)} м³ в день`, `+${amount(eco.brushwood)} m³ a day`)} />}
                     {g.id === "logs" && eco.firewood > 0 && <Row label={L("Отопление сегодня", "Heating today")} value={signedDaily(-eco.firewood, L("м³", "m³"))} tone="warn" />}
-                    {g.id === "wares" && eco.eveningWares > 0 && <Row label={L("Вечерние ремёсла, 19–22 ч", "Evening crafts, 19–22 h")} value={`+${decimal(eco.eveningWares.toFixed(2))} ${L("шт/ч", "pcs/h")}`} />}
+                    {g.id === "wares" &&
+                      st &&
+                      GOOD_LIST.map((k) => (
+                        <Row key={k} label={GOOD_NAMES[k]} value={`${Math.floor(st[k])} ${L("шт", "pcs")}${eco.yesterday[k] > 0 ? ` (+${amount(eco.yesterday[k])})` : ""}`} tone={st[k] < 1 ? "warn" : undefined} />
+                      ))}
+                    {g.id === "wares" && eco.eveningWares > 0 && <Row label={L("Вечерние ремёсла (одежда), 19–22 ч", "Evening crafts (clothing), 19–22 h")} value={`+${decimal(eco.eveningWares.toFixed(2))} ${L("шт/ч", "pcs/h")}`} />}
                   </>
                 }
               />
