@@ -3,7 +3,7 @@ import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { emptyLevers } from "./levers";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, startLevel, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
-import { createFounders, freeHomes, peopleStats } from "./people";
+import { createFounders, FOUNDERS, freeHomes, MOOD_START, peopleStats } from "./people";
 import { clearingLogs } from "./clearing";
 import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReservedGround } from "./foundationLots";
 import { isHeritage } from "./heritage";
@@ -11,6 +11,7 @@ import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
 import { nextRandom } from "./rng";
 import { CAMP_STORE_ID } from "./storage";
+import { attractionOf } from "./attraction";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, Clearing, Demand, Finds, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
 import { emptyWeather } from "./weather";
@@ -40,7 +41,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "stores" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "stores" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attraction" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -60,7 +61,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     finds: emptyFinds(),
     articles: [],
     incoming: [],
-    attract: 0,
+    attraction: attractionOf({ food: 1, mood: MOOD_START, unemployment: 0, services: 0, pop: FOUNDERS }), // the founding party: set anew every midnight
     summary: null,
     levers: emptyLevers(),
     progress: initialProgress(),

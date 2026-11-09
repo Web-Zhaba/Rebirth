@@ -14,6 +14,7 @@ import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } 
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
 import { spreadStores, type Stores } from "./storage";
+import { NO_ATTRACTION, type Attraction } from "./attraction";
 import { SERVICE } from "./services";
 import { isTradeOrder } from "./trade";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
@@ -380,6 +381,14 @@ function parseStock(v: unknown): Stock {
   return { ...base, clothes: w * WARES_SPLIT.clothes, dishes: w * WARES_SPLIT.dishes, furniture: w * WARES_SPLIT.furniture, tools: w * WARES_SPLIT.tools };
 }
 
+// Saves from before B6 (docs/PLAN-balance.md) have none: the founding party's (`fallback`) until the next midnight sets it.
+function parseAttraction(v: unknown, fallback: Attraction): Attraction {
+  if (!isRecord(v)) return fallback;
+  const out = { ...NO_ATTRACTION };
+  for (const k of Object.keys(NO_ATTRACTION) as (keyof Attraction)[]) if (isNum(v[k]) && (v[k] as number) >= 0) out[k] = k === "cap" ? (v[k] as number) : Math.min(1, v[k] as number);
+  return out;
+}
+
 // What each store holds; saves from before the stores (docs/PLAN-balance.md B4) spread their stock over the stores they
 // have. A record that does not add up to the stock is set right by the next tick (storage.ts Ledger.sync).
 function parseStores(v: unknown, stock: Stock, buildings: Record<number, Building>): Stores {
@@ -570,7 +579,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.landValue = numRecord(sim.landValue);
   g.incoming = parseIncoming(sim.incoming, g.buildings);
   g.clearings = parseClearings(sim.clearings);
-  g.attract = isNum(sim.attract) ? Math.min(1, Math.max(0, sim.attract)) : 0;
+  g.attraction = parseAttraction(sim.attraction, g.attraction);
   g.chronicle = parseChronicle(sim.chronicle);
   g.summary = parseSummary(sim.summary);
   g.levers = parseLevers(sim.levers);

@@ -576,10 +576,10 @@ describe("mood", () => {
     // stock for an outlook of o: (stock / need - 0.9) / 0.3 = o
     const run = (o: number, mood = 100) => {
       const s = { ...base, stock: { ...base.stock, food: need * (0.9 + 0.3 * o) }, households: { 1: { ...base.households[1], mood } } };
-      return dailyStep(s, { rand: () => 0.5, only: [] }).attract;
+      return dailyStep(s, { rand: () => 0.5, only: [] }).attraction.score; // food x (0.4 mood + 0.3 jobs + 0.3 services)
     };
-    expect(run(1)).toBeCloseTo(1);
-    expect(run(0.5)).toBeCloseTo(0.5);
+    expect(run(1)).toBeCloseTo(0.7); // a house is being built: nobody counts as jobless; no services
+    expect(run(0.5)).toBeCloseTo(0.35);
     expect(run(1, 50)).toBeCloseTo(0.5);
     expect(run(0.8, 50)).toBeCloseTo(0.4);
     expect(run(0, 100)).toBe(0); // below 90 % of the need: nobody comes
@@ -819,15 +819,15 @@ describe("save", () => {
   it("round-trips the families on their way and the hand-made hours; older saves have none", () => {
     const s = full();
     s.buildings[1] = { ...s.buildings[1], template: "izba", zone: "res", state: "active", hand: 42 };
-    const sim = { ...s, incoming: [{ house: 1, arrive: 400 }], attract: 0.7 };
+    const sim = { ...s, incoming: [{ house: 1, arrive: 400 }], attraction: { food: 1, mood: 0.6, jobs: 1, services: 0.2, score: 0.7, cap: 1.5 } };
     const parsed = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW)!;
     expect(parsed.sim.incoming).toEqual([{ house: 1, arrive: 400 }]);
-    expect(parsed.sim.attract).toBeCloseTo(0.7);
+    expect(parsed.sim.attraction).toEqual(sim.attraction);
     expect(parsed.sim.buildings[1].hand).toBe(42);
     const old = JSON.parse(JSON.stringify({ version: 4, city, sim }));
     delete old.sim.incoming;
-    delete old.sim.attract;
-    expect(parseSave(old, NOW)!.sim).toMatchObject({ incoming: [], attract: 0 });
+    delete old.sim.attraction;
+    expect(parseSave(old, NOW)!.sim).toMatchObject({ incoming: [], attraction: emptyGrowth(0).attraction });
     // broken entries and entries for houses that are not finished are dropped
     const bad = JSON.parse(JSON.stringify({ version: 4, city, sim: { ...sim, incoming: [{ house: 1, arrive: 400 }, { house: 9, arrive: 1 }, { house: 1, arrive: "x" }, null, { house: 1, arrive: 5 }] } }));
     expect(parseSave(bad, NOW)!.sim.incoming).toEqual([{ house: 1, arrive: 400 }]);

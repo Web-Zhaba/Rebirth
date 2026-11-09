@@ -3,7 +3,8 @@ import { buildFloor, buildingPriority, capacityOf } from "./jobs";
 import { isCleared } from "./clearing";
 import { assignFields, bears, expectedKg, FIELD, FOOD_RATE, foodKgHour, idleGumnos, idleOrchards, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
-import { covers, SERVICE, servicesIn } from "./services";
+import { countServices, covers, SERVICE, SERVICE_IDS, servicesIn } from "./services";
+import { attractionOf, inflowPerDay } from "./attraction";
 import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
@@ -26,7 +27,6 @@ export const RATES = {
   birthYear: 0.3,
   marriageDay: 0.02,
   maxMarriagesPerDay: 3,
-  immigrationDay: 1.0,
   moodLeaveDay: 0.1,
 };
 export const MOOD_START = 60;
@@ -928,33 +928,39 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
 
   jobsStep(w, s, work);
 
-  const attract = (() => {
+  // how attractive the town is to newcomers (attraction.ts), for the day that begins
+  const attraction = (() => {
     let adults = 0;
     let jobless = 0;
-    let satSum = 0;
-    let satN = 0;
     for (const r of Object.values(w.residents)) {
-      satSum += satisfaction(needsOf(r));
-      satN++;
       if (!isAdultAge(ageOf(r.born, now))) continue;
       adults++;
       if (r.job === null && !r.inClass) jobless++;
     }
-    const unemployment = adults > 0 && !work ? jobless / adults : 0;
-    const outlook = foodOutlook({ ...s, residents: w.residents, households: w.households, stock });
     let moodSum = 0;
     for (const h of Object.values(w.households)) moodSum += h.mood;
     const hs = Object.keys(w.households).length;
-    const avgMood = hs > 0 ? moodSum / hs : MOOD_START;
-    const needPull = 0.5 + 0.5 * (satN > 0 ? satSum / satN : 100) / 100; // a town whose people are content draws more
-    return Math.min(1, Math.max(0, 1 - unemployment * 2)) * outlook * Math.min(1, Math.max(0, avgMood / 100)) * needPull;
+    let houses = 0;
+    let covered = 0;
+    for (const b of Object.values(s.buildings)) {
+      if (!isFinishedHouse(b)) continue;
+      houses++;
+      covered += countServices(s.coverage[b.id]) / SERVICE_IDS.length;
+    }
+    return attractionOf({
+      food: foodOutlook({ ...s, residents: w.residents, households: w.households, stock }),
+      mood: hs > 0 ? moodSum / hs : MOOD_START,
+      unemployment: adults > 0 && !work ? jobless / adults : 0, // with construction work the jobless are builders
+      services: houses > 0 ? covered / houses : 0,
+      pop: Object.keys(w.residents).length,
+    });
   })();
 
   return {
     ...s,
     rng,
     stock,
-    attract,
+    attraction,
     residents: w.residents,
     households: w.households,
     nextPersonId: w.nextPersonId,
@@ -995,13 +1001,10 @@ export function immigrationStep(s: SimState, dt: number): SimState {
     }
     incoming = incoming.filter((f) => f.arrive > now);
   }
-  const p = 1 - (1 - Math.min(1, RATES.immigrationDay * s.attract)) ** (dt / 1440);
-  if (p > 0) {
-    for (const id of freeHomes(s.buildings, w ? w.households : s.households, incoming)) {
-      if (!(rand() < p)) continue;
-      incoming = [...incoming, { house: id, arrive: now + ARRIVE_MIN + rand() * ARRIVE_SPAN } satisfies Incoming];
-    }
-  }
+  // a family decides to come at the town's rate (attraction.ts), and takes the first free home
+  const free = freeHomes(s.buildings, w ? w.households : s.households, incoming);
+  const p = 1 - Math.exp((-inflowPerDay(s.attraction, free.length) * dt) / 1440);
+  if (p > 0 && rand() < p) incoming = [...incoming, { house: free[0], arrive: now + ARRIVE_MIN + rand() * ARRIVE_SPAN } satisfies Incoming];
   if (!w && incoming === s.incoming && rng === s.rng) return s;
   return {
     ...s,

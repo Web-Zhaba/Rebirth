@@ -4,6 +4,7 @@ import type { DomainId } from "./domains";
 import type { Land } from "../world/landcover";
 import type { WeatherState } from "./weather";
 import type { OrchardYear } from "./weatherEffects";
+import type { Attraction } from "./attraction";
 
 export interface City {
   name: string;
@@ -352,7 +353,7 @@ export interface SimState extends PeopleState {
   rng: number; // uint32 state of the growth generator
   lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
   incoming: Incoming[]; // families on their way, by arrival time
-  attract: number; // 0..1, how attractive the town is to newcomers; set at 00:00
+  attraction: Attraction; // how attractive the town is to newcomers and why (sim/attraction.ts); set at 00:00
   // Derived once per game day (and on load): bit i of coverage[house] is set when service i covers it.
   coverage: Record<number, number>;
   landValue: Record<number, number>; // house id -> 0..100
@@ -474,6 +475,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   fieldProgress: Record<number, { sown: number; harv: number }>; // field id -> share of its area sown / harvested this year (steps of 0.02), for the 3D fields
   heritageMul: number; // scarcity multiplier of the next restoration, 1..3
   callBlock: string | null; // why a call for settlers cannot be made now, or null
+  inflow: { free: number; perDay: number }; // free homes and the families a day the town draws now (sim/attraction.ts)
 };
 
 // What the main thread keeps.

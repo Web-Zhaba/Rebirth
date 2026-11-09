@@ -151,6 +151,7 @@ it("pacing harness", async () => {
   const done = new Set<number>();
   let lastJobsDay = -9;
   let lastCallDay = -1;
+  let lastDebugDay = -1;
   let jobsStretches = 0;
 
   // ----- milestones -----
@@ -230,10 +231,11 @@ it("pacing harness", async () => {
     }
     // A store group nearly full: a sensible player puts a store of that kind by the producers (docs/PLAN-balance.md B4).
     if (unlocked("barn"))
-      for (const [group, tpl] of [["wood", "logyard"], ["stone", "stoneyard"], ["goods", "warehouse"]] as const) {
+      for (const [group, tpl] of [["food", "barn"], ["wood", "logyard"], ["stone", "stoneyard"], ["goods", "warehouse"]] as const) {
         const used = STORE_GROUPS[group].reduce((n, k) => n + st.stock[k], 0);
         const pending = Object.values(st.buildings).some((b) => b.template === tpl && b.state !== "active");
-        if (!pending && capacityOf(st.buildings, group) - used < 0.1 * CAMP_STORE[group]) await place(tpl, -1, 130);
+        const low = group === "food" ? houses() >= 10 && capacityOf(st.buildings, group) - used < 0.5 * CAMP_STORE.food : capacityOf(st.buildings, group) - used < 0.1 * CAMP_STORE[group]; // a barn once the first houses stand
+        if (!pending && low) await place(tpl, -1, 130);
       }
     // A house stands empty and there are goods to pay: call settlers (the goods of the founding cart pay for two calls).
     if (homeGoods(st.stock) >= CALL.goods && dayOf(st.gameMinutes) > lastCallDay) {
@@ -250,6 +252,12 @@ it("pacing harness", async () => {
       const zone = unlocked("zone:trade") && jobsStretches++ % 2 === 1 ? "trade" : "craft";
       await extendRoad(roadEnd + 50);
       await paint(`${zone} zone ${from}-${roadEnd} m`, zone, (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
+    }
+    if (process.env.PACE_DEBUG && dayOf(st.gameMinutes) !== lastDebugDay) {
+      lastDebugDay = dayOf(st.gameMinutes);
+      const a = st.attraction;
+      process.stderr.write(`d${lastDebugDay + 1} pop ${st.people.pop} houses ${houses()} free ${st.inflow.free} score ${a.score.toFixed(2)} food ${a.food.toFixed(2)} mood ${a.mood.toFixed(2)} jobs ${a.jobs.toFixed(2)} serv ${a.services.toFixed(2)} perDay ${st.inflow.perDay.toFixed(2)} demand ${st.people.demand.res.toFixed(1)}
+`);
     }
     for (let k = 0; k < 6; k++) {
       now += STEP_MS;

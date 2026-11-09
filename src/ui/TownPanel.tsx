@@ -7,6 +7,7 @@ import { calendar } from "../sim/clock";
 import { JOB_GROUPS, JOB_NAMES, type JobKey, type Priority } from "../sim/buildings";
 import { CALL, RATIONS, workHours, type Rations } from "../sim/levers";
 import { SERVICE_LIST } from "../sim/services";
+import { INFLOW } from "../sim/attraction";
 import type { City, GrowthWhy, ZoneType } from "../sim/types";
 import { massText } from "../sim/units";
 import { ZONE_COLORS } from "../map/tools";
@@ -96,6 +97,37 @@ const ZONES: { id: ZoneType; label: string }[] = [
   { id: "trade", label: L("Торговля", "Trade") },
 ];
 
+const pct = (v: number) => `${Math.round(v * 100)}${L(" %", "%")}`;
+
+// Why families come, or do not (docs/PLAN-balance.md B6): the score, its parts and the inflow it brings now.
+function AttractionBlock() {
+  const s = state.value;
+  if (!s?.attraction || !s.inflow) return null;
+  const a = s.attraction;
+  const { free, perDay } = s.inflow;
+  const rate = perDay < 0.01 ? L("никто", "no one") : perDay >= 1 ? L(`около ${decimal(perDay.toFixed(1))} семьи в день`, `about ${decimal(perDay.toFixed(1))} families a day`) : L(`одна семья в ${Math.round(1 / perDay)} дн.`, `one family in ${Math.round(1 / perDay)} d`);
+  const why = free === 0 ? L("Свободных домов нет: новые семьи не едут", "No free homes: new families do not come") : a.food <= 0 ? L("Еды не хватит до урожая: новые семьи не едут", "The food will not last until the harvest: new families do not come") : null;
+  return (
+    <>
+      <Line label={L("Привлекательность", "Attractiveness")}>{pct(a.score)}</Line>
+      <Line label={L("Приезжают", "Arrivals")}>{rate}</Line>
+      <div class="people-note">
+        {L(
+          `Еда до урожая ${pct(a.food)} (умножает остальное) · настроение ${pct(a.mood)} · работа ${pct(a.jobs)} · службы у домов ${pct(a.services)} · свободных домов ${free}`,
+          `Food until the harvest ${pct(a.food)} (multiplies the rest) · mood ${pct(a.mood)} · jobs ${pct(a.jobs)} · services at the houses ${pct(a.services)} · free homes ${free}`,
+        )}
+      </div>
+      {why && <div class="prod-warn">{why}</div>}
+      <div class="people-note">
+        {L(
+          `При полной привлекательности и свободных домах: до ${decimal(a.cap.toFixed(1))} семьи в день. С ростом города приток растёт всё медленнее (не больше ${INFLOW.max}), дальше город растёт рождениями.`,
+          `At full attractiveness with free homes: up to ${decimal(a.cap.toFixed(1))} families a day. As the town grows the inflow grows ever slower (at most ${INFLOW.max}); beyond that the town grows by births.`,
+        )}
+      </div>
+    </>
+  );
+}
+
 function PeopleTab() {
   const p = people.value;
   const sv = services.value;
@@ -114,6 +146,7 @@ function PeopleTab() {
         {p.tents}
       </Line>
       <Line label={L("В пути", "On the way")}>{incomingCount.value > 0 ? `${incomingCount.value} ${families(incomingCount.value)}` : L("никого", "no one")}</Line>
+      <AttractionBlock />
       {sv && sv.houses > 0 && <Line label={L("Грамотные", "Literate")}>{Math.round(sv.literate * 100)}{L(" % взрослых", "% of adults")}</Line>}
       {eco && eco.avgMood > 0 && (
         <Line icon="mood" label={L("Настроение", "Mood")}>

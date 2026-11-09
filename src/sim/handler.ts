@@ -15,7 +15,8 @@ import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, canPlaceOnFoundation, placeOnFoundation, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
-import { peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
+import { freeHomes, peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
+import { inflowPerDay } from "./attraction";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
@@ -64,7 +65,13 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   const houseGoodsShare = Object.fromEntries(houseGoods(sim.households));
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+}
+
+// The inflow the town draws right now: its free homes and the families a day they bring (attraction.ts).
+function inflowNow(sim: SimState): SimSnapshot["inflow"] {
+  const free = freeHomes(sim.buildings, sim.households, sim.incoming).length;
+  return { free, perDay: inflowPerDay(sim.attraction, free) };
 }
 
 // Who lives or works in a building, with production details for producers.
