@@ -91,18 +91,18 @@ describe("allocation: roads, buildings and clearings", () => {
     expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs, planks: 0, stone: 0, wares: 0 })).toBe(false);
     expect(clearingsFirst({ food: 0, logs: BUILDINGS.izba.materials.logs - 1, planks: 0, stone: 0, wares: 0 })).toBe(true);
   });
-  it("what the crews leave goes to the first site that still has work, never wasted", () => {
+  it("hands no crew has room for stay idle", () => {
     const a = allocateLabor(bs, 100, 10, cs);
     const c = allocateClearings(bs, cs, 100, 10);
-    expect(a.get(1)).toBe(80);
+    expect(a.get(1)).toBe(10);
     expect(a.get(2)).toBe(10);
     expect(c.get(1)).toBe(10);
-    expect([...a.values(), ...c.values()].reduce((x, y) => x + y, 0)).toBeCloseTo(100);
+    expect([...a.values(), ...c.values()].reduce((x, y) => x + y, 0)).toBeCloseTo(30);
     const f = allocateClearings(bs, cs, 100, 10, true);
-    expect(f.get(1)).toBe(80);
+    expect(f.get(1)).toBe(10);
   });
-  it("only clearings remain: they take what a crew can, then the rest", () => {
-    expect(allocateClearings({}, cs, 25, 10).get(1)).toBe(25);
+  it("only clearings remain: they take what a crew can", () => {
+    expect(allocateClearings({}, cs, 25, 10).get(1)).toBe(10);
   });
   it("in a tick roads come first, then buildings, then clearings; clearings first when logs run short", () => {
     const hours = (builderCount(state([])) * BASE_TICK) / 60;

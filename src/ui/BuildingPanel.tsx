@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, houseCapacity, JOB_NAMES, materialsOf, type JobGroup, type Materials, UPGRADE } from "../sim/buildings";
+import { BUILDINGS, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, type JobGroup, type Materials, upgradable } from "../sim/buildings";
 import { domainName } from "../sim/domains";
 import { kindName, siteDomain, siteTitle } from "../sim/heritage";
 import { SPEED } from "../sim/research";
@@ -252,7 +252,7 @@ export function BuildingPanel() {
   const shown = !!b && !!t && !tool.value && rightPanel.value === "inspector";
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const snap = state.value;
-  const upgradeNote = b && snap && b.state === "active" && b.template === UPGRADE.template && b.level < 2 && !b.upgrade ? upgradeBlockers(snap, b, snap.houseMood[b.id]) : null;
+  const upgradeNote = b && snap && upgradable(b) ? upgradeBlockers(snap, b, snap.houseMood[b.id]) : null;
   const group = t?.group ?? null;
   const info = useResidents(id, shown && b?.state === "active", `${b?.staff ?? "-"}|${group ? (state.value?.levers.jobs?.[group] ?? 2) : "-"}`);
   const ws = snap?.weather;
@@ -291,7 +291,7 @@ export function BuildingPanel() {
   const output = info?.kind === "workplace" && info.production?.good ? { ...OUTPUT[info.production.good], made: info.production.yesterday } : null;
   const residents = info?.kind === "house" ? info.households.reduce((a, h) => a + h.people.length, 0) : 0;
   const size = site ? L(`${Math.round(site.area)} м², высота ${b.height} м`, `${Math.round(site.area)} m², height ${b.height} m`) : L(`${t.along} × ${t.deep} м, высота ${b.height} м`, `${t.along} × ${t.deep} m, height ${b.height} m`);
-  const level = b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level}` : "";
+  const level = b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level} ${L("из", "of")} ${maxLevel(b)}` : "";
   return (
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
       <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
@@ -337,13 +337,16 @@ export function BuildingPanel() {
               <Line icon="person" label={L("Жители", "Residents")}>
                 {residents} {L("из", "of")} {houseCapacity(b)}
               </Line>
+              <Line label={L("Семьи", "Families")}>
+                {info.households.length} {L("из", "of")} {homesOf(b)}
+              </Line>
               <Line icon="value" label={L("Стоимость земли", "Land value")}>
                 {info.landValue}
               </Line>
               <Line label={L("Рядом", "Nearby")} tone={info.services.length === 0 ? "warn" : undefined}>
                 {info.services.length > 0 ? info.services.map((sid) => SERVICES[sid].name.toLowerCase()).join(", ") : L("ничего из служб", "no services")}
               </Line>
-              {b.template === "izba" && b.level < 2 && !b.upgrade && b.streak > 0 && (
+              {upgradable(b) && b.streak > 0 && (
                 <div class="people-note">
                   {L("Хороших дней подряд:", "Good days in a row:")} {b.streak} {L("из", "of")} 20
                 </div>

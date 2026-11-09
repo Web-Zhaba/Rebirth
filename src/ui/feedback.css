@@ -288,6 +288,10 @@ button.toast-main:hover .toast-text {
   font-weight: 400;
   color: var(--frame-dim);
 }
+.builder-tasks-idle {
+  font-weight: 400;
+  color: var(--frame-dim);
+}
 .builder-tasks-list {
   display: flex;
   flex-direction: column;

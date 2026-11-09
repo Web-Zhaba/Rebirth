@@ -1,5 +1,5 @@
 import { LANDS } from "../world/landcover";
-import { BUILDINGS, homesOf, isPriority, JOB_KEYS, UPGRADE } from "./buildings";
+import { BUILDINGS, homesOf, isPriority, JOB_KEYS, maxLevel, startLevel, UPGRADE } from "./buildings";
 import { FOUNDATION_LOT, fitMaxOf } from "./foundationLots";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
@@ -208,8 +208,8 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       created: raw.created,
       // Saves from before production: finished and started buildings were built without materials.
       paid: typeof raw.paid === "boolean" ? raw.paid : raw.state !== "planned",
-      // Saves from before services: level 1 (a level 2 only makes sense for the izba), no streak.
-      level: raw.level === 2 && raw.template === UPGRADE.template ? 2 : 1,
+      level: 1, // a house's is read below, once its scale is known
+
       streak: nonNegInt(raw.streak) ? raw.streak : 0,
     };
     if (site) out[id].site = site;
@@ -229,6 +229,10 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       const m = raw.materials;
       if (isRecord(m) && isNum(m.logs) && isNum(m.planks) && isNum(m.stone) && m.logs >= 0 && m.planks >= 0 && m.stone >= 0) out[id].materials = { logs: m.logs, planks: m.planks, stone: m.stone };
     }
+    // Saves from before services have no level (1), no streak. Saves from before house levels (docs/PLAN-balance.md B2)
+    // had level 2 only for the house and a large house of level 1 holding two families: a house is at least at the
+    // level its template starts at, at most at the highest its area allows.
+    if (out[id].zone === "res") out[id].level = Math.min(maxLevel(out[id]), Math.max(startLevel(out[id].template), Number.isInteger(raw.level) ? (raw.level as number) : 1));
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
     if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
     if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
@@ -314,7 +318,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     if (h.home !== null) {
       if (!Number.isInteger(h.home)) return null;
       const n = homes.get(h.home as number) ?? 0;
-      if (isFinishedHouse(buildings[h.home as number]) && n < homesOf(buildings[h.home as number])) {
+      // up to the highest level: saves from before house levels may hold more families than the level (raised below)
+      if (isFinishedHouse(buildings[h.home as number]) && n < maxLevel(buildings[h.home as number])) {
         home = h.home as number;
         homes.set(home, n + 1);
       }
@@ -325,6 +330,11 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood, ...(h.cold === true ? { cold: true as const } : {}) };
   }
   if (seen.size !== Object.keys(residents).length) return null; // a resident in no household
+  // A house holds as many families as its level: one with more (saved before house levels) is raised to them, so no family is evicted.
+  for (const [id, n] of homes) {
+    const b = buildings[id];
+    if (n > homesOf(b)) buildings[id] = { ...b, level: n, height: b.height + UPGRADE.height * (n - b.level) };
+  }
   for (const r of Object.values(residents)) {
     if (!households[r.household]) return null;
     if (r.spouse !== null) {

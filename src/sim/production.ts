@@ -1,6 +1,6 @@
 import { leverMood, workHours } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
-import { allocateLabor, BUILDINGS, CELLAR_CAP, FOUNDING_STOCK, foodCapacity, materialsOf, storageOf, UPGRADE, type Materials, type SiteLever } from "./buildings";
+import { allocateLabor, BUILDINGS, CELLAR_CAP, FOUNDING_STOCK, foodCapacity, materialsOf, storageOf, upgradeMaterials, type Materials, type SiteLever } from "./buildings";
 import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, MAX_EVENTS, productionScales } from "./people";
@@ -64,7 +64,7 @@ export function reportShortages(before: Record<number, Building>, after: Record<
     const up = b.state === "active" ? b.upgrade : undefined;
     const wasUp = was.state === "active" ? was.upgrade : undefined;
     if (up ? !(up.paid && wasUp && !wasUp.paid) : !(b.paid && !was.paid)) continue;
-    const m = up ? UPGRADE.materials : materialsOf(b);
+    const m = up ? upgradeMaterials(b) : materialsOf(b);
     if (!m) continue;
     const hand = up ? up.labor > (wasUp?.labor ?? 0) : (b.hand ?? 0) > 0;
     for (const g of ["logs", "planks", "stone"] as const) {
@@ -141,7 +141,7 @@ export function payMaterials(
     // A finished house being upgraded is served like a building under construction.
     const up = b.state === "active" ? b.upgrade : undefined;
     if (up ? up.paid : b.paid) continue;
-    const m = up ? UPGRADE.materials : materialsOf(b);
+    const m = up ? upgradeMaterials(b) : materialsOf(b);
     let hand = 0;
     const next = { ...st };
     if (m) {

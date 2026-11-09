@@ -1,4 +1,4 @@
-import { BUILDINGS, templatesOf, type BuildingTemplate, type Materials } from "./buildings";
+import { BUILDINGS, startLevel, templatesOf, type BuildingTemplate, type Materials } from "./buildings";
 import { centroid, pointInRing } from "./excavation";
 import { isHeritage } from "./heritage";
 import { RESTORE, orientedBox, polysOverlap, ringDoor, simplifyRing } from "./heritageGeo";
@@ -196,12 +196,15 @@ export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate):
 // The size of a building of template `t` on the foundation against the template's own footprint.
 export const foundationScale = (t: BuildingTemplate, f: Pick<FoundFoundation, "area">): number => Math.round(Math.min(fitMaxOf(t), Math.max(FOUNDATION_LOT.fitMin, f.area / nominal(t))) * 100) / 100;
 
-// A planned building of template `t` on the foundation. It scales with the ring: its capacity (residents, families, jobs,
-// storage), labor and materials follow the area against the template's own footprint, so a size costs the same per m².
+// A planned building of template `t` on the foundation. It scales with the ring: its capacity (jobs, storage), labor and
+// materials follow the area against the template's own footprint, so a size costs the same per m2. A house is the
+// exception: it is built at the cost of its template and holds its families; the area raises its highest level, and
+// each level is paid when it is raised (docs/PLAN-balance.md B2).
 export function foundationBuilding(t: BuildingTemplate, f: FoundFoundation, door: Pt, id: number, now: number, site?: Site): Building {
   const ring = lotRing(f);
   const box = orientedBox(ring);
   const k = foundationScale(t, f);
+  const home = t.zone === "res";
   const r1 = (v: number) => Math.round(v * 10) / 10;
   const materials: Materials = { logs: r1(t.materials.logs * k), planks: r1(t.materials.planks * k), stone: r1(t.materials.stone * k) };
   const b: Building = {
@@ -213,17 +216,17 @@ export function foundationBuilding(t: BuildingTemplate, f: FoundFoundation, door
     footprint: ring,
     height: t.height,
     state: "planned",
-    labor: Math.max(1, Math.round(t.labor * k)),
+    labor: home ? t.labor : Math.max(1, Math.round(t.labor * k)),
     done: 0,
     created: now,
     paid: false,
-    level: 1,
+    level: startLevel(t.id),
     streak: 0,
     foundationId: f.id,
     door,
   };
   if (k !== 1) {
-    b.materials = materials;
+    if (!home) b.materials = materials;
     b.scale = k;
   }
   if (site) b.site = site;

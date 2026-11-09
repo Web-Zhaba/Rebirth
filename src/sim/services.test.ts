@@ -1,7 +1,7 @@
 import { allUnlocked } from "./tech";
 import { describe, expect, it } from "vitest";
 import { advanceTo } from "./clock";
-import { BUILDINGS, houseCapacity, UPGRADE } from "./buildings";
+import { BUILDINGS, homesOf, houseCapacity, upgradeLabor, upgradeMaterials, UPGRADE } from "./buildings";
 import { computeCoverage, computeLandValue, dailyServices, refreshServices, reachSegments, serviceStats, upgradeBlockers, upgradeShortfall } from "./coverage";
 import { advanceBuildings, canPlace, emptyGrowth, placeBuilding } from "./growth";
 import { toSnapshot } from "./handler";
@@ -537,7 +537,7 @@ describe("house upgrade", () => {
     expect(done[4].upgrade).toBeUndefined();
     expect(done[4].height).toBeCloseTo(BUILDINGS.izba.height + UPGRADE.height);
     expect(done[4].state).toBe("active");
-    expect(houseCapacity(done[4])).toBe(BUILDINGS.izba.residents + 2);
+    expect(houseCapacity(done[4])).toBe(2 * BUILDINGS.izba.residents);
     expect(constructionWork(done, s.roads)).toBe(false);
   });
   it("what the stock lacks is made by hand and added to the labor", () => {
@@ -546,11 +546,15 @@ describe("house upgrade", () => {
     const paid = payMaterials({ ...s.buildings, 4: house }, { ...s.stock, logs: 0, planks: 0 }, 100);
     expect(paid.buildings[4].upgrade!.labor).toBe(60 + 10 * HAND_HOURS.logs + 2 * HAND_HOURS.planks);
   });
-  it("level 2 houses hold two more people: births continue up to the new capacity", () => {
+  it("a house holds as many families as its level, and each level costs more", () => {
     const s = rich();
     const big: Building = { ...s.buildings[4], level: 2 };
-    expect(houseCapacity(big)).toBe(BUILDINGS.izba.residents + 2);
+    expect(homesOf(big)).toBe(2);
+    expect(houseCapacity(big)).toBe(2 * BUILDINGS.izba.residents);
     expect(houseCapacity(s.buildings[4])).toBe(BUILDINGS.izba.residents);
+    expect(upgradeLabor(s.buildings[4])).toBe(UPGRADE.labor);
+    expect(upgradeLabor({ level: 3 })).toBe(3 * UPGRADE.labor);
+    expect(upgradeMaterials({ level: 2 })).toEqual({ logs: 20, planks: 4, stone: 0 });
   });
 });
 
@@ -660,7 +664,7 @@ describe("save", () => {
   });
   it("repairs broken values instead of losing the town", () => {
     const b = parseSave(raw(izba({ level: 7, streak: -4, upgrade: { labor: -1, done: 0 } })), NOW)!.sim.buildings[1];
-    expect(b).toMatchObject({ level: 1, streak: 0 });
+    expect(b).toMatchObject({ level: 2, streak: 0 }); // no higher than the house's area allows
     expect(b.upgrade).toBeUndefined();
     // a level 2 smithy makes no sense
     expect(parseSave(raw({ ...bld(1, "smithy", 0), level: 2 }), NOW)!.sim.buildings[1].level).toBe(1);

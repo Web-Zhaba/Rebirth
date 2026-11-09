@@ -47,9 +47,9 @@ const ok = (r: ReturnType<typeof setPriority>): SimState => {
 
 describe("priority", () => {
   const two = { 1: site(1, 100), 2: site(2, 100) };
-  it("a prioritized building goes to the front of both rounds", () => {
+  it("a prioritized building goes to the front of the queue", () => {
     expect([...allocateLabor(two, 8, CREW, [], false, { priority: 2 })]).toEqual([[2, 6], [1, 2]]);
-    expect([...allocateLabor(two, 20, CREW, [], false, { priority: 2 })]).toEqual([[2, 14], [1, 6]]);
+    expect([...allocateLabor(two, 20, CREW, [], false, { priority: 2 })]).toEqual([[2, 6], [1, 6]]);
     expect([...allocateLabor(two, 8, CREW)]).toEqual([[1, 6], [2, 2]]); // none: the oldest first
   });
   it("a prioritized clearing goes ahead of buildings that would come first", () => {
@@ -79,10 +79,10 @@ describe("priority", () => {
 });
 
 describe("toloka", () => {
-  it("focus takes every hand without the crew limit", () => {
+  it("focus takes two crews before anyone else", () => {
     const two = { 1: site(1, 100), 2: site(2, 100) };
-    expect([...allocateLabor(two, 20, CREW, [], false, { focus: 2 })]).toEqual([[2, 20]]);
-    expect([...allocateLabor({ 1: site(1, 100), 2: site(2, 8) }, 20, CREW, [], false, { focus: 2 })]).toEqual([[2, 8], [1, 12]]);
+    expect([...allocateLabor(two, 20, CREW, [], false, { focus: 2 })]).toEqual([[2, 12], [1, 6]]);
+    expect([...allocateLabor({ 1: site(1, 100), 2: site(2, 8) }, 20, CREW, [], false, { focus: 2 })]).toEqual([[2, 8], [1, 6]]);
   });
   it("all adults build the site, production stops, and the day ends it", () => {
     const base = world([site(1), site(2)]);

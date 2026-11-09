@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILDINGS, familyCapacity, homesOf, houseCapacity, storageOf } from "./buildings";
+import { BUILDINGS, familyCapacity, homesOf, houseCapacity, maxLevel, storageOf } from "./buildings";
 import { FOUNDATION_TAKEN, foundationBuilding, foundationLots, lotCheck, lotRing } from "./foundationLots";
 import { simplifyRing } from "./heritageGeo";
 import { vacantHouses } from "./people";
@@ -58,8 +58,11 @@ describe("foundations as lots", () => {
     expect(t.zone).toBe("res");
     const k = Math.round((house.area / (t.along * t.deep)) * 100) / 100;
     expect(b.scale).toBe(k);
-    expect(houseCapacity(b)).toBe(Math.max(1, Math.round(t.residents * k)));
-    expect(b.labor).toBe(Math.round(t.labor * k));
+    // a house is built at its template's cost and holds its families; the area raises its highest level
+    expect(houseCapacity(b)).toBe(t.residents);
+    expect(b.labor).toBe(t.labor);
+    expect(b.materials).toBeUndefined();
+    expect(maxLevel(b)).toBe(Math.max(1, Math.round(t.homes * k)) + 1);
     expect(b.door![1]).toBeCloseTo(46, 5); // the wall facing the road
     expect(foundationLots(grown, "res")).toEqual([]); // built on, it is no longer free
   });
@@ -92,7 +95,7 @@ describe("foundations as lots", () => {
     expect(canPlaceOnFoundation({ ...placed, buildings: rest }, BUILDINGS.school, "h").ok).toBe(true);
   });
 
-  it("a big foundation makes a big building: more families, jobs and storage, at the same cost per m²", () => {
+  it("a big foundation makes a big building: more jobs and storage at the same cost per m², room for more house levels", () => {
     const big = found("b", rect(0, 46, 20, 24)); // 480 m²
     const s = mk([big]);
     const home = placeOnFoundation(s, BUILDINGS.barn, "b").buildings[1];
@@ -101,9 +104,11 @@ describe("foundations as lots", () => {
     expect(home.labor).toBe(4 * BUILDINGS.barn.labor);
     const house5 = { ...foundationBuilding(BUILDINGS.izba5, big, [10, 46], 1, 0), state: "active" as const };
     expect(house5.scale).toBe(Math.round((480 / (11 * 13)) * 100) / 100);
-    expect(homesOf(house5)).toBe(Math.round(2 * house5.scale!));
-    expect(vacantHouses({ 1: house5 }, {})).toEqual(Array(homesOf(house5)).fill(1));
-    expect(familyCapacity(house5)).toBe(Math.floor(houseCapacity(house5) / homesOf(house5)));
+    expect(homesOf(house5)).toBe(2); // a large house starts at level 2
+    expect(maxLevel(house5)).toBe(Math.round(2 * house5.scale!) + 1);
+    expect(vacantHouses({ 1: house5 }, {})).toEqual([1, 1]);
+    expect(familyCapacity(house5)).toBe(7);
+    expect(houseCapacity({ ...house5, level: 4 })).toBe(4 * 7);
   });
 
   it("a barn or a market takes a foundation of any size; others keep their cap", () => {
@@ -148,10 +153,23 @@ describe("foundations as lots", () => {
     expect(canPlaceOnFoundation(s, BUILDINGS.healer, "c").ok).toBe(false);
   });
 
+  it("a save from before house levels keeps every family: the house is raised to them", () => {
+    const s = spawnBuildings(mk([house], "res"));
+    const b = { ...s.buildings[1], state: "active" as const, done: s.buildings[1].labor, level: 1 };
+    const folk = emptyGrowth(1); // the founders
+    const [h1, h2] = Object.values(folk.households);
+    const households = { ...folk.households, [h1.id]: { ...h1, home: 1 }, [h2.id]: { ...h2, home: 1 } };
+    const sim = { ...s, residents: folk.residents, households, nextPersonId: folk.nextPersonId, nextHouseholdId: folk.nextHouseholdId, buildings: { 1: b } };
+    const back = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW + 1)!;
+    expect(back.sim.buildings[1].level).toBe(2);
+    expect(Object.values(back.sim.households).filter((h) => h.home === 1)).toHaveLength(2);
+  });
+
   it("round-trips a building on a foundation", () => {
     const s = spawnBuildings(mk([house], "res"));
     const back = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: s })), NOW + 1)!;
     const b = back.sim.buildings[1];
-    expect(b).toMatchObject({ foundationId: "h", scale: s.buildings[1].scale, door: s.buildings[1].door, materials: s.buildings[1].materials, lot: s.buildings[1].lot });
+    expect(b).toMatchObject({ foundationId: "h", scale: s.buildings[1].scale, door: s.buildings[1].door, level: s.buildings[1].level, lot: s.buildings[1].lot });
+    expect(b.materials).toEqual(s.buildings[1].materials);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step } from "./clock";
-import { BUILDINGS } from "./buildings";
+import { BUILDINGS, startLevel } from "./buildings";
 import { demand, emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import {
@@ -63,7 +63,7 @@ function building(id: number, template: string, x: number, state: Building["stat
     done: state === "active" ? t.labor : 0,
     created: 0,
     paid: true,
-    level: 1,
+    level: startLevel(template),
     streak: 0,
   };
 }

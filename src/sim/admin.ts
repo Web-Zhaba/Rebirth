@@ -47,7 +47,7 @@ function finishBuildings(all: Record<number, Building>): Record<number, Building
     if (out === all) out = { ...all };
     if (b.state === "active") {
       const { upgrade: _u, ...rest } = b;
-      out[b.id] = { ...rest, level: 2, height: b.height + UPGRADE.height };
+      out[b.id] = { ...rest, level: b.level + 1, height: b.height + UPGRADE.height };
     } else {
       out[b.id] = { ...b, paid: true, done: b.labor, state: "active" };
     }

@@ -1,4 +1,4 @@
-import { BUILDINGS, UPGRADE } from "./buildings";
+import { BUILDINGS, upgradable, upgradeLabor } from "./buildings";
 import { isUnlocked } from "./tech";
 import { ageOf, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
 import { roadNet } from "./roadNetCache";
@@ -154,7 +154,7 @@ export function upgradeShortfall(land: number, services: number | undefined, moo
 }
 
 export function upgradeBlockers(s: Pick<SimState, "progress" | "coverage" | "landValue">, b: Building, mood: number | undefined): string[] {
-  if (b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) return [];
+  if (!upgradable(b)) return [];
   const out = isUnlocked(s.progress, "upgrade") ? [] : [L("откроется с технологией «Просторное жильё»", "unlocks with the Spacious Housing technology")];
   return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood)];
 }
@@ -182,11 +182,11 @@ export function dailyServices(s: SimState): SimState {
   for (const h of Object.values(s.households)) if (h.home !== null) moodAt.set(h.home, h.mood);
   let buildings = s.buildings;
   for (const b of Object.values(s.buildings)) {
-    if (!isUnlocked(s.progress, "upgrade") || b.template !== UPGRADE.template || !isFinishedHouse(b) || b.level >= 2 || b.upgrade) continue;
+    if (!isUnlocked(s.progress, "upgrade") || !upgradable(b)) continue;
     const good = upgradeShortfall(landValue[b.id] ?? 0, coverage[b.id], moodAt.get(b.id)).length === 0;
     const streak = good ? b.streak + 1 : 0;
     let next: Building = b;
-    if (streak >= SERVICE.upgradeDays) next = { ...b, streak: 0, upgrade: { labor: UPGRADE.labor, done: 0, paid: false } };
+    if (streak >= SERVICE.upgradeDays) next = { ...b, streak: 0, upgrade: { labor: upgradeLabor(b), done: 0, paid: false } };
     else if (streak !== b.streak) next = { ...b, streak };
     if (next !== b) {
       if (buildings === s.buildings) buildings = { ...buildings };

@@ -543,22 +543,30 @@ export function cutOffEdges(g: RoadGraph): Set<number> {
   return out;
 }
 
-// Spends person-hours FIFO on workable edges; leftovers carry to the next one.
+// Hands a road edge can use at once: about one per 10 m of it, 1..ROAD_CREW_MAX, so a short stretch never takes the whole artel.
+export const ROAD_CREW_MAX = 12;
+export const roadCrew = (e: Pick<RoadEdge, "length">): number => Math.min(ROAD_CREW_MAX, Math.max(1, Math.ceil(e.length / 10)));
+
+// Spends person-hours on workable edges in order, each taking at most roadCrew hands' work (`handHours` is one hand's
+// work in this tick; no limit by default); the hands left go on to the next edge.
 // An edge takes the stone it owes from `stock` when work on it starts; edges short of stone wait and the hands go on to the next.
-// Returns the graph, the stock and the person-hours nobody could use (no reachable work).
-export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock): { roads: RoadGraph; left: number; stock?: Stock } {
+// Returns the graph, the stock and the person-hours no edge could use.
+export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock, handHours = Infinity): { roads: RoadGraph; left: number; stock?: Stock } {
   let edges = g.edges;
   let copied = false;
   let left = personHours;
   let st = stock;
+  const used = new Map<number, number>(); // edge id -> person-hours it took in this call
+  const room = (e: RoadEdge) => handHours * roadCrew(e) - (used.get(e.id) ?? 0);
   while (left > EPS) {
-    const ids = workableEdges(copied ? { ...g, edges } : g, st);
-    if (ids.length === 0) break;
+    const id = workableEdges(copied ? { ...g, edges } : g, st).find((i) => room(edges[i]) > EPS);
+    if (id === undefined) break;
     if (!copied) {
       edges = { ...edges };
       copied = true;
     }
-    let e = edges[ids[0]];
+    let e = edges[id];
+    const cap = room(e);
     if (!unfinished(e) && e.upgrade) {
       // rebuilding a built edge: the same, on its own job; when done the edge is the new kind
       let up = e.upgrade;
@@ -567,15 +575,13 @@ export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock): 
         const { stone: _taken, ...rest } = up;
         up = rest;
       }
-      const remain = up.labor - up.done;
-      if (left >= remain) {
+      const take = Math.min(left, cap, up.labor - up.done);
+      if (up.done + take >= up.labor - EPS) {
         const { upgrade: _done, ...rest } = e;
         edges[e.id] = { ...rest, kind: up.kind, labor: e.labor + up.labor, done: e.labor + up.labor };
-        left -= remain;
-      } else {
-        edges[e.id] = { ...e, upgrade: { ...up, done: Math.min(up.labor, up.done + left) } };
-        left = 0;
-      }
+      } else edges[e.id] = { ...e, upgrade: { ...up, done: up.done + take } };
+      used.set(e.id, (used.get(e.id) ?? 0) + take);
+      left -= take;
       continue;
     }
     if (e.stone !== undefined) {
@@ -584,14 +590,10 @@ export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock): 
       e = rest;
       edges[e.id] = e;
     }
-    const remain = e.labor - e.done;
-    if (left >= remain) {
-      edges[e.id] = { ...e, done: e.labor };
-      left -= remain;
-    } else {
-      edges[e.id] = { ...e, done: Math.min(e.labor, e.done + left) };
-      left = 0;
-    }
+    const take = Math.min(left, cap, e.labor - e.done);
+    edges[e.id] = { ...e, done: e.done + take >= e.labor - EPS ? e.labor : e.done + take };
+    used.set(e.id, (used.get(e.id) ?? 0) + take);
+    left -= take;
   }
   return { roads: copied ? { ...g, edges } : g, left, stock: st };
 }

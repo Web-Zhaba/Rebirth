@@ -94,12 +94,13 @@ export function step(s: SimState): SimState {
     // On a толока every hand goes to its site, none to the roads.
     const toloka = tolokaActive(s.levers, s.gameMinutes);
     const bf = buildFactor(s.weather) * buildSpeedMul(s.progress); // rain, cold and storms cut the hours and the crew
-    const hours = (builderCount(s) * BASE_TICK * bf * crewEfficiency(s)) / 60;
-    const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock);
+    const hand = (BASE_TICK * bf * crewEfficiency(s)) / 60; // person-hours of one builder in a tick
+    const hours = builderCount(s) * hand;
+    const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock, hand);
     const roadStock = r.stock ?? s.stock; // stone the roads took when work on them started
     roads = r.roads;
     const lever = { priority: s.levers.priority, focus: toloka ? s.levers.toloka!.site : null };
-    const crew = (CREW * BASE_TICK * bf) / 60; // person-hours of one crew in a tick
+    const crew = CREW * hand; // person-hours of one crew in a tick
     const first = clearingsFirst(s.stock);
     const paid = payMaterials(s.buildings, roadStock, r.left, crew, s.clearings, first, lever);
     clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first, lever);

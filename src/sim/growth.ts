@@ -1,7 +1,7 @@
 import { DIG, emptyFinds } from "./excavation";
 import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { emptyLevers } from "./levers";
-import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
+import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, startLevel, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
 import { createFounders, freeHomes, peopleStats } from "./people";
 import { clearingLogs } from "./clearing";
@@ -202,7 +202,7 @@ export function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id
     done: 0,
     created: now,
     paid: false,
-    level: 1,
+    level: startLevel(t.id),
     streak: 0,
   };
   if (site) b.site = site;
@@ -404,7 +404,7 @@ export function advanceBuildings(buildings: Record<number, Building>, personHour
       const up = b.upgrade!;
       const done = use >= up.labor - up.done - EPS ? up.labor : up.done + use;
       const { upgrade: _u, ...rest } = b;
-      out[id] = done >= up.labor ? { ...rest, level: 2, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
+      out[id] = done >= up.labor ? { ...rest, level: b.level + 1, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
     } else {
       const done = use >= b.labor - b.done - EPS ? b.labor : b.done + use;
       out[id] = { ...b, done, state: done >= b.labor ? "active" : "building" };
@@ -423,7 +423,7 @@ export function reportBuilt(before: Record<number, Building>, after: Record<numb
     const pos: [number, number] = [b.lot.cx, b.lot.cy];
     if (b.siteId) continue; // a restoration has its own notice
     if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `${L("Достроено", "Finished")}: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
-    else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", L("Дом расширен", "House expanded"), pos);
+    else if (b.level > was.level) out = say(out, now, "built", L("Дом расширен", "House expanded"), pos);
   }
   return out;
 }
