@@ -1,7 +1,8 @@
 import { play } from "../ui/sound";
+import { roomText } from "../ui/buildMenu";
 import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect, untracked } from "@preact/signals";
-import { BUILDINGS, materialsOf, scaled, storageOf, type BuildingTemplate } from "../sim/buildings";
+import { BUILDINGS, materialsOf, scaled, storeRoom, type BuildingTemplate } from "../sim/buildings";
 import { centroid, DIG } from "../sim/excavation";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
 import { foundationBuilding, foundationIndex, lotCheck, lotRing, usesFoundation } from "../sim/foundationLots";
@@ -17,7 +18,7 @@ import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -145,7 +146,7 @@ export function attachPlaceTool(view: View): void {
   // The cursor on an old foundation: the building would take the foundation's own shape.
   const onFoundation = (id: PlaceTool, x: number, y: number): Verdict | null => {
     const st = state.value;
-    const t = BUILDINGS[id];
+    const t = BUILDINGS[placeTemplate(id)];
     if (!st || !usesFoundation(t)) return null;
     const fd = foundationIndex(st.finds.foundations).at(x, y);
     if (!fd || (isHeritage(fd) && fd.state !== "lost")) return null; // a notable building keeps its restoration
@@ -157,8 +158,8 @@ export function attachPlaceTool(view: View): void {
     // The building grows with the foundation: its crew or storage and its cost.
     const b = foundationBuilding(t, fd, check.door, 0, 0);
     const jobs = scaled(t.jobs, b);
-    const store = storageOf(b);
-    const holds = store > 0 ? L(`склад ${Math.round(store / 1000)} т`, `stores ${Math.round(store / 1000)} t`) : jobs > 0 ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}` : "";
+    const room = roomText(storeRoom(b));
+    const holds = room ? L(`вмещает ${room}`, `holds ${room}`) : jobs > 0 ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}` : "";
     const size = L(`Старый фундамент ${Math.round(fd.area)} м²`, `Old foundation ${Math.round(fd.area)} m²`) + (holds ? ` · ${holds}` : "");
     return { ...base, front: check.door, ok: true, pending: false, text: `${detail}\n${size}\n${costText(b.labor, materialsOf(b))}` };
   };
@@ -170,7 +171,7 @@ export function attachPlaceTool(view: View): void {
     if (onOld) return onOld;
     const c0 = nearestStart(x, y);
     if (!st || !f || !c0) return null;
-    const t = BUILDINGS[id];
+    const t = BUILDINGS[placeTemplate(id)];
     const far = byKey.get(`${c0.edge}:${c0.side}:${c0.i + t.w - 1}:${t.d - 1}`);
     // Same geometry the sim builds; without the far cell the lot does not fit, show the first cell.
     let footprint: Pt[];
@@ -311,7 +312,7 @@ export function attachPlaceTool(view: View): void {
     }
     busy = true;
     if (v.foundationId) {
-      sendCmd({ type: "placeOnFoundation", template: id, foundationId: v.foundationId })
+      sendCmd({ type: "placeOnFoundation", template: placeTemplate(id), foundationId: v.foundationId })
         .then((r) => {
           if (!r.ok) flash(r.reason ?? L("Не удалось поставить здание", "Could not place the building"));
           else play("place");
@@ -323,7 +324,7 @@ export function attachPlaceTool(view: View): void {
         });
       return;
     }
-    const t = BUILDINGS[id];
+    const t = BUILDINGS[placeTemplate(id)];
     const measure = v.radius !== undefined ? siteAt(f, v.center[0], v.center[1], v.radius, state.value?.clearings) : Promise.resolve(NO_SITE);
     measure
       .then((site) => {
@@ -333,7 +334,7 @@ export function attachPlaceTool(view: View): void {
           flash(check.reason);
           return;
         }
-        return sendCmd({ type: "placeBuilding", template: id, edge: v.edge, side: v.side, i: v.i, site }).then((r) => {
+        return sendCmd({ type: "placeBuilding", template: placeTemplate(id), edge: v.edge, side: v.side, i: v.i, site }).then((r) => {
           if (!r.ok) flash(r.reason ?? L("Не удалось поставить здание", "Could not place the building"));
           else play("place");
         });

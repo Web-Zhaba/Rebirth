@@ -9,6 +9,7 @@ import { residentMoveFactor } from "./needs";
 import { GOOD } from "./production";
 import { isCleared } from "./clearing";
 import { roadCrew, workableEdges } from "./roads";
+import { CAMP_STORE_ID, Ledger } from "./storage";
 import { pointInPolygon } from "./zones";
 import { START_MINUTE_OF_DAY } from "./time";
 import type { Building, Resident, SimState, Stock } from "./types";
@@ -216,10 +217,19 @@ export function computeLife(s: SimState, day = 0): LifeData {
     }
   }
 
-  // carts: one per load of yesterday's output, producer -> camp
+  // carts: one per load of yesterday's output, producer -> the nearest store with room for it (storage.ts), or the camp
   const camp = snapToRoad(net, 0, 0);
   if (camp) {
     const tree = spotTree(net, camp, CART_RANGE);
+    const ledger = new Ledger(s);
+    const storeTrees = new Map<number, { spot: Spot; tree: ReturnType<typeof spotTree> } | null>();
+    const storeTree = (id: number, at: [number, number]) => {
+      if (!storeTrees.has(id)) {
+        const spot = id === CAMP_STORE_ID ? camp : snapToRoad(net, at[0], at[1]);
+        storeTrees.set(id, spot ? { spot, tree: id === CAMP_STORE_ID ? tree : spotTree(net, spot, CART_RANGE) } : null);
+      }
+      return storeTrees.get(id)!;
+    };
     let n = 0;
     for (const b of Object.values(s.buildings)) {
       const good = GOOD[b.template];
@@ -227,10 +237,12 @@ export function computeLife(s: SimState, day = 0): LifeData {
       const made = s.prod.yesterday[b.id] ?? 0;
       if (!(made > 0)) continue;
       const loads = Math.min(MAX_CARTS, Math.ceil(made / LOAD[good] - 1e-9));
+      const to = ledger.near(good, lotFront(b), "room")[0]?.point ?? ledger.points[0];
+      const st = storeTree(to.id, to.at);
       const l = locate(b);
-      const walk = l && walkTo(tree, camp, l, CART_RANGE);
-      if (!l || !walk) continue;
-      const pts = round2(trail([...walk.nodes].reverse(), l.at, camp.at, [lotFront(b), [0, 0]]));
+      const walk = l && st && walkTo(st.tree, st.spot, l, CART_RANGE);
+      if (!l || !st || !walk) continue;
+      const pts = round2(trail([...walk.nodes].reverse(), l.at, st.spot.at, [lotFront(b), to.at]));
       for (let k = 0; k < loads; k++) {
         trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: sch.workFrom + ((k + 0.5) * (sch.workTo - sch.workFrom)) / loads, speed: CART_SPEED });
       }

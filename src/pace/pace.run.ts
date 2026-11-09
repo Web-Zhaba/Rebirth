@@ -1,7 +1,7 @@
 import { homeGoods } from "../sim/goods";
 import { CALL } from "../sim/levers";
 import { it } from "vitest";
-import { BUILDINGS } from "../sim/buildings";
+import { BUILDINGS, CAMP_STORE, capacityOf, STORE_GROUPS } from "../sim/buildings";
 import { calendar } from "../sim/clock";
 import { canPlace } from "../sim/growth";
 import { freeHomes } from "../sim/people";
@@ -228,6 +228,13 @@ it("pacing harness", async () => {
     if (done.size === steps.length && st.stock.logs < BUILDINGS.izba.materials.logs && cutters > 0 && cutters < 1 + Math.floor(houses() / 5)) {
       await place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 });
     }
+    // A store group nearly full: a sensible player puts a store of that kind by the producers (docs/PLAN-balance.md B4).
+    if (unlocked("barn"))
+      for (const [group, tpl] of [["wood", "logyard"], ["stone", "stoneyard"], ["goods", "warehouse"]] as const) {
+        const used = STORE_GROUPS[group].reduce((n, k) => n + st.stock[k], 0);
+        const pending = Object.values(st.buildings).some((b) => b.template === tpl && b.state !== "active");
+        if (!pending && capacityOf(st.buildings, group) - used < 0.1 * CAMP_STORE[group]) await place(tpl, -1, 130);
+      }
     // A house stands empty and there are goods to pay: call settlers (the goods of the founding cart pay for two calls).
     if (homeGoods(st.stock) >= CALL.goods && dayOf(st.gameMinutes) > lastCallDay) {
       const sim = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;

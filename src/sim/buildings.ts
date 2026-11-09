@@ -103,6 +103,10 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   orchard: T("orchard", L("Сад", "Orchard"), "placed", 2, 3, 15, 20, 3, 100, 4, [7, 1, 0], "food"),
   apiary: T("apiary", L("Пасека", "Apiary"), "placed", 1, 1, 7, 6, 2, 50, 3, [5, 2, 0], "food"),
   cellar: T("cellar", L("Погреб", "Cellar"), "placed", 1, 1, 6, 6, 2, 110, 0, [16, 5, 6], "services"),
+  // Stores of the other goods (docs/PLAN-balance.md B4): variants of the storehouse tool.
+  logyard: T("logyard", L("Склад леса", "Timber yard"), "placed", 2, 2, 12, 10, 4, 90, 0, [14, 2, 0], "services"),
+  stoneyard: T("stoneyard", L("Склад камня", "Stone yard"), "placed", 2, 2, 12, 12, 2, 70, 0, [6, 1, 2], "services"),
+  warehouse: T("warehouse", L("Товарный склад", "Warehouse"), "placed", 2, 2, 10, 10, 6, 140, 0, [26, 6, 3], "services"),
   // Excavation (PLAN.md section 12).
   dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 6, [2, 0.5, 0], "services"),
   // A restored old building kept as a monument (sim/restore.ts): no jobs, no residents; its size, cost and shape come from the foundation.
@@ -153,19 +157,40 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 
 // ---------- storage ----------
 
+// Resources lie in stores (docs/PLAN-balance.md B4, sim/storage.ts): the camp at the founding point holds a little of
+// everything, a barn or cellar food, a timber yard logs and planks, a stone yard stone, a warehouse the goods. Each store
+// has a room per group of goods, in the units of the stock (kg, m3, t, pieces).
+export type StoreGroup = "food" | "wood" | "stone" | "goods";
+export const STORE_GROUPS: Record<StoreGroup, readonly (keyof Stock)[]> = { food: ["food"], wood: ["logs", "planks"], stone: ["stone"], goods: ["clothes", "dishes", "furniture", "tools"] };
+export const groupOf = (g: keyof Stock): StoreGroup => (g === "food" ? "food" : g === "logs" || g === "planks" ? "wood" : g === "stone" ? "stone" : "goods");
+export type StoreRoom = Partial<Record<StoreGroup, number>>;
+
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp
 export const BARN_CAP = 60_000; // kg per finished barn
 export const CELLAR_CAP = 20_000; // kg per finished cellar; it keeps food better than a barn (weatherEffects spoilage)
+export const CAMP_STORE: Required<StoreRoom> = { food: FOOD_CAMP_CAP, wood: 200, stone: 60, goods: 150 };
+export const STORES: Record<string, StoreRoom> = { barn: { food: BARN_CAP }, cellar: { food: CELLAR_CAP }, logyard: { wood: 400 }, stoneyard: { stone: 300 }, warehouse: { goods: 500 } };
 export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, clothes: 12, dishes: 6, furniture: 2, tools: 10 };
 
-export function foodCapacity(buildings: Record<number, Building>): number {
-  let cap = FOOD_CAMP_CAP;
-  for (const b of Object.values(buildings)) if (b.state === "active") cap += storageOf(b);
-  return cap;
+// The room of a finished store (scaled with its old foundation); empty for any other building.
+export function storeRoom(b: Pick<Building, "template" | "scale">): StoreRoom {
+  const r = STORES[b.template];
+  if (!r) return {};
+  const out: StoreRoom = {};
+  for (const k of Object.keys(r) as StoreGroup[]) out[k] = r[k]! * (b.scale ?? 1);
+  return out;
 }
 
+// The room of a group in the whole town: the camp and every finished store.
+export function capacityOf(buildings: Record<number, Building>, group: StoreGroup): number {
+  let cap = CAMP_STORE[group];
+  for (const b of Object.values(buildings)) if (b.state === "active") cap += storeRoom(b)[group] ?? 0;
+  return cap;
+}
+export const foodCapacity = (buildings: Record<number, Building>): number => capacityOf(buildings, "food");
+
 // Kg of food a finished building holds on top of the camp (scaled with its old foundation).
-export const storageOf = (b: Pick<Building, "template" | "scale">): number => (b.template === "barn" ? BARN_CAP : b.template === "cellar" ? CELLAR_CAP : 0) * (b.scale ?? 1);
+export const storageOf = (b: Pick<Building, "template" | "scale">): number => storeRoom(b).food ?? 0;
 
 // ---------- construction labor ----------
 

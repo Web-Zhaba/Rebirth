@@ -3,16 +3,17 @@ import { goodsTotal } from "./goods";
 import { allUnlocked } from "./tech";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, step } from "./clock";
-import { BARN_CAP, BUILDINGS, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
+import { BARN_CAP, BUILDINGS, CAMP_STORE, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
 import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { Handler, type Storage } from "./handler";
-import { builderCount, dailyStep, foodPerDay, immigrationStep, peopleStats, queryBuilding, RATES } from "./people";
-import { dailyEconomy, economyStats, HAND_HOURS, handHours, PACE, payMaterials, produceStep, RATE } from "./production";
+import { builderCount, dailyStep, foodPerDay, immigrationStep, lotFront, peopleStats, queryBuilding, RATES } from "./people";
+import { dailyEconomy, economyStats, FULL_TEXT, HAND_HOURS, handHours, PACE, payMaterials, produceStep, RATE } from "./production";
 import type { FromWorker } from "./protocol";
 import { massText } from "./units";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
+import { haulHours, haulMetres, Ledger, settleStores, spreadStores, withStock } from "./storage";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, City, Field, Household, Resident, RoadGraph, SaveV4, SimState, Site, TerrainInfo } from "./types";
 import { emptyZones, paintCells, qkey, regenerateCells } from "./zones";
@@ -20,6 +21,8 @@ import { emptyZones, paintCells, qkey, regenerateCells } from "./zones";
 const NOW = 1_800_000_000_000;
 const meadow: TerrainInfo = { land: "meadow", slope: 0 };
 const NO_SITE: Site = { forest: 0, water: 0, rock: 0 };
+// The share of a producer's work left after it carts its output to the camp (storage.ts): `perHour` units a work hour.
+const carted = (s: SimState, id: number, g: keyof SimState["stock"], perHour: number) => 1 / (1 + perHour * haulHours(g, 1, haulMetres(s.roads, [0, 0], lotFront(s.buildings[id]))));
 
 // gameMinutes of `hour`:00 on day-of-year `day` (1..YEAR_DAYS) of year `year`.
 const at = (day: number, hour = 0, year = 1) => ((year - 1) * YEAR_DAYS + day - 1) * 1440 + hour * 60 - 360;
@@ -158,7 +161,7 @@ describe("storage", () => {
   });
   it("daily rot trims food above capacity (a barn was demolished)", () => {
     let s = folk(town([]), [{ home: null, adults: 1 }]);
-    s = { ...s, stock: { ...s.stock, food: 5000 } };
+    s = withStock(s, { ...s.stock, food: 5000 }); // kept at the camp beyond its room
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.stock.food).toBe(FOOD_CAMP_CAP);
     expect(d.events[0].text).toContain("не хватает складов");
@@ -206,20 +209,23 @@ describe("food", () => {
     s = work(s);
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.prod.today).toEqual({});
-    expect(d.prod.yesterday[1]).toBeCloseTo(2 * RATE.logs * PACE);
-    expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * RATE.logs * PACE);
+    const k = carted(s, 1, "logs", RATE.logs * PACE);
+    expect(d.prod.yesterday[1]).toBeCloseTo(2 * RATE.logs * PACE * k);
+    expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * RATE.logs * PACE * k);
   });
 });
 
 describe("producers", () => {
   const staffed = (template: string, n: number, site?: Site, gm = NOON) => folk(town([bld(1, template, 50, "active", site)], { gm }), [{ home: null, adults: n, job: 1 }]);
   it("woodcutter: RATE.logs m3 per hour x PACE x forest share", () => {
-    expect(work(staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 })).stock.logs).toBeCloseTo(2 * RATE.logs * PACE * 0.6);
+    const s = staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 });
+    expect(work(s).stock.logs).toBeCloseTo(2 * RATE.logs * PACE * 0.6 * carted(s, 1, "logs", RATE.logs * PACE * 0.6));
     expect(work(staffed("woodcutter", 2, NO_SITE)).stock.logs).toBe(0);
   });
   it("quarry: 0.15 t per hour x PACE, with or without rock nearby", () => {
-    expect(work(staffed("quarry", 3, { forest: 0, water: 0, rock: 0.5 })).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
-    expect(work(staffed("quarry", 3, NO_SITE)).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
+    const k = carted(staffed("quarry", 3), 1, "stone", 0.15 * PACE);
+    expect(work(staffed("quarry", 3, { forest: 0, water: 0, rock: 0.5 })).stock.stone).toBeCloseTo(3 * 0.15 * PACE * k);
+    expect(work(staffed("quarry", 3, NO_SITE)).stock.stone).toBeCloseTo(3 * 0.15 * PACE * k);
   });
   it("a hungry or exhausted worker gives fewer hours", () => {
     const s = folk(town([bld(1, "quarry", 50)]), [{ home: null, adults: 2, job: 1 }]);
@@ -477,7 +483,8 @@ describe("construction materials", () => {
     expect(a.stock).toMatchObject({ logs: 0, planks: 0, stone: 0 });
     expect(a.buildings[1].paid).toBe(true);
     expect(a.buildings[1].done).toBeCloseTo(1); // 6 adults x 10 min
-    expect(a.buildings[1].labor).toBe(BUILDINGS.izba.labor);
+    expect(a.buildings[1].haul).toBeGreaterThan(0); // the materials were carted from the camp
+    expect(a.buildings[1].labor).toBeCloseTo(BUILDINGS.izba.labor + a.buildings[1].haul!);
     const b = step(a);
     expect(b.stock).toMatchObject({ logs: 0, planks: 0, stone: 0 });
   });
@@ -487,7 +494,7 @@ describe("goods by house level", () => {
   it("a family in a level 2 house needs clothing and dishes; served is kept on the household", () => {
     const home = { ...bld(2, "izba", 100), level: 2 };
     let s = busy(folk(town([bld(1, "shop", 50), home]), [{ home: null, adults: 1, job: 1 }, { home: 2, adults: 2 }]));
-    s = { ...s, stock: { ...s.stock, clothes: 100, dishes: 0.01, furniture: 100 } };
+    s = withStock(s, { ...s.stock, clothes: 100, dishes: 0.01, furniture: 100 });
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     const fam = Object.values(d.households).find((h) => h.home === 2)!;
     // wants 2 x 0.03 clothing and 2 x 0.015 dishes, gets all the clothing and 0.01 of the dishes
@@ -907,5 +914,55 @@ describe("determinism with production", () => {
     expect(calendar(once.gameMinutes).dayOfYear).toBeGreaterThanOrEqual(11);
     expect(goodsTotal(once.stock)).toBeGreaterThan(0);
     expect(Object.keys(once.prod.fields).length).toBe(1);
+  });
+});
+
+describe("logistics (docs/PLAN-balance.md B4)", () => {
+  const woods = (extra: Building[] = []) => folk(town([bld(1, "woodcutter", 1500, "active", { forest: 1, water: 0, rock: 0 }), ...extra]), [{ home: null, adults: 2, job: 1 }]);
+  it("a producer far from the stores loses hours to carting; a store beside it brings the rate back", () => {
+    const far = work(woods());
+    const near = work(woods([bld(2, "logyard", 1460)]));
+    const full = 2 * RATE.logs * PACE;
+    expect(far.stock.logs).toBeCloseTo(full * carted(woods(), 1, "logs", RATE.logs * PACE));
+    expect(far.stock.logs).toBeLessThan(full * 0.75); // 1.5 km of road to the camp
+    expect(near.stock.logs).toBeGreaterThan(full * 0.95);
+    expect(near.stores[2].logs).toBeCloseTo(near.stock.logs); // the logs lie in the yard
+    expect(near.prod.haul?.[1]).toBeLessThan(0.05);
+  });
+  it("output with no room in any store is not made, once-a-day notice", () => {
+    const s = withStock(woods(), { ...woods().stock, logs: 200 }); // the camp holds 200 m3 of timber
+    const a = work(work(s));
+    expect(a.stock.logs).toBe(200);
+    expect(a.events.filter((e) => e.text === FULL_TEXT.wood)).toHaveLength(1);
+  });
+  it("a site fetches its materials from the nearest store; the carting is added to its labor", () => {
+    const site = bld(1, "izba", 1500, "planned");
+    const M = BUILDINGS.izba.materials;
+    const stock = { ...town([]).stock, logs: M.logs, planks: M.planks, stone: M.stone };
+    const pay = (s: SimState) => {
+      const ledger = new Ledger(s);
+      return { b: payMaterials(s.buildings, s.stock, 10, Infinity, [], false, undefined, ledger).buildings[1], stores: ledger.stores };
+    };
+    const camp = pay(withStock(town([site]), stock));
+    const yard = { ...bld(2, "logyard", 1460) };
+    const s = town([site, yard]);
+    const near = pay({ ...s, stock, stores: { 0: { stone: M.stone }, 2: { logs: M.logs, planks: M.planks } } });
+    expect(camp.b.haul).toBeGreaterThan(near.b.haul!);
+    expect(camp.b.labor).toBeCloseTo(BUILDINGS.izba.labor + camp.b.haul!);
+    expect(near.stores[2]).toBeUndefined(); // the yard was emptied
+  });
+  it("the stores add up to the stock; a demolished store's goods move to the others as far as there is room", () => {
+    const s: SimState = { ...town([bld(2, "logyard", 300)]), stock: { ...town([]).stock, logs: 350 }, stores: { 0: { food: 1750, clothes: 20, dishes: 20, furniture: 20, tools: 20 }, 2: { logs: 350 } } };
+    expect(settleStores(s)).toBe(s);
+    const gone = settleStores({ ...s, buildings: {} });
+    expect(gone.stores[2]).toBeUndefined();
+    expect(gone.stores[0].logs).toBe(CAMP_STORE.wood);
+    expect(gone.stock.logs).toBe(CAMP_STORE.wood);
+  });
+  it("a save from before the stores keeps its whole stock at the camp and in its stores", () => {
+    const stores = spreadStores({ stock: { ...town([]).stock, logs: 900, food: 70_000 }, buildings: { 1: bld(1, "barn", 300) }, roads: emptyRoads() });
+    expect(stores[0].logs).toBe(900);
+    expect(stores[0].food! + stores[1].food!).toBe(70_000);
+    expect(stores[0].food).toBe(FOOD_CAMP_CAP + 70_000 - FOOD_CAMP_CAP - BARN_CAP); // the barn filled first after the camp
   });
 });

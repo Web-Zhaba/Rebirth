@@ -13,6 +13,7 @@ import { migrateText } from "./legacyText";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
+import { spreadStores, type Stores } from "./storage";
 import { SERVICE } from "./services";
 import { isTradeOrder } from "./trade";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
@@ -235,6 +236,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     // level its template starts at, at most at the highest its area allows.
     if (out[id].zone === "res") out[id].level = Math.min(maxLevel(out[id]), Math.max(startLevel(out[id].template), Number.isInteger(raw.level) ? (raw.level as number) : 1));
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
+    if (isNum(raw.haul) && raw.haul > 0) out[id].haul = raw.haul;
     if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
     if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
     const up = raw.upgrade;
@@ -376,6 +378,21 @@ function parseStock(v: unknown): Stock {
   if (!ok("wares")) return emptyStock();
   const w = v.wares as number;
   return { ...base, clothes: w * WARES_SPLIT.clothes, dishes: w * WARES_SPLIT.dishes, furniture: w * WARES_SPLIT.furniture, tools: w * WARES_SPLIT.tools };
+}
+
+// What each store holds; saves from before the stores (docs/PLAN-balance.md B4) spread their stock over the stores they
+// have. A record that does not add up to the stock is set right by the next tick (storage.ts Ledger.sync).
+function parseStores(v: unknown, stock: Stock, buildings: Record<number, Building>): Stores {
+  if (!isRecord(v)) return spreadStores({ stock, buildings, roads: emptyRoads() });
+  const out: Stores = {};
+  for (const [k, h] of Object.entries(v)) {
+    const id = Number(k);
+    if (!Number.isInteger(id) || id < 0 || !isRecord(h)) continue;
+    const held: Partial<Stock> = {};
+    for (const g of Object.keys(stock) as (keyof Stock)[]) if (isNum(h[g]) && (h[g] as number) > 0) held[g] = h[g] as number;
+    out[id] = held;
+  }
+  return out;
 }
 
 const numRecord = (v: unknown): Record<number, number> => {
@@ -547,6 +564,7 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.rng = rng;
   Object.assign(g, people);
   g.stock = parseStock(sim.stock);
+  g.stores = parseStores(sim.stores, g.stock, g.buildings);
   g.prod = parseProd(sim.prod);
   g.coverage = numRecord(sim.coverage); // derived: rebuilt on load and every day
   g.landValue = numRecord(sim.landValue);

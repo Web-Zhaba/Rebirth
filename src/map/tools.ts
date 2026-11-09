@@ -62,6 +62,17 @@ export function roadKindOf(t: Tool | null, material: Record<MaterialTool, RoadKi
   if (t === "path" || t === "footbridge") return t;
   return t && isMaterialTool(t) ? material[t] : null;
 }
+// The kind of store the storehouse tool puts down (docs/PLAN-balance.md B4): a variant switch, not a tool of its own.
+export const STORE_KINDS: { id: string; label: string; title: string }[] = [
+  { id: "barn", label: L("Еда", "Food"), title: L("Амбар: зерно и припасы", "Barn: grain and provisions") },
+  { id: "logyard", label: L("Лес", "Timber"), title: L("Склад леса: брёвна и доски", "Timber yard: logs and planks") },
+  { id: "stoneyard", label: L("Камень", "Stone"), title: L("Склад камня", "Stone yard") },
+  { id: "warehouse", label: L("Товары", "Goods"), title: L("Товарный склад: одежда, посуда, утварь, инструменты", "Warehouse: clothing, dishes, furnishings, tools") },
+];
+export const storeKind = signal<string>("barn");
+// The template a placement tool puts down: the storehouse tool the kind chosen for it, any other tool its own.
+export const placeTemplate = (t: PlaceTool, kind = storeKind.value): string => (t === "barn" ? kind : t);
+
 // Brief message about a rejected action, shown by the toolbar.
 export const toolMsg = signal<string | null>(null);
 

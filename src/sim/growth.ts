@@ -10,6 +10,7 @@ import { isHeritage } from "./heritage";
 import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
 import { nextRandom } from "./rng";
+import { CAMP_STORE_ID } from "./storage";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, Clearing, Demand, Finds, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
 import { emptyWeather } from "./weather";
@@ -39,7 +40,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "stores" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -51,6 +52,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     rng: f.rng,
     lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
     stock: emptyStock(),
+    stores: { [CAMP_STORE_ID]: emptyStock() }, // the founding stock fits the camp
     prod: emptyProd(),
     coverage: {},
     landValue: {},

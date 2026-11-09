@@ -1,6 +1,6 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, isMaterialTool, isRoadTool, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
+import { flash, isMaterialTool, isRoadTool, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, STORE_KINDS, storeKind, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
@@ -296,6 +296,7 @@ export function BuildBar() {
             })}
           />
         )}
+        {active === "barn" && <Segmented label={L("Вид склада", "Store kind")} value={storeKind.value} onChange={(k) => (storeKind.value = k)} options={STORE_KINDS.map((o) => ({ id: o.id, label: o.label, title: o.title }))} />}
         {active && !msg && <CostLine t={active} />}
       </div>
       <div class={`bb-panel${open ? " is-open" : ""}`}>

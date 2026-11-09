@@ -195,6 +195,7 @@ export const isUnlocked = (p: Pick<ProgressState, "techs">, key: string): boolea
 // The unlock key of a build-bar tool or template id, or null when it is available from the start.
 export function unlockKeyOf(tool: string): string | null {
   if (tool === "craft" || tool === "trade") return `zone:${tool}`;
+  if (tool === "logyard" || tool === "stoneyard" || tool === "warehouse") return "barn"; // kinds of the storehouse
   if (tool === "stone" || tool === "stonebridge") return `road:${tool}`;
   return Object.hasOwn(UNLOCK_NAME, tool) && !tool.startsWith("zone:") && !tool.startsWith("road:") && tool !== "upgrade" ? tool : null;
 }
@@ -232,7 +233,8 @@ export const cropOf = (s: { weather?: { crop: number }; progress?: Techs }): num
 export function provenUnlocks(s: Pick<SimState, "buildings" | "zones">): string[] {
   const out = new Set<string>();
   for (const b of Object.values(s.buildings)) {
-    if (unlockKeyOf(b.template)) out.add(b.template);
+    const key = unlockKeyOf(b.template);
+    if (key) out.add(key);
     if (b.zone === "craft" || b.zone === "trade") out.add(`zone:${b.zone}`);
     if (b.level >= 2 || b.upgrade) out.add("upgrade");
   }

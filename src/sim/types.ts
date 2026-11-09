@@ -117,6 +117,7 @@ export interface Building {
   radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
+  haul?: number; // person-hours of carting its materials from the stores, added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
   // A restored old building (PLAN-research.ru.md section 7): the footprint is the real ring (3..64 points), the lot its oriented box.
   siteId?: string; // the foundation it stands on
@@ -307,6 +308,7 @@ export interface ProdState {
   yesterday: Record<number, number>;
   orchard: OrchardYear; // what this year has done to the fruit trees (frost at the blossom, drought, heat)
   trade?: { give: keyof Stock; get: keyof Stock; gave: number; got: number }; // what the markets swapped in the day that ended; absent when nothing moved
+  haul?: Record<number, number>; // producer id -> share of its work hours that went to carting at the last work tick (sim/storage.ts)
 }
 
 // Research and eras (PLAN-research.ru.md section 4; sim/tech.ts holds the tree, sim/research.ts the rules).
@@ -334,7 +336,8 @@ export interface Incoming {
 }
 
 export interface SimState extends PeopleState {
-  stock: Stock;
+  stock: Stock; // the town's total; what lies where is in `stores`
+  stores: Record<number, Partial<Stock>>; // store id (0 = the camp, else a finished barn, cellar, yard or warehouse) -> its contents (sim/storage.ts)
   prod: ProdState;
   realTime: number; // epoch ms simulated up to
   gameMinutes: number; // since founding
@@ -532,6 +535,9 @@ export interface ProductionInfo {
   site?: Site;
   missing?: string; // input the workshop lacks
   storage?: number; // kg of food a barn or cellar holds
+  store?: { held: Partial<Stock>; room: Partial<Record<"food" | "wood" | "stone" | "goods", number>> }; // a store: what it holds and its room per group
+  haul?: { metres: number; share: number }; // a producer: road metres to the store it carts to, share of its hours the carting takes
+  full?: boolean; // a producer: no store has room for its output
   orchard?: { ripeDays: number; quality: number }; // days until the trees bear (0 = they do); share of the full yield this year allows
   fields?: { count: number; ha: number; sown: number; reaped: number; expected: number };
 }

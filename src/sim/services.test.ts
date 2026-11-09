@@ -13,6 +13,7 @@ import { FIELD } from "./fields";
 import { CAMP, covers, learnPerDay, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
 import { SCHOOL_SEATS } from "./school";
 import { setTrade } from "./leverCmds";
+import { withStock } from "./storage";
 import type { TradeOrder } from "./trade";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, Household, Resident, RoadGraph, SimState } from "./types";
@@ -281,7 +282,7 @@ describe("market trade", () => {
   const mk = (order: TradeOrder | null, stock: Partial<SimState["stock"]> = {}) => {
     const houses = Array.from({ length: 3 }, (_, i) => bld(10 + i, "izba", 100 + 10 * i));
     const s = busy(folk(town([bld(1, "market", 0), ...houses]), [{ home: 10, adults: 2, job: 1 }, { home: 11, adults: 2 }, { home: 12, adults: 2 }]));
-    return withCoverage({ ...s, levers: { ...s.levers, trade: order }, stock: { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 100, dishes: 0, furniture: 0, tools: 0, ...stock } });
+    return withCoverage(withStock({ ...s, levers: { ...s.levers, trade: order } }, { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 100, dishes: 0, furniture: 0, tools: 0, ...stock }));
   };
   it("a worker swaps up to a day's volume of the surplus, minus the margin", () => {
     const s = mk({ give: "stone", get: "clothes" }, { stone: 200 });

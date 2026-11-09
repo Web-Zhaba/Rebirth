@@ -3,10 +3,10 @@ import { workLength } from "../sim/levers";
 import { DIG } from "../sim/excavation";
 import { CLEARING } from "../sim/clearing";
 import { PLACE_MIN } from "../sim/growth";
-import { BUILDINGS, type Materials } from "../sim/buildings";
+import { BUILDINGS, STORES, type Materials, type StoreGroup, type StoreRoom } from "../sim/buildings";
 import { ROAD_KINDS } from "../sim/roads";
 import { SERVICES, isService } from "../sim/services";
-import { roadKindOf, roadMaterial, SITE_RADIUS, type MaterialTool, type Tool } from "../map/tools";
+import { isPlaceTool, placeTemplate, roadKindOf, roadMaterial, SITE_RADIUS, storeKind, type MaterialTool, type Tool } from "../map/tools";
 import type { RoadKind } from "../sim/types";
 import type { IconName } from "./icons";
 import { decimal, L } from "../i18n";
@@ -82,6 +82,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   field: L("Поле", "Field"),
   clearing: L("Вырубка", "Clearing"),
   clear: L("Снять зону", "Clear zone"),
+  barn: L("Склад", "Storehouse"),
 };
 
 export const toolLabel = (t: Tool): string => TOOL_LABEL[t] ?? BUILDINGS[t].name;
@@ -109,7 +110,7 @@ const PURPOSE: Record<Tool, string> = {
   forager: L("Ягоды, грибы и орехи: летом и осенью, весной немного, зимой и под снегом ничего", "Berries, mushrooms and nuts: summer and autumn, a little in spring, nothing in winter or under snow"),
   orchard: L("Фруктовый сад: плодоносит через год после посадки, осенью; заморозки в цвету и засуха снижают урожай", "Fruit orchard: bears fruit in autumn from a year after planting; frost at blossom and drought cut the yield"),
   apiary: L("Пасека: мёд летом и осенью, пчёлы летают только в тёплую сухую тихую погоду", "Apiary: honey in summer and autumn; bees fly only in warm, dry, calm weather"),
-  barn: L("Склад: добавляет места для запасов еды", "Storehouse: adds room for food stores"),
+  barn: L("Склад: амбар для еды, склад леса, склад камня или товарный склад. Производства возят выработку на ближайший склад с местом, стройки и дома берут из ближайшего: чем ближе склад, тем меньше времени уходит на подвоз", "Storehouse: a barn for food, a timber yard, a stone yard or a warehouse. Producers cart their output to the nearest store with room, sites and homes fetch from the nearest one: the closer the store, the less time the carting takes"),
   cellar: L("Погреб: хранит запасы лучше склада, меньше портится в жару и сырость", "Cellar: keeps stores better than a storehouse, less spoils in heat and damp"),
   well: L("Вода рядом с домами: настроение и здоровье", "Water near the houses: mood and health"),
   market: L("Раздаёт товары по домам и радует людей", "Hands out goods to the houses and pleases people"),
@@ -169,16 +170,33 @@ export function materialList(m: Materials): { icon: IconName; text: string }[] {
   return MAT_ICON.filter((x) => m[x.key] > 0).map((x) => ({ icon: x.icon, text: `${num(m[x.key])} ${x.unit}` }));
 }
 
+// The room of a store per group of goods, as "лес 400 м³ · камень 300 т".
+const GROUP_ROOM: Record<StoreGroup, [string, string, number]> = {
+  food: [L("еда", "food"), L("т", "t"), 1000],
+  wood: [L("лес", "timber"), L("м³", "m³"), 1],
+  stone: [L("камень", "stone"), L("т", "t"), 1],
+  goods: [L("товары", "goods"), L("шт", "pcs"), 1],
+};
+export const storeGroupName = (g: StoreGroup): string => GROUP_ROOM[g][0];
+export const storeAmount = (g: StoreGroup, n: number): string => `${num(n / GROUP_ROOM[g][2])} ${GROUP_ROOM[g][1]}`;
+export const roomText = (room: StoreRoom): string =>
+  (Object.keys(room) as StoreGroup[])
+    .filter((g) => (room[g] ?? 0) > 0)
+    .map((g) => `${GROUP_ROOM[g][0]} ${storeAmount(g, room[g]!)}`)
+    .join(" · ");
+
 // Everything the hover card shows, taken from the sim tables.
 // A road or bridge tool shows the material chosen for it.
-export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roadMaterial.value): ToolInfo {
-  const b = BUILDINGS[t];
+// The storehouse tool shows the kind of store chosen for it.
+export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roadMaterial.value, store = storeKind.value): ToolInfo {
+  const b = BUILDINGS[isPlaceTool(t) ? placeTemplate(t, store) : t];
   const kind = roadKindOf(t, material);
   const road = kind ? ROAD_KINDS[kind] : null;
   let reach: string | null = null;
   if (isService(t)) reach = L(`Охват ${SERVICES[t].reach} м по дорогам`, `Reach ${SERVICES[t].reach} m by road`);
   else if (t === "gumno") reach = L(`Поля до ${FIELD.radius} м от фермы`, `Fields within ${FIELD.radius} m of the farm`);
   else if (t === "woodcutter" || t === "fisher" || t === "forager") reach = L(`Радиус ${SITE_RADIUS[t]} м`, `Radius ${SITE_RADIUS[t]} m`);
+  else if (b && STORES[b.id]) reach = L(`Вмещает: ${roomText(STORES[b.id])}`, `Holds: ${roomText(STORES[b.id])}`);
   else if (t === "dig") reach = L(`Вскрывает ${DIG.startRadius} м, потом растёт до ${DIG.maxRadius} м и снимается сам`, `Opens ${DIG.startRadius} m, then grows to ${DIG.maxRadius} m and removes itself`);
   else if (t === "garden" || t === "hunter" || t === "orchard" || t === "apiary") {
     // The best season with every job filled, a full working day.

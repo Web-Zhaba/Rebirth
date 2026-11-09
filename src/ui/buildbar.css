@@ -48,6 +48,10 @@
 .bb-lines .seg {
   font-size: var(--fs-sm);
 }
+/* a switch of four kinds (the storehouse) must not clip its longest word */
+.bb-lines .seg-btn {
+  min-width: max-content;
+}
 
 .road-msg {
   font-size: var(--fs-md);

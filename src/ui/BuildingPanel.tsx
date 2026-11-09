@@ -1,6 +1,7 @@
 import { GOOD_NAMES, GOODS_UPGRADE, needsAt } from "../sim/goods";
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, type JobGroup, type Materials, upgradable } from "../sim/buildings";
+import { BUILDINGS, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
+import { storeAmount, storeGroupName } from "./buildMenu";
 import { domainName } from "../sim/domains";
 import { kindName, siteDomain, siteTitle } from "../sim/heritage";
 import { SPEED } from "../sim/research";
@@ -27,12 +28,11 @@ import { duplicateTemplate } from "./actionModel";
 import { followResident } from "./follow";
 import { NeedsBars } from "./NeedsBars";
 import { SEMANTIC_IDS } from "./semanticIds";
-import { decimal, L } from "../i18n";
+import { L } from "../i18n";
 
 const REFRESH_MS = 4000;
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;
-const tons = (kg: number) => decimal((Math.round(kg / 100) / 10).toString());
 
 const MISSING: Record<string, string> = { [L("брёвна", "logs")]: L("Нет брёвен", "No logs"), [L("брёвна (на уголь)", "logs (for charcoal)")]: L("Нет брёвен (на уголь)", "No logs (for charcoal)"), [L("доски", "planks")]: L("Нет досок", "No planks") };
 
@@ -43,7 +43,7 @@ const MATERIALS: [keyof Materials, string, string][] = [
 ];
 
 // What a site under construction takes from the stock, and the hand-made hours its shortfall adds.
-function SiteMaterials({ m, paid, hand, st }: { m: Materials | undefined; paid: boolean; hand?: number; st: Stock | null }) {
+function SiteMaterials({ m, paid, hand, haul, st }: { m: Materials | undefined; paid: boolean; hand?: number; haul?: number; st: Stock | null }) {
   if (!m) return null;
   const need = MATERIALS.filter(([g]) => m[g] > 0)
     .map(([g, name, unit]) => `${name} ${num(m[g])} ${unit}`)
@@ -61,6 +61,7 @@ function SiteMaterials({ m, paid, hand, st }: { m: Materials | undefined; paid: 
       ) : (
         <div class="people-note">{paid ? L("Хватило запасов склада", "The store had enough") : L("Запасов склада хватает", "The store has enough")}</div>
       )}
+      {paid && (haul ?? 0) >= 0.05 && <div class="people-note">{L(`Подвоз со складов: ${num(haul!)} ч работы`, `Carting from the stores: ${num(haul!)} h of work`)}</div>}
     </div>
   );
 }
@@ -110,7 +111,7 @@ function useResidents(id: number | null, active: boolean, bump: string): Buildin
 
 const SITE_FACT = new Set(["woodcutter", "fisher", "forager"]);
 // Whether Production below has anything to show for this workplace.
-const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && SITE_FACT.has(template)) || !!p.orchard || p.storage !== undefined || !!p.fields || !!p.missing;
+const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && SITE_FACT.has(template)) || !!p.orchard || !!p.store || !!p.haul || !!p.full || !!p.fields || !!p.missing;
 
 function Production({ template, p }: { template: string; p: ProductionInfo }) {
   const site = p.site;
@@ -120,7 +121,17 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
       {site && template === "fisher" && <div>{L("Вода рядом:", "Water nearby:")} {pct(site.water)}</div>}
       {site && template === "forager" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
       {p.orchard && <div>{p.orchard.ripeDays > 0 ? L(`Деревья растут: ещё ${p.orchard.ripeDays} дн.`, `Trees are growing: ${p.orchard.ripeDays} more d`) : L(`Урожай этого года: ${pct(p.orchard.quality)}`, `This year’s crop: ${pct(p.orchard.quality)}`)}</div>}
-      {p.storage !== undefined && <div>{L("Склад:", "Storage:")} +{tons(p.storage)} {L("т еды", "t of food")}</div>}
+      {p.store &&
+        (Object.keys(p.store.room) as StoreGroup[]).map((g) => {
+          const held = STORE_GROUPS[g].reduce((n, k) => n + (p.store!.held[k] ?? 0), 0);
+          return (
+            <div key={g}>
+              {storeGroupName(g).replace(/^./, (c) => c.toUpperCase())}: {storeAmount(g, held)} {L("из", "of")} {storeAmount(g, p.store!.room[g]!)}
+            </div>
+          );
+        })}
+      {p.haul && p.haul.share >= 0.005 && <div>{L(`До склада ${Math.round(p.haul.metres)} м: подвоз берёт ${pct(p.haul.share)} времени`, `${Math.round(p.haul.metres)} m to the store: carting takes ${pct(p.haul.share)} of the time`)}</div>}
+      {p.full && <div class="prod-warn">{L("Склады полны: работа стоит", "The stores are full: work has stopped")}</div>}
       {p.fields && (
         <div>
           {p.fields.count > 0 ? (
@@ -327,7 +338,7 @@ export function BuildingPanel() {
               {weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
             </Line>
           )}
-          {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} st={stock.value} />}
+          {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} haul={b.haul} st={stock.value} />}
           {left > 0 && <SiteLevers siteKey={b.id} />}
         </Section>
       )}

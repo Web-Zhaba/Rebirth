@@ -37,6 +37,7 @@ export function templateIcon(template: string): IconName {
   if (template === "restored") return "foundations";
   if (CRAFT.has(template)) return "craft";
   if (TRADE.has(template)) return "trade";
+  if (template === "logyard" || template === "stoneyard" || template === "warehouse") return "barn"; // kinds of the storehouse
   return template in BUILDINGS ? (template as IconName) : "res";
 }
 
