@@ -237,6 +237,17 @@ it("pacing harness", async () => {
         const low = group === "food" ? houses() >= 10 && capacityOf(st.buildings, group) - used < 0.5 * CAMP_STORE.food : capacityOf(st.buildings, group) - used < 0.1 * CAMP_STORE[group]; // a barn once the first houses stand
         if (!pending && low) await place(tpl, -1, 130);
       }
+    // The administration nears its limit: a sensible player puts up the town hall, then district offices (docs/PLAN-balance.md B7).
+    {
+      const adm = st.economy.admin;
+      const offices = Object.values(st.buildings).filter((b) => b.template === "townhall" || b.template === "office");
+      const hall = offices.some((b) => b.template === "townhall");
+      const pending = offices.some((b) => b.state !== "active");
+      if (!pending && adm.pop > 0.8 * adm.capacity) {
+        if (!hall && unlocked("townhall")) await place("townhall", -1, 130);
+        else if (hall && unlocked("office")) await place("office", -1, 130);
+      }
+    }
     // A house stands empty and there are goods to pay: call settlers (the goods of the founding cart pay for two calls).
     if (homeGoods(st.stock) >= CALL.goods && dayOf(st.gameMinutes) > lastCallDay) {
       const sim = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
@@ -256,7 +267,7 @@ it("pacing harness", async () => {
     if (process.env.PACE_DEBUG && dayOf(st.gameMinutes) !== lastDebugDay) {
       lastDebugDay = dayOf(st.gameMinutes);
       const a = st.attraction;
-      process.stderr.write(`d${lastDebugDay + 1} pop ${st.people.pop} houses ${houses()} free ${st.inflow.free} score ${a.score.toFixed(2)} food ${a.food.toFixed(2)} mood ${a.mood.toFixed(2)} jobs ${a.jobs.toFixed(2)} serv ${a.services.toFixed(2)} perDay ${st.inflow.perDay.toFixed(2)} demand ${st.people.demand.res.toFixed(1)}
+      process.stderr.write(`d${lastDebugDay + 1} pop ${st.people.pop} houses ${houses()} free ${st.inflow.free} score ${a.score.toFixed(2)} food ${a.food.toFixed(2)} mood ${a.mood.toFixed(2)} jobs ${a.jobs.toFixed(2)} serv ${a.services.toFixed(2)} perDay ${st.inflow.perDay.toFixed(2)} admin ${st.economy.admin.capacity.toFixed(0)} x${st.economy.admin.factor.toFixed(2)} demand ${st.people.demand.res.toFixed(1)}
 `);
     }
     for (let k = 0; k < 6; k++) {

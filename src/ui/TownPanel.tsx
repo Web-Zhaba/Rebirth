@@ -142,6 +142,13 @@ function PeopleTab() {
         {p.pop} ({L("взрослых", "adults")} {p.adults}, {L("детей", "children")} {p.children})
       </Line>
       <Line label={L("Семей", "Families")}>{p.households}</Line>
+      {eco?.admin && (
+        <Line label={L("Управление", "Administration")}>
+          {L(`${eco.admin.pop} из ${Math.round(eco.admin.capacity)} жителей`, `${eco.admin.pop} of ${Math.round(eco.admin.capacity)} residents`)}
+          {eco.admin.factor < 1 ? L(` · работа −${Math.round((1 - eco.admin.factor) * 100)} %`, ` · work −${Math.round((1 - eco.admin.factor) * 100)}%`) : ""}
+        </Line>
+      )}
+      {eco?.admin && eco.admin.factor < 1 && <div class="prod-warn">{L("Перегрузка управления: нужна ратуша или районная управа с писарями", "The administration is overloaded: a town hall or a district office with clerks is needed")}</div>}
       <Line icon="tent" label={L("В палатках", "In tents")}>
         {p.tents}
       </Line>

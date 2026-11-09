@@ -10,6 +10,7 @@ const eco = (o: Partial<EconomyStats> = {}): EconomyStats => ({
   yesterday: { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 },
   fields: { count: 0, ha: 0, assignedHa: 0, sown: 0, reaped: 0, expected: 0, window: "none" as never },
   avgMood: 0,
+  admin: { pop: 0, capacity: 150, factor: 1 },
   forage: 0,
   brushwood: 0,
   outlook: 1,

@@ -107,6 +107,7 @@ export const PLACED_BUILDING_COLORS = {
   chapel: "#85689f",
   school: "#3f8a6b",
   healer: "#b24d46",
+  townhall: "#6c6a8f",
 } as const;
 
 // Restored old buildings drawn as 3D models (heritageModels.ts): wall, roof and accent (dome, spire, chimney, cornice)

@@ -1,4 +1,5 @@
 import { needsAt, TOOL_WEAR, TOOLLESS } from "./goods";
+import { ADMIN, adminOf, overload } from "./governance";
 import { goodsTotal } from "./goods";
 import { allUnlocked } from "./tech";
 import { describe, expect, it } from "vitest";
@@ -964,5 +965,37 @@ describe("logistics (docs/PLAN-balance.md B4)", () => {
     expect(stores[0].logs).toBe(900);
     expect(stores[0].food! + stores[1].food!).toBe(70_000);
     expect(stores[0].food).toBe(FOOD_CAMP_CAP + 70_000 - FOOD_CAMP_CAP - BARN_CAP); // the barn filled first after the camp
+  });
+});
+
+describe("administration (docs/PLAN-balance.md B7)", () => {
+  const crowd = (n: number, extra: Building[] = []) => folk(town([bld(1, "quarry", 50), ...extra]), [{ home: null, adults: 2, job: 1 }, { home: null, adults: n - 2 }]);
+  it("past what the offices manage every work rate drops gently, never below the floor", () => {
+    expect(overload(ADMIN.elders, ADMIN.elders)).toBe(1);
+    expect(overload(2 * ADMIN.elders, ADMIN.elders)).toBeCloseTo(1 / (1 + ADMIN.slope));
+    expect(overload(100 * ADMIN.elders, ADMIN.elders)).toBe(ADMIN.floor);
+  });
+  it("the elders manage a hamlet; a town hall adds its room by the share of its clerks at work", () => {
+    expect(adminOf(crowd(10)).capacity).toBe(ADMIN.elders);
+    const hall = crowd(10, [bld(2, "townhall", 120)]); // no clerks yet
+    expect(adminOf(hall).capacity).toBe(ADMIN.elders);
+    const two = Object.values(hall.residents).filter((r) => r.job === null).slice(0, 2);
+    const staffed = { ...hall, residents: { ...hall.residents, ...Object.fromEntries(two.map((r) => [r.id, { ...r, job: 2 }])) } };
+    expect(adminOf(staffed).capacity).toBeCloseTo(ADMIN.elders + ADMIN.room.townhall / 2); // 2 of 4 clerks
+    expect(adminOf(crowd(10, [bld(2, "townhall", 120, "building")])).capacity).toBe(ADMIN.elders);
+  });
+  it("an overloaded town works slower and is told so once a day", () => {
+    const calm = work(crowd(100)).stock.stone;
+    const busy = crowd(300);
+    expect(adminOf(busy).factor).toBeCloseTo(overload(300, ADMIN.elders));
+    expect(work(busy).stock.stone).toBeCloseTo(calm * adminOf(busy).factor);
+    expect(economyStats(busy).admin.capacity).toBe(ADMIN.elders);
+    expect(dailyEconomy({ ...busy, gameMinutes: at(13) }).events.some((e) => e.text.startsWith("Перегрузка управления"))).toBe(true);
+  });
+  it("a town has one town hall; district offices are many", () => {
+    const s = town([bld(5, "townhall", 900)], { roads: road([[0, 0], [160, 0]]) });
+    const e = Number(Object.keys(s.roads.edges)[0]);
+    expect(canPlace(s, BUILDINGS.townhall, e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
+    expect(canPlace(s, BUILDINGS.office, e, 1, 3, NO_SITE)).toEqual({ ok: true });
   });
 });

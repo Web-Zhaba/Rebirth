@@ -49,6 +49,7 @@ import Sunrise from "~icons/game-icons/sunrise";
 import Sunset from "~icons/game-icons/sunset";
 import StoneBlock from "~icons/game-icons/stone-block";
 import Village from "~icons/game-icons/village";
+import Capitol from "~icons/game-icons/capitol";
 import Well from "~icons/game-icons/well";
 import WoodAxe from "~icons/game-icons/wood-axe";
 import PhBookOpen from "~icons/ph/book-open";
@@ -122,6 +123,7 @@ export const ICONS = {
   // Journal (game-icons): chronicle entry, article, founding
   quill: QuillInk,
   scroll: ScrollUnfurled,
+  townhall: Capitol,
   tent: CampingTent,
   // Top bar (game-icons): people, goods, day phases
   person: Person,

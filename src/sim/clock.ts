@@ -15,6 +15,7 @@ import { isWorkHour, tolokaActive, workHours, type Levers } from "./levers";
 import { crewEfficiency } from "./needs";
 import { spendOnRoads } from "./roads";
 import { Ledger, settleStores } from "./storage";
+import { adminFactor } from "./governance";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
 import type { SimState } from "./types";
 import { weatherStep } from "./weather";
@@ -95,7 +96,7 @@ export function step(s: SimState): SimState {
     // materials from the stock when work on them starts, and to forest clearings, ahead of the buildings when logs run short.
     // On a толока every hand goes to its site, none to the roads.
     const toloka = tolokaActive(s.levers, s.gameMinutes);
-    const bf = buildFactor(s.weather) * buildSpeedMul(s.progress); // rain, cold and storms cut the hours and the crew
+    const bf = buildFactor(s.weather) * buildSpeedMul(s.progress) * adminFactor(s); // rain, cold and storms cut the hours and the crew; so does an overloaded administration
     const hand = (BASE_TICK * bf * crewEfficiency(s)) / 60; // person-hours of one builder in a tick
     const hours = builderCount(s) * hand;
     const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock, hand);

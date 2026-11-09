@@ -66,12 +66,14 @@ export const TECHS: TechDef[] = [
   { id: "housing", era: 1, domain: "build", name: L("Просторное жильё", "Spacious Housing"), days: 21, requires: ["crafts", "stonework"], unlocks: ["upgrade"], description: L("Дома можно расширять.", "Houses can be expanded.") },
   { id: "guildwork", era: 1, domain: "craft", name: L("Цеховое дело", "Guild work"), days: 21, requires: ["crafts", "trade"], unlocks: [], modifiers: { workshopOutput: 0.1 }, description: L("Мастера делятся приёмами: выработка мастерских выше на 10 %.", "Masters share their methods: workshop output is 10% higher.") },
   { id: "joinery", era: 1, domain: "build", name: L("Столярное дело", "Joinery"), days: 21, requires: ["housing"], unlocks: [], modifiers: { buildSpeed: 0.1, bridgeSpan: { bridge: 15 } }, description: L("Стройка быстрее на 10 %, свайный мост перекрывает на 15 м больше.", "Building is 10% faster; a pile bridge spans 15 m more.") },
+  { id: "governance", era: 1, domain: "learn", name: L("Управление", "Governance"), days: 15, requires: ["crafts"], unlocks: ["townhall"], description: L("Писари ведут дела поселения: ратуша, без неё работа замедляется после 150 жителей.", "Clerks keep the settlement’s affairs: a town hall; without one work slows past 150 residents.") },
   // ----- era II «Деревня» -----
   { id: "paving", era: 2, domain: "build", name: L("Мощение", "Paving"), days: 24, requires: ["stonework"], unlocks: ["road:stone"], description: L("Каменная дорога: берёт уклон круче грунтовой.", "Stone road: handles steeper slopes than a dirt road.") },
   { id: "stonebridge", era: 2, domain: "build", name: L("Каменные мосты", "Stone bridges"), days: 30, requires: ["paving"], unlocks: ["road:stonebridge"], description: L("Каменный мост через воду.", "A stone bridge across water.") },
   { id: "trusses", era: 2, domain: "build", name: L("Стропильные фермы", "Roof trusses"), days: 30, requires: ["stonebridge", "joinery"], unlocks: [], modifiers: { bridgeSpan: { bridge: 15, stonebridge: 40 } }, description: L("Мосты перекрывают больший пролёт: свайный +15 м, каменный +40 м.", "Bridges span farther: pile +15 m, stone +40 m.") },
   { id: "cellars", era: 2, domain: "farm", name: L("Погреба", "Cellars"), days: 18, requires: ["storage"], unlocks: ["cellar"], description: L("Запасы хранятся дольше: погреб.", "Supplies keep longer: cellar.") },
   { id: "beekeeping", era: 2, domain: "farm", name: L("Пчеловодство", "Beekeeping"), days: 18, requires: ["orchards"], unlocks: ["apiary"], description: L("Мёд и воск: пасека.", "Honey and wax: apiary.") },
+  { id: "districts", era: 2, domain: "learn", name: L("Районное управление", "District offices"), days: 24, requires: ["governance"], unlocks: ["office"], description: L("Районные управы берут на себя дела частей города.", "District offices take over the affairs of parts of the town.") },
   { id: "letters", era: 2, domain: "learn", name: L("Грамота", "Literacy"), days: 24, requires: ["faith"], unlocks: ["school"], description: L("Учить детей чтению и счёту: школа.", "Teach children to read and count: school.") },
 ];
 
@@ -110,6 +112,8 @@ export const UNLOCK_NAME: Record<string, string> = {
   chapel: L("храм", "temple"),
   school: L("школа", "school"),
   healer: L("лечебница", "infirmary"),
+  townhall: L("ратуша", "town hall"),
+  office: L("районная управа", "district office"),
   "zone:craft": L("ремесленная зона", "craft zone"),
   "zone:trade": L("торговая зона", "trade zone"),
   upgrade: L("расширение домов", "house expansion"),

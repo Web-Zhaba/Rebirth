@@ -95,7 +95,7 @@ describe("tech model", () => {
   it("groups lanes by era and domain, empty domains left out", () => {
     const v = buildTechView(input());
     expect(v.lanes.map((l) => l.era)).toEqual([1, 2]);
-    expect(v.lanes[0].domains.map((d) => d.id)).not.toContain("learn");
+    expect(v.lanes[1].domains.map((d) => d.id)).not.toContain("craft"); // era II has no craft techs
     expect(v.lanes[1].domains.map((d) => d.id)).toContain("learn");
     expect(v.lanes.flatMap((l) => l.domains.flatMap((d) => d.nodes)).length).toBe(TECHS.length);
   });

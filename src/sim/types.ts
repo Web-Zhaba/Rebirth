@@ -393,6 +393,7 @@ export interface EconomyStats {
   buildFactor: number; // share of the artel's hours the weather allows right now
   firewood: number; // m3 a day the households burn at today's cold
   unheated: { households: number; people: number }; // without firewood since the last midnight
+  admin: { pop: number; capacity: number; factor: number }; // residents, what the offices manage, the work rate it leaves (sim/governance.ts)
 }
 
 export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";

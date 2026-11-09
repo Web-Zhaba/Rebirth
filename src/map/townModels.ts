@@ -61,6 +61,8 @@ const FORMS: Record<string, TownForm> = {
   gumno: "farm",
   barn: "store",
   warehouse: "store",
+  townhall: "school",
+  office: "cabin",
   logyard: "logyard",
   stoneyard: "quarry",
   woodcutter: "logyard",

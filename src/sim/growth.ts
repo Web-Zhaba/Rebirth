@@ -307,6 +307,9 @@ export function spawnBuildings(s: SimState): SimState {
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
 
 const NO_PLACE = (reason: string): PlaceCheck => ({ ok: false, reason });
+// A town has one town hall; past it the administration grows by district offices (governance.ts).
+const secondHall = (s: Pick<SimState, "buildings">, t: BuildingTemplate): PlaceCheck | null =>
+  t.id === "townhall" && Object.values(s.buildings).some((b) => b.template === "townhall") ? NO_PLACE(L("Ратуша уже есть: управление расширяют районные управы", "There is a town hall already: district offices extend the administration")) : null;
 export const PLACE_MIN = { forest: 0.1, water: 0.05, foragerForest: FORAGER_FOREST }; // site shares the woodcutter, the fisher and the forager need
 
 const BLOCK_REASON: Record<string, string> = {
@@ -329,6 +332,8 @@ export function canPlace(
   site: Site,
 ): PlaceCheck {
   if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
+  const hall = secondHall(s, t);
+  if (hall) return hall;
   const e = s.roads.edges[edge];
   if (!e) return NO_PLACE(L("Нет такой дороги", "No such road"));
   if (e.done < e.labor) return NO_PLACE(L("Дорога ещё не построена", "The road is not built yet"));
@@ -363,6 +368,8 @@ export function canPlace(
 // Can the player put `t` on the old foundation `foundationId`? (Shared by the worker and the placement tool.)
 export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds">, t: BuildingTemplate, foundationId: string): PlaceCheck {
   if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
+  const hall = secondHall(s, t);
+  if (hall) return hall;
   const f = s.finds.foundations.find((x) => x.id === foundationId);
   if (!f) return NO_PLACE(L("Нет такого фундамента", "No such foundation"));
   const r = lotCheck(s, f, t);

@@ -6,6 +6,7 @@ import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, H
 import { DIG, growDig, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, lotFront, MAX_EVENTS, productionScales } from "./people";
 import { haulHours, Ledger } from "./storage";
+import { adminOf, adminFactor } from "./governance";
 import { buildingPriority } from "./jobs";
 import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
@@ -183,6 +184,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
   let events = s.events;
   let buildings = s.buildings;
   const shopMul = workshopMul(s.progress);
+  const admin = adminFactor(s); // past what the offices can manage every work goes slower
   // food that finds no room in the stores rots
   const addFood = (kg: number, at: [number, number]) => {
     const { stored } = ledger.put("food", kg, at);
@@ -231,7 +233,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     const eff = b.zone === "craft" ? strength + SERVICE.literateBoost * (workers.lit.get(b.id) ?? 0) : strength;
     const wf = workFactor(b.template, s.weather); // rain, frost, storms
     if (wf <= 0) continue;
-    let h = eff * dt * wf * (b.zone === "craft" ? shopMul : 1) * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
+    let h = eff * dt * wf * admin * (b.zone === "craft" ? shopMul : 1) * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
     if (TOOL_USERS.has(b.template)) {
       // tools wear out with the work; what has none works at TOOLLESS of its rate
       const wear = h * TOOL_WEAR;
@@ -361,6 +363,9 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
   }
   return { ...s, stock: { ...ledger.stock }, stores: ledger.stores, events, buildings, prod: { ...s.prod, fields, today, flags, haul } };
 }
+
+export const overloadText = (pop: number, capacity: number, factor: number): string =>
+  L(`Перегрузка управления: ${pop} жителей, управы справляются с ${Math.round(capacity)} — вся работа медленнее на ${Math.round((1 - factor) * 100)} %`, `Administration overloaded: ${pop} residents, the offices manage ${Math.round(capacity)} — all work is ${Math.round((1 - factor) * 100)}% slower`);
 
 export const FULL_TEXT: Record<StoreGroup, string> = {
   food: L("Еде некуда класть: нужен амбар или погреб", "No room for food: a barn or cellar is needed"),
@@ -510,6 +515,10 @@ export function dailyEconomy(s: SimState): SimState {
     }
     if (cold.size > 0 && !Object.values(s.households).some((h) => h.cold)) events = say(events, now, "shortage", L("Дров нет, люди мёрзнут", "No firewood, people are freezing"));
   }
+
+  // the administration falls behind: said once a day while it lasts
+  const admin = adminOf(s);
+  if (admin.factor < 1) events = say(events, now, "shortage", overloadText(admin.pop, admin.capacity, admin.factor));
 
   // Personal needs of the day that ended. Mood is coloured by the needs the day began with (the values on `s`), so a
   // single daily step still uses the state it was called with; the fresh needs are what the next day works with.
@@ -676,6 +685,7 @@ export function economyStats(s: SimState): EconomyStats {
     buildFactor: buildFactor(s.weather),
     firewood: firewoodDaily(s.weather) * hs,
     unheated: { households: unheated, people: unheatedPeople },
+    admin: adminOf(s),
   };
 }
 

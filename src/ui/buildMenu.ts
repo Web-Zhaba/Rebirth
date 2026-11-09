@@ -4,9 +4,10 @@ import { DIG } from "../sim/excavation";
 import { CLEARING } from "../sim/clearing";
 import { PLACE_MIN } from "../sim/growth";
 import { BUILDINGS, STORES, type Materials, type StoreGroup, type StoreRoom } from "../sim/buildings";
+import { ADMIN } from "../sim/governance";
 import { ROAD_KINDS } from "../sim/roads";
 import { SERVICES, isService } from "../sim/services";
-import { isPlaceTool, placeTemplate, roadKindOf, roadMaterial, SITE_RADIUS, storeKind, type MaterialTool, type Tool } from "../map/tools";
+import { isPlaceTool, placeTemplate, placeVariant, roadKindOf, roadMaterial, SITE_RADIUS, type MaterialTool, type Tool } from "../map/tools";
 import type { RoadKind } from "../sim/types";
 import type { IconName } from "./icons";
 import { decimal, L } from "../i18n";
@@ -24,7 +25,7 @@ export const CATEGORIES: Category[] = [
   { id: "zones", label: L("Зоны", "Zones"), tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
   { id: "food", label: L("Еда", "Food"), tools: ["gumno", "garden", "hunter", "fisher", "forager", "orchard", "apiary"] },
   { id: "farm", label: L("Ресурсы", "Resources"), tools: ["woodcutter", "sawpit", "quarry", "barn", "cellar"] },
-  { id: "services", label: L("Службы", "Services"), tools: ["well", "market", "chapel", "school", "healer"] },
+  { id: "services", label: L("Службы", "Services"), tools: ["well", "market", "chapel", "school", "healer", "townhall"] },
   { id: "past", label: L("Прошлое", "Past"), tools: ["dig"] },
 ];
 
@@ -66,6 +67,7 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   chapel: "chapel",
   school: "school",
   healer: "healer",
+  townhall: "townhall",
   dig: "dig",
 };
 
@@ -83,6 +85,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   clearing: L("Вырубка", "Clearing"),
   clear: L("Снять зону", "Clear zone"),
   barn: L("Склад", "Storehouse"),
+  townhall: L("Управа", "Administration"),
 };
 
 export const toolLabel = (t: Tool): string => TOOL_LABEL[t] ?? BUILDINGS[t].name;
@@ -117,6 +120,7 @@ const PURPOSE: Record<Tool, string> = {
   chapel: L("Место для общей жизни: настроение людей", "A place for community life: people’s mood"),
   school: L("Учит детей грамоте, грамотные работают лучше", "Teaches children to read; literate people work better"),
   healer: L("Лечит: меньше смертей, настроение выше", "Heals: fewer deaths, higher mood"),
+  townhall: L(`Управление поселением: без управ работа замедляется, когда жителей больше ${ADMIN.elders}. Ратуша (одна на город) справляется ещё с ${ADMIN.room.townhall} жителями, каждая районная управа — с ${ADMIN.room.office}, пока в них работают писари`, `Running the settlement: without offices work slows once there are more than ${ADMIN.elders} residents. A town hall (one per town) manages ${ADMIN.room.townhall} more, each district office ${ADMIN.room.office}, while clerks work in them`),
   dig: L("Раскоп на месте старых построек: находки для тетради, камень от фундаментов", "A dig on the site of old buildings: finds for the notebook, stone from foundations"),
 };
 
@@ -187,9 +191,9 @@ export const roomText = (room: StoreRoom): string =>
 
 // Everything the hover card shows, taken from the sim tables.
 // A road or bridge tool shows the material chosen for it.
-// The storehouse tool shows the kind of store chosen for it.
-export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roadMaterial.value, store = storeKind.value): ToolInfo {
-  const b = BUILDINGS[isPlaceTool(t) ? placeTemplate(t, store) : t];
+// A tool with kinds (the storehouse, the administration) shows the kind chosen for it.
+export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roadMaterial.value, chosen = placeVariant.value): ToolInfo {
+  const b = BUILDINGS[isPlaceTool(t) ? placeTemplate(t, chosen) : t];
   const kind = roadKindOf(t, material);
   const road = kind ? ROAD_KINDS[kind] : null;
   let reach: string | null = null;

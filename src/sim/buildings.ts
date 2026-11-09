@@ -107,6 +107,9 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   logyard: T("logyard", L("Склад леса", "Timber yard"), "placed", 2, 2, 12, 10, 4, 90, 0, [14, 2, 0], "services"),
   stoneyard: T("stoneyard", L("Склад камня", "Stone yard"), "placed", 2, 2, 12, 12, 2, 70, 0, [6, 1, 2], "services"),
   warehouse: T("warehouse", L("Товарный склад", "Warehouse"), "placed", 2, 2, 10, 10, 6, 140, 0, [26, 6, 3], "services"),
+  // Administration (docs/PLAN-balance.md B7, sim/governance.ts): clerks who manage the town; kinds of one build-bar tool.
+  townhall: T("townhall", L("Ратуша", "Town hall"), "placed", 2, 3, 14, 12, 9, 300, 4, [60, 12, 15], "services"),
+  office: T("office", L("Районная управа", "District office"), "placed", 2, 2, 10, 10, 7, 160, 2, [30, 6, 6], "services"),
   // Excavation (PLAN.md section 12).
   dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 6, [2, 0.5, 0], "services"),
   // A restored old building kept as a monument (sim/restore.ts): no jobs, no residents; its size, cost and shape come from the foundation.
