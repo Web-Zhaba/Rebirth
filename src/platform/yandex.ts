@@ -1,8 +1,9 @@
-import { NO_PLATFORM, type Platform, type PlatformHooks } from "./index";
+import { NO_PLATFORM, type Platform } from "./index";
 
 // Yandex Games SDK v2 (https://yandex.ru/dev/games/doc/ru/sdk/sdk-about). The portal serves `/sdk.js` next to the
 // game; anywhere else (local preview) it is missing and the game runs without the portal.
 interface YaSdk {
+  environment: { i18n: { lang: string } };
   features: {
     LoadingAPI?: { ready(): void };
     GameplayAPI?: { start(): void; stop(): void };
@@ -29,7 +30,7 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-export async function initYandex(hooks: PlatformHooks): Promise<Platform> {
+export async function initYandex(): Promise<Platform> {
   let ysdk: YaSdk;
   try {
     await loadScript(SDK_URL);
@@ -39,9 +40,13 @@ export async function initYandex(hooks: PlatformHooks): Promise<Platform> {
     console.warn("Yandex Games SDK unavailable, running without it:", e);
     return NO_PLATFORM;
   }
-  ysdk.on?.("game_api_pause", hooks.pause);
-  ysdk.on?.("game_api_resume", hooks.resume);
   return {
+    // Language auto-detection through the SDK, required by the portal (requirement 2.14).
+    lang: ysdk.environment.i18n.lang,
+    listen(hooks) {
+      ysdk.on?.("game_api_pause", hooks.pause);
+      ysdk.on?.("game_api_resume", hooks.resume);
+    },
     ready: () => ysdk.features.LoadingAPI?.ready(),
     gameplay: (on) => (on ? ysdk.features.GameplayAPI?.start() : ysdk.features.GameplayAPI?.stop()),
   };
