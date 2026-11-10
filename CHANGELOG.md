@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.3.2...rebirth-v0.4.0) (2026-11-10)
+
+
+### Features
+
+* **ads:** supplies for a rewarded ad ([da821f1](https://github.com/Web-Zhaba/Rebirth/commit/da821f147f27dced7445d0ccebc8790a558e0c81))
+* **balance:** administration capacity and overload ([55b73fb](https://github.com/Web-Zhaba/Rebirth/commit/55b73fb197c5e341bab0353008ac9b48f598e780))
+* **balance:** crew limits per site and families by house level ([06cfd23](https://github.com/Web-Zhaba/Rebirth/commit/06cfd23439fcfb966618dc0b95b20709cb65b090))
+* **balance:** goods groups instead of one wares figure ([37c8a94](https://github.com/Web-Zhaba/Rebirth/commit/37c8a9494642bc48a4a64aeef6d5bc1f9d2304b7))
+* **balance:** settlers come by the town's attractiveness ([b93c238](https://github.com/Web-Zhaba/Rebirth/commit/b93c238270f47caf59c70275758464e109a556ee))
+* **balance:** stores and carting instead of one town stock ([0c3c859](https://github.com/Web-Zhaba/Rebirth/commit/0c3c859629f3923312663e5db525c137fc71df40))
+* **i18n:** detect the language through the Yandex Games SDK ([1d91d51](https://github.com/Web-Zhaba/Rebirth/commit/1d91d5137675d54a3692fe8315eba48294a1f546))
+
+
+### Documentation
+
+* **balance:** mark B1 and B2 done ([e4eb4d9](https://github.com/Web-Zhaba/Rebirth/commit/e4eb4d93ddf167cca16491a0e125bbfba588bb32))
+* **balance:** road crew cap is ROAD_CREW_MAX ([6d67320](https://github.com/Web-Zhaba/Rebirth/commit/6d67320f9d8ebad2e2b0ed459983481060ab2739))
+
 ## [0.3.2](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.3.0...rebirth-v0.3.2) (2026-11-04)
 
 
