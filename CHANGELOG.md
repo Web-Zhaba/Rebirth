@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.4.0...rebirth-v0.4.1) (2026-11-10)
+
+
+### Performance
+
+* **sim:** faster offline catch-up ([d883394](https://github.com/Web-Zhaba/Rebirth/commit/d883394f5b463383e61f9704b76d06b844140b0d))
+* **sim:** faster offline catch-up ([f3c162d](https://github.com/Web-Zhaba/Rebirth/commit/f3c162dba0b22d5c0e3f108e0eca04864bdfc728))
+
 ## [0.4.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.3.2...rebirth-v0.4.0) (2026-11-10)
 
 
