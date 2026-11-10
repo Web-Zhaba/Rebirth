@@ -45,7 +45,7 @@ const mk = (foundations: FoundFoundation[], progress: ProgressState = allResearc
     zones: emptyZones(),
     ...emptyGrowth(1),
     progress,
-    finds: { foundations, pois: [], streets: [], revealed: [{ digId: 1, x: 0, y: 0, r: 15 }] },
+    finds: { foundations, pois: [], streets: [], revealed: [{ digId: 1, x: 0, y: 0, r: 15 }], features: [], fates: {} },
   }) as SimState;
 
 const church = found("a", "place_of_worship", rect(0, 0, 20, 30), { height: 11 });
@@ -129,7 +129,7 @@ describe("completion", () => {
     expect(s.events.some((e) => e.text.startsWith("Восстановлено: Объект a"))).toBe(true);
   });
   it("scales the weight of a restoration in a sparse village", () => {
-    const sparse = { ...mk([church]), finds: { ...mk([church]).finds, revealed: [{ digId: 1, x: 0, y: 0, r: 400 }] } };
+    const sparse = { ...mk([church]), finds: { ...mk([church]).finds, revealed: [{ digId: 1, x: 0, y: 0, r: 400 }], features: [], fates: {} } };
     expect(distinctTyped(sparse.finds.foundations)).toBe(1);
     expect(scarcity(sparse.finds)).toBe(3);
     const s = finishAll(asItWas(sparse, "a"));

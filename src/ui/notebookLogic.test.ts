@@ -38,6 +38,8 @@ describe("findsToEntries", () => {
       streets: [place("s1", "Милютина", "street", 4, 11)],
       foundations: [fnd("a", 4, 12), fnd("b", 4, 15), fnd("c", 9, 20)],
       revealed: [],
+      features: [],
+      fates: {},
     };
     expect(findsToEntries(finds, [4, 9])).toEqual([
       { id: "poi:p1", kind: "poi", title: "Храм", detail: "place_of_worship", at: 10 },
@@ -48,11 +50,11 @@ describe("findsToEntries", () => {
   });
   it("numbers digs by ascending id, also those without foundations, and pluralises in Russian", () => {
     const many = Array.from({ length: 37 }, (_, i) => fnd(`f${i}`, 9, 1));
-    const e = findsToEntries({ pois: [], streets: [], foundations: many, revealed: [] }, [3, 9]);
+    const e = findsToEntries({ pois: [], streets: [], foundations: many, revealed: [], features: [], fates: {} }, [3, 9]);
     expect(e.map((x) => x.title)).toEqual(["Раскоп №2: 37 фундаментов"]);
   });
   it("is empty without finds", () => {
     expect(findsToEntries(null)).toEqual([]);
-    expect(findsToEntries({ pois: [], streets: [], foundations: [], revealed: [] })).toEqual([]);
+    expect(findsToEntries({ pois: [], streets: [], foundations: [], revealed: [], features: [], fates: {} })).toEqual([]);
   });
 });

@@ -11,6 +11,7 @@ import { hintSpots, selectedSite, typedAt, typedFoundations } from "../../map/he
 import { brokenWalls, streetWidth } from "../../map/ruinsGeometry";
 import { tool } from "../../map/tools";
 import { foundationIndex } from "../../sim/foundationLots";
+import { beyondSurvey, catalogue, foundIds } from "../../sim/items";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import type { View } from "../view";
 
@@ -175,9 +176,17 @@ export const ruinPois: ReadonlySignal<FeatureCollection> = computed(() => {
   return fc(w.pois.filter((p) => !typedNames.has(p.name)).map((p) => ({ type: "Feature", properties: { name: p.name }, geometry: { type: "Point", coordinates: f.toLngLat(p.x, p.y) } })));
 });
 
+// Hints: notable places just beyond the discs, and the finds found that point to places the survey has not reached.
 export const ruinHints: ReadonlySignal<FeatureCollection> = computed(() => {
   const f = frame.value;
-  return f ? fc(hintSpots.value.map((h) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: f.toLngLat(h.x, h.y) } }))) : EMPTY;
+  const fd = finds.value;
+  if (!f) return EMPTY;
+  const pts: [number, number][] = hintSpots.value.map((h) => [h.x, h.y]);
+  if (fd) {
+    const found = foundIds({ finds: fd });
+    for (const i of catalogue({ finds: fd })) if (found.has(i.id) && !fd.fates[i.id] && !i.lines && beyondSurvey(fd, i)) pts.push([i.x, i.y]);
+  }
+  return fc(pts.map(([x, y]) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: f.toLngLat(x, y) } })));
 });
 
 // A click on an old foundation, an outline or a dug one, opens its panel while the old city shows; a real building on the

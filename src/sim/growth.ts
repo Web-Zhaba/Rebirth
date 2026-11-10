@@ -366,6 +366,7 @@ export function canPlace(
 ): PlaceCheck {
   if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
   if (t.id === "restored") return NO_PLACE(L("Памятник ставится только на старый фундамент", "A monument stands only on an old foundation"));
+  if (t.id === "museum") return NO_PLACE(L("Музей ставится только на старый фундамент", "A museum stands only on an old foundation"));
   const hall = secondHall(s, t);
   if (hall) return hall;
   const e = s.roads.edges[edge];

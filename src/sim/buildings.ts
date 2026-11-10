@@ -112,6 +112,8 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   office: T("office", L("Районная управа", "District office"), "placed", 2, 2, 10, 10, 7, 160, 2, [30, 6, 6], "services"),
   // Excavation (PLAN.md section 12).
   dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 6, [2, 0.5, 0], "services"),
+  // A museum: a purpose of any old foundation, its halls by floor area (sim/museum.ts).
+  museum: T("museum", L("Музей", "Museum"), "placed", 2, 2, 10, 10, 6, 140, 2, [30, 6, 4], "services"),
   // Digging one surveyed outline (sim/digging.ts): a site of the artel on the old ring, gone once it is dug; 8
   // person-hours per 100 m2.
   excavation: T("excavation", L("Раскопки фундамента", "Foundation dig"), "placed", 1, 1, 10, 10, 0.5, 8, 0, [0, 0, 0], null),

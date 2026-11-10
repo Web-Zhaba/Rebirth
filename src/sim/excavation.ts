@@ -1,6 +1,6 @@
 import { floorsOf } from "./buildings";
 import { addChronicle } from "./chronicle";
-import type { Building, DigInfo, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
+import type { Building, DigInfo, FeatureKind, FoundFeature, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
 import { decimal, L, plural } from "../i18n";
 
 // Excavation (PLAN.md section 12, docs/PLAN-restoration.md section 5) in two stages. A dig site is the survey: wide, fast
@@ -23,7 +23,7 @@ const EPS = 1e-9;
 
 type Pt = [number, number];
 
-export const emptyFinds = (): Finds => ({ foundations: [], pois: [], streets: [], revealed: [] });
+export const emptyFinds = (): Finds => ({ foundations: [], pois: [], streets: [], revealed: [], features: [], fates: {} });
 export const isDig = (b: Pick<Building, "template">): boolean => b.template === DIG.template;
 export const radiusOf = (b: Pick<Building, "radius">): number => b.radius ?? DIG.startRadius;
 export const revealedArea = (r: number): number => Math.PI * r * r;
@@ -109,7 +109,13 @@ export interface FindsCmd {
   foundations: { id: string; ring: [number, number][]; area: number; cls?: string; name?: string; height?: number }[];
   pois: { id: string; name: string; cls: string; x: number; y: number }[];
   streets: { id: string; name: string; lines?: [number, number][][] }[];
+  features?: { id: string; kind: FeatureKind; x: number; y: number; name?: string; cls?: string }[];
 }
+
+const FEATURE_KINDS: readonly FeatureKind[] = ["seeds", "parts", "rails", "bucket", "number", "sign"];
+const MAX_FEATURES = 20_000;
+const featureOk = (f: unknown): f is NonNullable<FindsCmd["features"]>[number] =>
+  isRec(f) && isStr(f.id, 200) && typeof f.kind === "string" && (FEATURE_KINDS as readonly string[]).includes(f.kind) && finite(f.x) && finite(f.y) && (f.name === undefined || isStr(f.name, 200)) && (f.cls === undefined || isStr(f.cls, 60));
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
@@ -159,7 +165,9 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   const gone = !dig || !isDig(dig);
   if (gone && !s.finds.revealed.some((d) => d.digId === cmd.digId)) return bad(L("Раскопа уже нет", "The dig is gone"));
   const { foundations, pois, streets } = cmd;
-  if (!Array.isArray(foundations) || !Array.isArray(pois) || !Array.isArray(streets)) return bad(L("Некорректные находки", "Invalid finds"));
+  const features = cmd.features ?? [];
+  if (!Array.isArray(foundations) || !Array.isArray(pois) || !Array.isArray(streets) || !Array.isArray(features)) return bad(L("Некорректные находки", "Invalid finds"));
+  if (features.length > MAX_LIST || !features.every(featureOk)) return bad(L("Некорректная находка", "Invalid find"));
   if (foundations.length > DIG.batch || pois.length > MAX_LIST || streets.length > MAX_LIST) return bad(L("Слишком много находок", "Too many finds"));
   for (const f of foundations) {
     if (!isRec(f) || !isStr(f.id, 200) || !finite(f.area) || f.area <= 0 || f.area > 1e7) return bad(L("Некорректный фундамент", "Invalid foundation"));
@@ -238,7 +246,16 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     const n = newF.length;
     chronicle = addChronicle(chronicle, at, "dig:found", L(`Разведка: ${n} ${plural(n, "контур", "контура", "контуров")} старых построек`, `Survey: ${n} ${plural(n, "", "", "", "outline")} of old buildings`));
   }
-  if (newF.length + newPois.length + newStreets.length + enriched === 0 && knownStreets === s.finds.streets) return { ok: true, sim: s };
+  // Features that give finds (sim/items.ts): each id once.
+  const known0 = s.finds.features ?? [];
+  const seenX = new Set(known0.map((f) => f.id));
+  const newX: FoundFeature[] = [];
+  for (const f of features) {
+    if (seenX.has(f.id) || known0.length + newX.length >= MAX_FEATURES) continue;
+    seenX.add(f.id);
+    newX.push({ id: f.id, kind: f.kind, x: r2(f.x), y: r2(f.y), digId: cmd.digId, ...(f.name ? { name: f.name } : {}), ...(f.cls ? { cls: f.cls } : {}) });
+  }
+  if (newF.length + newPois.length + newStreets.length + newX.length + enriched === 0 && knownStreets === s.finds.streets) return { ok: true, sim: s };
   return {
     ok: true,
     sim: {
@@ -250,6 +267,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
         foundations: newF.length ? [...known, ...newF] : known,
         pois: newPois.length ? [...s.finds.pois, ...newPois] : s.finds.pois,
         streets: newStreets.length ? [...knownStreets, ...newStreets] : knownStreets,
+        features: newX.length ? [...known0, ...newX] : known0,
       },
     },
   };
@@ -298,5 +316,11 @@ export function parseFinds(v: unknown): Finds {
       out.revealed.push({ digId: r.digId as number, x: r.x, y: r.y, r: r.r });
     }
   }
+  if (Array.isArray(v.features))
+    for (const f of v.features) {
+      const digId = isRec(f) ? f.digId : undefined;
+      if (featureOk(f) && Number.isInteger(digId)) out.features.push({ id: f.id, kind: f.kind, x: f.x, y: f.y, digId: digId as number, ...(f.name ? { name: f.name } : {}), ...(f.cls ? { cls: f.cls } : {}) });
+    }
+  if (isRec(v.fates)) for (const [k, fate] of Object.entries(v.fates)) if (k.length <= 260 && (fate === "returned" || fate === "used")) out.fates[k] = fate;
   return out;
 }

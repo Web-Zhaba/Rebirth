@@ -66,7 +66,7 @@ const STAGES: Record<SizeClass, Stage[]> = {
   ],
 };
 const STORE_CLASS = new Set(["barn", "cellar", "logyard", "stoneyard", "warehouse", "market", "gumno"]);
-const HALL_CLASS = new Set(["chapel", "school", "townhall", "office", "restored"]);
+const HALL_CLASS = new Set(["chapel", "school", "townhall", "office", "restored", "museum"]);
 const sizeClass = (t: BuildingTemplate): SizeClass => (STORE_CLASS.has(t.id) ? "store" : HALL_CLASS.has(t.id) ? "hall" : "heated");
 
 type Progress = Pick<ProgressState, "techs">;

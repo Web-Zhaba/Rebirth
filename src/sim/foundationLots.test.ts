@@ -43,7 +43,7 @@ const mk = (foundations: FoundFoundation[], zone: ZoneType | "none" = "none", pr
     households: {},
     lastSpawn: { res: -1000, craft: -1000, trade: -1000 },
     progress,
-    finds: { foundations, pois: [], streets: [], revealed: [{ digId: 1, x: 0, y: 0, r: 120 }] },
+    finds: { foundations, pois: [], streets: [], revealed: [{ digId: 1, x: 0, y: 0, r: 120 }], features: [], fates: {} },
   } as SimState;
 };
 const bare = (): ProgressState => ({ ...initialProgress(), techs: [] });

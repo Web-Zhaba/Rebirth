@@ -172,6 +172,7 @@ const WORK_TEMPLATE: Record<string, string> = {
   school: "school",
   college: "school",
   hospital: "healer",
+  museum: "museum",
   marketplace: "market",
   // typical kinds: a shop of any kind works as a shop (it grows in a trade zone), a pharmacy as an infirmary...
   shop: "shop",

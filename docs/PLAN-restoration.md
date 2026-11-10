@@ -1,6 +1,6 @@
 # Rebirth — restoration-first gameplay (design record)
 
-> Status: approved design (decided 2026-11-10). RB1, RB2 and RB3 done (2026-11-10); see the notes under each section and section 7.
+> Status: approved design (decided 2026-11-10). RB1-RB4 done (2026-11-10/11); see the notes under each section and section 7.
 > Replaces for implementation: the restore order with "monument / working" modes (`src/sim/restore.ts`,
 > PLAN-research.ru.md §4 item 4 and §7) and the template-size fit of foundation lots (`src/sim/foundationLots.ts`,
 > PLAN.md §12). Everything else in those documents stands.
@@ -149,6 +149,14 @@ Wikipedia). Game wording stays neutral, as today: the game never claims the obje
   A found sign of an unopened school marks its approximate spot: the next survey has a target.
 - **Before building**: sample real tiles of several villages and towns to see which POI subclasses and land uses
   actually occur; fill the object tables for the common ones first.
+  *Sampled (2026-11-10), OpenFreeMap z14, 3x3 tiles around 4 small towns, 5 villages and a city:* POIs most often are
+  gates, parking, bus stops, playgrounds, cafes, christian places of worship (255), convenience shops (216), clothes
+  (215), pharmacies (210), supermarkets (202), attractions, parks, restaurants, lodging, museums (143), government
+  offices, kindergartens, car repair (97), banks (95), schools (83), town halls (80), post offices (62), drinking water
+  (74), libraries, colleges, theatres; railway stations are rare (1), halts a few. Land: wood, grass and farmland
+  dominate; commercial and industrial land uses (84 tiles' worth) and allotments (79) are common, orchards rare; every
+  town tile has a housenumber layer. Object types were written for: post, railway, school, college, library, place of
+  worship, pharmacy, hospital, bank, town hall, bakery, fire station, museum, theatre; other named places give a sign.
 
 ### 6.2 Three fates of a find
 
@@ -173,7 +181,24 @@ Wikipedia). Game wording stays neutral, as today: the game never claims the obje
 | RB1 (done) | Foundation sets the building | any purpose on any foundation; size from the ring; floors from height for all foundations; limits by purpose class and technology; add-a-floor upgrade; capacity rules (2.3); heating by occupied floor area; the restore order merged into construction, monument as a purpose; save migration. Tests and a pace run on a large foundation, plus a hands-on check. |
 | RB2 (done) | Tiers and rewards | typical kinds back; unique detection (name, repetition, article match); recognisability per dig with thresholds; complete streets; monument mood takes the best, not the sum. |
 | RB3 (done) | Two-stage excavation | survey reveals the old plan; digging per foundation and per street; the discovery moment. |
-| RB4 | Finds and museum | data sampling first; finds from real features; finds leading to places; return / exhibit / use; museum as a purpose with themed halls. |
+| RB4 (done) | Finds and museum | data sampling first; finds from real features; finds leading to places; return / exhibit / use; museum as a purpose with themed halls. |
+
+RB4 notes: the catalogue of finds is derived, never stored: named places recorded by the survey (a typical object
+when its class has one, else a sign), the named streets (street signs), the real features the client now reports with
+the finds (garden land cover: seeds; industrial land use: machine parts; railways: rails; drinking water: a bucket;
+named places in the band beyond the discs: a sign pointing there; house numbers: counted per street), and the
+notebook's articles titled with a building's name (archive pages). A find is found once a dug foundation's centroid lies
+within 60 m of it (of its line, for a street sign) or its own foundation is dug; a dig's notice lists what it turned up,
+and a find beyond the survey says so and marks its spot on the map (the hint markers). Only the fates are stored:
+returned (its building stands on its foundation, its street is restored in full, a well stands within 30 m) gives the
+building its real name and lifts a typical restoration as it was to full weight; used: seeds +2 % field yield each (up to
+5), machine parts +0.2 craft research weight, rails +5 tools and gone. The museum is a purpose of the «Прошлое»
+category, on a foundation only (an old museum's as it was): a hall per 100 m2 of floor area (1-8), a theme per hall,
+one hall per theme in the town; a complete exhibition (every known find of its theme shown, at least 3) gives 0.5
+research weight in its domain and 5 % attraction (x1.5 for a museum as it was, up to 25 %), recomputed daily. The
+notebook got a «Находки» tab (by theme, with return and use), the museum's panel its halls, the town panel's streets
+their house numbers and household. The pace harness places a dig: the faster survey of RB3 frees its diggers sooner, so
+its timeline shifted (era II day 147 instead of 132; population 100 still on day 70).
 
 RB3 notes: the dig site is the survey, four times faster than the old dig and up to 160 m; what it records is a ghost
 outline (`FoundFoundation.ghost`): dashed on the map, its kind and name hidden, no lot, still reserved ground. Digging an

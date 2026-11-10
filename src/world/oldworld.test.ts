@@ -205,7 +205,7 @@ describe("parseOldWorldTile", () => {
   });
 
   it("returns nothing for a missing tile", () => {
-    expect(parseOldWorldTile(null, 14, 0, 0, frame, [])).toEqual({ foundations: [], streets: [], pois: [], spots: [] });
+    expect(parseOldWorldTile(null, 14, 0, 0, frame, [])).toEqual({ foundations: [], streets: [], pois: [], spots: [], features: [] });
   });
 });
 

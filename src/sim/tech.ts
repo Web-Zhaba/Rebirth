@@ -221,14 +221,16 @@ const sumMod = (p: Techs, f: (m: TechModifiers) => number | undefined): number =
   for (const id of p?.techs ?? []) n += f(TECH_BY_ID.get(id)?.modifiers ?? {}) ?? 0;
   return n;
 };
-export const fieldYieldMul = (p: Techs): number => 1 + sumMod(p, (m) => m.fieldYield);
+// Old seeds put to use (sim/items.ts) raise the yield too: FIELD_SEED.share each, the first FIELD_SEED.cap of them.
+export const FIELD_SEED = { share: 0.02, cap: 5 };
+export const fieldYieldMul = (p: (Techs & { seeds?: number }) | undefined): number => 1 + sumMod(p, (m) => m.fieldYield) + FIELD_SEED.share * Math.min(FIELD_SEED.cap, p?.seeds ?? 0);
 export const workshopMul = (p: Techs): number => 1 + sumMod(p, (m) => m.workshopOutput);
 export const buildSpeedMul = (p: Techs): number => 1 + sumMod(p, (m) => m.buildSpeed);
 // Metres the researched techs add to the span limit of a bridge kind.
 export const bridgeSpanBonus = (p: Techs, kind: RoadKind): number => sumMod(p, (m) => m.bridgeSpan?.[kind]);
 
 // Yield potential of the fields: the weather's crop times the techs' yield.
-export const cropOf = (s: { weather?: { crop: number }; progress?: Techs }): number => (s.weather?.crop ?? 1) * fieldYieldMul(s.progress);
+export const cropOf = (s: { weather?: { crop: number }; progress?: Techs & { seeds?: number } }): number => (s.weather?.crop ?? 1) * fieldYieldMul(s.progress);
 
 // ---------- old towns ----------
 

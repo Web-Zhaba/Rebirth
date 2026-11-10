@@ -7,6 +7,9 @@ import { kindName, siteDomain, siteTitle } from "../sim/heritage";
 import { SPEED } from "../sim/research";
 import { upgradeBlockers } from "../sim/coverage";
 import { foundationKindText } from "../sim/foundationLots";
+import { realName } from "../sim/items";
+import { halls, MUSEUM, themes } from "../sim/museum";
+import { flash } from "../map/tools";
 import { queuedLabel } from "../sim/clock";
 import { handHours } from "../sim/production";
 import { DIG, revealedArea } from "../sim/excavation";
@@ -17,7 +20,7 @@ import type { ComponentChildren } from "preact";
 import type { Building, BuildingQuery, FoundFoundation, Needs, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../view/layers/buildings";
 import { PLACE_TOOLS, tool, type PlaceTool } from "../map/tools";
-import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simClient";
+import { buildings, digs, gameClock, queryBuilding, sendCmd, state, stock } from "../simClient";
 import { act, InspectorHead, Line, num, plural, Section, siteEta, SiteLevers } from "./InspectorParts";
 import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspectorModel";
 import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
@@ -83,6 +86,49 @@ function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined 
       )}
       {b.template === "restored" && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
     </div>
+  );
+}
+
+// The halls of a finished museum: what each shows, and the choice of theme (docs/PLAN-restoration.md section 6.3).
+function MuseumHalls({ b }: { b: Building }) {
+  const st = state.value!;
+  const list = themes(st);
+  const mine = halls(st).filter((h) => h.museum === b.id);
+  const taken = new Map(halls(st).flatMap((h) => (h.theme ? [[h.theme.key, h] as const] : [])));
+  const pick = async (hall: number, theme: string) => {
+    const r = await sendCmd({ type: "setExhibition", building: b.id, hall, theme: theme || null });
+    if (!r.ok) flash(r.reason ?? L("Не вышло", "That didn't work"));
+  };
+  return (
+    <Section title={L("Залы", "Halls")}>
+      {list.length === 0 && <div class="people-note">{L("Находок для выставок пока нет: раскапывайте фундаменты.", "No finds to exhibit yet: dig foundations.")}</div>}
+      {mine.map((h) => (
+        <div class="demand-card" key={h.index}>
+          <label class="insp-line">
+            <span class="insp-label">{L(`Зал ${h.index + 1}`, `Hall ${h.index + 1}`)}</span>
+            <select class="insp-value" value={h.theme?.key ?? ""} onChange={(e) => void pick(h.index, (e.currentTarget as HTMLSelectElement).value)}>
+              <option value="">{L("пусто", "empty")}</option>
+              {list.map((t) => {
+                const other = taken.get(t.key);
+                const busy = !!other && !(other.museum === b.id && other.index === h.index);
+                return (
+                  <option key={t.key} value={t.key} disabled={busy}>
+                    {t.name} ({t.shown.length}){busy ? L(" — в другом зале", " — in another hall") : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          {h.theme && (
+            <div class="people-note">
+              {h.theme.complete
+                ? L(`Выставка полная: знания (${domainName(h.theme.domain).toLowerCase()}) и привлекательность города`, `The exhibition is complete: knowledge (${domainName(h.theme.domain).toLowerCase()}) and the town's appeal`)
+                : L(`Показано ${h.theme.shown.length} из ${h.theme.items.length}: полной выставке нужны все находки темы, не меньше ${MUSEUM.min}`, `${h.theme.shown.length} of ${h.theme.items.length} shown: a complete one needs every find of the theme, at least ${MUSEUM.min}`)}
+            </div>
+          )}
+        </div>
+      ))}
+    </Section>
   );
 }
 
@@ -307,7 +353,7 @@ export function BuildingPanel() {
   const level = b.foundationId ? ` · ${L("этажей", "floors")} ${b.level}${b.level < maxLevel(b) ? ` ${L("из", "of")} ${maxLevel(b)}` : ""}` : b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level} ${L("из", "of")} ${maxLevel(b)}` : "";
   return (
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
-      <InspectorHead icon={templateIcon(b.template)} title={b.asItWas && site ? siteTitle(site) : t.name} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
+      <InspectorHead icon={templateIcon(b.template)} title={(snap && realName(snap, b)) ?? (b.asItWas && site ? siteTitle(site) : t.name)} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
       {b.foundationId && (
         <Section>
           {b.asItWas && <Restored b={b} site={site} />}
@@ -315,6 +361,7 @@ export function BuildingPanel() {
           {!b.asItWas && site?.cls && <div class="people-note">{foundationKindText(site, t)}</div>}
         </Section>
       )}
+      {b.template === "museum" && b.state === "active" && snap && <MuseumHalls b={b} />}
       {(left > 0 || b.state !== "active") && (
         <Section title={upgrading ? L("Перестройка", "Rebuild") : L("Стройка", "Construction")}>
           {left > 0 && (

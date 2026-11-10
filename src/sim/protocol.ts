@@ -6,6 +6,7 @@ import type { SimDelta } from "./delta";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { TradeOrder } from "./trade";
+import type { FeatureKind } from "./types";
 import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
 export type { Away };
@@ -37,6 +38,10 @@ export type Cmd =
   // Dig a surveyed outline, or every outline of an old street (sim/digging.ts).
   | { type: "digFoundation"; foundationId: string }
   | { type: "digStreet"; streetId: string }
+  // What to do with a find (sim/items.ts), and what a museum hall shows (sim/museum.ts; null empties the hall).
+  | { type: "returnFind"; id: string }
+  | { type: "useFind"; id: string }
+  | { type: "setExhibition"; building: number; hall: number; theme: string | null }
   | { type: "demolish"; id: number }
   // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
   | { type: "setPriority"; key: number | null }
@@ -65,6 +70,7 @@ export type Cmd =
       foundations: { id: string; ring: [number, number][]; area: number }[];
       pois: { id: string; name: string; cls: string; x: number; y: number }[];
       streets: { id: string; name: string; lines?: [number, number][][] }[];
+      features?: { id: string; kind: FeatureKind; x: number; y: number; name?: string; cls?: string }[];
     };
 
 export type ToWorker =

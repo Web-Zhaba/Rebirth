@@ -39,7 +39,7 @@ const mk = (foundations: FoundFoundation[], extra: Partial<SimState> = {}, progr
     ...emptyGrowth(1),
     progress,
     articles: [],
-    finds: { foundations, pois: [], streets: [], revealed: [{ digId: 1, x: 0, y: 40, r: 150 }] },
+    finds: { foundations, pois: [], streets: [], revealed: [{ digId: 1, x: 0, y: 40, r: 150 }], features: [], fates: {} },
     ...extra,
   }) as SimState;
 
@@ -77,7 +77,7 @@ describe("rewards by tier", () => {
   it("a unique one is a landmark: it works as a monument and the best monument in reach counts, not the sum", () => {
     const church = found("c", rect(0, 0, 12, 20), { cls: "place_of_worship", name: "Церковь Покрова" });
     const plain = found("m", rect(40, 0, 10, 10));
-    let s = finishAll(put(mk([church, plain], { finds: { foundations: [church, plain], pois: [place("p", "Церковь Покрова")], streets: [], revealed: [{ digId: 1, x: 0, y: 40, r: 150 }] } }), "c", "chapel"));
+    let s = finishAll(put(mk([church, plain], { finds: { foundations: [church, plain], pois: [place("p", "Церковь Покрова")], streets: [], revealed: [{ digId: 1, x: 0, y: 40, r: 150 }], features: [], fates: {} } }), "c", "chapel"));
     expect(s.buildings[1].landmark).toBe(true);
     expect(s.chronicle.some((c) => c.kind === "heritage:c")).toBe(true);
     s = finishAll(put(s, "m", "restored"));

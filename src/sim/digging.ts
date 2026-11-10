@@ -3,6 +3,7 @@ import { addChronicle } from "./chronicle";
 import { salvagedStone } from "./excavation";
 import { foundationScale, lotRing } from "./foundationLots";
 import { kindName, siteTitle, tierContext, tierOf } from "./heritage";
+import { beyondSurvey, catalogue, foundIds } from "./items";
 import { orientedBox } from "./heritageGeo";
 import { MAX_EVENTS } from "./people";
 import { say } from "./production";
@@ -126,5 +127,19 @@ export function completeExcavations(s: SimState): SimState {
   }
   const n = done.length;
   if (n > 1) chronicle = addChronicle(chronicle, s.gameMinutes, "dig:dug", L(`Раскопано ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`, `${n} foundations dug`));
-  return { ...s, buildings, events, chronicle, stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock, finds: { ...s.finds, foundations } };
+  const out: SimState = { ...s, buildings, events, chronicle, stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock, finds: { ...s.finds, foundations } };
+  return reportFinds(s, out, [done[0].lot.cx, done[0].lot.cy]);
+}
+
+// The finds the digs turned up (sim/items.ts), in one notice; those lying beyond the survey point to places not open yet.
+function reportFinds(before: SimState, after: SimState, at: [number, number]): SimState {
+  const had = foundIds(before);
+  const now = foundIds(after);
+  const fresh = catalogue(after).filter((i) => now.has(i.id) && !had.has(i.id));
+  if (fresh.length === 0) return after;
+  const names = fresh.slice(0, 3).map((i) => i.name).join(", ") + (fresh.length > 3 ? L(` и ещё ${fresh.length - 3}`, ` and ${fresh.length - 3} more`) : "");
+  let events = say(after.events, after.gameMinutes, "heritage", L(`Находки: ${names}`, `Finds: ${names}`), at);
+  for (const i of fresh.filter((x) => beyondSurvey(after.finds, x)).slice(0, 2))
+    events = say(events, after.gameMinutes, "heritage", L(`${i.name} указывает на место за раскопом`, `${i.name} points to a place beyond the dig`), [i.x, i.y]);
+  return { ...after, events };
 }

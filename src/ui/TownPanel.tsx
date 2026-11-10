@@ -316,6 +316,11 @@ function PlacesTab() {
       {streets.map((t) => (
         <div class="demand-card" key={t.id}>
           <Line label={t.name}>{t.restored ? L("имя возвращено", "name restored") : L(`дома ${t.built} из ${t.houses} · дорога ${pct(t.road)}`, `houses ${t.built} of ${t.houses} · road ${pct(t.road)}`)}</Line>
+          {(t.numbers.total > 0 || t.household.total > 0) && (
+            <div class="people-note">
+              {[t.numbers.total > 0 ? L(`номера домов: ${t.numbers.found} из ${t.numbers.total}`, `house numbers: ${t.numbers.found} of ${t.numbers.total}`) : "", t.household.total > 0 ? L(`утварь улицы: ${t.household.found} из ${t.household.total} домов`, `the street's household: ${t.household.found} of ${t.household.total} houses`) : ""].filter(Boolean).join(" · ")}
+            </div>
+          )}
         </div>
       ))}
     </div>

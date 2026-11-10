@@ -25,7 +25,7 @@ const builtRoad = (): RoadGraph => {
 };
 
 const mk = (foundations: FoundFoundation[], streets: FoundPlace[] = [], pois: FoundPlace[] = []): SimState =>
-  ({ realTime: 0, gameMinutes: 1000, roads: builtRoad(), zones: emptyZones(), ...emptyGrowth(1), progress: allResearched(), articles: [], finds: { foundations, pois, streets, revealed: [{ digId: 1, x: 0, y: 40, r: 150 }] } }) as SimState;
+  ({ realTime: 0, gameMinutes: 1000, roads: builtRoad(), zones: emptyZones(), ...emptyGrowth(1), progress: allResearched(), articles: [], finds: { foundations, pois, streets, revealed: [{ digId: 1, x: 0, y: 40, r: 150 }], features: [], fates: {} } }) as SimState;
 
 const ok = <T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> => {
   if (!r.ok) throw new Error((r as unknown as { reason: string }).reason);

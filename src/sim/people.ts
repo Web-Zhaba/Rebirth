@@ -963,6 +963,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       unemployment: adults > 0 && !work ? jobless / adults : 0, // with construction work the jobless are builders
       services: houses > 0 ? covered / houses : 0,
       pop: Object.keys(w.residents).length,
+      museum: s.progress?.museumPull ?? 0,
     });
   })();
 

@@ -13,6 +13,7 @@ import Bulldozer from "~icons/game-icons/bulldozer";
 import Church from "~icons/game-icons/church";
 import DigHole from "~icons/game-icons/dig-hole";
 import Obelisk from "~icons/game-icons/obelisk";
+import GreekTemple from "~icons/game-icons/greek-temple";
 import FishingPole from "~icons/game-icons/fishing-pole";
 import Carrot from "~icons/game-icons/carrot";
 import Deer from "~icons/game-icons/deer";
@@ -181,6 +182,7 @@ export const ICONS = {
   healer: HerbsBundle,
   dig: DigHole,
   monument: Obelisk,
+  museum: GreekTemple,
 } satisfies Record<string, IconComponent>;
 
 export type IconName = keyof typeof ICONS;

@@ -128,6 +128,7 @@ export interface Building {
   asItWas?: true; // the purpose matches the foundation's known old kind: a restoration in full (sim/restore.ts)
   landmark?: true; // a unique old building restored as it was: it works as a monument too
   restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
+  exhibits?: (string | null)[]; // a museum: the theme each hall shows (sim/museum.ts)
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -253,7 +254,24 @@ export interface Finds {
   pois: FoundPlace[];
   streets: FoundPlace[];
   revealed: RevealedSite[];
+  features: FoundFeature[]; // real features that give finds (sim/items.ts); saves before them have none
+  fates: Record<string, FindFate>; // find id -> what the player did with it
 }
+
+// A real feature of the tile data that gives one find (docs/PLAN-restoration.md section 6): a garden (seeds), an
+// industrial ground (machine parts), a railway (rails), a well (bucket), a house number (counted per street, no item), or
+// a named place beyond the revealed discs (a sign that points to it).
+export type FeatureKind = "seeds" | "parts" | "rails" | "bucket" | "number" | "sign";
+export interface FoundFeature {
+  id: string;
+  kind: FeatureKind;
+  x: number; // local metres
+  y: number;
+  digId: number;
+  name?: string; // a sign's place name, a house number
+  cls?: string; // a sign's POI class
+}
+export type FindFate = "returned" | "used";
 
 // A finished dig site as the snapshot shows it.
 export interface DigInfo {
@@ -322,6 +340,9 @@ export interface ProgressState {
   research: { active: { techId: string; done: number } | null; queue: string[] }; // done: days of work so far; queue holds at most 3
   insights: string[]; // received and not yet used up (a tech insight goes when its tech is researched)
   restored: Partial<Record<DomainId, number>>; // weighted sum of restored old buildings per domain
+  seeds?: number; // old seeds put to use: each raises field yield (sim/items.ts)
+  exhibits?: Partial<Record<DomainId, number>>; // research weight of the complete museum exhibitions, set daily (sim/museum.ts)
+  museumPull?: number; // attraction share the complete exhibitions add, set daily
   recognised?: Record<number, number>; // dig id -> recognisability steps granted, 1..4 (sim/recognition.ts)
 }
 

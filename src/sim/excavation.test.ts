@@ -153,12 +153,12 @@ describe("recordFinds", () => {
 describe("saves", () => {
   const save = (sim: SimState): unknown => JSON.parse(JSON.stringify({ version: 4, city, sim } satisfies SaveV4));
   it("a new town has empty finds and an older save gets the default", () => {
-    expect(emptyGrowth(1).finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [] });
+    expect(emptyGrowth(1).finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [], features: [], fates: {} });
     const s = town([dig()]);
     const raw = save(s) as { sim: Record<string, unknown> };
     delete raw.sim.finds;
     const p = parseSave(raw, NOW)!;
-    expect(p.sim.finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [] });
+    expect(p.sim.finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [], features: [], fates: {} });
     expect(p.sim.buildings[1].radius).toBe(0);
   });
   it("finds and the radius survive a round trip", () => {
@@ -177,7 +177,7 @@ describe("saves", () => {
       raw.sim.finds = junk;
       const p = parseSave(raw, NOW);
       expect(p).not.toBeNull();
-      expect(p!.sim.finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [] });
+      expect(p!.sim.finds).toEqual({ foundations: [], pois: [], streets: [], revealed: [], features: [], fates: {} });
     }
     const raw = save(s) as { sim: Record<string, unknown> };
     raw.sim.finds = { foundations: [{ id: "ok", ring: square(0, 0, 3), area: 9, digId: 1, at: 0 }, { id: "bad", ring: [[0, 0]], area: 1, digId: 1, at: 0 }], pois: [], streets: [{ id: "s", name: "A", kind: "street", digId: 1, at: 0 }, { nope: 1 }] };
