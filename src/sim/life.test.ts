@@ -246,7 +246,7 @@ describe("carts", () => {
         expect(c.pts[c.pts.length - 1]).toEqual([0, 0]);
       }
     }
-    expect(LOAD).toEqual({ logs: 5, planks: 2, stone: 3, food: 500, wares: 20 });
+    expect(LOAD).toEqual({ logs: 5, planks: 2, stone: 3, food: 500, clothes: 20, dishes: 20, furniture: 6, tools: 15 });
   });
   it("caps at 6 carts a producer and sends none when nothing was made", () => {
     expect(carts(computeLife(withMade(1, "woodcutter", 10_000)).trips)).toHaveLength(MAX_CARTS);
@@ -368,12 +368,12 @@ describe("families on their way", () => {
     const terrain: Record<string, TerrainInfo> = {};
     for (const c of regenerateCells(base.roads, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
     const cells = regenerateCells(base.roads, [], [], terrain).map((c) => (c.block ? c : { ...c, zone: "res" as const }));
-    const s = { ...base, zones: { ...emptyZones(), cells, terrain, rev: 1 }, realTime: NOW, gameMinutes: 300, attract: 1 }; // mid-day, no daily step in sight
+    const s = { ...base, zones: { ...emptyZones(), cells, terrain, rev: 1 }, realTime: NOW, gameMinutes: 300, attraction: { food: 1, mood: 1, jobs: 1, services: 1, score: 1, cap: 1e6 } }; // mid-day, no daily step in sight
     const mem: Storage = { get: async () => ({ version: 4, city, sim: JSON.parse(JSON.stringify(s)) }), put: async () => {}, clear: async () => {} };
     const h = new Handler(mem, (m) => out.push(m));
     await h.handle({ t: "load", legacy: null, now: NOW });
     out.length = 0;
-    h.tick(NOW + 2500); // the vacant house gets a family (attract 1)
+    h.tick(NOW + 2500); // the vacant house gets a family (a family comes at once)
     expect(out.map((m) => m.t)).toEqual(["snapshot", "life"]);
     const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
     expect(snap.sim.incoming).toHaveLength(1);

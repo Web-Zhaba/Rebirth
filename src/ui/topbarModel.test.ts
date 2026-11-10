@@ -7,9 +7,10 @@ const eco = (o: Partial<EconomyStats> = {}): EconomyStats => ({
   foodCap: 10000,
   foodPerDay: 100,
   foodDays: 50,
-  yesterday: { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 },
+  yesterday: { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 },
   fields: { count: 0, ha: 0, assignedHa: 0, sown: 0, reaped: 0, expected: 0, window: "none" as never },
   avgMood: 0,
+  admin: { pop: 0, capacity: 150, factor: 1 },
   forage: 0,
   brushwood: 0,
   outlook: 1,
@@ -39,7 +40,7 @@ describe("top bar model", () => {
   });
 
   it("food net is production plus foraging minus eating", () => {
-    expect(foodNet(eco({ yesterday: { food: 40, logs: 0, planks: 0, stone: 0, wares: 0 }, forage: 24, foodPerDay: 100 }))).toBe(-36);
+    expect(foodNet(eco({ yesterday: { food: 40, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 }, forage: 24, foodPerDay: 100 }))).toBe(-36);
   });
 
   it("warns about famine, low food, missing hands and logs", () => {

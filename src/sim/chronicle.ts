@@ -11,6 +11,7 @@ const FIRST_BUILT: Record<string, string> = {
   smithy: L("Построена первая кузница", "The first smithy is built"),
   carpentry: L("Построена первая столярная мастерская", "The first carpentry workshop is built"),
   pottery: L("Построена первая гончарня", "The first pottery is built"),
+  weaver: L("Построена первая ткацкая мастерская", "The first weaving workshop is built"),
   shop: L("Построен первый магазин", "The first shop is built"),
   tavern: L("Построена первая таверна", "The first tavern is built"),
   gumno: L("Построена первая ферма", "The first farm is built"),

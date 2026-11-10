@@ -4,10 +4,10 @@ import { atLeastAsClose, CLOSE_UP_MPP } from "../view/scale";
 import { selectedBuilding } from "../view/layers/buildings";
 import { compactScreen } from "../map/motion";
 import { etaRealMs, formatReal } from "../sim/buildEta";
-import { BUILDINGS } from "../sim/buildings";
+import { BUILDINGS, CREW, siteCrew } from "../sim/buildings";
 import { siteTitle } from "../sim/heritage";
 import { isCleared } from "../sim/clearing";
-import { ROAD_KINDS, stoneWaiting, workableEdges, workLeft, workShare } from "../sim/roads";
+import { ROAD_KINDS, roadCrew, stoneWaiting, workableEdges, workLeft, workShare } from "../sim/roads";
 import { frame, gameClock, speed, state } from "../simClient";
 import { plural } from "./InspectorParts";
 import { ProgressBar } from "./kit";
@@ -35,12 +35,15 @@ interface Task {
   at?: [number, number]; // local meters: the title flies the map there, hover rings it
   building?: number; // building id: the title also opens its card
   prio: boolean; // the player put this site first
+  crew: number; // hands the site can use at once
+  order: number; // 0 roads, 1 workplaces, 2 houses, 3 clearings: the order the artel takes them
   wait?: string; // why nobody works on it now (shown instead of the finish time)
 }
 
 // Construction work the builders are on now: houses and workshops going up (or being rebuilt), roads they can reach,
 // land being cleared. Bottom-right of the HUD, on the build bar's line. Collapsible (remembered). Sites are listed in the
-// order the builders take them: the priority site first, then the rest. Each row shows when it is expected to finish.
+// order the builders take them: the priority site first, then roads, workplaces, houses and clearings. Each site takes its
+// crew of the builders; a row shows when it is expected to finish with those hands, or that it waits for hands.
 export function BuilderTasks({ view }: { view: View }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [hover, setHover] = useState<[number, number] | null>(null);
@@ -66,8 +69,9 @@ export function BuilderTasks({ view }: { view: View }) {
     const site = b.siteId ? s.finds.foundations.find((f) => f.id === b.siteId) : undefined;
     const name = site ? siteTitle(site) : (BUILDINGS[b.template]?.name ?? b.template);
     const at: [number, number] = [b.lot.cx, b.lot.cy];
-    if (b.state === "building") tasks.push({ key: `b${b.id}`, title: name, value: b.labor > 0 ? b.done / b.labor : 0, left: Math.max(0, b.labor - b.done), at, building: b.id, prio: priority === b.id });
-    if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: ${L("перестройка", "rebuild")}`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), at, building: b.id, prio: priority === b.id });
+    const job = { crew: siteCrew(b), order: b.zone === "res" ? 2 : 1, at, building: b.id, prio: priority === b.id };
+    if (b.state === "building") tasks.push({ key: `b${b.id}`, title: name, value: b.labor > 0 ? b.done / b.labor : 0, left: Math.max(0, b.labor - b.done), ...job });
+    if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: ${L("перестройка", "rebuild")}`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), ...job });
   }
   const reachable = new Set(workableEdges(s.roads));
   const noStone = stoneWaiting(s.roads, s.stock);
@@ -78,30 +82,34 @@ export function BuilderTasks({ view }: { view: View }) {
     const at: [number, number] = [(a.x + b.x) / 2, (a.y + b.y) / 2];
     const upgrading = e.done >= e.labor && e.upgrade;
     const title = upgrading ? `${ROAD_KINDS[e.kind].name} · ${L("улучшение", "upgrade")}: ${ROAD_KINDS[e.upgrade!.kind].name.toLowerCase()}` : ROAD_KINDS[e.kind].name;
-    tasks.push({ key: `r${e.id}`, title: `${title}, ${Math.round(e.length)} ${L("м", "m")}`, value: workShare(e), left: workLeft(e), at, prio: false, ...(noStone.has(e.id) ? { wait: L("Нет камня", "No stone") } : {}) });
+    tasks.push({ key: `r${e.id}`, title: `${title}, ${Math.round(e.length)} ${L("м", "m")}`, value: workShare(e), left: workLeft(e), at, prio: false, crew: roadCrew(e), order: 0, ...(noStone.has(e.id) ? { wait: L("Нет камня", "No stone") } : {}) });
   }
   for (const c of s.clearings) {
     if (isCleared(c)) continue;
     const at: [number, number] = [c.pts.reduce((t, p) => t + p[0], 0) / c.pts.length, c.pts.reduce((t, p) => t + p[1], 0) / c.pts.length];
-    tasks.push({ key: `c${c.id}`, title: L("Вырубка", "Clearing"), value: c.labor > 0 ? c.done / c.labor : 0, left: Math.max(0, c.labor - c.done), at, prio: priority === -c.id });
+    tasks.push({ key: `c${c.id}`, title: L("Вырубка", "Clearing"), value: c.labor > 0 ? c.done / c.labor : 0, left: Math.max(0, c.labor - c.done), at, prio: priority === -c.id, crew: CREW, order: 3 });
   }
-  // The priority site first; the rest keep their order.
-  tasks.sort((p, q) => Number(q.prio) - Number(p.prio));
+  // The priority site first, then by kind; each kind keeps its order.
+  tasks.sort((p, q) => Number(q.prio) - Number(p.prio) || p.order - q.order);
 
   const builders = s.people?.builders ?? 0;
   const gm = gameClock.value;
-  let ahead = 0;
-  const etaText = (personHours: number): string => {
+  let free = builders; // builders no site in the list has taken yet
+  const etaText = (personHours: number, hands: number): string => {
     if (builders <= 0) return L("некому строить", "no one to build");
-    const ms = etaRealMs(personHours, builders, gm, speed.value, s.levers);
+    if (hands <= 0) return L("ждёт рабочих", "waiting for hands");
+    const ms = etaRealMs(personHours, hands, gm, speed.value, s.levers);
     if (Number.isFinite(ms)) return formatReal(ms);
     return speed.value === 0 ? L("пауза", "paused") : L("нет срока", "no estimate");
   };
-  const rows = tasks.slice(0, MAX_SHOWN).map((t) => {
+  const all = tasks.map((t) => {
     if (t.wait) return { ...t, eta: t.wait };
-    ahead += t.left;
-    return { ...t, eta: etaText(ahead) };
+    const hands = Math.min(t.crew, free);
+    free -= hands;
+    return { ...t, eta: etaText(t.left, hands) };
   });
+  const rows = all.slice(0, MAX_SHOWN);
+  const idle = tasks.length > 0 ? free : 0; // builders every crew is full without
   const rest = tasks.length - rows.length;
   const toggle = () => {
     const next = !collapsed;
@@ -118,6 +126,12 @@ export function BuilderTasks({ view }: { view: View }) {
         <Icon name="build" size={16} />
         <span>
           <span class="builder-tasks-word">{L("Строители", "Builders")}</span> <b>{builders}</b>
+          {idle > 0 && (
+            <span class="builder-tasks-idle" title={L("Всем стройкам хватает рук: лишние ждут новых работ", "Every site has its crew: the rest wait for new work")}>
+              {" "}
+              · {idle} {L("без дела", "idle")}
+            </span>
+          )}
         </span>
         <span class="builder-tasks-count">
           {tasks.length > 0 ? (

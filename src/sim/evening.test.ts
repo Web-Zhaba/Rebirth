@@ -52,7 +52,7 @@ function bld(id: number, template: string, x: number, state: Building["state"] =
 function town(bs: Building[], gm: number, roads: RoadGraph = roadAlong()): SimState {
   const buildings: Record<number, Building> = {};
   for (const b of bs) buildings[b.id] = b;
-  return { realTime: NOW, gameMinutes: gm, roads, zones: emptyZones(), ...emptyGrowth(7, gm), stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 }, buildings, nextBuildingId: bs.length + 1 };
+  return { realTime: NOW, gameMinutes: gm, roads, zones: emptyZones(), ...emptyGrowth(7, gm), stock: { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 20, dishes: 20, furniture: 20, tools: 20 }, buildings, nextBuildingId: bs.length + 1 };
 }
 
 interface HSpec {
@@ -95,13 +95,13 @@ describe("evening home crafts", () => {
   it("adults at home make 0.01 pcs an hour each", () => {
     const s = homes(evening());
     expect(eveningRate(s)).toBeCloseTo(0.03);
-    expect(eveningStep(s, 1).stock.wares).toBeCloseTo(20.03);
+    expect(eveningStep(s, 1).stock.clothes).toBeCloseTo(20.03);
     expect(toSnapshot(s).economy.eveningWares).toBeCloseTo(0.03);
   });
   it("doubles in winter", () => {
     const s = homes(evening(WINTER));
     expect(eveningRate(s)).toBeCloseTo(0.06);
-    expect(eveningStep(s, 1).stock.wares).toBeCloseTo(20.06);
+    expect(eveningStep(s, 1).stock.clothes).toBeCloseTo(20.06);
   });
   it("counts only adults: children, the old and tent dwellers do not", () => {
     let s = homes(evening());
@@ -109,13 +109,13 @@ describe("evening home crafts", () => {
     expect(eveningRate(s)).toBeCloseTo(0.02);
     expect(eveningRate(folk(town([], evening()), [{ home: null, adults: 3 }]))).toBe(0);
   });
-  it("the step makes wares only from 19:00 to 22:00", () => {
-    const wares = (gm: number) => step(homes(gm)).stock.wares;
-    expect(wares(evening(SUMMER, 19))).toBeCloseTo(20 + 0.03 / 6);
-    expect(wares(evening(SUMMER, 21, 50)) - 20).toBeCloseTo(0.03 / 6 - 0, 5);
-    for (const [h, m] of [[18, 50], [22, 0], [23, 0], [3, 0], [6, 50]]) expect(wares(evening(SUMMER, h, m)), `${h}:${m}`).toBe(20);
+  it("the step makes clothing only from 19:00 to 22:00", () => {
+    const made = (gm: number) => step(homes(gm)).stock.clothes;
+    expect(made(evening(SUMMER, 19))).toBeCloseTo(20 + 0.03 / 6);
+    expect(made(evening(SUMMER, 21, 50)) - 20).toBeCloseTo(0.03 / 6 - 0, 5);
+    for (const [h, m] of [[18, 50], [22, 0], [23, 0], [3, 0], [6, 50]]) expect(made(evening(SUMMER, h, m)), `${h}:${m}`).toBe(20);
   });
-  it("the evening wares count in the day's output", () => {
+  it("the evening clothing counts in the day's output", () => {
     const s = eveningStep(homes(evening()), 10);
     expect(daySummary(s).lines.find((l) => l.kind === "made")?.text).toContain("товаров");
   });

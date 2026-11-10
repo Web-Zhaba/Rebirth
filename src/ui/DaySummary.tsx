@@ -8,12 +8,18 @@ import type { IconName } from "./icons";
 import { IconButton, Panel } from "./kit";
 import { DAY_SUMMARY_MS, daySummaryRemaining } from "./daySummaryTimerModel";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { SuppliesOffer } from "./SuppliesOffer";
+import { platform } from "../platform";
+import { calendar, YEAR_DAYS } from "../sim/time";
 import { L } from "../i18n";
+
+// The year's last summary offers supplies for an ad (where the portal has rewarded ads); that card waits to be closed.
+const yearEnd = (at: number): boolean => platform.rewarded !== null && calendar(at).dayOfYear === YEAR_DAYS;
 
 const LINE_ICON: Record<SummaryLine["kind"], IconName> = { built: "craft", arrived: "res", born: "res", made: "gumno", problem: "warning" };
 
 // «Итоги дня»: each new card stays on screen for five real seconds. The countdown is independent
-// of game speed and pause; the close button can dismiss it earlier.
+// of game speed and pause; the close button can dismiss it earlier. The year's last card has no countdown.
 export function DaySummary({ view }: { view: View }) {
   const [closed, setClosed] = useState<number | null>(null);
   const [remaining, setRemaining] = useState(1);
@@ -21,7 +27,7 @@ export function DaySummary({ view }: { view: View }) {
   const at = summary?.at ?? null;
 
   useEffect(() => {
-    if (at === null || closed === at) return;
+    if (at === null || closed === at || yearEnd(at)) return;
     const started = performance.now();
     let raf = 0;
     setRemaining(1);
@@ -45,6 +51,7 @@ export function DaySummary({ view }: { view: View }) {
 
   if (!summary || closed === summary.at) return null;
   const fl = frame.value;
+  const offer = yearEnd(summary.at);
   return (
     <Panel class="day-summary" role="region" aria-labelledby={SEMANTIC_IDS.daySummaryTitle}>
       <div class="day-summary-head">
@@ -53,7 +60,7 @@ export function DaySummary({ view }: { view: View }) {
         </strong>
         <IconButton icon="close" label={L("Закрыть", "Close")} size={16} onClick={() => setClosed(summary.at)} />
       </div>
-      <div
+      {!offer && <div
         class="day-summary-timer"
         role="progressbar"
         aria-label={L("До автоматического закрытия", "Until it closes automatically")}
@@ -63,7 +70,7 @@ export function DaySummary({ view }: { view: View }) {
         aria-valuetext={L(`Осталось ${(remaining * DAY_SUMMARY_MS / 1000).toFixed(1)} с`, `${(remaining * DAY_SUMMARY_MS / 1000).toFixed(1)} s left`)}
       >
         <span style={{ width: `${remaining * 100}%` }} />
-      </div>
+      </div>}
       {summary.lines.length === 0 && <div>{L("День прошёл тихо.", "A quiet day.")}</div>}
       {summary.lines.map((l, i) => {
         const pos = l.pos;
@@ -85,6 +92,7 @@ export function DaySummary({ view }: { view: View }) {
           <div key={i} class="day-summary-line">{body}</div>
         );
       })}
+      {offer && <SuppliesOffer key={summary.at} />}
     </Panel>
   );
 }

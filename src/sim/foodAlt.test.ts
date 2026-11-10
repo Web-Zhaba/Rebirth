@@ -45,7 +45,7 @@ const bld = (id: number, template: string, x: number, state: Building["state"] =
 const base = (gm: number, weather: WeatherState, bs: Building[], fields: Field[] = []): SimState => {
   const buildings: Record<number, Building> = {};
   for (const b of bs) buildings[b.id] = b;
-  return { realTime: 0, gameMinutes: gm, roads: emptyRoads(), zones: { ...emptyZones(), fields }, ...emptyGrowth(7, gm), stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 }, buildings, weather };
+  return { realTime: 0, gameMinutes: gm, roads: emptyRoads(), zones: { ...emptyZones(), fields }, ...emptyGrowth(7, gm), stock: { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 20, dishes: 20, furniture: 20, tools: 20 }, buildings, weather };
 };
 function folk(s: SimState, n: number, job: number | null, perHome = n): SimState {
   const residents: Record<number, Resident> = {};

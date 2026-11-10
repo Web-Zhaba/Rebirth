@@ -1,25 +1,30 @@
 // The game's language, fixed for the page's lifetime: changing it stores the choice and reloads.
 // Texts sit next to each other in the code as L(ru, en). Russian is the source; tests run in Russian.
 // The sim worker cannot read localStorage, so the page passes the language as the worker's name.
+import { platform } from "./platform";
+
 export type Lang = "ru" | "en";
 
 const KEY = "rebirth.lang";
 const isLang = (v: unknown): v is Lang => v === "ru" || v === "en";
+// Any language code to one the game has: Russian for those who read it, English for everyone else.
+const fromCode = (code: string): Lang => (/^(ru|be|uk|kk)\b/i.test(code) ? "ru" : "en");
 
 function detect(): Lang {
   if (import.meta.env.MODE === "test") return "ru";
   const g = globalThis as { WorkerGlobalScope?: unknown; name?: string };
   if (g.WorkerGlobalScope !== undefined) return isLang(g.name) ? g.name : "ru";
-  // A portal (Yandex Games) passes its interface language in the page address.
-  const url = new URLSearchParams(location.search + "&" + location.hash.slice(1)).get("lang");
-  if (url) return url === "ru" || url === "be" || url === "uk" || url === "kk" ? "ru" : "en";
+  // The player's own choice in the settings wins over any detection.
   try {
     const stored = localStorage.getItem(KEY);
     if (isLang(stored)) return stored;
   } catch {
-    // storage blocked: fall through to the browser language
+    // storage blocked: fall through to detection
   }
-  return /^(ru|be|uk|kk)\b/i.test(navigator.language) ? "ru" : "en";
+  // A portal tells its interface language through its SDK (set up before this module loads, boot.ts).
+  if (platform.lang) return fromCode(platform.lang);
+  const url = new URLSearchParams(location.search + "&" + location.hash.slice(1)).get("lang");
+  return fromCode(url ?? navigator.language);
 }
 
 export const lang: Lang = detect();

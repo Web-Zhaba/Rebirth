@@ -1,5 +1,7 @@
+import { GOOD_NAMES, GOODS_UPGRADE, needsAt } from "../sim/goods";
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, houseCapacity, JOB_NAMES, materialsOf, type JobGroup, type Materials, UPGRADE } from "../sim/buildings";
+import { BUILDINGS, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
+import { storeAmount, storeGroupName } from "./buildMenu";
 import { domainName } from "../sim/domains";
 import { kindName, siteDomain, siteTitle } from "../sim/heritage";
 import { SPEED } from "../sim/research";
@@ -26,12 +28,11 @@ import { duplicateTemplate } from "./actionModel";
 import { followResident } from "./follow";
 import { NeedsBars } from "./NeedsBars";
 import { SEMANTIC_IDS } from "./semanticIds";
-import { decimal, L } from "../i18n";
+import { L } from "../i18n";
 
 const REFRESH_MS = 4000;
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;
-const tons = (kg: number) => decimal((Math.round(kg / 100) / 10).toString());
 
 const MISSING: Record<string, string> = { [L("брёвна", "logs")]: L("Нет брёвен", "No logs"), [L("брёвна (на уголь)", "logs (for charcoal)")]: L("Нет брёвен (на уголь)", "No logs (for charcoal)"), [L("доски", "planks")]: L("Нет досок", "No planks") };
 
@@ -42,7 +43,7 @@ const MATERIALS: [keyof Materials, string, string][] = [
 ];
 
 // What a site under construction takes from the stock, and the hand-made hours its shortfall adds.
-function SiteMaterials({ m, paid, hand, st }: { m: Materials | undefined; paid: boolean; hand?: number; st: Stock | null }) {
+function SiteMaterials({ m, paid, hand, haul, st }: { m: Materials | undefined; paid: boolean; hand?: number; haul?: number; st: Stock | null }) {
   if (!m) return null;
   const need = MATERIALS.filter(([g]) => m[g] > 0)
     .map(([g, name, unit]) => `${name} ${num(m[g])} ${unit}`)
@@ -60,6 +61,7 @@ function SiteMaterials({ m, paid, hand, st }: { m: Materials | undefined; paid: 
       ) : (
         <div class="people-note">{paid ? L("Хватило запасов склада", "The store had enough") : L("Запасов склада хватает", "The store has enough")}</div>
       )}
+      {paid && (haul ?? 0) >= 0.05 && <div class="people-note">{L(`Подвоз со складов: ${num(haul!)} ч работы`, `Carting from the stores: ${num(haul!)} h of work`)}</div>}
     </div>
   );
 }
@@ -109,7 +111,7 @@ function useResidents(id: number | null, active: boolean, bump: string): Buildin
 
 const SITE_FACT = new Set(["woodcutter", "fisher", "forager"]);
 // Whether Production below has anything to show for this workplace.
-const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && SITE_FACT.has(template)) || !!p.orchard || p.storage !== undefined || !!p.fields || !!p.missing;
+const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && SITE_FACT.has(template)) || !!p.orchard || !!p.store || !!p.haul || !!p.full || !!p.fields || !!p.missing;
 
 function Production({ template, p }: { template: string; p: ProductionInfo }) {
   const site = p.site;
@@ -119,7 +121,17 @@ function Production({ template, p }: { template: string; p: ProductionInfo }) {
       {site && template === "fisher" && <div>{L("Вода рядом:", "Water nearby:")} {pct(site.water)}</div>}
       {site && template === "forager" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
       {p.orchard && <div>{p.orchard.ripeDays > 0 ? L(`Деревья растут: ещё ${p.orchard.ripeDays} дн.`, `Trees are growing: ${p.orchard.ripeDays} more d`) : L(`Урожай этого года: ${pct(p.orchard.quality)}`, `This year’s crop: ${pct(p.orchard.quality)}`)}</div>}
-      {p.storage !== undefined && <div>{L("Склад:", "Storage:")} +{tons(p.storage)} {L("т еды", "t of food")}</div>}
+      {p.store &&
+        (Object.keys(p.store.room) as StoreGroup[]).map((g) => {
+          const held = STORE_GROUPS[g].reduce((n, k) => n + (p.store!.held[k] ?? 0), 0);
+          return (
+            <div key={g}>
+              {storeGroupName(g).replace(/^./, (c) => c.toUpperCase())}: {storeAmount(g, held)} {L("из", "of")} {storeAmount(g, p.store!.room[g]!)}
+            </div>
+          );
+        })}
+      {p.haul && p.haul.share >= 0.005 && <div>{L(`До склада ${Math.round(p.haul.metres)} м: подвоз берёт ${pct(p.haul.share)} времени`, `${Math.round(p.haul.metres)} m to the store: carting takes ${pct(p.haul.share)} of the time`)}</div>}
+      {p.full && <div class="prod-warn">{L("Склады полны: работа стоит", "The stores are full: work has stopped")}</div>}
       {p.fields && (
         <div>
           {p.fields.count > 0 ? (
@@ -172,9 +184,9 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
   );
 }
 
-const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 };
+const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
 
-const TRADE_LABEL: Record<TradeGood, string> = { food: L("Еда", "Food"), logs: L("Брёвна", "Logs"), planks: L("Доски", "Planks"), stone: L("Камень", "Stone"), wares: L("Товары", "Goods") };
+const TRADE_LABEL: Record<TradeGood, string> = { food: L("Еда", "Food"), logs: L("Брёвна", "Logs"), planks: L("Доски", "Planks"), stone: L("Камень", "Stone"), clothes: GOOD_NAMES.clothes, dishes: GOOD_NAMES.dishes, furniture: GOOD_NAMES.furniture, tools: GOOD_NAMES.tools };
 const TRADE_OFF = { id: "none", label: "—", title: L("Не меняем", "No trade") } as const;
 
 // The town's trade order, shown in every market: one good given, one got, swapped each day by the market workers.
@@ -195,7 +207,7 @@ function MarketTrade({ workers }: { workers: number }) {
         onChange={(id) => {
           if (id === TRADE_OFF.id) return set(null);
           const give = id as TradeGood;
-          set({ give, get: order && order.get !== give ? order.get : give === "wares" ? "food" : "wares" });
+          set({ give, get: order && order.get !== give ? order.get : give === "food" ? "tools" : "food" });
         }}
       />
       {order && (
@@ -252,7 +264,7 @@ export function BuildingPanel() {
   const shown = !!b && !!t && !tool.value && rightPanel.value === "inspector";
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const snap = state.value;
-  const upgradeNote = b && snap && b.state === "active" && b.template === UPGRADE.template && b.level < 2 && !b.upgrade ? upgradeBlockers(snap, b, snap.houseMood[b.id]) : null;
+  const upgradeNote = b && snap && upgradable(b) ? upgradeBlockers(snap, b, snap.houseMood[b.id], snap.houseGoods?.[b.id]) : null;
   const group = t?.group ?? null;
   const info = useResidents(id, shown && b?.state === "active", `${b?.staff ?? "-"}|${group ? (state.value?.levers.jobs?.[group] ?? 2) : "-"}`);
   const ws = snap?.weather;
@@ -291,7 +303,7 @@ export function BuildingPanel() {
   const output = info?.kind === "workplace" && info.production?.good ? { ...OUTPUT[info.production.good], made: info.production.yesterday } : null;
   const residents = info?.kind === "house" ? info.households.reduce((a, h) => a + h.people.length, 0) : 0;
   const size = site ? L(`${Math.round(site.area)} м², высота ${b.height} м`, `${Math.round(site.area)} m², height ${b.height} m`) : L(`${t.along} × ${t.deep} м, высота ${b.height} м`, `${t.along} × ${t.deep} m, height ${b.height} m`);
-  const level = b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level}` : "";
+  const level = b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level} ${L("из", "of")} ${maxLevel(b)}` : "";
   return (
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
       <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
@@ -326,7 +338,7 @@ export function BuildingPanel() {
               {weatherBuild.reason ? ` — ${weatherBuild.reason}` : ""}
             </Line>
           )}
-          {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} st={stock.value} />}
+          {b.state !== "active" && <SiteMaterials m={materialsOf(b)} paid={b.paid} hand={b.hand} haul={b.haul} st={stock.value} />}
           {left > 0 && <SiteLevers siteKey={b.id} />}
         </Section>
       )}
@@ -337,13 +349,22 @@ export function BuildingPanel() {
               <Line icon="person" label={L("Жители", "Residents")}>
                 {residents} {L("из", "of")} {houseCapacity(b)}
               </Line>
+              <Line label={L("Семьи", "Families")}>
+                {info.households.length} {L("из", "of")} {homesOf(b)}
+              </Line>
+              <Line label={L("Нужны товары", "Goods needed")} tone={(snap?.houseGoods?.[b.id] ?? 1) < GOODS_UPGRADE ? "warn" : undefined}>
+                {needsAt(b.level)
+                  .map((g) => GOOD_NAMES[g].toLowerCase())
+                  .join(", ")}
+                {snap?.houseGoods?.[b.id] !== undefined && ` · ${L("получено", "served")} ${Math.round(snap.houseGoods[b.id] * 100)} %`}
+              </Line>
               <Line icon="value" label={L("Стоимость земли", "Land value")}>
                 {info.landValue}
               </Line>
               <Line label={L("Рядом", "Nearby")} tone={info.services.length === 0 ? "warn" : undefined}>
                 {info.services.length > 0 ? info.services.map((sid) => SERVICES[sid].name.toLowerCase()).join(", ") : L("ничего из служб", "no services")}
               </Line>
-              {b.template === "izba" && b.level < 2 && !b.upgrade && b.streak > 0 && (
+              {upgradable(b) && b.streak > 0 && (
                 <div class="people-note">
                   {L("Хороших дней подряд:", "Good days in a row:")} {b.streak} {L("из", "of")} 20
                 </div>

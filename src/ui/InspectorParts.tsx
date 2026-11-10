@@ -1,3 +1,4 @@
+import { CREW, siteCrew } from "../sim/buildings";
 import "./panels.css";
 import type { ComponentChildren } from "preact";
 import { etaRealMs, formatReal } from "../sim/buildEta";
@@ -26,7 +27,8 @@ export function siteEta(hours: number, key: number): string {
   const s = state.value;
   if (!s || hours <= 0) return "";
   const toloka = !!s.levers.toloka && s.levers.toloka.site === key && gameClock.value < s.levers.toloka.until;
-  const hands = siteHands(artelHands(), toloka);
+  const b = key > 0 ? s.buildings[key] : undefined;
+  const hands = siteHands(artelHands(), toloka, b ? siteCrew(b) : CREW);
   if (hands <= 0) return L("некому строить", "no one to build");
   if (speed.value === 0) return L(`${num(hours / hands)} ч работы, время стоит`, `${num(hours / hands)} h of work, time is stopped`);
   const ms = etaRealMs(hours, hands, s.gameMinutes, speed.value, s.levers);

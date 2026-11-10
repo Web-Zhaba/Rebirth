@@ -26,8 +26,8 @@ const old = (sim: SimState, goals?: unknown) => JSON.parse(JSON.stringify({ vers
 describe("tech graph", () => {
   it("is a sound tree", () => {
     expect(validateTechs()).toEqual([]);
-    expect(TECHS.filter((t) => t.era === 1)).toHaveLength(15);
-    expect(TECHS.filter((t) => t.era === 2).map((t) => t.id)).toEqual(["paving", "stonebridge", "trusses", "cellars", "beekeeping", "letters"]);
+    expect(TECHS.filter((t) => t.era === 1)).toHaveLength(16);
+    expect(TECHS.filter((t) => t.era === 2).map((t) => t.id)).toEqual(["paving", "stonebridge", "trusses", "cellars", "beekeeping", "districts", "letters"]);
   });
   it("catches a cycle, a missing prerequisite, a lower era and a doubled key", () => {
     const t = (id: string, requires: string[], era: 1 | 2 = 1, unlocks: string[] = []) => ({ ...TECHS[0], id, requires, era, unlocks });

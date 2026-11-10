@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { ATTRACT, INFLOW, inflowCap, inflowPerDay, NO_ATTRACTION } from "./attraction";
 import { advanceTo, BASE_TICK, step } from "./clock";
-import { BUILDINGS } from "./buildings";
+import { BUILDINGS, startLevel } from "./buildings";
 import { demand, emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import {
@@ -63,7 +64,7 @@ function building(id: number, template: string, x: number, state: Building["stat
     done: state === "active" ? t.labor : 0,
     created: 0,
     paid: true,
-    level: 1,
+    level: startLevel(template),
     streak: 0,
   };
 }
@@ -219,19 +220,31 @@ describe("immigration", () => {
   it("the daily step stores how attractive the town is", () => {
     const s = settled(jobs());
     expect(peopleStats(s).unemployed).toBe(0);
-    expect(s.attract).toBeGreaterThan(0.5); // mood 60 x food outlook 1
-    expect(s.attract).toBeLessThanOrEqual(1);
+    // food outlook 1 x (0.4 x mood 0.6 + 0.3 x jobs 1 + 0.3 x no services)
+    expect(s.attraction).toMatchObject({ food: 1, jobs: 1, services: 0 });
+    expect(s.attraction.score).toBeCloseTo(ATTRACT.mood * s.attraction.mood + ATTRACT.jobs);
+    expect(s.attraction.cap).toBeCloseTo(inflowCap(Object.keys(s.residents).length));
     expect(s.households[1].home).toBe(1); // but nobody arrives in the daily step
     expect(s.incoming).toEqual([]);
     expect(Object.keys(s.households)).toHaveLength(4);
   });
-  it("is 0 when everybody is unemployed", () => {
+  it("jobs count for nothing when everybody is unemployed", () => {
     const s = settled([]); // no workplaces and no construction: all adults idle
     expect(peopleStats(s)).toMatchObject({ unemployed: 8, builders: 0 });
-    expect(s.attract).toBe(0);
+    expect(s.attraction.jobs).toBe(0);
+    expect(s.attraction.score).toBeLessThan(settled(jobs()).attraction.score);
+  });
+  it("the inflow grows with the town and saturates; it needs free homes", () => {
+    expect(inflowCap(0)).toBe(INFLOW.base);
+    expect(inflowCap(INFLOW.half)).toBeCloseTo((INFLOW.base + INFLOW.max) / 2);
+    expect(inflowCap(100_000)).toBeLessThan(INFLOW.max);
+    const a = { ...NO_ATTRACTION, score: 0.5, cap: 2 };
+    expect(inflowPerDay(a, 0)).toBe(0);
+    expect(inflowPerDay(a, 1)).toBeCloseTo(0.5);
+    expect(inflowPerDay(a, 5)).toBeCloseTo(1);
   });
   it("sends a family to a vacant house, 6-12 game hours away, only once per house", () => {
-    const s = { ...settled(jobs()), attract: 1 };
+    const s = { ...settled(jobs()), attraction: { ...NO_ATTRACTION, score: 1, cap: 1e6 } }; // comes at once
     const a = immigrationStep(s, BASE_TICK);
     expect(a.incoming).toHaveLength(1);
     expect(a.incoming[0].house).toBe(5);
@@ -239,11 +252,11 @@ describe("immigration", () => {
     expect(a.incoming[0].arrive - s.gameMinutes).toBeLessThanOrEqual(12 * 60);
     expect(Object.keys(a.households)).toHaveLength(4); // not arrived yet
     expect(immigrationStep(a, BASE_TICK).incoming).toBe(a.incoming); // the house is promised already
-    const calm = { ...s, attract: 0 };
+    const calm = { ...s, attraction: NO_ATTRACTION };
     expect(immigrationStep(calm, BASE_TICK)).toBe(calm);
   });
   it("the per-tick hazard adds up to the daily rate", () => {
-    const base: SimState = { ...settled(jobs()), attract: 0.5 };
+    const base: SimState = { ...settled(jobs()), attraction: { ...NO_ATTRACTION, score: 0.5, cap: 2 } }; // one free home: 0.5 families a day
     let came = 0;
     const days = 300;
     for (let seed = 1; seed <= days; seed++) {
@@ -251,13 +264,13 @@ describe("immigration", () => {
       for (let t = 0; t < 1440 / BASE_TICK && s.incoming.length === 0; t++) s = immigrationStep(s, BASE_TICK);
       if (s.incoming.length > 0) came++;
     }
-    expect(came / days).toBeGreaterThan(0.4); // 1 - (1 - 0.5)^1 = 0.5
-    expect(came / days).toBeLessThan(0.6);
+    expect(came / days).toBeGreaterThan(0.3); // 1 - e^-0.5 = 0.39
+    expect(came / days).toBeLessThan(0.48);
   });
   it("the family arrives at its time into the promised house", () => {
     const s = settled(jobs());
     const gm = s.gameMinutes;
-    const wait = { ...s, attract: 0, incoming: [{ house: 5, arrive: gm + 1 }] };
+    const wait = { ...s, attraction: NO_ATTRACTION, incoming: [{ house: 5, arrive: gm + 1 }] };
     expect(immigrationStep(wait, BASE_TICK)).toBe(wait); // not due yet
     const a = immigrationStep({ ...wait, incoming: [{ house: 5, arrive: gm }] }, BASE_TICK);
     const fam = Object.values(a.households).find((h) => h.home === 5)!;
@@ -273,7 +286,7 @@ describe("immigration", () => {
     expect(adults[0].spouse).toBe(adults[1].id);
   });
   it("goes into another vacant house when the promised one is gone, else into a tent", () => {
-    const s = { ...settled([building(9, "izba", 900)]), attract: 0 };
+    const s = { ...settled([building(9, "izba", 900)]), attraction: NO_ATTRACTION };
     const due = (house: number) => [{ house, arrive: s.gameMinutes }];
     const { 5: _gone, ...without5 } = s.buildings;
     const other = immigrationStep({ ...s, buildings: without5, incoming: due(5) }, BASE_TICK);
@@ -287,7 +300,7 @@ describe("immigration", () => {
     expect(Object.values(settledTent.households).filter((h) => !h.founder).map((h) => h.home)).toEqual([5]);
   });
   it("does not take a house promised to another family", () => {
-    const s = { ...settled([building(9, "izba", 900)]), attract: 0 };
+    const s = { ...settled([building(9, "izba", 900)]), attraction: NO_ATTRACTION };
     const a = immigrationStep({ ...s, incoming: [{ house: 5, arrive: s.gameMinutes - 1 }, { house: 9, arrive: s.gameMinutes + 600 }] }, BASE_TICK);
     expect(Object.values(a.households).find((h) => !h.founder)!.home).toBe(5);
     expect(a.incoming).toEqual([{ house: 9, arrive: s.gameMinutes + 600 }]);
@@ -295,7 +308,7 @@ describe("immigration", () => {
   it("arrivals always fit the house", () => {
     const s = custom(town([building(1, "izba", 100)]), []);
     for (let i = 1; i <= 40; i++) {
-      const a = immigrationStep({ ...s, rng: i, attract: 0, incoming: [{ house: 1, arrive: s.gameMinutes }] }, BASE_TICK);
+      const a = immigrationStep({ ...s, rng: i, attraction: NO_ATTRACTION, incoming: [{ house: 1, arrive: s.gameMinutes }] }, BASE_TICK);
       for (const h of Object.values(a.households)) expect(h.members.length).toBeLessThanOrEqual(5);
       expect(Object.keys(a.households)).toHaveLength(1);
     }

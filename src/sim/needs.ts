@@ -169,7 +169,7 @@ export function needProblems(n: Needs): string[] {
 export interface NeedsDay {
   now: number;
   fed: number; // share of the day's food need that the barns met, 0..1
-  served: number; // share of the household's wares need, 0..1
+  served: number; // share of the household's goods need, 0..1
   gather: boolean; // the household has a tavern or a chapel to gather at
   cold: boolean; // the household had no firewood
   hours: number; // length of the workday in hours

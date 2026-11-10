@@ -1,4 +1,3 @@
-import "./style.css";
 import { render, h } from "preact";
 import { computed, effect } from "@preact/signals";
 import { attachArticles } from "./map/articles";
@@ -12,7 +11,7 @@ import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeRests, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
 import type { Speed } from "./sim/clock";
-import { initPlatform } from "./platform";
+import { platform } from "./platform";
 import { soundPaused } from "./ui/sound";
 import { tryMountEngineView } from "./view/engine/mount";
 import type { View } from "./view/view";
@@ -37,7 +36,7 @@ document.getElementById("ui")!.setAttribute("aria-label", LANDMARK_LABELS.interf
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 // The portal's own pauses (its ads and overlays) stop the clock and the sound, then give back the speed the player had.
 let speedBeforePause: Speed | null = null;
-const platformInit = initPlatform({
+platform.listen({
   pause() {
     if (speedBeforePause === null) {
       speedBeforePause = speed.peek();
@@ -72,8 +71,6 @@ const engineMount = await tryMountEngineView({
   debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1",
   life: { trips: lifeTrips, rests: lifeRests, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById },
 });
-// The portal's SDK is up before the game starts; it loads alongside the map.
-const platform = await platformInit;
 if (engineMount) start(engineMount.view);
 // Without the engine the page explains why; the portal still has to drop its loader to show that.
 else platform.ready();

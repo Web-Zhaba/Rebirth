@@ -757,3 +757,15 @@ button.warn-chip:hover:not(:disabled) {
   -webkit-mask: url("/rebirth-icon.svg") center / contain no-repeat;
   mask: url("/rebirth-icon.svg") center / contain no-repeat;
 }
+
+.supplies-offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-3) 0;
+}
+
+.supplies-note {
+  margin: var(--sp-2) 0;
+  color: var(--pencil);
+}

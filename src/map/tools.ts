@@ -13,13 +13,13 @@ export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | 
 export type RoadMode = "straight" | "arc";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
 export type ZoneTool = BrushTool | "field" | "clearing";
-export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | ServiceId;
+export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "townhall" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
 export const isZoneTool = (t: Tool): t is ZoneTool => isBrushTool(t) || t === "field" || t === "clearing";
-export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer"];
+export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer", "townhall"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
@@ -62,6 +62,29 @@ export function roadKindOf(t: Tool | null, material: Record<MaterialTool, RoadKi
   if (t === "path" || t === "footbridge") return t;
   return t && isMaterialTool(t) ? material[t] : null;
 }
+// Kinds of building one placement tool puts down, picked with a switch (new buildings come as variants of a tool, not
+// as tools of their own): the storehouse (docs/PLAN-balance.md B4) and the administration (B7). The first is the default.
+export interface PlaceVariant {
+  id: string; // template
+  label: string;
+  title: string;
+}
+export const PLACE_VARIANTS: Partial<Record<PlaceTool, PlaceVariant[]>> = {
+  barn: [
+    { id: "barn", label: L("Еда", "Food"), title: L("Амбар: зерно и припасы", "Barn: grain and provisions") },
+    { id: "logyard", label: L("Лес", "Timber"), title: L("Склад леса: брёвна и доски", "Timber yard: logs and planks") },
+    { id: "stoneyard", label: L("Камень", "Stone"), title: L("Склад камня", "Stone yard") },
+    { id: "warehouse", label: L("Товары", "Goods"), title: L("Товарный склад: одежда, посуда, утварь, инструменты", "Warehouse: clothing, dishes, furnishings, tools") },
+  ],
+  townhall: [
+    { id: "townhall", label: L("Ратуша", "Town hall"), title: L("Ратуша: одна на город", "Town hall: one per town") },
+    { id: "office", label: L("Управа", "Office"), title: L("Районная управа", "District office") },
+  ],
+};
+export const placeVariant = signal<Partial<Record<PlaceTool, string>>>({});
+// The template a placement tool puts down: the kind chosen for it, or its first kind, or the tool itself.
+export const placeTemplate = (t: PlaceTool, chosen: Partial<Record<PlaceTool, string>> = placeVariant.value): string => chosen[t] ?? PLACE_VARIANTS[t]?.[0].id ?? t;
+
 // Brief message about a rejected action, shown by the toolbar.
 export const toolMsg = signal<string | null>(null);
 

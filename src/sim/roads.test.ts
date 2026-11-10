@@ -15,6 +15,7 @@ import {
   snapPoint,
   workableEdges,
   type TerrainProfile,
+  roadCrew,
 } from "./roads";
 import { emptyZones } from "./zones";
 import { emptyGrowth } from "./growth";
@@ -256,7 +257,7 @@ describe("construction", () => {
   it("works only 07:00-19:00 game time", () => {
     const g = add(emptyRoads(), [[0, 0], [50, 0]], [1000]);
     const start = { realTime: NOW, gameMinutes: 0, roads: g, zones: emptyZones(), ...emptyGrowth(1) }; // 06:00
-    const per = (builderCount(start) * BASE_TICK) / 60; // person-hours per tick of the founders' artel
+    const per = (Math.min(builderCount(start), roadCrew(g.edges[3])) * BASE_TICK) / 60; // person-hours per tick of the edge's crew
     const at = (minutes: number) => advanceTo(start, NOW + (minutes / BASE_TICK) * TICK_MS);
     expect(at(60).roads.edges[3].done).toBe(0); // 06:00-07:00 idle
     expect(at(70).roads.edges[3].done).toBeCloseTo(per); // first work tick

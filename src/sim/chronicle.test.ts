@@ -234,7 +234,7 @@ describe("catch-up", () => {
     const t = newTally();
     const next = { ...s, buildings: { 5: bld(5, "woodcutter", "active"), 6: bld(6, "pottery", "active") }, prod: { ...s.prod, today: { 5: 3, 6: 2 } } };
     observe(t, { ...next, prod: { ...s.prod, today: { 5: 1 } } }, next);
-    expect(t.produced).toMatchObject({ logs: 2, wares: 2, food: 0 });
+    expect(t.produced).toMatchObject({ logs: 2, dishes: 2, food: 0 });
   });
 
   it("a tab returning after a long gap catches up with progress, one snapshot, one life and a summary", async () => {

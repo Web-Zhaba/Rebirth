@@ -1,15 +1,17 @@
 import { DIG, emptyFinds } from "./excavation";
 import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { emptyLevers } from "./levers";
-import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
+import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, startLevel, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
-import { createFounders, freeHomes, peopleStats } from "./people";
+import { createFounders, FOUNDERS, freeHomes, MOOD_START, peopleStats } from "./people";
 import { clearingLogs } from "./clearing";
 import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReservedGround } from "./foundationLots";
 import { isHeritage } from "./heritage";
 import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
 import { nextRandom } from "./rng";
+import { CAMP_STORE_ID } from "./storage";
+import { attractionOf } from "./attraction";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, Clearing, Demand, Finds, GrowthAdvice, GrowthWhy, PeopleState, RoadEdge, RoadGraph, Site, SimState, TownEvent, ZoneCell, ZoneState, ZoneType } from "./types";
 import { emptyWeather } from "./weather";
@@ -39,7 +41,7 @@ const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occ
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 const KEEP_SHARE = 0.6;
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attract" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "lastSpawn" | "stock" | "stores" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attraction" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -51,6 +53,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     rng: f.rng,
     lastSpawn: { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN },
     stock: emptyStock(),
+    stores: { [CAMP_STORE_ID]: emptyStock() }, // the founding stock fits the camp
     prod: emptyProd(),
     coverage: {},
     landValue: {},
@@ -58,7 +61,7 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     finds: emptyFinds(),
     articles: [],
     incoming: [],
-    attract: 0,
+    attraction: attractionOf({ food: 1, mood: MOOD_START, unemployment: 0, services: 0, pop: FOUNDERS }), // the founding party: set anew every midnight
     summary: null,
     levers: emptyLevers(),
     progress: initialProgress(),
@@ -202,7 +205,7 @@ export function makeBuilding(t: BuildingTemplate, c0: ZoneCell, c1: ZoneCell, id
     done: 0,
     created: now,
     paid: false,
-    level: 1,
+    level: startLevel(t.id),
     streak: 0,
   };
   if (site) b.site = site;
@@ -304,6 +307,9 @@ export function spawnBuildings(s: SimState): SimState {
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
 
 const NO_PLACE = (reason: string): PlaceCheck => ({ ok: false, reason });
+// A town has one town hall; past it the administration grows by district offices (governance.ts).
+const secondHall = (s: Pick<SimState, "buildings">, t: BuildingTemplate): PlaceCheck | null =>
+  t.id === "townhall" && Object.values(s.buildings).some((b) => b.template === "townhall") ? NO_PLACE(L("Ратуша уже есть: управление расширяют районные управы", "There is a town hall already: district offices extend the administration")) : null;
 export const PLACE_MIN = { forest: 0.1, water: 0.05, foragerForest: FORAGER_FOREST }; // site shares the woodcutter, the fisher and the forager need
 
 const BLOCK_REASON: Record<string, string> = {
@@ -326,6 +332,8 @@ export function canPlace(
   site: Site,
 ): PlaceCheck {
   if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
+  const hall = secondHall(s, t);
+  if (hall) return hall;
   const e = s.roads.edges[edge];
   if (!e) return NO_PLACE(L("Нет такой дороги", "No such road"));
   if (e.done < e.labor) return NO_PLACE(L("Дорога ещё не построена", "The road is not built yet"));
@@ -360,6 +368,8 @@ export function canPlace(
 // Can the player put `t` on the old foundation `foundationId`? (Shared by the worker and the placement tool.)
 export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds">, t: BuildingTemplate, foundationId: string): PlaceCheck {
   if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
+  const hall = secondHall(s, t);
+  if (hall) return hall;
   const f = s.finds.foundations.find((x) => x.id === foundationId);
   if (!f) return NO_PLACE(L("Нет такого фундамента", "No such foundation"));
   const r = lotCheck(s, f, t);
@@ -404,7 +414,7 @@ export function advanceBuildings(buildings: Record<number, Building>, personHour
       const up = b.upgrade!;
       const done = use >= up.labor - up.done - EPS ? up.labor : up.done + use;
       const { upgrade: _u, ...rest } = b;
-      out[id] = done >= up.labor ? { ...rest, level: 2, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
+      out[id] = done >= up.labor ? { ...rest, level: b.level + 1, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
     } else {
       const done = use >= b.labor - b.done - EPS ? b.labor : b.done + use;
       out[id] = { ...b, done, state: done >= b.labor ? "active" : "building" };
@@ -423,7 +433,7 @@ export function reportBuilt(before: Record<number, Building>, after: Record<numb
     const pos: [number, number] = [b.lot.cx, b.lot.cy];
     if (b.siteId) continue; // a restoration has its own notice
     if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `${L("Достроено", "Finished")}: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
-    else if (b.level >= 2 && was.level < 2) out = say(out, now, "built", L("Дом расширен", "House expanded"), pos);
+    else if (b.level > was.level) out = say(out, now, "built", L("Дом расширен", "House expanded"), pos);
   }
   return out;
 }

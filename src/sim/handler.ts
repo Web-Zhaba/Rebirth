@@ -1,3 +1,4 @@
+import { houseGoods } from "./coverage";
 import { finishAll, grantStock, nextEra, reveal, unlockAll } from "./admin";
 import { newTally, observe, summarize, type Tally } from "./away";
 import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed } from "./clock";
@@ -8,13 +9,14 @@ import { scarcity } from "./heritage";
 import { loseSite, restoreSite } from "./restore";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
-import { callBlock, callSettlers, callToloka, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
+import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, canPlaceOnFoundation, placeOnFoundation, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
-import { peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
+import { freeHomes, peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
+import { inflowPerDay } from "./attraction";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
@@ -60,9 +62,16 @@ export function toSnapshot(sim: SimState): SimSnapshot {
     houseResidents[h.home] = (houseResidents[h.home] ?? 0) + h.members.length;
   }
   for (const id in houseMood) houseMood[id] = Math.round(houseMood[id]);
+  const houseGoodsShare = Object.fromEntries(houseGoods(sim.households));
   const ps = peopleStats(sim);
   const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+}
+
+// The inflow the town draws right now: its free homes and the families a day they bring (attraction.ts).
+function inflowNow(sim: SimState): SimSnapshot["inflow"] {
+  const free = freeHomes(sim.buildings, sim.households, sim.incoming).length;
+  return { free, perDay: inflowPerDay(sim.attraction, free) };
 }
 
 // Who lives or works in a building, with production details for producers.
@@ -498,7 +507,7 @@ export class Handler {
         }
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
-      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade") {
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "grantSupplies" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade") {
         const r =
           cmd.type === "setPriority" ? setPriority(sim, cmd.key)
           : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
@@ -508,6 +517,7 @@ export class Handler {
           : cmd.type === "setJobPriority" ? setJobPriority(sim, cmd.group, cmd.priority)
           : cmd.type === "setStaff" ? setStaff(sim, cmd.id, cmd.staff)
           : cmd.type === "setTrade" ? setTrade(sim, cmd.order)
+          : cmd.type === "grantSupplies" ? grantSupplies(sim)
           : callSettlers(sim);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };

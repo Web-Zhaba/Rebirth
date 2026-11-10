@@ -1,4 +1,4 @@
-import { BUILDINGS, scaled } from "./buildings";
+import { BUILDINGS, capacityOf, groupOf, scaled, STORE_GROUPS, type StoreGroup } from "./buildings";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
 import { cropOf } from "./tech";
 import { fieldWork } from "./weatherEffects";
@@ -138,12 +138,23 @@ export function idleGumnos(s: Idle): Set<number> {
 // The stock good a workshop needs to work at all.
 export const WORKSHOP_INPUT: Record<string, keyof Stock> = { sawpit: "logs", smithy: "logs", carpentry: "planks" };
 
-// Workshops that made nothing yesterday and find their input missing now: their workers have nothing to do.
+// What the producers make that stop when no store has room for it (food rots instead; a sawmill frees room by taking logs).
+const STOPS_WHEN_FULL: Record<string, keyof Stock> = { woodcutter: "logs", quarry: "stone", pottery: "dishes", weaver: "clothes", smithy: "tools", carpentry: "furniture" };
+
+// Workshops that made nothing yesterday and find their input missing, or no room for their output, now: their workers have nothing to do.
 function blockedWorkshops(s: Pick<Idle, "buildings" | "stock" | "prod">): Set<number> {
   const out = new Set<number>();
+  const full = new Map<StoreGroup, boolean>();
+  const isFull = (g: keyof Stock): boolean => {
+    const group = groupOf(g);
+    if (!full.has(group)) full.set(group, capacityOf(s.buildings, group) - STORE_GROUPS[group].reduce((n, k) => n + s.stock[k], 0) <= 1e-6);
+    return full.get(group)!;
+  };
   for (const b of Object.values(s.buildings)) {
-    const good = WORKSHOP_INPUT[b.template];
-    if (good && b.state === "active" && s.stock[good] <= 1e-9 && (s.prod.yesterday[b.id] ?? 0) <= 1e-9) out.add(b.id);
+    if (b.state !== "active" || (s.prod.yesterday[b.id] ?? 0) > 1e-9) continue;
+    const input = WORKSHOP_INPUT[b.template];
+    const output = STOPS_WHEN_FULL[b.template];
+    if ((input && s.stock[input] <= 1e-9) || (output && isFull(output))) out.add(b.id);
   }
   return out;
 }

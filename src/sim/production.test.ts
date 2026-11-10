@@ -1,16 +1,20 @@
+import { needsAt, TOOL_WEAR, TOOLLESS } from "./goods";
+import { ADMIN, adminOf, overload } from "./governance";
+import { goodsTotal } from "./goods";
 import { allUnlocked } from "./tech";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, step } from "./clock";
-import { BARN_CAP, BUILDINGS, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
+import { BARN_CAP, BUILDINGS, CAMP_STORE, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
 import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { Handler, type Storage } from "./handler";
-import { builderCount, dailyStep, foodPerDay, immigrationStep, peopleStats, queryBuilding, RATES } from "./people";
-import { dailyEconomy, economyStats, HAND_HOURS, handHours, PACE, payMaterials, produceStep, RATE } from "./production";
+import { builderCount, dailyStep, foodPerDay, immigrationStep, lotFront, peopleStats, queryBuilding, RATES } from "./people";
+import { dailyEconomy, economyStats, FULL_TEXT, HAND_HOURS, handHours, PACE, payMaterials, produceStep, RATE } from "./production";
 import type { FromWorker } from "./protocol";
 import { massText } from "./units";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
+import { haulHours, haulMetres, Ledger, settleStores, spreadStores, withStock } from "./storage";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, City, Field, Household, Resident, RoadGraph, SaveV4, SimState, Site, TerrainInfo } from "./types";
 import { emptyZones, paintCells, qkey, regenerateCells } from "./zones";
@@ -18,6 +22,8 @@ import { emptyZones, paintCells, qkey, regenerateCells } from "./zones";
 const NOW = 1_800_000_000_000;
 const meadow: TerrainInfo = { land: "meadow", slope: 0 };
 const NO_SITE: Site = { forest: 0, water: 0, rock: 0 };
+// The share of a producer's work left after it carts its output to the camp (storage.ts): `perHour` units a work hour.
+const carted = (s: SimState, id: number, g: keyof SimState["stock"], perHour: number) => 1 / (1 + perHour * haulHours(g, 1, haulMetres(s.roads, [0, 0], lotFront(s.buildings[id]))));
 
 // gameMinutes of `hour`:00 on day-of-year `day` (1..YEAR_DAYS) of year `year`.
 const at = (day: number, hour = 0, year = 1) => ((year - 1) * YEAR_DAYS + day - 1) * 1440 + hour * 60 - 360;
@@ -78,7 +84,7 @@ function town(bs: Building[], opts: { gm?: number; fields?: Field[]; roads?: Roa
     zones: { cells, fields, terrain, rev: 1 },
     ...emptyGrowth(7, gm),
     progress: allUnlocked(),
-    stock: { food: 1750, logs: 0, planks: 0, stone: 0, wares: 20 }, // a bare camp, not the founding stock
+    stock: { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 20, dishes: 20, furniture: 20, tools: 20 }, // a bare camp, not the founding stock
     buildings,
     nextBuildingId: bs.length + 1,
   };
@@ -156,7 +162,7 @@ describe("storage", () => {
   });
   it("daily rot trims food above capacity (a barn was demolished)", () => {
     let s = folk(town([]), [{ home: null, adults: 1 }]);
-    s = { ...s, stock: { ...s.stock, food: 5000 } };
+    s = withStock(s, { ...s.stock, food: 5000 }); // kept at the camp beyond its room
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.stock.food).toBe(FOOD_CAMP_CAP);
     expect(d.events[0].text).toContain("не хватает складов");
@@ -204,20 +210,23 @@ describe("food", () => {
     s = work(s);
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.prod.today).toEqual({});
-    expect(d.prod.yesterday[1]).toBeCloseTo(2 * RATE.logs * PACE);
-    expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * RATE.logs * PACE);
+    const k = carted(s, 1, "logs", RATE.logs * PACE);
+    expect(d.prod.yesterday[1]).toBeCloseTo(2 * RATE.logs * PACE * k);
+    expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * RATE.logs * PACE * k);
   });
 });
 
 describe("producers", () => {
   const staffed = (template: string, n: number, site?: Site, gm = NOON) => folk(town([bld(1, template, 50, "active", site)], { gm }), [{ home: null, adults: n, job: 1 }]);
   it("woodcutter: RATE.logs m3 per hour x PACE x forest share", () => {
-    expect(work(staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 })).stock.logs).toBeCloseTo(2 * RATE.logs * PACE * 0.6);
+    const s = staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 });
+    expect(work(s).stock.logs).toBeCloseTo(2 * RATE.logs * PACE * 0.6 * carted(s, 1, "logs", RATE.logs * PACE * 0.6));
     expect(work(staffed("woodcutter", 2, NO_SITE)).stock.logs).toBe(0);
   });
   it("quarry: 0.15 t per hour x PACE, with or without rock nearby", () => {
-    expect(work(staffed("quarry", 3, { forest: 0, water: 0, rock: 0.5 })).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
-    expect(work(staffed("quarry", 3, NO_SITE)).stock.stone).toBeCloseTo(3 * 0.15 * PACE);
+    const k = carted(staffed("quarry", 3), 1, "stone", 0.15 * PACE);
+    expect(work(staffed("quarry", 3, { forest: 0, water: 0, rock: 0.5 })).stock.stone).toBeCloseTo(3 * 0.15 * PACE * k);
+    expect(work(staffed("quarry", 3, NO_SITE)).stock.stone).toBeCloseTo(3 * 0.15 * PACE * k);
   });
   it("a hungry or exhausted worker gives fewer hours", () => {
     const s = folk(town([bld(1, "quarry", 50)]), [{ home: null, adults: 2, job: 1 }]);
@@ -261,28 +270,44 @@ describe("producers", () => {
     expect(part.stock.planks).toBeCloseTo(0.1);
     expect(part.stock.logs).toBeCloseTo(0);
   });
-  it("workshops: pottery needs nothing, smithy eats logs, carpentry eats planks", () => {
-    expect(work(staffed("pottery", 3)).stock.wares - 20).toBeCloseTo(3 * 0.025);
+  it("workshops: pottery and weaving need nothing, smithy eats logs, carpentry eats planks", () => {
+    expect(work(staffed("pottery", 3)).stock.dishes - 20).toBeCloseTo(3 * 0.025);
+    expect(work(staffed("weaver", 3)).stock.clothes - 20).toBeCloseTo(3 * 0.02);
     let sm = staffed("smithy", 3);
-    expect(work(sm).stock.wares).toBe(20); // no logs, no wares
+    expect(work(sm).stock.tools).toBe(20); // no logs, no tools
     sm = { ...sm, stock: { ...sm.stock, logs: 5 } };
     const a = work(sm);
-    expect(a.stock.wares - 20).toBeCloseTo(3 * 0.015);
+    expect(a.stock.tools - 20).toBeCloseTo(3 * 0.015);
     expect(a.stock.logs).toBeCloseTo(5 - 3 * 0.015 * 0.05);
     let c = staffed("carpentry", 4);
-    expect(work(c).stock.wares).toBe(20);
+    expect(work(c).stock.furniture).toBe(20);
     c = { ...c, stock: { ...c.stock, planks: 2 } };
     const b = work(c);
-    expect(b.stock.wares - 20).toBeCloseTo(4 * 0.015);
+    expect(b.stock.furniture - 20).toBeCloseTo(4 * 0.015);
     expect(b.stock.planks).toBeCloseTo(2 - 4 * 0.015 * 0.03);
+  });
+  it("tools wear out with the work; without them a place works at half rate; the smithy needs none", () => {
+    const s = staffed("pottery", 3);
+    const a = work(s);
+    expect(a.stock.tools).toBeCloseTo(20 - 3 * TOOL_WEAR);
+    const bare = work({ ...s, stock: { ...s.stock, tools: 0 } });
+    expect(bare.stock.dishes - 20).toBeCloseTo((a.stock.dishes - 20) * TOOLLESS);
+    const short = (x: SimState) => x.events.filter((e) => e.kind === "shortage" && e.text.includes("Инструменты кончились")).length;
+    expect(short(bare)).toBe(1);
+    expect(short(work(bare))).toBe(1); // once a game day
+    const last = work({ ...s, stock: { ...s.stock, tools: 3 * TOOL_WEAR * 0.5 } }); // runs out in this tick
+    expect(last.stock.tools).toBe(0);
+    expect(short(last)).toBe(1);
+    const sm = staffed("smithy", 3);
+    expect(work({ ...sm, stock: { ...sm.stock, logs: 5, tools: 0 } }).stock.tools).toBeCloseTo(3 * 0.015);
   });
   it("only employed workers produce, and only during work hours", () => {
     const s = folk(town([bld(1, "pottery", 50)]), [{ home: null, adults: 3 }]);
-    expect(work(s).stock.wares).toBe(20); // nobody employed
+    expect(work(s).stock.dishes).toBe(20); // nobody employed
     const w = folk(town([bld(1, "pottery", 50)], { gm: at(12, 12) }), [{ home: null, adults: 3, job: 1 }]);
-    expect(step(w).stock.wares).toBeGreaterThan(20);
+    expect(step(w).stock.dishes).toBeGreaterThan(20);
     const night = { ...w, gameMinutes: at(12, 22) };
-    expect(step(night).stock.wares).toBe(20);
+    expect(step(night).stock.dishes).toBe(20);
   });
 });
 
@@ -420,9 +445,9 @@ describe("construction materials", () => {
   const planned = (template = "izba") => ({ 1: bld(1, template, 50, "planned") });
   it("takes the materials from the stock when work starts", () => {
     const M = BUILDINGS.izba.materials;
-    const stock = { food: 0, logs: 30, planks: 5, stone: 4, wares: 0 };
+    const stock = { food: 0, logs: 30, planks: 5, stone: 4, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
     const r = payMaterials(planned(), stock, 1);
-    expect(r.stock).toEqual({ food: 0, logs: 30 - M.logs, planks: 5 - M.planks, stone: 4 - M.stone, wares: 0 });
+    expect(r.stock).toEqual({ food: 0, logs: 30 - M.logs, planks: 5 - M.planks, stone: 4 - M.stone, clothes: 0, dishes: 0, furniture: 0, tools: 0 });
     expect(r.buildings[1].paid).toBe(true);
     expect(r.buildings[1].labor).toBe(BUILDINGS.izba.labor); // nothing missing
     // paid once only
@@ -432,23 +457,23 @@ describe("construction materials", () => {
   });
   it("makes the shortfall by hand and adds it to the labor", () => {
     const M = BUILDINGS.izba.materials;
-    const stock = { food: 0, logs: M.logs - 5, planks: 0, stone: M.stone + 3, wares: 0 };
+    const stock = { food: 0, logs: M.logs - 5, planks: 0, stone: M.stone + 3, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
     const r = payMaterials(planned(), stock, 1);
     // short by 5 m3 of logs and all the planks; the stone is there
     const hand = 5 * HAND_HOURS.logs + M.planks * HAND_HOURS.planks;
     expect(r.buildings[1].labor).toBeCloseTo(BUILDINGS.izba.labor + hand);
-    expect(r.stock).toEqual({ food: 0, logs: 0, planks: 0, stone: 3, wares: 0 });
+    expect(r.stock).toEqual({ food: 0, logs: 0, planks: 0, stone: 3, clothes: 0, dishes: 0, furniture: 0, tools: 0 });
     expect(r.buildings[1].hand).toBeCloseTo(hand); // kept for the building panel
     expect(handHours(BUILDINGS.izba.materials, stock)).toBeCloseTo(r.buildings[1].hand!);
-    expect(payMaterials(planned(), { food: 0, logs: 30, planks: 5, stone: 4, wares: 0 }, 1).buildings[1]).not.toHaveProperty("hand");
+    expect(payMaterials(planned(), { food: 0, logs: 30, planks: 5, stone: 4, clothes: 0, dishes: 0, furniture: 0, tools: 0 }, 1).buildings[1]).not.toHaveProperty("hand");
     expect(HAND_HOURS).toEqual({ logs: 4, planks: 12, stone: 2 });
   });
   it("only the building that really receives hours pays", () => {
     const two = { 1: bld(1, "izba", 50, "planned"), 2: bld(2, "izba", 90, "planned") };
-    const r = payMaterials(two, { food: 0, logs: 100, planks: 10, stone: 10, wares: 0 }, 5);
+    const r = payMaterials(two, { food: 0, logs: 100, planks: 10, stone: 10, clothes: 0, dishes: 0, furniture: 0, tools: 0 }, 5);
     expect(r.buildings[1].paid).toBe(true);
     expect(r.buildings[2].paid).toBe(false);
-    const both = payMaterials(two, { food: 0, logs: 100, planks: 10, stone: 10, wares: 0 }, BUILDINGS.izba.labor + 1);
+    const both = payMaterials(two, { food: 0, logs: 100, planks: 10, stone: 10, clothes: 0, dishes: 0, furniture: 0, tools: 0 }, BUILDINGS.izba.labor + 1);
     expect(both.buildings[2].paid).toBe(true);
   });
   it("a work tick pays and builds", () => {
@@ -459,33 +484,51 @@ describe("construction materials", () => {
     expect(a.stock).toMatchObject({ logs: 0, planks: 0, stone: 0 });
     expect(a.buildings[1].paid).toBe(true);
     expect(a.buildings[1].done).toBeCloseTo(1); // 6 adults x 10 min
-    expect(a.buildings[1].labor).toBe(BUILDINGS.izba.labor);
+    expect(a.buildings[1].haul).toBeGreaterThan(0); // the materials were carted from the camp
+    expect(a.buildings[1].labor).toBeCloseTo(BUILDINGS.izba.labor + a.buildings[1].haul!);
     const b = step(a);
     expect(b.stock).toMatchObject({ logs: 0, planks: 0, stone: 0 });
   });
 });
 
+describe("goods by house level", () => {
+  it("a family in a level 2 house needs clothing and dishes; served is kept on the household", () => {
+    const home = { ...bld(2, "izba", 100), level: 2 };
+    let s = busy(folk(town([bld(1, "shop", 50), home]), [{ home: null, adults: 1, job: 1 }, { home: 2, adults: 2 }]));
+    s = withStock(s, { ...s.stock, clothes: 100, dishes: 0.01, furniture: 100 });
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
+    const fam = Object.values(d.households).find((h) => h.home === 2)!;
+    // wants 2 x 0.03 clothing and 2 x 0.015 dishes, gets all the clothing and 0.01 of the dishes
+    expect(fam.served).toBeCloseTo((0.06 + 0.01) / (0.06 + 0.03));
+    expect(d.stock.furniture).toBe(100); // furnishings come with level 3
+    expect(needsAt(1)).toEqual(["clothes"]);
+    expect(needsAt(3)).toEqual(["clothes", "dishes", "furniture"]);
+  });
+});
+
 describe("mood", () => {
-  it("moves a quarter of the way to 10 + 45 fed + 10 wares + 10 house", () => {
+  it("moves a quarter of the way to 10 + 45 fed + 10 goods + 10 house", () => {
     let s = busy(folk(town([bld(1, "izba", 0)]), [{ home: 1, adults: 2 }, { home: null, adults: 2 }]));
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.households[1].mood).toBeCloseTo(60 + (65 - 60) / 4);
     expect(d.households[2].mood).toBeCloseTo(60 + (55 - 60) / 4);
   });
-  it("wares from trade workers lift it: 12 households a day per trader, 0.05 per person", () => {
+  it("goods from trade workers lift it: 12 households a day per trader, the clothing of a tent 0.03 per person", () => {
     const specs: HSpec[] = [{ home: null, adults: 1, job: 1 }, ...Array.from({ length: 13 }, () => ({ home: null, adults: 2, kids: 2 }))];
     let s = busy(folk(town([bld(1, "shop", 50)]), specs));
-    s = { ...s, stock: { ...s.stock, wares: 100 } };
+    s = { ...s, stock: { ...s.stock, clothes: 100 } };
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     // one trader serves 12 of the 14 households
-    const took = s.stock.wares - d.stock.wares; // the one-person household is served on some days only
-    expect(took).toBeGreaterThanOrEqual(0.05 + 0.2 * 11 - 1e-9);
-    expect(took).toBeLessThanOrEqual(0.2 * 12 + 1e-9);
+    const took = s.stock.clothes - d.stock.clothes; // the one-person household is served on some days only
+    expect(took).toBeGreaterThanOrEqual(0.03 + 0.12 * 11 - 1e-9);
+    expect(took).toBeLessThanOrEqual(0.12 * 12 + 1e-9);
+    expect(d.stock.dishes).toBe(s.stock.dishes); // tents need clothing only
+    expect(Object.values(d.households).filter((h) => h.served === 1)).toHaveLength(12); // kept for the house upgrade
     const lifted = Object.values(d.households).filter((h) => h.mood > 59);
     expect(lifted).toHaveLength(12);
-    // no wares: nothing is handed out
-    const dry = dailyEconomy({ ...s, stock: { ...s.stock, wares: 0 }, gameMinutes: at(13) });
-    expect(dry.stock.wares).toBe(0);
+    // no goods: nothing is handed out
+    const dry = dailyEconomy({ ...s, stock: { ...s.stock, clothes: 0, dishes: 0, furniture: 0, tools: 0 }, gameMinutes: at(13) });
+    expect(dry.stock.clothes).toBe(0);
     expect(Object.values(dry.households).every((h) => Math.abs(h.mood - 58.75) < 1e-9)).toBe(true);
     // the next day starts from another household
     const d2 = dailyEconomy({ ...s, gameMinutes: at(14) });
@@ -534,10 +577,10 @@ describe("mood", () => {
     // stock for an outlook of o: (stock / need - 0.9) / 0.3 = o
     const run = (o: number, mood = 100) => {
       const s = { ...base, stock: { ...base.stock, food: need * (0.9 + 0.3 * o) }, households: { 1: { ...base.households[1], mood } } };
-      return dailyStep(s, { rand: () => 0.5, only: [] }).attract;
+      return dailyStep(s, { rand: () => 0.5, only: [] }).attraction.score; // food x (0.4 mood + 0.3 jobs + 0.3 services)
     };
-    expect(run(1)).toBeCloseTo(1);
-    expect(run(0.5)).toBeCloseTo(0.5);
+    expect(run(1)).toBeCloseTo(0.7); // a house is being built: nobody counts as jobless; no services
+    expect(run(0.5)).toBeCloseTo(0.35);
     expect(run(1, 50)).toBeCloseTo(0.5);
     expect(run(0.8, 50)).toBeCloseTo(0.4);
     expect(run(0, 100)).toBe(0); // below 90 % of the need: nobody comes
@@ -765,7 +808,7 @@ describe("save", () => {
     expect(parseSave(tooHigh, NOW)!.sim.residents[1].needs).toBeUndefined();
   });
   it("round-trips stock, mood, progress and placed buildings", () => {
-    const s = { ...full(), stock: { food: 5, logs: 6, planks: 7, stone: 8, wares: 9 } };
+    const s = { ...full(), stock: { food: 5, logs: 6, planks: 7, stone: 8, clothes: 9, dishes: 9, furniture: 9, tools: 9 } };
     s.buildings[1].site = { forest: 0.3, water: 0.2, rock: 0.1 };
     s.prod = { ...s.prod, fields: { 1: { year: 1, sowH: 3, harvH: 0, reaped: 0 } }, today: { 1: 2 }, yesterday: { 1: 3 } };
     const parsed = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: s })), NOW)!;
@@ -777,15 +820,15 @@ describe("save", () => {
   it("round-trips the families on their way and the hand-made hours; older saves have none", () => {
     const s = full();
     s.buildings[1] = { ...s.buildings[1], template: "izba", zone: "res", state: "active", hand: 42 };
-    const sim = { ...s, incoming: [{ house: 1, arrive: 400 }], attract: 0.7 };
+    const sim = { ...s, incoming: [{ house: 1, arrive: 400 }], attraction: { food: 1, mood: 0.6, jobs: 1, services: 0.2, score: 0.7, cap: 1.5 } };
     const parsed = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim })), NOW)!;
     expect(parsed.sim.incoming).toEqual([{ house: 1, arrive: 400 }]);
-    expect(parsed.sim.attract).toBeCloseTo(0.7);
+    expect(parsed.sim.attraction).toEqual(sim.attraction);
     expect(parsed.sim.buildings[1].hand).toBe(42);
     const old = JSON.parse(JSON.stringify({ version: 4, city, sim }));
     delete old.sim.incoming;
-    delete old.sim.attract;
-    expect(parseSave(old, NOW)!.sim).toMatchObject({ incoming: [], attract: 0 });
+    delete old.sim.attraction;
+    expect(parseSave(old, NOW)!.sim).toMatchObject({ incoming: [], attraction: emptyGrowth(0).attraction });
     // broken entries and entries for houses that are not finished are dropped
     const bad = JSON.parse(JSON.stringify({ version: 4, city, sim: { ...sim, incoming: [{ house: 1, arrive: 400 }, { house: 9, arrive: 1 }, { house: 1, arrive: "x" }, null, { house: 1, arrive: 5 }] } }));
     expect(parseSave(bad, NOW)!.sim.incoming).toEqual([{ house: 1, arrive: 400 }]);
@@ -824,7 +867,7 @@ describe("save", () => {
   });
   it("broken stock, progress and mood fall back without losing the town", () => {
     const s = JSON.parse(JSON.stringify(full()));
-    s.stock = { food: -1, logs: 0, planks: 0, stone: 0, wares: 0 };
+    s.stock = { food: -1, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
     s.prod = { fields: { 1: { year: 1, sowH: "x" } }, flags: 5, today: { a: 1, 2: -4 }, yesterday: null };
     s.households[1].mood = "high";
     const p = parseSave({ version: 4, city, sim: s }, NOW)!;
@@ -870,7 +913,89 @@ describe("determinism with production", () => {
     const once = advanceTo(s, t);
     expect(m).toEqual(once);
     expect(calendar(once.gameMinutes).dayOfYear).toBeGreaterThanOrEqual(11);
-    expect(once.stock.wares).toBeGreaterThan(20);
+    expect(goodsTotal(once.stock)).toBeGreaterThan(0);
     expect(Object.keys(once.prod.fields).length).toBe(1);
+  });
+});
+
+describe("logistics (docs/PLAN-balance.md B4)", () => {
+  const woods = (extra: Building[] = []) => folk(town([bld(1, "woodcutter", 1500, "active", { forest: 1, water: 0, rock: 0 }), ...extra]), [{ home: null, adults: 2, job: 1 }]);
+  it("a producer far from the stores loses hours to carting; a store beside it brings the rate back", () => {
+    const far = work(woods());
+    const near = work(woods([bld(2, "logyard", 1460)]));
+    const full = 2 * RATE.logs * PACE;
+    expect(far.stock.logs).toBeCloseTo(full * carted(woods(), 1, "logs", RATE.logs * PACE));
+    expect(far.stock.logs).toBeLessThan(full * 0.75); // 1.5 km of road to the camp
+    expect(near.stock.logs).toBeGreaterThan(full * 0.95);
+    expect(near.stores[2].logs).toBeCloseTo(near.stock.logs); // the logs lie in the yard
+    expect(near.prod.haul?.[1]).toBeLessThan(0.05);
+  });
+  it("output with no room in any store is not made, once-a-day notice", () => {
+    const s = withStock(woods(), { ...woods().stock, logs: 200 }); // the camp holds 200 m3 of timber
+    const a = work(work(s));
+    expect(a.stock.logs).toBe(200);
+    expect(a.events.filter((e) => e.text === FULL_TEXT.wood)).toHaveLength(1);
+  });
+  it("a site fetches its materials from the nearest store; the carting is added to its labor", () => {
+    const site = bld(1, "izba", 1500, "planned");
+    const M = BUILDINGS.izba.materials;
+    const stock = { ...town([]).stock, logs: M.logs, planks: M.planks, stone: M.stone };
+    const pay = (s: SimState) => {
+      const ledger = new Ledger(s);
+      return { b: payMaterials(s.buildings, s.stock, 10, Infinity, [], false, undefined, ledger).buildings[1], stores: ledger.stores };
+    };
+    const camp = pay(withStock(town([site]), stock));
+    const yard = { ...bld(2, "logyard", 1460) };
+    const s = town([site, yard]);
+    const near = pay({ ...s, stock, stores: { 0: { stone: M.stone }, 2: { logs: M.logs, planks: M.planks } } });
+    expect(camp.b.haul).toBeGreaterThan(near.b.haul!);
+    expect(camp.b.labor).toBeCloseTo(BUILDINGS.izba.labor + camp.b.haul!);
+    expect(near.stores[2]).toBeUndefined(); // the yard was emptied
+  });
+  it("the stores add up to the stock; a demolished store's goods move to the others as far as there is room", () => {
+    const s: SimState = { ...town([bld(2, "logyard", 300)]), stock: { ...town([]).stock, logs: 350 }, stores: { 0: { food: 1750, clothes: 20, dishes: 20, furniture: 20, tools: 20 }, 2: { logs: 350 } } };
+    expect(settleStores(s)).toBe(s);
+    const gone = settleStores({ ...s, buildings: {} });
+    expect(gone.stores[2]).toBeUndefined();
+    expect(gone.stores[0].logs).toBe(CAMP_STORE.wood);
+    expect(gone.stock.logs).toBe(CAMP_STORE.wood);
+  });
+  it("a save from before the stores keeps its whole stock at the camp and in its stores", () => {
+    const stores = spreadStores({ stock: { ...town([]).stock, logs: 900, food: 70_000 }, buildings: { 1: bld(1, "barn", 300) }, roads: emptyRoads() });
+    expect(stores[0].logs).toBe(900);
+    expect(stores[0].food! + stores[1].food!).toBe(70_000);
+    expect(stores[0].food).toBe(FOOD_CAMP_CAP + 70_000 - FOOD_CAMP_CAP - BARN_CAP); // the barn filled first after the camp
+  });
+});
+
+describe("administration (docs/PLAN-balance.md B7)", () => {
+  const crowd = (n: number, extra: Building[] = []) => folk(town([bld(1, "quarry", 50), ...extra]), [{ home: null, adults: 2, job: 1 }, { home: null, adults: n - 2 }]);
+  it("past what the offices manage every work rate drops gently, never below the floor", () => {
+    expect(overload(ADMIN.elders, ADMIN.elders)).toBe(1);
+    expect(overload(2 * ADMIN.elders, ADMIN.elders)).toBeCloseTo(1 / (1 + ADMIN.slope));
+    expect(overload(100 * ADMIN.elders, ADMIN.elders)).toBe(ADMIN.floor);
+  });
+  it("the elders manage a hamlet; a town hall adds its room by the share of its clerks at work", () => {
+    expect(adminOf(crowd(10)).capacity).toBe(ADMIN.elders);
+    const hall = crowd(10, [bld(2, "townhall", 120)]); // no clerks yet
+    expect(adminOf(hall).capacity).toBe(ADMIN.elders);
+    const two = Object.values(hall.residents).filter((r) => r.job === null).slice(0, 2);
+    const staffed = { ...hall, residents: { ...hall.residents, ...Object.fromEntries(two.map((r) => [r.id, { ...r, job: 2 }])) } };
+    expect(adminOf(staffed).capacity).toBeCloseTo(ADMIN.elders + ADMIN.room.townhall / 2); // 2 of 4 clerks
+    expect(adminOf(crowd(10, [bld(2, "townhall", 120, "building")])).capacity).toBe(ADMIN.elders);
+  });
+  it("an overloaded town works slower and is told so once a day", () => {
+    const calm = work(crowd(100)).stock.stone;
+    const busy = crowd(300);
+    expect(adminOf(busy).factor).toBeCloseTo(overload(300, ADMIN.elders));
+    expect(work(busy).stock.stone).toBeCloseTo(calm * adminOf(busy).factor);
+    expect(economyStats(busy).admin.capacity).toBe(ADMIN.elders);
+    expect(dailyEconomy({ ...busy, gameMinutes: at(13) }).events.some((e) => e.text.startsWith("Перегрузка управления"))).toBe(true);
+  });
+  it("a town has one town hall; district offices are many", () => {
+    const s = town([bld(5, "townhall", 900)], { roads: road([[0, 0], [160, 0]]) });
+    const e = Number(Object.keys(s.roads.edges)[0]);
+    expect(canPlace(s, BUILDINGS.townhall, e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
+    expect(canPlace(s, BUILDINGS.office, e, 1, 3, NO_SITE)).toEqual({ ok: true });
   });
 });

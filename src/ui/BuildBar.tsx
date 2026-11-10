@@ -1,6 +1,6 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, isMaterialTool, isRoadTool, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
+import { flash, isMaterialTool, isPlaceTool, isRoadTool, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
@@ -248,6 +248,10 @@ export function BuildBar() {
         const next = { ...cur };
         for (const k of ["dirt", "bridge"] as const) if (lockReason({ progress }, cur[k])) next[k] = k;
         if (next.dirt !== cur.dirt || next.bridge !== cur.bridge) roadMaterial.value = next;
+        // a kind that is not open falls back to the tool's first one
+        const kinds = placeVariant.peek();
+        const open = Object.fromEntries(Object.entries(kinds).filter(([, id]) => !lockReason({ progress }, id)));
+        if (Object.keys(open).length !== Object.keys(kinds).length) placeVariant.value = open;
       }),
     [],
   );
@@ -272,6 +276,7 @@ export function BuildBar() {
   const mode = roadMode.value;
   const drawsRoad = !!active && isRoadTool(active) && active !== "bulldoze" && active !== "restore";
   const materials = active && isMaterialTool(active) ? ROAD_MATERIALS[active] : null;
+  const kinds = active && isPlaceTool(active) ? PLACE_VARIANTS[active] : undefined;
   const h = touchScreen() ? HINTS.touch : HINTS.mouse;
   const hint = active ? (drawsRoad ? h.road[mode] : h.tool[active]) : null;
   return (
@@ -291,6 +296,17 @@ export function BuildBar() {
             value={roadKindOf(active)!}
             onChange={(k) => (roadMaterial.value = { ...roadMaterial.value, [active]: k })}
             options={materials.map((o) => {
+              const lock = progress ? lockReason({ progress }, o.id) : null;
+              return { id: o.id, label: o.label, title: lock ? `${o.title}: ${lock}` : o.title, disabled: !!lock };
+            })}
+          />
+        )}
+        {kinds && active && isPlaceTool(active) && (
+          <Segmented
+            label={L("Вид здания", "Building kind")}
+            value={placeTemplate(active)}
+            onChange={(k) => (placeVariant.value = { ...placeVariant.value, [active]: k })}
+            options={kinds.map((o) => {
               const lock = progress ? lockReason({ progress }, o.id) : null;
               return { id: o.id, label: o.label, title: lock ? `${o.title}: ${lock}` : o.title, disabled: !!lock };
             })}

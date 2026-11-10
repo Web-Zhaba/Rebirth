@@ -5,7 +5,7 @@ import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
 import { allocateLabor, BUILDINGS, CREW, homesOf } from "./buildings";
 import { advanceBuildings, DEMAND, demand, emptyGrowth, growthAdvice, nextRandom, reconcile, seedOf, townStats } from "./growth";
 import { builderCount, peopleStats } from "./people";
-import { addRoad, emptyRoads, removeEdge } from "./roads";
+import { addRoad, emptyRoads, removeEdge, roadCrew } from "./roads";
 import { payMaterials, reportShortages } from "./production";
 import { parseSave } from "./save";
 import type { Building, City, RoadGraph, SimState, TerrainInfo, ZoneCell, ZoneType } from "./types";
@@ -177,16 +177,17 @@ describe("spawning", () => {
 
 describe("construction", () => {
   const at7 = 60; // game minutes since 06:00 -> 07:00, work starts
-  it("roads first, then buildings", () => {
+  it("a road takes its crew first, the other hands go to the buildings", () => {
     let s = ticks(world(straight(), "res"), 1);
     const g = road(s.roads, [[0, 0], [0, -40]], 10); // unbuilt, starts at the founding point
     const idB = Math.max(...Object.keys(g.edges).map(Number));
     s = { ...s, roads: g, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 } };
     const per = (builderCount(s) * BASE_TICK) / 60;
+    const onRoad = (roadCrew(g.edges[idB]) * BASE_TICK) / 60; // 40 m: a crew of 4
     expect(builderCount(s)).toBe(8); // the adults of the founding households
     s = ticks(s, 5);
-    expect(s.roads.edges[idB].done).toBeCloseTo(5 * per);
-    expect(s.buildings[1].done).toBe(0);
+    expect(s.roads.edges[idB].done).toBeCloseTo(5 * onRoad);
+    expect(list(s).reduce((sum, b) => sum + b.done, 0)).toBeCloseTo(5 * (per - onRoad));
     s = ticks(s, 12); // the road finishes during these ticks, the rest goes to the houses
     expect(s.roads.edges[idB].done).toBe(10);
     const done = list(s).reduce((sum, b) => sum + b.done, 0); // a crew takes one site, the rest of the hands the next
@@ -202,21 +203,21 @@ describe("construction", () => {
     expect(advanceBuildings(a, 0)).toBe(a);
     expect(advanceBuildings({ 1: { ...base, state: "active", done: base.labor } }, 5)).toEqual({ 1: { ...base, state: "active", done: base.labor } });
   });
-  it("a site takes one crew, the other hands go to the next site, the rest to the oldest", () => {
+  it("a site takes one crew, the other hands go to the next site, the rest stay idle", () => {
     const base = ticks(world(straight(), "res"), 1).buildings[1];
     const site = (id: number, labor = 100) => ({ ...base, id, labor });
     const two = { 1: site(1), 2: site(2) };
     expect([...allocateLabor(two, 8, CREW)]).toEqual([[1, 6], [2, 2]]);
-    expect([...allocateLabor(two, 20, CREW)]).toEqual([[1, 14], [2, 6]]); // both at the crew limit: 8 hands left go to the oldest
+    expect([...allocateLabor(two, 20, CREW)]).toEqual([[1, 6], [2, 6]]); // both at the crew limit: 8 hands idle
     expect([...allocateLabor({ 1: site(1, 3), 2: site(2) }, 8, CREW)]).toEqual([[1, 3], [2, 5]]); // a nearly done site takes less
-    expect([...allocateLabor({ 1: { ...base, state: "active", done: base.labor }, 2: site(2) }, 8, CREW)]).toEqual([[2, 8]]); // finished: none
+    expect([...allocateLabor({ 1: { ...base, state: "active", done: base.labor }, 2: site(2) }, 8, CREW)]).toEqual([[2, 6]]); // finished: none, the other site takes its crew
     const upgrading = { ...base, state: "active" as const, done: base.labor, upgrade: { labor: 60, done: 0, paid: false } };
     expect([...allocateLabor({ 1: upgrading, 2: site(2) }, 8, CREW)]).toEqual([[1, 6], [2, 2]]); // an upgrade is a site too
   });
   it("payMaterials and advanceBuildings serve the same sites", () => {
     const base = ticks(world(straight(), "res"), 1).buildings[1];
     const three = Object.fromEntries([1, 2, 3].map((id) => [id, { ...base, id, labor: 100, done: 0, paid: false, state: "planned" as const }]));
-    const stock = { food: 0, logs: 100, planks: 10, stone: 10, wares: 0 };
+    const stock = { food: 0, logs: 100, planks: 10, stone: 10, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
     const crew = (CREW * BASE_TICK) / 60;
     const hours = (8 * BASE_TICK) / 60; // 8 hands
     const paid = payMaterials(three, stock, hours, crew);
@@ -229,20 +230,21 @@ describe("construction", () => {
   it("construction speed follows the number of jobless adults", () => {
     let s = ticks(world(straight(), "res"), 1);
     const b = s.buildings[1];
-    s = { ...s, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 }, buildings: { 1: b } };
+    s = { ...s, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 }, buildings: { 1: b, 2: { ...b, id: 2 } } };
+    const done = (x: typeof s) => Object.values(step(x).buildings).reduce((sum, v) => sum + v.done, 0);
     expect(builderCount(s)).toBe(8);
-    expect(step(s).buildings[1].done).toBeCloseTo((8 * BASE_TICK) / 60);
+    expect(done(s)).toBeCloseTo((8 * BASE_TICK) / 60);
     // two adults get regular jobs: fewer hands on the site
     const adults = Object.values(s.residents).filter((r) => r.born < -16 * YEAR_MIN + at7);
     const busy = { ...s.residents };
     for (const r of adults.slice(0, 2)) busy[r.id] = { ...r, job: 99, commute: 5 };
     const s2 = { ...s, residents: busy };
     expect(builderCount(s2)).toBe(6);
-    expect(step(s2).buildings[1].done).toBeCloseTo((6 * BASE_TICK) / 60);
+    expect(done(s2)).toBeCloseTo((6 * BASE_TICK) / 60);
   });
 });
 
-const hand = { food: 0, logs: 0, planks: 0, stone: 0, wares: 0 }; // an empty stock: every material is made by hand
+const hand = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 }; // an empty stock: every material is made by hand
 
 describe("notices", () => {
   const at7 = 60;

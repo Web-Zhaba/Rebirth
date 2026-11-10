@@ -4,6 +4,7 @@ import type { DomainId } from "./domains";
 import type { Land } from "../world/landcover";
 import type { WeatherState } from "./weather";
 import type { OrchardYear } from "./weatherEffects";
+import type { Attraction } from "./attraction";
 
 export interface City {
   name: string;
@@ -117,6 +118,7 @@ export interface Building {
   radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
+  haul?: number; // person-hours of carting its materials from the stores, added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
   // A restored old building (PLAN-research.ru.md section 7): the footprint is the real ring (3..64 points), the lot its oriented box.
   siteId?: string; // the foundation it stands on
@@ -177,6 +179,7 @@ export interface Household {
   founder: boolean; // came with the founding party: never emigrates
   mood: number; // 0..100
   cold?: true; // no firewood at the last midnight: mood target down, death rate up (weather only)
+  served?: number; // share of its goods the household got at the last midnight, 0..1 (none yet: not counted)
 }
 
 export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage"; // goal and unlock are no longer made: old saves still carry them
@@ -273,7 +276,11 @@ export interface Stock {
   logs: number; // m3
   planks: number; // m3
   stone: number; // t
-  wares: number; // pieces
+  // goods, pieces (sim/goods.ts)
+  clothes: number;
+  dishes: number;
+  furniture: number;
+  tools: number;
 }
 
 // A field's progress in one year (rye is sown in spring and reaped in autumn of the same year).
@@ -302,6 +309,7 @@ export interface ProdState {
   yesterday: Record<number, number>;
   orchard: OrchardYear; // what this year has done to the fruit trees (frost at the blossom, drought, heat)
   trade?: { give: keyof Stock; get: keyof Stock; gave: number; got: number }; // what the markets swapped in the day that ended; absent when nothing moved
+  haul?: Record<number, number>; // producer id -> share of its work hours that went to carting at the last work tick (sim/storage.ts)
 }
 
 // Research and eras (PLAN-research.ru.md section 4; sim/tech.ts holds the tree, sim/research.ts the rules).
@@ -329,7 +337,8 @@ export interface Incoming {
 }
 
 export interface SimState extends PeopleState {
-  stock: Stock;
+  stock: Stock; // the town's total; what lies where is in `stores`
+  stores: Record<number, Partial<Stock>>; // store id (0 = the camp, else a finished barn, cellar, yard or warehouse) -> its contents (sim/storage.ts)
   prod: ProdState;
   realTime: number; // epoch ms simulated up to
   gameMinutes: number; // since founding
@@ -344,7 +353,7 @@ export interface SimState extends PeopleState {
   rng: number; // uint32 state of the growth generator
   lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
   incoming: Incoming[]; // families on their way, by arrival time
-  attract: number; // 0..1, how attractive the town is to newcomers; set at 00:00
+  attraction: Attraction; // how attractive the town is to newcomers and why (sim/attraction.ts); set at 00:00
   // Derived once per game day (and on load): bit i of coverage[house] is set when service i covers it.
   coverage: Record<number, number>;
   landValue: Record<number, number>; // house id -> 0..100
@@ -378,12 +387,13 @@ export interface EconomyStats {
   forage: number; // kg of food a day the idle adults gather
   brushwood: number; // m3 of firewood a day the idle adults gather (only while the town is short of fuel)
   outlook: number; // 0..1, can the food last to the end of the next harvest window
-  eveningWares: number; // pieces an hour the adults at home make at 19-22 (doubles in winter)
+  eveningWares: number; // pieces of clothing an hour the adults at home make at 19-22 (doubles in winter)
   trade?: ProdState["trade"]; // what the markets swapped yesterday
   fieldWork: number; // share of the field work the weather allows right now (1 = calm)
   buildFactor: number; // share of the artel's hours the weather allows right now
   firewood: number; // m3 a day the households burn at today's cold
   unheated: { households: number; people: number }; // without firewood since the last midnight
+  admin: { pop: number; capacity: number; factor: number }; // residents, what the offices manage, the work rate it leaves (sim/governance.ts)
 }
 
 export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";
@@ -460,11 +470,13 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
+  houseGoods: Record<number, number>; // house id -> least share of its goods a family got at the last midnight (houses served at least once)
   houseResidents: Record<number, number>; // house id -> residents, compact input for service placement previews
   research: ResearchView;
   fieldProgress: Record<number, { sown: number; harv: number }>; // field id -> share of its area sown / harvested this year (steps of 0.02), for the 3D fields
   heritageMul: number; // scarcity multiplier of the next restoration, 1..3
   callBlock: string | null; // why a call for settlers cannot be made now, or null
+  inflow: { free: number; perDay: number }; // free homes and the families a day the town draws now (sim/attraction.ts)
 };
 
 // What the main thread keeps.
@@ -526,6 +538,9 @@ export interface ProductionInfo {
   site?: Site;
   missing?: string; // input the workshop lacks
   storage?: number; // kg of food a barn or cellar holds
+  store?: { held: Partial<Stock>; room: Partial<Record<"food" | "wood" | "stone" | "goods", number>> }; // a store: what it holds and its room per group
+  haul?: { metres: number; share: number }; // a producer: road metres to the store it carts to, share of its hours the carting takes
+  full?: boolean; // a producer: no store has room for its output
   orchard?: { ripeDays: number; quality: number }; // days until the trees bear (0 = they do); share of the full yield this year allows
   fields?: { count: number; ha: number; sown: number; reaped: number; expected: number };
 }

@@ -1,5 +1,7 @@
+import { homeGoods } from "../sim/goods";
+import { CALL } from "../sim/levers";
 import { it } from "vitest";
-import { BUILDINGS } from "../sim/buildings";
+import { BUILDINGS, CAMP_STORE, capacityOf, STORE_GROUPS } from "../sim/buildings";
 import { calendar } from "../sim/clock";
 import { canPlace } from "../sim/growth";
 import { freeHomes } from "../sim/people";
@@ -149,6 +151,7 @@ it("pacing harness", async () => {
   const done = new Set<number>();
   let lastJobsDay = -9;
   let lastCallDay = -1;
+  let lastDebugDay = -1;
   let jobsStretches = 0;
 
   // ----- milestones -----
@@ -226,8 +229,27 @@ it("pacing harness", async () => {
     if (done.size === steps.length && st.stock.logs < BUILDINGS.izba.materials.logs && cutters > 0 && cutters < 1 + Math.floor(houses() / 5)) {
       await place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 });
     }
-    // A house stands empty and there are wares to pay: call settlers (the wares of the founding cart pay for two calls).
-    if (st.stock.wares >= 10 && dayOf(st.gameMinutes) > lastCallDay) {
+    // A store group nearly full: a sensible player puts a store of that kind by the producers (docs/PLAN-balance.md B4).
+    if (unlocked("barn"))
+      for (const [group, tpl] of [["food", "barn"], ["wood", "logyard"], ["stone", "stoneyard"], ["goods", "warehouse"]] as const) {
+        const used = STORE_GROUPS[group].reduce((n, k) => n + st.stock[k], 0);
+        const pending = Object.values(st.buildings).some((b) => b.template === tpl && b.state !== "active");
+        const low = group === "food" ? houses() >= 10 && capacityOf(st.buildings, group) - used < 0.5 * CAMP_STORE.food : capacityOf(st.buildings, group) - used < 0.1 * CAMP_STORE[group]; // a barn once the first houses stand
+        if (!pending && low) await place(tpl, -1, 130);
+      }
+    // The administration nears its limit: a sensible player puts up the town hall, then district offices (docs/PLAN-balance.md B7).
+    {
+      const adm = st.economy.admin;
+      const offices = Object.values(st.buildings).filter((b) => b.template === "townhall" || b.template === "office");
+      const hall = offices.some((b) => b.template === "townhall");
+      const pending = offices.some((b) => b.state !== "active");
+      if (!pending && adm.pop > 0.8 * adm.capacity) {
+        if (!hall && unlocked("townhall")) await place("townhall", -1, 130);
+        else if (hall && unlocked("office")) await place("office", -1, 130);
+      }
+    }
+    // A house stands empty and there are goods to pay: call settlers (the goods of the founding cart pay for two calls).
+    if (homeGoods(st.stock) >= CALL.goods && dayOf(st.gameMinutes) > lastCallDay) {
       const sim = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
       if (freeHomes(sim.buildings, sim.households, sim.incoming).length > 0) {
         lastCallDay = dayOf(st.gameMinutes);
@@ -241,6 +263,12 @@ it("pacing harness", async () => {
       const zone = unlocked("zone:trade") && jobsStretches++ % 2 === 1 ? "trade" : "craft";
       await extendRoad(roadEnd + 50);
       await paint(`${zone} zone ${from}-${roadEnd} m`, zone, (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
+    }
+    if (process.env.PACE_DEBUG && dayOf(st.gameMinutes) !== lastDebugDay) {
+      lastDebugDay = dayOf(st.gameMinutes);
+      const a = st.attraction;
+      process.stderr.write(`d${lastDebugDay + 1} pop ${st.people.pop} houses ${houses()} free ${st.inflow.free} score ${a.score.toFixed(2)} food ${a.food.toFixed(2)} mood ${a.mood.toFixed(2)} jobs ${a.jobs.toFixed(2)} serv ${a.services.toFixed(2)} perDay ${st.inflow.perDay.toFixed(2)} admin ${st.economy.admin.capacity.toFixed(0)} x${st.economy.admin.factor.toFixed(2)} demand ${st.people.demand.res.toFixed(1)}
+`);
     }
     for (let k = 0; k < 6; k++) {
       now += STEP_MS;

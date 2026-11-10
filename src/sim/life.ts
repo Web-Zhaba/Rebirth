@@ -1,5 +1,5 @@
 import { unit, type Light, type Rest, type Trip } from "../map/life";
-import { BUILDINGS } from "./buildings";
+import { BUILDINGS, CREW, FOCUS_CREWS, siteCrew } from "./buildings";
 import { EVENING } from "./evening";
 import { tolokaActive, workHours } from "./levers";
 import { idleWorkplaces, WORKSHOP_INPUT } from "./fields";
@@ -8,7 +8,8 @@ import { ageOf, buildingCentre, buildNet, constructionWork, isAdultAge, isFinish
 import { residentMoveFactor } from "./needs";
 import { GOOD } from "./production";
 import { isCleared } from "./clearing";
-import { workableEdges } from "./roads";
+import { roadCrew, workableEdges } from "./roads";
+import { CAMP_STORE_ID, Ledger } from "./storage";
 import { pointInPolygon } from "./zones";
 import { START_MINUTE_OF_DAY } from "./time";
 import type { Building, Resident, SimState, Stock } from "./types";
@@ -26,7 +27,7 @@ export const MAX_WALKERS = 300;
 export const MAX_CARTS = 6; // per producer per day
 export const CART_SPEED = 3000 / 60; // m per game minute, 3 km/h
 export const CART_RANGE = 6000; // m of road from the camp
-export const LOAD: Record<keyof Stock, number> = { logs: 5, planks: 2, stone: 3, food: 500, wares: 20 };
+export const LOAD: Record<keyof Stock, number> = { logs: 5, planks: 2, stone: 3, food: 500, clothes: 20, dishes: 20, furniture: 6, tools: 15 };
 export const MAX_GUESTS = 12; // evening walkers to one tavern
 const DAY_MIN = 1440;
 export const CAMP_CLEAR = 3; // m around the founding point the tent folk leave free
@@ -216,10 +217,19 @@ export function computeLife(s: SimState, day = 0): LifeData {
     }
   }
 
-  // carts: one per load of yesterday's output, producer -> camp
+  // carts: one per load of yesterday's output, producer -> the nearest store with room for it (storage.ts), or the camp
   const camp = snapToRoad(net, 0, 0);
   if (camp) {
     const tree = spotTree(net, camp, CART_RANGE);
+    const ledger = new Ledger(s);
+    const storeTrees = new Map<number, { spot: Spot; tree: ReturnType<typeof spotTree> } | null>();
+    const storeTree = (id: number, at: [number, number]) => {
+      if (!storeTrees.has(id)) {
+        const spot = id === CAMP_STORE_ID ? camp : snapToRoad(net, at[0], at[1]);
+        storeTrees.set(id, spot ? { spot, tree: id === CAMP_STORE_ID ? tree : spotTree(net, spot, CART_RANGE) } : null);
+      }
+      return storeTrees.get(id)!;
+    };
     let n = 0;
     for (const b of Object.values(s.buildings)) {
       const good = GOOD[b.template];
@@ -227,10 +237,12 @@ export function computeLife(s: SimState, day = 0): LifeData {
       const made = s.prod.yesterday[b.id] ?? 0;
       if (!(made > 0)) continue;
       const loads = Math.min(MAX_CARTS, Math.ceil(made / LOAD[good] - 1e-9));
+      const to = ledger.near(good, lotFront(b), "room")[0]?.point ?? ledger.points[0];
+      const st = storeTree(to.id, to.at);
       const l = locate(b);
-      const walk = l && walkTo(tree, camp, l, CART_RANGE);
-      if (!l || !walk) continue;
-      const pts = round2(trail([...walk.nodes].reverse(), l.at, camp.at, [lotFront(b), [0, 0]]));
+      const walk = l && st && walkTo(st.tree, st.spot, l, CART_RANGE);
+      if (!l || !st || !walk) continue;
+      const pts = round2(trail([...walk.nodes].reverse(), l.at, st.spot.at, [lotFront(b), to.at]));
       for (let k = 0; k < loads; k++) {
         trips.push({ id: CART_ID0 + n++, kind: "cart", pts, depart: sch.workFrom + ((k + 0.5) * (sch.workTo - sch.workFrom)) / loads, speed: CART_SPEED });
       }
@@ -256,8 +268,9 @@ export function computeLife(s: SimState, day = 0): LifeData {
 
 // Where every resident stays off their walks: in their house (out of sight), else scattered about the camp at the
 // founding point; at work in work hours when they have a job (and are not in class), on the plot when it is worked in
-// the open. The builders (the artel: adults without work, or whose workplace stands idle; everyone in a toloka) work
-// on the construction sites instead, each at one of them.
+// the open. The builders (the artel: adults without work, or whose workplace stands idle; everyone in a toloka) fill
+// the crews of the construction sites in the order the work is shared (see allocateLabor); those no crew has room for
+// stay idle.
 function restsOf(s: SimState, sch: Schedule): Rest[] {
   const housed = (r: Resident) => {
     const hh = s.households[r.household];
@@ -266,8 +279,19 @@ function restsOf(s: SimState, sch: Schedule): Rest[] {
   };
   const all = Object.values(s.residents);
   const camp = CAMP_PER * Math.sqrt(all.filter((r) => !housed(r)).length);
-  const sites = constructionSites(s);
   const toloka = tolokaActive(s.levers, s.gameMinutes);
+  const sites = constructionSites(s, toloka);
+  let site = 0;
+  let taken = 0;
+  const crewSpot = (who: number): [number, number] | null => {
+    while (site < sites.length && taken >= sites[site].crew) {
+      site++;
+      taken = 0;
+    }
+    if (site >= sites.length) return null;
+    taken++;
+    return sites[site].spot(who);
+  };
   const idle = sites.length ? idleWorkplaces(s) : new Set<number>();
   return all.map((r) => {
     const age = ageOf(r.born, s.gameMinutes);
@@ -275,35 +299,56 @@ function restsOf(s: SimState, sch: Schedule): Rest[] {
     const d = CAMP_CLEAR + camp * Math.sqrt(unit(r.id, 9));
     const home: [number, number] | null = housed(r) ? null : [cm(d * Math.cos(a)), cm(d * Math.sin(a))];
     const job = r.job !== null && !r.inClass ? s.buildings[r.job] : undefined;
-    const builder = sites.length > 0 && isAdultAge(age) && !r.inClass && (toloka || r.job === null || idle.has(r.job));
-    const at = builder ? sites[Math.floor(unit(r.id, 30) * sites.length)](r.id) : isWorkplace(job) ? (OPEN_AIR.has(job.template) ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
+    const artel = sites.length > 0 && isAdultAge(age) && !r.inClass && (toloka || r.job === null || idle.has(r.job));
+    const spot = artel ? crewSpot(r.id) : null;
+    const builder = spot !== null;
+    const at = builder ? spot : artel ? undefined : isWorkplace(job) ? (OPEN_AIR.has(job.template) ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
     const work = at !== undefined ? { at, from: sch.workFrom, to: sch.workTo, ...(builder && { build: true }) } : undefined;
     return { who: r.id, sex: r.sex, age, home, ...(work && { work }) };
   });
 }
 
-// The construction going on, each as a builder's spot on it: a building rising (on its footprint) or being rebuilt (by
-// its door, the house stands meanwhile), a forest being cleared, a road being laid (along the edge).
-function constructionSites(s: SimState): ((who: number) => [number, number])[] {
+// The construction going on, in the order the artel's work is shared (roads, workplaces, houses, clearings; the
+// toloka site first with its doubled crew and no roads), each with its crew and a builder's spot on it: a building
+// rising (on its footprint) or being rebuilt (by its door, the house stands meanwhile), a forest being cleared, a
+// road being laid (along the edge).
+interface CrewSite {
+  crew: number;
+  spot: (who: number) => [number, number];
+}
+function constructionSites(s: SimState, toloka: boolean): CrewSite[] {
   if (!constructionWork(s.buildings, s.roads, s.clearings, s.stock)) return [];
-  const out: ((who: number) => [number, number])[] = [];
+  const roads: CrewSite[] = [];
+  if (!toloka)
+    for (const id of workableEdges(s.roads, s.stock)) {
+      const e = s.roads.edges[id];
+      const [p, q] = [s.roads.nodes[e.a], s.roads.nodes[e.b]];
+      roads.push({
+        crew: roadCrew(e),
+        spot: (who) => {
+          const t = unit(who, 33);
+          return [cm(p.x + (q.x - p.x) * t), cm(p.y + (q.y - p.y) * t)];
+        },
+      });
+    }
+  const work: CrewSite[] = [];
+  const homes: CrewSite[] = [];
+  let focus: CrewSite | null = null;
+  const focusId = toloka ? s.levers.toloka?.site : null;
   for (const b of Object.values(s.buildings)) {
-    if (b.state !== "active") out.push((who) => spotOn(b.footprint, who, centre(b)));
+    let spot: ((who: number) => [number, number]) | null = null;
+    if (b.state !== "active") spot = (who) => spotOn(b.footprint, who, centre(b));
     else if (b.upgrade) {
       const [x, y] = lotFront(b);
-      out.push((who) => [cm(x + 3 * (unit(who, 31) - 0.5)), cm(y + 3 * (unit(who, 32) - 0.5))]);
+      spot = (who) => [cm(x + 3 * (unit(who, 31) - 0.5)), cm(y + 3 * (unit(who, 32) - 0.5))];
     }
+    if (!spot) continue;
+    if (b.id === focusId) focus = { crew: siteCrew(b) * FOCUS_CREWS, spot };
+    else (b.zone === "res" ? homes : work).push({ crew: siteCrew(b), spot });
   }
-  for (const c of s.clearings ?? []) if (!isCleared(c)) out.push((who) => spotOn(c.pts, who, c.pts[0]));
-  for (const id of workableEdges(s.roads, s.stock)) {
-    const e = s.roads.edges[id];
-    const [p, q] = [s.roads.nodes[e.a], s.roads.nodes[e.b]];
-    out.push((who) => {
-      const t = unit(who, 33);
-      return [cm(p.x + (q.x - p.x) * t), cm(p.y + (q.y - p.y) * t)];
-    });
-  }
-  return out;
+  const fell: CrewSite[] = [];
+  for (const c of s.clearings ?? []) if (!isCleared(c)) fell.push({ crew: CREW, spot: (who) => spotOn(c.pts, who, c.pts[0]) });
+  return [...(focus ? [focus] : []), ...roads, ...work, ...homes, ...fell];
 }
 
 const cm = (v: number) => Math.round(v * 100) / 100; // to the centimetre, as the trips

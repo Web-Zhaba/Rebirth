@@ -4,6 +4,7 @@ import { refreshServices } from "./coverage";
 import { syncPeople } from "./people";
 import { isCleared } from "./clearing";
 import { UPGRADE } from "./buildings";
+import { withStock } from "./storage";
 import { completeRestorations } from "./restore";
 import type { Building, RoadGraph, SimState } from "./types";
 import { L } from "../i18n";
@@ -47,7 +48,7 @@ function finishBuildings(all: Record<number, Building>): Record<number, Building
     if (out === all) out = { ...all };
     if (b.state === "active") {
       const { upgrade: _u, ...rest } = b;
-      out[b.id] = { ...rest, level: 2, height: b.height + UPGRADE.height };
+      out[b.id] = { ...rest, level: b.level + 1, height: b.height + UPGRADE.height };
     } else {
       out[b.id] = { ...b, paid: true, done: b.labor, state: "active" };
     }
@@ -65,10 +66,9 @@ export function finishAll(s: SimState): SimState {
   return refreshServices(syncPeople(completeRestorations(cleared)));
 }
 
-export const grantStock = (s: SimState): SimState => ({
-  ...s,
-  stock: { food: s.stock.food + ADMIN.grant, logs: s.stock.logs + ADMIN.grant, planks: s.stock.planks + ADMIN.grant, stone: s.stock.stone + ADMIN.grant, wares: s.stock.wares + ADMIN.grant },
-});
+// Kept at the camp beyond its room: a debug grant skips the logistics.
+export const grantStock = (s: SimState): SimState =>
+  withStock(s, { food: s.stock.food + ADMIN.grant, logs: s.stock.logs + ADMIN.grant, planks: s.stock.planks + ADMIN.grant, stone: s.stock.stone + ADMIN.grant, clothes: s.stock.clothes + ADMIN.grant, dishes: s.stock.dishes + ADMIN.grant, furniture: s.stock.furniture + ADMIN.grant, tools: s.stock.tools + ADMIN.grant });
 
 export const unlockAll = (s: SimState): SimState => researchAll(s);
 export const nextEra = (s: SimState): SimState => nextEraOf(s);

@@ -43,6 +43,7 @@ export type Cmd =
   | { type: "setRations"; rations: Rations }
   | { type: "setAdultSchool"; on: boolean }
   | { type: "callSettlers" }
+  | { type: "grantSupplies" } // the reward for a watched ad
   | { type: "setTrade"; order: TradeOrder | null } // what the markets swap every day
   // Jobs: hiring priority of a job group (or of construction), and the staff limit of a workplace.
   | { type: "setJobPriority"; group: JobKey; priority: Priority }

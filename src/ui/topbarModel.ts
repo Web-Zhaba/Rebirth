@@ -56,6 +56,7 @@ export function warnings(args: { food: number; eco: EconomyStats; builders: numb
   if (weather) out.push({ id: "weather", text: weather });
   if (queue > 0 && builders === 0) out.push({ id: "nohands", text: L("Некому строить", "No one to build") });
   if (building > 0 && logs < 0.05) out.push({ id: "nologs", text: L("Не хватает брёвен", "Short of logs") });
+  if (eco.admin && eco.admin.factor < 1) out.push({ id: "admin", text: L(`Перегрузка управления: работа −${Math.round((1 - eco.admin.factor) * 100)} %`, `Administration overloaded: work −${Math.round((1 - eco.admin.factor) * 100)}%`) });
   return out;
 }
 

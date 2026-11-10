@@ -1,5 +1,6 @@
+import { GOODS, WARES_SPLIT } from "./goods";
 import { LANDS } from "../world/landcover";
-import { BUILDINGS, homesOf, isPriority, JOB_KEYS, UPGRADE } from "./buildings";
+import { BUILDINGS, homesOf, isPriority, JOB_KEYS, maxLevel, startLevel, UPGRADE } from "./buildings";
 import { FOUNDATION_LOT, fitMaxOf } from "./foundationLots";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
@@ -12,6 +13,8 @@ import { migrateText } from "./legacyText";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
+import { spreadStores, type Stores } from "./storage";
+import { NO_ATTRACTION, type Attraction } from "./attraction";
 import { SERVICE } from "./services";
 import { isTradeOrder } from "./trade";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
@@ -208,8 +211,8 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       created: raw.created,
       // Saves from before production: finished and started buildings were built without materials.
       paid: typeof raw.paid === "boolean" ? raw.paid : raw.state !== "planned",
-      // Saves from before services: level 1 (a level 2 only makes sense for the izba), no streak.
-      level: raw.level === 2 && raw.template === UPGRADE.template ? 2 : 1,
+      level: 1, // a house's is read below, once its scale is known
+
       streak: nonNegInt(raw.streak) ? raw.streak : 0,
     };
     if (site) out[id].site = site;
@@ -229,7 +232,12 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       const m = raw.materials;
       if (isRecord(m) && isNum(m.logs) && isNum(m.planks) && isNum(m.stone) && m.logs >= 0 && m.planks >= 0 && m.stone >= 0) out[id].materials = { logs: m.logs, planks: m.planks, stone: m.stone };
     }
+    // Saves from before services have no level (1), no streak. Saves from before house levels (docs/PLAN-balance.md B2)
+    // had level 2 only for the house and a large house of level 1 holding two families: a house is at least at the
+    // level its template starts at, at most at the highest its area allows.
+    if (out[id].zone === "res") out[id].level = Math.min(maxLevel(out[id]), Math.max(startLevel(out[id].template), Number.isInteger(raw.level) ? (raw.level as number) : 1));
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
+    if (isNum(raw.haul) && raw.haul > 0) out[id].haul = raw.haul;
     if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
     if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
     const up = raw.upgrade;
@@ -314,7 +322,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     if (h.home !== null) {
       if (!Number.isInteger(h.home)) return null;
       const n = homes.get(h.home as number) ?? 0;
-      if (isFinishedHouse(buildings[h.home as number]) && n < homesOf(buildings[h.home as number])) {
+      // up to the highest level: saves from before house levels may hold more families than the level (raised below)
+      if (isFinishedHouse(buildings[h.home as number]) && n < maxLevel(buildings[h.home as number])) {
         home = h.home as number;
         homes.set(home, n + 1);
       }
@@ -322,9 +331,14 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     const mood = isNum(h.mood) ? Math.min(100, Math.max(0, h.mood)) : MOOD_START;
     // Saves from before the flag: the founding households arrived at minute 0.
     const founder = typeof h.founder === "boolean" ? h.founder : h.arrived === 0;
-    households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood, ...(h.cold === true ? { cold: true as const } : {}) };
+    households[id] = { id, last: h.last, home, members, arrived: h.arrived, founder, mood, ...(h.cold === true ? { cold: true as const } : {}), ...(isNum(h.served) && h.served >= 0 && h.served <= 1 ? { served: h.served } : {}) };
   }
   if (seen.size !== Object.keys(residents).length) return null; // a resident in no household
+  // A house holds as many families as its level: one with more (saved before house levels) is raised to them, so no family is evicted.
+  for (const [id, n] of homes) {
+    const b = buildings[id];
+    if (n > homesOf(b)) buildings[id] = { ...b, level: n, height: b.height + UPGRADE.height * (n - b.level) };
+  }
   for (const r of Object.values(residents)) {
     if (!households[r.household]) return null;
     if (r.spouse !== null) {
@@ -348,11 +362,46 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
   return { residents, households, nextPersonId: nextPerson, nextHouseholdId: nextHouse, events: events.slice(-MAX_EVENTS) };
 }
 
-// A stock with any broken figure gives back the founding stock.
+// Saves from before goods groups (B3) trade "wares": they trade clothing now.
+function oldTrade(v: unknown): unknown {
+  if (!isRecord(v)) return v;
+  const fix = (g: unknown) => (g === "wares" ? "clothes" : g);
+  return { ...v, give: fix(v.give), get: fix(v.get) };
+}
+
+// A stock with any broken figure gives back the founding stock. Saves from before goods groups (docs/PLAN-balance.md B3)
+// carry one `wares` figure: it is split by WARES_SPLIT.
 function parseStock(v: unknown): Stock {
-  const keys = ["food", "logs", "planks", "stone", "wares"] as const;
-  if (!isRecord(v) || !keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0)) return emptyStock();
-  return { food: v.food as number, logs: v.logs as number, planks: v.planks as number, stone: v.stone as number, wares: v.wares as number };
+  const ok = (k: string) => isRecord(v) && isNum(v[k]) && (v[k] as number) >= 0;
+  if (!isRecord(v) || !["food", "logs", "planks", "stone"].every(ok)) return emptyStock();
+  const base = { food: v.food as number, logs: v.logs as number, planks: v.planks as number, stone: v.stone as number };
+  if (GOODS.every(ok)) return { ...base, clothes: v.clothes as number, dishes: v.dishes as number, furniture: v.furniture as number, tools: v.tools as number };
+  if (!ok("wares")) return emptyStock();
+  const w = v.wares as number;
+  return { ...base, clothes: w * WARES_SPLIT.clothes, dishes: w * WARES_SPLIT.dishes, furniture: w * WARES_SPLIT.furniture, tools: w * WARES_SPLIT.tools };
+}
+
+// Saves from before B6 (docs/PLAN-balance.md) have none: the founding party's (`fallback`) until the next midnight sets it.
+function parseAttraction(v: unknown, fallback: Attraction): Attraction {
+  if (!isRecord(v)) return fallback;
+  const out = { ...NO_ATTRACTION };
+  for (const k of Object.keys(NO_ATTRACTION) as (keyof Attraction)[]) if (isNum(v[k]) && (v[k] as number) >= 0) out[k] = k === "cap" ? (v[k] as number) : Math.min(1, v[k] as number);
+  return out;
+}
+
+// What each store holds; saves from before the stores (docs/PLAN-balance.md B4) spread their stock over the stores they
+// have. A record that does not add up to the stock is set right by the next tick (storage.ts Ledger.sync).
+function parseStores(v: unknown, stock: Stock, buildings: Record<number, Building>): Stores {
+  if (!isRecord(v)) return spreadStores({ stock, buildings, roads: emptyRoads() });
+  const out: Stores = {};
+  for (const [k, h] of Object.entries(v)) {
+    const id = Number(k);
+    if (!Number.isInteger(id) || id < 0 || !isRecord(h)) continue;
+    const held: Partial<Stock> = {};
+    for (const g of Object.keys(stock) as (keyof Stock)[]) if (isNum(h[g]) && (h[g] as number) > 0) held[g] = h[g] as number;
+    out[id] = held;
+  }
+  return out;
 }
 
 const numRecord = (v: unknown): Record<number, number> => {
@@ -387,7 +436,7 @@ function parseProd(v: unknown): ProdState {
   // Saves from before the orchard: a year with nothing counted.
   const o = v.orchard;
   if (isRecord(o) && Number.isInteger(o.year)) out.orchard = { year: o.year as number, frost: num(o.frost, 0, 400, 0), stress: num(o.stress, 0, 400, 0), days: num(o.days, 0, 400, 0), hot: num(o.hot, 0, 400, 0) };
-  const t = v.trade;
+  const t = oldTrade(v.trade);
   if (isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0) out.trade = { give: t.give, get: t.get, gave: t.gave, got: t.got };
   return out;
 }
@@ -407,7 +456,8 @@ function parseLevers(v: unknown): Levers {
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
   const j = v.jobs;
   if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
-  if (isTradeOrder(v.trade)) out.trade = { give: v.trade.give, get: v.trade.get };
+  const order = oldTrade(v.trade);
+  if (isTradeOrder(order)) out.trade = { give: order.give, get: order.get };
   return out;
 }
 
@@ -523,12 +573,13 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.rng = rng;
   Object.assign(g, people);
   g.stock = parseStock(sim.stock);
+  g.stores = parseStores(sim.stores, g.stock, g.buildings);
   g.prod = parseProd(sim.prod);
   g.coverage = numRecord(sim.coverage); // derived: rebuilt on load and every day
   g.landValue = numRecord(sim.landValue);
   g.incoming = parseIncoming(sim.incoming, g.buildings);
   g.clearings = parseClearings(sim.clearings);
-  g.attract = isNum(sim.attract) ? Math.min(1, Math.max(0, sim.attract)) : 0;
+  g.attraction = parseAttraction(sim.attraction, g.attraction);
   g.chronicle = parseChronicle(sim.chronicle);
   g.summary = parseSummary(sim.summary);
   g.levers = parseLevers(sim.levers);

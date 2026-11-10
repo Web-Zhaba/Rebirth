@@ -14,6 +14,8 @@ import { dailyEconomy, payMaterials, produceStep, reportShortages, say } from ".
 import { isWorkHour, tolokaActive, workHours, type Levers } from "./levers";
 import { crewEfficiency } from "./needs";
 import { spendOnRoads } from "./roads";
+import { Ledger, settleStores } from "./storage";
+import { adminFactor } from "./governance";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
 import type { SimState } from "./types";
 import { weatherStep } from "./weather";
@@ -86,6 +88,7 @@ export function step(s: SimState): SimState {
   let roads = s.roads;
   let buildings = s.buildings;
   let stock = s.stock;
+  let stores = s.stores;
   let events = s.events;
   let clearUse = new Map<number, number>();
   if (working) {
@@ -93,22 +96,25 @@ export function step(s: SimState): SimState {
     // materials from the stock when work on them starts, and to forest clearings, ahead of the buildings when logs run short.
     // On a толока every hand goes to its site, none to the roads.
     const toloka = tolokaActive(s.levers, s.gameMinutes);
-    const bf = buildFactor(s.weather) * buildSpeedMul(s.progress); // rain, cold and storms cut the hours and the crew
-    const hours = (builderCount(s) * BASE_TICK * bf * crewEfficiency(s)) / 60;
-    const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock);
+    const bf = buildFactor(s.weather) * buildSpeedMul(s.progress) * adminFactor(s); // rain, cold and storms cut the hours and the crew; so does an overloaded administration
+    const hand = (BASE_TICK * bf * crewEfficiency(s)) / 60; // person-hours of one builder in a tick
+    const hours = builderCount(s) * hand;
+    const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock, hand);
     const roadStock = r.stock ?? s.stock; // stone the roads took when work on them started
     roads = r.roads;
     const lever = { priority: s.levers.priority, focus: toloka ? s.levers.toloka!.site : null };
-    const crew = (CREW * BASE_TICK * bf) / 60; // person-hours of one crew in a tick
+    const crew = CREW * hand; // person-hours of one crew in a tick
     const first = clearingsFirst(s.stock);
-    const paid = payMaterials(s.buildings, roadStock, r.left, crew, s.clearings, first, lever);
+    const ledger = new Ledger({ ...s, stock: roadStock }); // sites fetch their materials from the nearest stores
+    const paid = payMaterials(s.buildings, roadStock, r.left, crew, s.clearings, first, lever, ledger);
     clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first, lever);
     buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings, first, lever);
     stock = paid.stock;
+    stores = ledger.stores;
     events = reportShortages(s.buildings, paid.buildings, roadStock, events, s.gameMinutes);
     events = reportBuilt(s.buildings, buildings, events, s.gameMinutes);
   }
-  let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, events }, clearUse);
+  let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, stores, events }, clearUse);
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScales(s));
   else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
   cur = completeRestorations(retireDigs(cur));
@@ -117,7 +123,8 @@ export function step(s: SimState): SimState {
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = eraStep(dailyServices(dailyStep(dailyEconomy(next)))); // a tick crossed 00:00
-  return recordChronicle(s, settleLevers(spawnBuildings(immigrationStep(next, BASE_TICK))));
+  // whatever moved on the stock alone this tick (roads, trade, arrivals, gifts) is taken into the stores
+  return recordChronicle(s, settleStores(settleLevers(spawnBuildings(immigrationStep(next, BASE_TICK)))));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.
