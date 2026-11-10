@@ -1,6 +1,7 @@
 import { DIG, emptyFinds } from "./excavation";
 import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { emptyLevers } from "./levers";
+import { makeIdentityCache } from "./memo";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, startLevel, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
 import { assignFields, fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
 import { createFounders, demandCounts, FOUNDERS, freeHomes, MOOD_START } from "./people";
@@ -221,7 +222,25 @@ interface Lot {
   fits: [BuildingTemplate, ZoneCell][]; // template and the far corner cell of its lot
 }
 
-function findLots(s: Pick<SimState, "roads" | "buildings" | "zones"> & { finds?: Finds }, zone: ZoneType): Lot[] {
+// The free lots of a zone type, kept per cells array. Scanning every cell is the dearest thing a tick does, and a zone
+// that wants a building but has no lot asks again every tick; the answer moves only with the cells, the built roads,
+// the buildings standing (a lot never moves) and the old foundations.
+const lotCache = new WeakMap<readonly ZoneCell[], Map<ZoneType, { key: string; old: unknown; lots: readonly Lot[] }>>();
+
+function findLots(s: Pick<SimState, "roads" | "buildings" | "zones"> & { finds?: Finds }, zone: ZoneType): readonly Lot[] {
+  let key = "";
+  for (const e of Object.values(s.roads.edges)) if (e.done >= e.labor) key += `${e.id},`;
+  key += `|${Object.keys(s.buildings).join()}`;
+  let byZone = lotCache.get(s.zones.cells);
+  if (!byZone) lotCache.set(s.zones.cells, (byZone = new Map()));
+  const hit = byZone.get(zone);
+  if (hit && hit.key === key && hit.old === s.finds?.foundations) return hit.lots;
+  const lots = scanLots(s, zone);
+  byZone.set(zone, { key, old: s.finds?.foundations, lots });
+  return lots;
+}
+
+function scanLots(s: Pick<SimState, "roads" | "buildings" | "zones"> & { finds?: Finds }, zone: ZoneType): Lot[] {
   const old = s.finds?.foundations ?? [];
   const built = new Set<number>();
   for (const e of Object.values(s.roads.edges)) if (e.done >= e.labor) built.add(e.id);
@@ -248,11 +267,17 @@ function findLots(s: Pick<SimState, "roads" | "buildings" | "zones"> & { finds?:
   return lots;
 }
 
+// The zone types with a cell painted, kept per cells array (every snapshot asks).
+const paintedZones = makeIdentityCache((cells: readonly ZoneCell[]): ReadonlySet<ZoneType> => {
+  const painted = new Set<ZoneType>();
+  for (const c of cells) if (!c.block && c.zone !== "none") painted.add(c.zone);
+  return painted;
+});
+
 // Why a zone type is not growing, in the order a player can fix it: nothing painted, no demand, no free lot
 // beside a built road, no hands in the artel, materials made by hand. "ok" = it grows (or a site is in work).
 export function growthAdvice(s: SimState, dem: Demand, builders: number): GrowthAdvice {
-  const painted = new Set<ZoneType>();
-  for (const c of s.zones.cells) if (!c.block && c.zone !== "none") painted.add(c.zone);
+  const painted = paintedZones(s.zones.cells);
   const open = Object.values(s.buildings).filter((b) => b.state !== "active" && b.zone !== "placed");
   const why = (zone: ZoneType): GrowthWhy => {
     if (!painted.has(zone)) return "nozone";

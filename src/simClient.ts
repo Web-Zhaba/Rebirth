@@ -2,6 +2,7 @@ import { lang } from "./i18n";
 import { computed, effect, signal } from "@preact/signals";
 import type { Light, Rest, Trip } from "./map/life";
 import { BASE_TICK, clockAt, tickMs, type Speed } from "./sim/clock";
+import { applyDelta } from "./sim/delta";
 import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";
 import { makeFrame } from "./world/frame";
@@ -126,12 +127,10 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       catchUp.value = null;
       break;
     case "snapshot": {
-      // Zones, the chronicle, finds and articles ride along only when they changed; otherwise keep the ones we have.
-      const z = m.zones ?? state.value?.zones;
-      const c = m.chronicle ?? state.value?.chronicle;
-      const f = m.finds ?? state.value?.finds;
-      const a = m.articles ?? state.value?.articles;
-      if (z && c && f && a) state.value = { ...m.sim, zones: z, chronicle: c, finds: f, articles: a };
+      // A snapshot carries only what changed (zones, the chronicle, finds and articles too); the rest stays as we have
+      // it, the same objects, so what is drawn from an unchanged part is not drawn again.
+      const prev = state.value;
+      if (prev) state.value = { ...applyDelta(prev, m.sim), zones: m.zones ?? prev.zones, chronicle: m.chronicle ?? prev.chronicle, finds: m.finds ?? prev.finds, articles: m.articles ?? prev.articles };
       break;
     }
     case "cmdResult": {

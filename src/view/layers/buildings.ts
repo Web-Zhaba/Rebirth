@@ -89,11 +89,21 @@ export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   return lastItems;
 });
 
-// Footprints in lng/lat with `state` and `up` (upgrading).
+// Footprints in lng/lat with `state` and `up` (upgrading). The same collection comes back while none of that changed:
+// work on a site moves its progress every tick, and the overlay is not drawn again for it.
+const NO_SHAPES: FeatureCollection = { type: "FeatureCollection", features: [] };
+let shapes = NO_SHAPES;
+let shapesFrame: Frame | null = null;
+let shapesSig = "";
 export const buildingShapes: ReadonlySignal<FeatureCollection> = computed(() => {
   const list = buildings.value;
   const f = frame.value;
-  if (!list || !f) return { type: "FeatureCollection", features: [] };
+  if (!list || !f) return NO_SHAPES;
+  let sig = "";
+  for (const b of Object.values(list)) sig += `${b.id}:${b.state}:${b.upgrade ? 1 : 0},`;
+  if (f === shapesFrame && sig === shapesSig) return shapes;
+  shapesFrame = f;
+  shapesSig = sig;
   const features: Feature[] = Object.values(list).map((b) => ({
     type: "Feature",
     properties: { id: b.id, state: b.state, up: !!b.upgrade },
@@ -102,7 +112,8 @@ export const buildingShapes: ReadonlySignal<FeatureCollection> = computed(() => 
   if (ringCache.size > features.length * 3 + 100) {
     for (const id of ringCache.keys()) if (!(id in list)) ringCache.delete(id);
   }
-  return { type: "FeatureCollection", features };
+  shapes = { type: "FeatureCollection", features };
+  return shapes;
 });
 
 // Hit-test footprints in the town frame (an index, not the renderer: neither renderer can be asked reliably).

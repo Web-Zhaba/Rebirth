@@ -1073,7 +1073,7 @@ const WORK_TEXT: Record<string, string> = {
   dig: L("землекоп — Раскоп", "digger — Dig"),
 };
 
-function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: Set<number>): string {
+function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: ReadonlySet<number>): string {
   if (age < ADULT_MIN) return r.inClass ? L("школьник", "pupil") : L("ребёнок", "child");
   if (age >= ADULT_MAX) return r.sex === "m" ? L("старик", "old man") : L("старуха", "old woman");
   if (r.inClass) return L("учится в школе", "studies at school");

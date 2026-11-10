@@ -3,6 +3,7 @@ import { CALL } from "../sim/levers";
 import { it } from "vitest";
 import { BUILDINGS, CAMP_STORE, capacityOf, STORE_GROUPS } from "../sim/buildings";
 import { calendar } from "../sim/clock";
+import { applyDelta } from "../sim/delta";
 import { canPlace } from "../sim/growth";
 import { freeHomes } from "../sim/people";
 import { Handler, type Storage } from "../sim/handler";
@@ -32,7 +33,7 @@ it("pacing harness", async () => {
   const results = new Map<number, { ok: boolean; reason?: string }>();
   const post = (m: FromWorker) => {
     if (m.t === "loaded" && m.save) st = m.save.sim;
-    else if (m.t === "snapshot") st = { ...st, ...m.sim, zones: m.zones ?? st.zones, chronicle: m.chronicle ?? st.chronicle };
+    else if (m.t === "snapshot") st = { ...applyDelta(st, m.sim), zones: m.zones ?? st.zones, chronicle: m.chronicle ?? st.chronicle };
     else if (m.t === "cmdResult") results.set(m.id, m);
     else if (m.t === "error") throw new Error(m.message);
   };

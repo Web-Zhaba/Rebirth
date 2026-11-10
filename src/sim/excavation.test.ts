@@ -3,6 +3,7 @@ import { BUILDINGS } from "./buildings";
 import { DIG, digDone, digInfos, growDig, radiusOf, recordFinds, revealedArea, type FindsCmd } from "./excavation";
 import { step } from "./clock";
 import { emptyGrowth, makeBuilding } from "./growth";
+import { applyDelta } from "./delta";
 import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
@@ -199,9 +200,11 @@ describe("recordFinds through the worker", () => {
     await h.handle({ t: "cmd", id: 1, cmd: { type: "recordFinds", digId: 1, foundations: [found("a", 100)], pois: [], streets: [] } });
     await h.handle({ t: "cmd", id: 2, cmd: { type: "demolish", id: 1 } });
     expect(out.filter((m) => m.t === "cmdResult").pop()).toEqual({ t: "cmdResult", id: 2, ok: true });
-    const snap = out.filter((m): m is Extract<FromWorker, { t: "snapshot" }> => m.t === "snapshot").pop()!;
-    expect(snap.sim.buildings[1]).toBeUndefined();
-    expect(snap.sim.digs).toEqual([expect.objectContaining({ id: 1, r: 40, foundations: 1 })]);
+    // every snapshot carries what changed since the one before: applied in turn they are what the main thread has
+    let sim = (out.find((m) => m.t === "loaded") as Extract<FromWorker, { t: "loaded" }>).save!.sim;
+    for (const m of out) if (m.t === "snapshot") sim = applyDelta(sim, m.sim);
+    expect(sim.buildings[1]).toBeUndefined();
+    expect(sim.digs).toEqual([expect.objectContaining({ id: 1, r: 40, foundations: 1 })]);
     expect((stored as SaveV4).sim.finds.revealed).toEqual([expect.objectContaining({ digId: 1, r: 40 })]);
     await h.handle({ t: "cmd", id: 3, cmd: { type: "recordFinds", digId: 1, foundations: [found("late", 100)], pois: [], streets: [] } });
     expect(out.filter((m) => m.t === "cmdResult").pop()).toEqual({ t: "cmdResult", id: 3, ok: true });
@@ -219,7 +222,7 @@ describe("recordFinds through the worker", () => {
     expect(out.filter((m) => m.t === "cmdResult")).toEqual([{ t: "cmdResult", id: 1, ok: true }]);
     const snap = out.filter((m): m is Extract<FromWorker, { t: "snapshot" }> => m.t === "snapshot").pop()!;
     expect(snap.chronicle?.some((e) => e.text.includes("Милютина"))).toBe(true);
-    expect(snap.sim.digs[0]).toMatchObject({ id: 1, foundations: 1, streets: 1 });
+    expect(snap.sim.digs![0]).toMatchObject({ id: 1, foundations: 1, streets: 1 });
     expect((stored as SaveV4).sim.finds.foundations).toHaveLength(1);
     await h.handle({ t: "cmd", id: 2, cmd: { type: "recordFinds", digId: 1, foundations: [found("a", 100)], pois: [], streets: [] } });
     expect(out.filter((m) => m.t === "cmdResult").pop()).toEqual({ t: "cmdResult", id: 2, ok: true });

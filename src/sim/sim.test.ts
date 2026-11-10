@@ -1,13 +1,14 @@
 import { DAYS_PER_SEASON, YEAR_DAYS } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, daylight, OFFLINE_CAP, TICK_MS } from "./clock";
-import { Handler, type Storage } from "./handler";
+import { applyDelta, snapshotDelta } from "./delta";
+import { Handler, toSnapshot, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
 import { emptyGrowth, seedOf } from "./growth";
 import { emptyRoads } from "./roads";
 import { emptyZones } from "./zones";
 import { migrateLegacy, parseSave } from "./save";
-import type { City, RoadGraph, SaveV4 } from "./types";
+import type { City, RoadGraph, SaveV4, SimState } from "./types";
 
 const NOW = 1_800_000_000_000;
 const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
@@ -119,6 +120,60 @@ describe("save", () => {
   });
 });
 
+describe("snapshotDelta", () => {
+  const sim = (): SimState => ({ realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth() });
+  it("carries the clock and only the parts that changed", () => {
+    const s = sim();
+    const posted = { snap: toSnapshot(s), text: {} };
+    const people = posted.snap.people;
+    // a tick that moved the clock and the events: the roads are the same object, the people the same content
+    const moved = { ...s, gameMinutes: 10, realTime: NOW + 2500, events: [...s.events] };
+    const delta = snapshotDelta(posted, toSnapshot(moved));
+    expect(Object.keys(delta).sort()).toEqual(["events", "gameMinutes", "realTime"]);
+    expect(delta.events).toBe(moved.events);
+    expect(posted.snap.people).toBe(people); // the object the main thread has a copy of
+    expect(snapshotDelta(posted, toSnapshot(moved))).toEqual({ gameMinutes: 10, realTime: NOW + 2500 });
+  });
+  it("a derived part goes when its content changes, a part that is gone goes as undefined", () => {
+    const s = sim();
+    const posted = { snap: { ...toSnapshot(s), old: 1 } as ReturnType<typeof toSnapshot>, text: {} };
+    const delta = snapshotDelta(posted, toSnapshot({ ...s, residents: {}, households: {} }));
+    expect(delta.people).toMatchObject({ pop: 0 });
+    expect("old" in delta && (delta as Record<string, unknown>).old === undefined).toBe(true);
+  });
+});
+
+describe("patches of the buildings and the road edges", () => {
+  const edge = (id: number, done: number) => ({ id, a: 1, b: 2, kind: "path" as const, length: 50, labor: 10, done });
+  const house = (id: number, done: number) => ({ id, done }) as unknown as SimState["buildings"][number];
+  const base = (): SimState => ({ realTime: NOW, gameMinutes: 0, zones: emptyZones(), ...growth(), roads: { ...emptyRoads(), edges: { 1: edge(1, 0), 2: edge(2, 10) } }, buildings: { 1: house(1, 0), 2: house(2, 5), 3: house(3, 9) } });
+  it("work on a site and on a road goes as the entries that moved, and the main thread keeps the rest", () => {
+    const s = base();
+    const posted = { snap: toSnapshot(s), text: {} };
+    const client = structuredClone(posted.snap);
+    const worked: SimState = { ...s, gameMinutes: 10, buildings: { 1: house(1, 1), 3: s.buildings[3] }, roads: { ...s.roads, edges: { ...s.roads.edges, 1: edge(1, 4) } } };
+    const delta = snapshotDelta(posted, toSnapshot(worked));
+    expect(delta).not.toHaveProperty("buildings");
+    expect(delta).not.toHaveProperty("roads");
+    expect(delta.patch).toEqual({ buildings: { set: { 1: house(1, 1) }, del: [2] }, edges: { set: { 1: edge(1, 4) }, del: [] } });
+    const next = applyDelta(client, structuredClone(delta));
+    expect(next.buildings).toEqual(worked.buildings);
+    expect(next.roads).toEqual(worked.roads);
+    expect(next.buildings[3]).toBe(client.buildings[3]); // untouched entries are the same objects: nothing redraws them
+    expect(next.roads.edges[2]).toBe(client.roads.edges[2]);
+    expect(next.roads.nodes).toBe(client.roads.nodes);
+    expect(next).not.toHaveProperty("patch");
+  });
+  it("a road drawn or removed moves the nodes: the graph goes whole", () => {
+    const s = base();
+    const posted = { snap: toSnapshot(s), text: {} };
+    const roads = { ...s.roads, nodes: { ...s.roads.nodes }, nextId: s.roads.nextId + 1 };
+    const delta = snapshotDelta(posted, toSnapshot({ ...s, roads }));
+    expect(delta.roads).toBe(roads);
+    expect(delta.patch).toBeUndefined();
+  });
+});
+
 function setup(initial: unknown = undefined) {
   let stored: unknown = initial;
   let puts = 0;
@@ -179,15 +234,19 @@ describe("handler", () => {
     const { h, out } = setup();
     h.tick(NOW); // nothing loaded
     await h.handle({ t: "found", city, now: NOW });
+    const town = (out[0] as Extract<FromWorker, { t: "loaded" }>).save!.sim;
+    expect(town).toMatchObject({ realTime: NOW, gameMinutes: 0, roads: emptyRoads(), people: { pop: 14, households: 4, tents: 4 } });
+    // aggregates only: no individual residents cross the thread boundary
+    for (const k of ["residents", "households", "nextPersonId"]) expect(town).not.toHaveProperty(k);
     out.length = 0;
     h.tick(NOW + 2000);
     expect(out).toEqual([]);
     h.tick(NOW + 2500);
     expect(out.map((m) => m.t)).toEqual(["snapshot", "life"]); // the first tick of a day also brings the visual life
     const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
-    expect(snap.sim).toMatchObject({ realTime: NOW + 2500, gameMinutes: 10, roads: emptyRoads(), people: { pop: 14, households: 4, tents: 4 } });
-    // aggregates only: no individual residents cross the thread boundary
-    for (const k of ["residents", "households", "zones", "nextPersonId"]) expect(snap.sim).not.toHaveProperty(k);
+    expect(snap.sim).toMatchObject({ realTime: NOW + 2500, gameMinutes: 10 });
+    // only what changed since the town was loaded: the roads did not
+    for (const k of ["roads", "residents", "households", "zones", "nextPersonId"]) expect(snap.sim).not.toHaveProperty(k);
     h.tick(NOW + 3000);
     expect(out.length).toBe(2);
   });
@@ -199,7 +258,7 @@ describe("handler", () => {
     expect(out.map((m) => m.t)).toEqual(["snapshot", "cmdResult"]);
     expect(out[1]).toEqual({ t: "cmdResult", id: 7, ok: true });
     const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
-    expect(Object.keys(snap.sim.roads.edges)).toHaveLength(1);
+    expect(Object.keys(snap.sim.roads!.edges)).toHaveLength(1);
     expect((get() as SaveV4).sim.roads).toEqual(snap.sim.roads);
   });
   it("rejected commands change nothing", async () => {

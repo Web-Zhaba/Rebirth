@@ -1,4 +1,5 @@
 import { BUILDINGS, capacityOf, groupOf, scaled, STORE_GROUPS, type StoreGroup } from "./buildings";
+import { memoLast } from "./memo";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
 import { cropOf } from "./tech";
 import { fieldWork } from "./weatherEffects";
@@ -126,26 +127,32 @@ export const sowCredit = (gameMinutes: number): number => (calendar(gameMinutes)
 
 type Idle = Pick<SimState, "residents" | "buildings" | "gameMinutes" | "zones" | "prod" | "stock"> & Partial<Pick<SimState, "weather" | "progress">>;
 
+// The idle sets below are asked many times a tick (the artel, demand, foraging, the panels): each keeps its last answer
+// for as long as what it reads stays the same (memo.ts).
+
 // Active gumnos with no work for their farmers right now.
-export function idleGumnos(s: Idle): Set<number> {
+export const idleGumnos = (s: Idle): ReadonlySet<number> => gumnosIdle(s.gameMinutes, s.buildings, s.zones.fields, s.prod.fields, s.weather, s.progress);
+
+const gumnosIdle = memoLast((gameMinutes: number, buildings: Idle["buildings"], fields: readonly Field[], work: Record<number, FieldWork>, weather: Idle["weather"], progress: Idle["progress"]): ReadonlySet<number> => {
   const out = new Set<number>();
-  const win = windowAt(s.gameMinutes);
-  const gumnos = Object.values(s.buildings).filter((b) => b.template === "gumno" && b.state === "active");
+  const win = windowAt(gameMinutes);
+  const gumnos = Object.values(buildings).filter((b) => b.template === "gumno" && b.state === "active");
   if (gumnos.length === 0) return out;
-  if (win === null || (s.weather && fieldWork(s.weather) <= 0)) { // frozen, snowed in: the farmers join the artel
+  if (win === null || (weather && fieldWork(weather) <= 0)) { // frozen, snowed in: the farmers join the artel
     for (const b of gumnos) out.add(b.id);
     return out;
   }
-  const year = calendar(s.gameMinutes).year;
-  const assign = assignFields(s.zones.fields, s.buildings);
+  const year = calendar(gameMinutes).year;
+  const crop = cropOf({ weather, progress });
+  const assign = assignFields(fields, buildings);
   const left = new Map<number, number>();
-  for (const f of s.zones.fields) {
+  for (const f of fields) {
     const g = assign.get(f.id);
-    if (g !== undefined) left.set(g, (left.get(g) ?? 0) + remainingHours(f, workOf(s.prod.fields, f.id, year), win, cropOf(s)));
+    if (g !== undefined) left.set(g, (left.get(g) ?? 0) + remainingHours(f, workOf(work, f.id, year), win, crop));
   }
   for (const b of gumnos) if ((left.get(b.id) ?? 0) <= 1e-9) out.add(b.id);
   return out;
-}
+});
 
 // The stock good a workshop needs to work at all.
 export const WORKSHOP_INPUT: Record<string, keyof Stock> = { sawpit: "logs", smithy: "logs", carpentry: "planks" };
@@ -154,39 +161,43 @@ export const WORKSHOP_INPUT: Record<string, keyof Stock> = { sawpit: "logs", smi
 const STOPS_WHEN_FULL: Record<string, keyof Stock> = { woodcutter: "logs", quarry: "stone", pottery: "dishes", weaver: "clothes", smithy: "tools", carpentry: "furniture" };
 
 // Workshops that made nothing yesterday and find their input missing, or no room for their output, now: their workers have nothing to do.
-function blockedWorkshops(s: Pick<Idle, "buildings" | "stock" | "prod">): Set<number> {
+function blockedWorkshops(buildings: Idle["buildings"], stock: Stock, yesterday: Record<number, number>): Set<number> {
   const out = new Set<number>();
   const full = new Map<StoreGroup, boolean>();
   const isFull = (g: keyof Stock): boolean => {
     const group = groupOf(g);
-    if (!full.has(group)) full.set(group, capacityOf(s.buildings, group) - STORE_GROUPS[group].reduce((n, k) => n + s.stock[k], 0) <= 1e-6);
+    if (!full.has(group)) full.set(group, capacityOf(buildings, group) - STORE_GROUPS[group].reduce((n, k) => n + stock[k], 0) <= 1e-6);
     return full.get(group)!;
   };
-  for (const b of Object.values(s.buildings)) {
-    if (b.state !== "active" || (s.prod.yesterday[b.id] ?? 0) > 1e-9) continue;
+  for (const b of Object.values(buildings)) {
+    if (b.state !== "active" || (yesterday[b.id] ?? 0) > 1e-9) continue;
     const input = WORKSHOP_INPUT[b.template];
     const output = STOPS_WHEN_FULL[b.template];
-    if ((input && s.stock[input] <= 1e-9) || (output && isFull(output))) out.add(b.id);
+    if ((input && stock[input] <= 1e-9) || (output && isFull(output))) out.add(b.id);
   }
   return out;
 }
 
 // Orchards with nothing to pick: the trees do not bear yet, or it is not autumn.
-export function idleOrchards(s: Idle): Set<number> {
+export const idleOrchards = (s: Idle): ReadonlySet<number> => orchardsIdle(s.gameMinutes, s.buildings);
+
+const orchardsIdle = memoLast((gameMinutes: number, buildings: Idle["buildings"]): ReadonlySet<number> => {
   const out = new Set<number>();
-  const autumn = calendar(s.gameMinutes).season === 2;
-  for (const b of Object.values(s.buildings)) if (b.template === "orchard" && b.state === "active" && !(autumn && bears(b, s.gameMinutes))) out.add(b.id);
+  const autumn = calendar(gameMinutes).season === 2;
+  for (const b of Object.values(buildings)) if (b.template === "orchard" && b.state === "active" && !(autumn && bears(b, gameMinutes))) out.add(b.id);
   return out;
-}
+});
 
 // Workplaces whose workers join the construction artel: farmers while the land has no work for them,
 // the workers of workshops blocked by missing inputs, and the gardeners of an orchard out of season.
-export function idleWorkplaces(s: Idle): Set<number> {
-  const out = idleGumnos(s);
-  for (const id of blockedWorkshops(s)) out.add(id);
-  for (const id of idleOrchards(s)) out.add(id);
+export const idleWorkplaces = (s: Idle): ReadonlySet<number> => workplacesIdle(idleGumnos(s), idleOrchards(s), s.buildings, s.stock, s.prod.yesterday);
+
+const workplacesIdle = memoLast((gumnos: ReadonlySet<number>, orchards: ReadonlySet<number>, buildings: Idle["buildings"], stock: Stock, yesterday: Record<number, number>): ReadonlySet<number> => {
+  const out = new Set(gumnos);
+  for (const id of blockedWorkshops(buildings, stock, yesterday)) out.add(id);
+  for (const id of orchards) out.add(id);
   return out;
-}
+});
 
 // Fruit trees bear a year after the orchard was finished (Building.ripe, stamped by the daily step).
 export const bears = (b: Pick<Building, "ripe">, now: number): boolean => b.ripe !== undefined && now >= b.ripe;
@@ -203,7 +214,7 @@ export function idleWorkers(s: Idle): number {
   return idle.size === 0 ? 0 : countWorkers(s.residents, idle);
 }
 
-function countWorkers(residents: Record<number, Resident>, set: Set<number>): number {
+function countWorkers(residents: Record<number, Resident>, set: ReadonlySet<number>): number {
   let n = 0;
   for (const r of Object.values(residents)) if (r.job !== null && set.has(r.job)) n++;
   return n;

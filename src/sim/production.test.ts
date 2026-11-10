@@ -7,6 +7,7 @@ import { advanceTo, BASE_TICK, calendar, step } from "./clock";
 import { BARN_CAP, BUILDINGS, CAMP_STORE, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
 import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
+import { applyDelta } from "./delta";
 import { Handler, type Storage } from "./handler";
 import { builderCount, dailyStep, foodPerDay, immigrationStep, lotFront, peopleStats, queryBuilding, RATES } from "./people";
 import { dailyEconomy, economyStats, FULL_TEXT, HAND_HOURS, handHours, PACE, payMaterials, produceStep, RATE } from "./production";
@@ -722,8 +723,9 @@ describe("handler: placeBuilding and demolish", () => {
     const out: FromWorker[] = [];
     const h = new Handler(storage, (m) => out.push(m));
     await h.handle({ t: "load", legacy: null, now: NOW });
+    const loaded = (out.find((m) => m.t === "loaded") as Extract<FromWorker, { t: "loaded" }>).save!.sim;
     out.length = 0;
-    return { h, out, get: () => stored as SaveV4 };
+    return { h, out, loaded, get: () => stored as SaveV4 };
   }
   const spec = { template: "barn", side: 1 as const, i: 3, site: NO_SITE };
 
@@ -769,12 +771,13 @@ describe("handler: placeBuilding and demolish", () => {
   });
   it("snapshots carry the aggregates and the inspector the production", async () => {
     const s = folk(town([bld(1, "gumno", 200), bld(2, "sawpit", 400)], { fields: [FIELD10()], gm: SPRING_NOON }), [{ home: null, adults: 2, job: 2 }]);
-    const { h, out } = await boot(s);
+    const { h, out, loaded } = await boot(s);
     h.tick(NOW + 10_000);
     const snap = out.find((m) => m.t === "snapshot") as Extract<FromWorker, { t: "snapshot" }>;
-    expect(snap.sim.stock.food).toBeGreaterThan(0);
-    expect(snap.sim.economy).toMatchObject({ foodCap: FOOD_CAMP_CAP, fields: { count: 1, ha: 10, assignedHa: 10, window: "sowing" } });
-    expect(snap.sim).not.toHaveProperty("prod");
+    const sim = applyDelta(loaded, snap.sim); // a snapshot carries what changed since the town was loaded
+    expect(sim.stock.food).toBeGreaterThan(0);
+    expect(sim.economy).toMatchObject({ foodCap: FOOD_CAMP_CAP, fields: { count: 1, ha: 10, assignedHa: 10, window: "sowing" } });
+    expect(sim).not.toHaveProperty("prod");
     await h.handle({ t: "query", id: 5, q: { type: "building", id: 1 } });
     const q = out.find((m) => m.t === "queryResult") as Extract<FromWorker, { t: "queryResult" }>;
     expect(q.data).toMatchObject({ kind: "workplace", capacity: 4, production: { good: "food", fields: { count: 1, ha: 10 } } });
