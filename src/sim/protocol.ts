@@ -19,6 +19,8 @@ export interface ArticleInput {
   lang: "ru" | "en";
   lat: number;
   lng: number;
+  x?: number; // local metres of the article's point
+  y?: number;
 }
 
 export type Cmd =

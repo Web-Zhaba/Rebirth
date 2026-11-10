@@ -85,6 +85,11 @@ function Outline({ v }: { v: OutlineView }) {
         <>
           <Line label={L("Этажей", "Floors")}>{v.floors}</Line>
           <div class="people-note">{L("Фундамент раскопан: наведите на него здание из строительства, чтобы поставить его здесь.", "The foundation is dug: point a building from the build bar at it to put it here.")}</div>
+          {v.limits.map((l) => (
+            <Line key={l.what} label={l.what} tone={l.why ? "warn" : "ok"}>
+              {l.why ? l.why.replace(/^.*: /, "") : L("можно", "allowed")}
+            </Line>
+          ))}
         </>
       ) : v.digging !== null ? (
         <div class="people-note" role="status">{L(`Раскапывают: ${Math.round(v.digging * 100)} %`, `Being dug: ${Math.round(v.digging * 100)}%`)}</div>

@@ -4,7 +4,8 @@ import { BUILDINGS } from "./buildings";
 import { recordFinds } from "./excavation";
 import { canPlaceOnFoundation, emptyGrowth, placeOnFoundation, spawnBuildings } from "./growth";
 import { tierContext, tierOf, TYPICAL_SHARE, restoreWeightOf, scarcity } from "./heritage";
-import { finishedMonuments, monumentMoodAt } from "./monuments";
+import { finishedMonuments, monumentMoodAt, TYPICAL_LOCAL } from "./monuments";
+import { computeLandValue } from "./coverage";
 import { digShares, districtMood, recognise, RECOGNITION, stepsOf } from "./recognition";
 import { addRoad, emptyRoads } from "./roads";
 import { lineCovered, restoreStreets, streetFoundations, streetProgress } from "./streets";
@@ -165,5 +166,26 @@ describe("streets restored in full", () => {
     expect(r2.sim.finds.streets[0].lines).toEqual([[[0, 0], [120, 0]]]);
     const bad = recordFinds(s, { digId: 1, foundations: [], pois: [], streets: [{ id: "z", name: "Б", lines: [[[0, 0]]] }] });
     expect(bad.ok).toBe(false);
+  });
+});
+
+describe("closing notes of sections 2.2 and 3", () => {
+  it("an article counts only next to the ring (or anywhere when its point is unknown)", () => {
+    const ring: [number, number][] = [[0, 0], [10, 0], [10, 10], [0, 10]];
+    const f = { cls: "school", name: "Школа", ring };
+    const two = tierContext({ pois: [place("a", "Школа"), place("b", "Школа")] }, []);
+    expect(tierOf(f, two)).toBe("typical");
+    const far = tierContext({ pois: [place("a", "Школа"), place("b", "Школа")] }, [{ ...article("Школа"), x: 2000, y: 0 }]);
+    expect(tierOf(f, far)).toBe("typical");
+    const near = tierContext({ pois: [place("a", "Школа"), place("b", "Школа")] }, [{ ...article("Школа"), x: 50, y: 0 }]);
+    expect(tierOf(f, near)).toBe("unique");
+    expect(tierOf(f, tierContext({ pois: [place("a", "Школа"), place("b", "Школа")] }, [article("Школа")]))).toBe("unique");
+  });
+  it("a typical building as it was makes the land of the houses next to it dearer", () => {
+    const shop = found("s", rect(0, 0, 10, 30), { cls: "pharmacy", name: "Аптека" });
+    const s = finishAll(put(mk([shop]), "s", "healer"));
+    const house = (id: number, cx: number) => ({ id, template: "izba", zone: "res" as const, lot: { cx, cy: 52, angle: 0, w: 2, d: 3 }, side: 1 as const, footprint: rect(cx - 5, 45, 10, 10), height: 5, state: "active" as const, labor: 1, done: 1, created: 0, paid: true, level: 1, streak: 0 });
+    const land = computeLandValue({ buildings: { ...s.buildings, 2: house(2, 60), 3: house(3, 400) }, households: {} }, {});
+    expect(land[2] - land[3]).toBe(TYPICAL_LOCAL.land);
   });
 });

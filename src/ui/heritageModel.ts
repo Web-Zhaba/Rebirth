@@ -1,10 +1,11 @@
 import { BUILDINGS, floorsOf, type Materials } from "../sim/buildings";
 import { domainName, type DomainId } from "../sim/domains";
-import { foundationScale } from "../sim/foundationLots";
+import { foundationScale, sizeBlocker } from "../sim/foundationLots";
 import { canPlaceOnFoundation } from "../sim/growth";
 import { digBlocker, streetDigs, streetOf } from "../sim/digging";
 import { asItWasTemplate, earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreWeightOf, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE, type Tier } from "../sim/heritage";
 import { SPEED } from "../sim/research";
+import { TYPICAL_LOCAL } from "../sim/monuments";
 import { SERVICES, isService } from "../sim/services";
 import { INSIGHT_BY_ID, lockReason, TECH_BY_ID } from "../sim/tech";
 import type { FoundFoundation, FoundState, SimState, StoredArticle } from "../sim/types";
@@ -137,7 +138,12 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     template,
     byZone: t.zone !== "placed",
     purpose: t.name,
-    effects: unique && template !== "restored" ? [...purposeEffects(template), L(`Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.landmarkMood}`, `Houses within ${MONUMENT.radius} m: mood +${MONUMENT.landmarkMood}`)] : purposeEffects(template),
+    effects:
+      unique && template !== "restored"
+        ? [...purposeEffects(template), L(`Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.landmarkMood}`, `Houses within ${MONUMENT.radius} m: mood +${MONUMENT.landmarkMood}`)]
+        : !unique && template !== "restored"
+          ? [...purposeEffects(template), L(`Дома в ${TYPICAL_LOCAL.radius} м: стоимость земли +${TYPICAL_LOCAL.land}`, `Houses within ${TYPICAL_LOCAL.radius} m: land value +${TYPICAL_LOCAL.land}`)]
+          : purposeEffects(template),
     research: `+${fmt(domain ? speedGain(base, w) : 0)}${L(" % к скорости", "% speed")}: ${domain ? domainName(domain) : "—"}`,
     insight,
     cost,
@@ -160,9 +166,17 @@ export interface OutlineView {
   digging: number | null; // share 0..1 dug while a dig is under way
   blocker: string | null; // why it cannot be ordered dug now
   street: { id: string; name: string; left: number } | null; // its old street and the outlines there still to order dug
+  limits: { what: string; why: string | null }[]; // a dug foundation: which purposes its size allows now, and what lifts the limit
 }
 
-export function buildOutlineView(f: FoundFoundation, sim: Pick<SimState, "finds" | "buildings">): OutlineView {
+// One representative purpose of each size class (sim/foundationLots.ts STAGES).
+const LIMIT_CLASSES: { what: string; template: string }[] = [
+  { what: L("Жильё и мастерские", "Houses and workshops"), template: "izba" },
+  { what: L("Залы: храм, школа, ратуша, музей", "Halls: temple, school, town hall, museum"), template: "school" },
+  { what: L("Склады и рынок", "Stores and the market"), template: "barn" },
+];
+
+export function buildOutlineView(f: FoundFoundation, sim: Pick<SimState, "finds" | "buildings" | "progress">): OutlineView {
   const t = BUILDINGS.excavation;
   const site = Object.values(sim.buildings).find((b) => b.foundationId === f.id && b.template === "excavation");
   const street = f.ghost ? streetOf(sim, f.id) : null;
@@ -175,5 +189,6 @@ export function buildOutlineView(f: FoundFoundation, sim: Pick<SimState, "finds"
     digging: site ? (site.labor > 0 ? site.done / site.labor : 0) : null,
     blocker: f.ghost ? digBlocker(sim, f) : null,
     street: street ? { ...street, left: streetDigs(sim, street.id).length } : null,
+    limits: f.ghost ? [] : LIMIT_CLASSES.map((c) => ({ what: c.what, why: sizeBlocker(sim.progress, BUILDINGS[c.template], f) })),
   };
 }

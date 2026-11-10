@@ -101,13 +101,30 @@ export const siteDomain = (cls: string | undefined): DomainId | null => heritage
 export type Tier = "ordinary" | "typical" | "unique";
 export interface TierContext {
   names: Map<string, number>; // normalised name -> named places of the revealed area that carry it
-  titles: Set<string>; // normalised titles of the notebook's articles
+  titles: Map<string, ([number, number] | null)[]>; // normalised title -> where the notebook's articles of it point (null: unknown)
+}
+
+// An article counts for a building when its point lies this close to the ring's centre (Wikipedia points are rough).
+export const ARTICLE_NEAR = 400; // m
+
+type Ringed = { ring?: readonly [number, number][] };
+const centreOf = (r: readonly [number, number][]): [number, number] => [r.reduce((a, p) => a + p[0], 0) / r.length, r.reduce((a, p) => a + p[1], 0) / r.length];
+
+// Is there an article titled with the building's name next to its ring? An article without a known point (older saves)
+// counts by its title alone.
+export function articleNear(f: { name?: string } & Ringed, ctx: Pick<TierContext, "titles">): boolean {
+  if (!f.name) return false;
+  const at = ctx.titles.get(normName(f.name));
+  if (!at) return false;
+  if (!f.ring || f.ring.length === 0) return true;
+  const [cx, cy] = centreOf(f.ring);
+  return at.some((p) => p === null || Math.hypot(p[0] - cx, p[1] - cy) <= ARTICLE_NEAR);
 }
 
 export const normName = (s: string): string => s.trim().toLowerCase().replace(/ё/g, "е");
 
 const ctxCache = new WeakMap<object, WeakMap<object, TierContext>>();
-export function tierContext(finds: Pick<SimState["finds"], "pois">, articles: readonly { title: string }[]): TierContext {
+export function tierContext(finds: Pick<SimState["finds"], "pois">, articles: readonly { title: string; x?: number; y?: number }[]): TierContext {
   let inner = ctxCache.get(finds.pois);
   if (!inner) ctxCache.set(finds.pois, (inner = new WeakMap()));
   const hit = inner.get(articles);
@@ -117,17 +134,24 @@ export function tierContext(finds: Pick<SimState["finds"], "pois">, articles: re
     const n = normName(p.name);
     names.set(n, (names.get(n) ?? 0) + 1);
   }
-  const ctx: TierContext = { names, titles: new Set(articles.map((a) => normName(a.title))) };
+  const titles = new Map<string, ([number, number] | null)[]>();
+  for (const a of articles) {
+    const k = normName(a.title);
+    const list = titles.get(k) ?? [];
+    list.push(a.x !== undefined && a.y !== undefined ? [a.x, a.y] : null);
+    titles.set(k, list);
+  }
+  const ctx: TierContext = { names, titles };
   inner.set(articles, ctx);
   return ctx;
 }
 
-export function tierOf(f: Pick<FoundFoundation, "cls" | "name">, ctx: TierContext): Tier {
+export function tierOf(f: Pick<FoundFoundation, "cls" | "name"> & Ringed, ctx: TierContext): Tier {
   if (!siteDomain(f.cls)) return "ordinary";
   if (isTypicalKind(f.cls)) return "typical";
   if (!f.name) return "typical"; // a nameless building is never unique
   const n = normName(f.name);
-  if (ctx.titles.has(n)) return "unique";
+  if (articleNear(f, ctx)) return "unique";
   return (ctx.names.get(n) ?? 0) > 1 ? "typical" : "unique";
 }
 

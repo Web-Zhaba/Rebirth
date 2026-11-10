@@ -232,6 +232,48 @@ PACE_FOUNDATION=1 npm run pace`, two 240 m2 foundations by the first houses, one
 (26 without them), 100 on day 66 (70); each big house fills in 1-4 days at the immigration flow. Both runs starve in
 winter past ~100 residents: the bot's 12 fields are its ceiling, not the foundations.
 
+## 7a. Checklist (2026-11-11)
+
+Every point of sections 2-6 against the code (`src/`) and the tests that hold it. "Read as" marks an interpretation;
+"departs" a value the data made different from the text above.
+
+| § | Point | Where | Proof |
+|---|---|---|---|
+| 2 | any purpose on any foundation >= minArea, open ground excluded | `sim/foundationLots.ts` lotCheck, OPEN_GROUND | foundationLots.test "the player puts any purpose" |
+| 2 | restoration is ordinary construction; order, panel modes gone; monument a purpose | `sim/growth.ts` placeOnFoundation, `sim/restore.ts`, tool «Памятник» | restore.test "is ordinary construction", "a monument stands only on an old foundation" |
+| 2 | "as it was": full bonus, real name, chronicle line | foundationLots isAsItWas, restore.ts completeRestorations | restore.test "completion" |
+| 2 | cost by floor area, at most 16 hands | foundationBuilding, buildings.ts siteCrew | foundationLots.test "a big foundation" |
+| 2 | save migration (scale uncapped, restoreMode to a purpose) | `sim/save.ts` parseBuildings | restore.test "migrates a restoration ordered apart", foundationLots.test "a save from before floors" |
+| 2.1 | every foundation keeps its height; old saves learn it | `map/excavation.ts`, excavation.ts recordFinds | browser: 82/82 foundations with height (Мстёра) |
+| 2.1 | floors from height (departs: 3.66 m, see 2.1 note) | buildings.ts floorsOf | foundationLots.test "floors come from the old height" |
+| 2.1 | floor area drives capacity, cost, heating; 50 m2 a family, no cap | buildings.ts floorArea, homesOf; production.ts heatShares | foundationLots.test (homes 10/14, heating) |
+| 2.1 | missing floors as an upgrade; capacity of built floors; old height completes "as it was" | coverage.ts dailyServices, floorBlocker | foundationLots.test "regains its floors", "floors come from" |
+| 2.2 | limits by purpose class and tech (departs: measured 250/400/1000, see note) | foundationLots.ts STAGES | foundationLots.test "limits the size" |
+| 2.2 | "as it was" lifts the limits | sizeBlocker, plannedFloors | restore.test "another purpose keeps the size limits" |
+| 2.2 | a foundation over the limit stays, with a hint | zones skip it, reserved ground; the hint on hover and in the dug foundation's panel | digging.test "a dug foundation's panel", foundationLots.test zone growth |
+| 2.2 | trusses for large roofs; «Свод» fits stone halls | trusses stage; read as: a note on naming, nothing to build | — |
+| 2.3 | jobs ~sqrt with a cap; storage linear; reach unchanged; heating only while lived in | buildings.ts scaledJobs, storeRoom; heatShares | foundationLots.test |
+| 2.3 | immigration flow-limited, a big house fills over time | attraction.ts (unchanged) | pace run PACE_FOUNDATION: 1-4 days to fill |
+| 3 | ordinary: function and recognisability | recognition.ts digShares | recognition.test |
+| 3 | typical kinds back; matching purpose; small, local bonus; REPEAT | heritage.ts TYPICAL_*, WORK_TEMPLATE; restore.ts TYPICAL_SHARE; monuments.ts TYPICAL_LOCAL (land +2 within 100 m) | recognition.test "rewards by tier", "a typical building as it was makes the land … dearer" |
+| 3 | unique: insight, chronicle chapter, monument effect | restore.ts landmark | recognition.test "a unique one is a landmark" |
+| 3 | class, proper name, name repetition, article next to the ring | heritage.ts tierOf, articleNear (400 m; title alone for older saves) | recognition.test "tiers", "an article counts only next to the ring" |
+| 4 | recognisability by area; 25/50/75/100 % rewards (mood, idea, chronicle) | recognition.ts recognise, districtMood | recognition.test "each quarter brings its reward once" |
+| 4 | a street restored in full gets its name and a chronicle line | streets.ts restoreStreets; town labels | recognition.test "streets restored in full"; browser (Пионерский переулок) |
+| 4 | monument mood takes the best in reach | monuments.ts monumentMoodAt | recognition.test |
+| 5 | survey wide, fast, cheap: streets and ghost outlines | excavation.ts DIG, ghost flag; ruins.ts ruinGhosts | excavation.test; browser |
+| 5 | dig one outline (read as: by the artel, "diggers" being the people who dig); stone, finds | digging.ts orderDig, completeExcavations | digging.test |
+| 5 | dig the whole street in one go | digging.ts orderStreetDig | digging.test "a whole street" |
+| 5 | discovery: outline draws itself; unique opens with a card and the camera flies; ordinary quietly | ruins.ts partialRing; toastStore discovered; Toasts.tsx | digging.test "a unique old building opens"; browser |
+| 6.1 | one find per real feature, attributed, neutral wording; all ten kinds of the table | items.ts catalogue; oldworld.ts features; placesModel (numbers, household) | items.test "the catalogue", "records and counters" |
+| 6.1 | finds lead to places; a sign beyond the survey marks a target | items.ts beyondSurvey; ruins.ts ruinHints | items.test "a find is found once …" |
+| 6.1 | sample real tiles first | 6.1 note | — |
+| 6.2 | return (real name; "as it was" in full), exhibit, use (seeds, parts, rails: read as tools, the game has no metal) | items.ts returnFind, useFind; museum.ts | items.test "fates" |
+| 6.3 | museum a purpose; old museum as it was better; no loss without one | museum template, MUSEUM.asItWas | items.test "the museum" |
+| 6.3 | halls by floor area, one theme each; complete exhibition: research and attraction | museum.ts hallsOf, setExhibition, exhibitionEffects, museumDaily | items.test "shows one theme a hall" |
+
+Not done by design: section 8 (trade stays as it is until it is redesigned).
+
 ## 8. Open
 
 - Trade: to be redesigned within this frame later; today's daily swap at the market stays until then.

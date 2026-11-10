@@ -1,6 +1,6 @@
 import { centroid, pointInRing } from "./excavation";
 import { foundationIndex } from "./foundationLots";
-import { normName, siteDomain, TYPICAL_SHARE } from "./heritage";
+import { articleNear, normName, siteDomain, TYPICAL_SHARE } from "./heritage";
 import type { DomainId } from "./domains";
 import type { Building, FindFate, Finds, FoundFoundation, SimState, StoredArticle } from "./types";
 import { L } from "../i18n";
@@ -140,11 +140,12 @@ export function catalogue(s: CatalogueInput): Item[] {
     else if (f.kind === "rails") out.push({ ...base, kind: "rails", name: L("Рельс, костыли и путевой знак", "A rail, spikes and a track sign"), theme: "railway", themeName: L("Железная дорога", "The railway"), usable: true });
     else if (f.kind === "bucket") out.push({ ...base, kind: "bucket", name: L("Ведро и ворот колодца", "Well bucket and windlass"), ...placeTheme(null, f.x, f.y), usable: false });
   }
-  // an article of the notebook titled with a building's name: its archive page
-  const byName = new Map<string, FoundFoundation>();
-  for (const f of list) if (f.name) byName.set(normName(f.name), f);
+  // an article of the notebook titled with a building's name, next to its ring: its archive page
+  const byName = new Map<string, FoundFoundation[]>();
+  for (const f of list) if (f.name) byName.set(normName(f.name), [...(byName.get(normName(f.name)) ?? []), f]);
   for (const a of s.articles ?? []) {
-    const f = byName.get(normName(a.title));
+    const ctx = { titles: new Map([[normName(a.title), [a.x !== undefined && a.y !== undefined ? ([a.x, a.y] as [number, number]) : null]]]) };
+    const f = (byName.get(normName(a.title)) ?? []).find((x) => articleNear(x, ctx));
     if (!f) continue;
     const [x, y] = centroid(f.ring);
     out.push({ id: `page:${a.id}`, kind: "page", name: L(`Архивная страница «${a.title}»`, `Archive page “${a.title}”`), source: "Wikipedia", theme: `place:${f.id}`, themeName: f.name!, domain: siteDomain(f.cls) ?? "learn", x, y, place: f.id, usable: false });

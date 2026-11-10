@@ -8,7 +8,7 @@ import { servicePreviewIndex } from "./servicePreviewIndex";
 import { CAMP, countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
 import { classPupils, schoolSeats } from "./school";
 import { learningFactor, MOOD_NEUTRAL, needsOf } from "./needs";
-import { finishedMonuments, monumentLand, monumentsNear } from "./monuments";
+import { finishedMonuments, monumentLand, monumentsNear, typicalNear, typicalRestored } from "./monuments";
 import type { Building, Household, RoadGraph, ServiceId, ServiceStats, SimState } from "./types";
 import { L } from "../i18n";
 
@@ -104,6 +104,7 @@ const bkey = (bx: number, by: number) => bx * 65536 + by;
 export function computeLandValue(s: Pick<SimState, "buildings" | "households">, coverage: Record<number, number>): Record<number, number> {
   const out: Record<number, number> = {};
   const monuments = finishedMonuments(s.buildings);
+  const typical = typicalRestored(s.buildings);
   const grid = new Map<number, { x: number; y: number; mood: number }[]>();
   for (const h of Object.values(s.households)) {
     const home = h.home === null ? undefined : s.buildings[h.home];
@@ -132,7 +133,7 @@ export function computeLandValue(s: Pick<SimState, "buildings" | "households">, 
       }
     }
     const moodTerm = n > 0 ? SERVICE.landMoodWeight * (sum / n - 50) : 0;
-    const v = SERVICE.landBase + SERVICE.landPerService * countServices(coverage[b.id]) + moodTerm + monumentLand(monumentsNear(monuments, b.lot.cx, b.lot.cy));
+    const v = SERVICE.landBase + SERVICE.landPerService * countServices(coverage[b.id]) + moodTerm + monumentLand(monumentsNear(monuments, b.lot.cx, b.lot.cy), typicalNear(typical, b.lot.cx, b.lot.cy));
     out[b.id] = Math.round(Math.min(100, Math.max(0, v)));
   }
   return out;

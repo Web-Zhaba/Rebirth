@@ -22,4 +22,15 @@ export function monumentMoodAt(monuments: readonly Building[], x: number, y: num
   for (const m of monuments) if (Math.hypot(m.lot.cx - x, m.lot.cy - y) <= MONUMENT.radius) best = Math.max(best, m.landmark ? MONUMENT.landmarkMood : MONUMENT.mood);
   return best;
 }
-export const monumentLand = (count: number): number => Math.min(MONUMENT.landCap, MONUMENT.land * count);
+export const monumentLand = (count: number, typical = 0): number => Math.min(MONUMENT.landCap, MONUMENT.land * count + TYPICAL_LOCAL.land * typical);
+
+// A typical old building brought back as it was (a shop, a pharmacy...) gives the houses next to it a small, local
+// bonus (docs/PLAN-restoration.md section 3): dearer land within a short reach, under the monuments' cap.
+export const TYPICAL_LOCAL = { radius: 100, land: 2 };
+export const typicalRestored = (buildings: Record<number, Building>): Building[] =>
+  Object.values(buildings).filter((b) => b.asItWas && !b.landmark && b.template !== "restored" && b.state === "active");
+export function typicalNear(list: readonly Building[], x: number, y: number): number {
+  let n = 0;
+  for (const b of list) if (Math.hypot(b.lot.cx - x, b.lot.cy - y) <= TYPICAL_LOCAL.radius) n++;
+  return n;
+}

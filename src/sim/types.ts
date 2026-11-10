@@ -238,6 +238,8 @@ export interface StoredArticle {
   lang: "ru" | "en";
   lat: number;
   lng: number;
+  x?: number; // local metres, as the client placed it (saves before have none)
+  y?: number;
   at: number; // gameMinutes
 }
 

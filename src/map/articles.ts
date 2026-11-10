@@ -44,7 +44,10 @@ export function attachArticles(): void {
         const text = await extracts(group.map((h) => h.pageid), lang);
         for (const h of group) {
           const e = text.get(h.pageid);
-          if (e) payload.push({ id: articleId(h), title: e.title, extract: e.extract.slice(0, EXTRACT_CHARS), url: e.url, lang, lat: h.lat, lng: h.lng });
+          if (e) {
+            const [x, y] = f.toLocal(h.lng, h.lat);
+            payload.push({ id: articleId(h), title: e.title, extract: e.extract.slice(0, EXTRACT_CHARS), url: e.url, lang, lat: h.lat, lng: h.lng, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+          }
         }
       }
       for (let i = 0; i < payload.length; i += SEND_BATCH) {

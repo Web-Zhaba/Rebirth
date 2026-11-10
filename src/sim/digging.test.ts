@@ -9,6 +9,7 @@ import { addRoad, emptyRoads } from "./roads";
 import { allResearched } from "./tech";
 import type { FoundFoundation, FoundPlace, RoadGraph, SimState } from "./types";
 import { emptyZones, regenerateCells } from "./zones";
+import { buildOutlineView } from "../ui/heritageModel";
 
 // Excavation in two stages (docs/PLAN-restoration.md section 5): the survey leaves ghost outlines, each dug on its own.
 
@@ -65,6 +66,19 @@ describe("an outline", () => {
   it("completes only finished digs", () => {
     const s = ok(orderDig(mk([house]), "h")).sim;
     expect(completeExcavations(s)).toBe(s);
+  });
+});
+
+describe("a dug foundation's panel", () => {
+  it("tells which purposes its size allows now and what lifts the limit", () => {
+    const big = { id: "b", ring: rect(0, 46, 20, 20), area: 400, digId: 1, at: 0 } as FoundFoundation;
+    const v = buildOutlineView(big, { ...mk([big]), progress: { ...allResearched(), techs: [] } });
+    expect(v.limits.map((l) => [l.what, l.why])).toEqual([
+      ["Жильё и мастерские", "Фундамент велик для этого (400 м²): нужна «Просторное жильё»"],
+      ["Залы: храм, школа, ратуша, музей", "Фундамент велик для этого (400 м²): нужна «Работа с камнем»"],
+      ["Склады и рынок", null],
+    ]);
+    expect(buildOutlineView({ ...big, ghost: true }, mk([big])).limits).toEqual([]);
   });
 });
 

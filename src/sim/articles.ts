@@ -20,7 +20,8 @@ function clean(v: unknown): Omit<StoredArticle, "at"> | null {
   if (!v.id.startsWith(`${v.lang}:`)) return null;
   if (!isStr(v.url, 300) || !v.url.startsWith(`https://${v.lang}.wikipedia.org/`)) return null;
   if (!finite(v.lat) || !finite(v.lng) || Math.abs(v.lat) > 90 || Math.abs(v.lng) > 180) return null;
-  return { id: v.id, title: v.title, extract: v.extract.slice(0, EXTRACT_MAX), url: v.url, lang: v.lang, lat: v.lat, lng: v.lng };
+  const local = finite(v.x) && finite(v.y) && Math.abs(v.x) <= 1e6 && Math.abs(v.y) <= 1e6 ? { x: v.x, y: v.y } : {};
+  return { id: v.id, title: v.title, extract: v.extract.slice(0, EXTRACT_MAX), url: v.url, lang: v.lang, lat: v.lat, lng: v.lng, ...local };
 }
 
 export type ArticlesResult = { ok: true; sim: SimState } | { ok: false; reason: string };
