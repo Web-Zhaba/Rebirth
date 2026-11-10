@@ -7,6 +7,11 @@ import { diffEvents, isImportant, pushToast, soundFor, type Toast } from "./toas
 // or a catch-up is only a baseline: history is never replayed.
 export const toasts = signal<Toast[]>([]);
 
+// The last unique old building uncovered since the page loaded (docs/PLAN-restoration.md section 5): the map flies to it
+// and its card opens (Toasts.tsx). Not on a baseline snapshot: history is never replayed.
+export const discovered = signal<{ site: string; pos: [number, number]; n: number } | null>(null);
+let discoveries = 0;
+
 let seen: Set<string> | null = null;
 let nextId = 1;
 
@@ -28,6 +33,7 @@ effect(() => {
   let list = toasts.peek();
   for (const e of r.fresh) {
     list = pushToast(list, { id: nextId++, kind: e.kind, text: e.text, pos: e.pos, important: isImportant(e.kind) });
+    if (e.kind === "discovery" && e.site && e.pos) discovered.value = { site: e.site, pos: e.pos, n: ++discoveries };
   }
   toasts.value = list;
 });

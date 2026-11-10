@@ -95,7 +95,7 @@ export interface StreetProgress {
 export function streetProgress(s: Pick<SimState, "finds" | "buildings" | "roads">, t: FoundPlace, own?: FoundFoundation[]): StreetProgress {
   const fs = own ?? streetFoundations(s.finds.streets, s.finds.foundations).get(t.id) ?? [];
   const on = new Set<string>();
-  for (const b of Object.values(s.buildings)) if (b.foundationId && b.state === "active") on.add(b.foundationId);
+  for (const b of Object.values(s.buildings)) if (b.foundationId && b.state === "active" && b.template !== "excavation") on.add(b.foundationId);
   return { houses: fs.length, built: fs.filter((f) => on.has(f.id)).length, road: t.lines ? lineCovered(t.lines, s.roads) : 0 };
 }
 

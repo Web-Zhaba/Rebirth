@@ -7,6 +7,7 @@ import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { scarcity } from "./heritage";
 import { loseSite } from "./restore";
+import { orderDig, orderStreetDig } from "./digging";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
 import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
@@ -498,6 +499,11 @@ export class Handler {
         const ok = canPlaceOnFoundation(sim, t, cmd.foundationId);
         if (!ok.ok) return reject(ok.reason);
         this.save = { ...this.save, sim: placeOnFoundation(sim, t, cmd.foundationId) };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "digFoundation" || cmd.type === "digStreet") {
+        const r = cmd.type === "digFoundation" ? orderDig(sim, cmd.foundationId) : orderStreetDig(sim, cmd.streetId);
+        if (!r.ok) return reject(r.reason);
+        this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
       } else if (cmd.type === "recordFinds") {
         const r = recordFinds(sim, cmd);

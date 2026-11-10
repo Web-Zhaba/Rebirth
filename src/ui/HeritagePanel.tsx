@@ -1,7 +1,7 @@
 import { selectedSite, typedFoundations } from "../map/heritageSpots";
 import { flash } from "../map/tools";
 import { articles, sendCmd, state } from "../simClient";
-import { buildHeritageView, type HeritageView } from "./heritageModel";
+import { buildHeritageView, buildOutlineView, type HeritageView, type OutlineView } from "./heritageModel";
 import { InspectorHead, Line, num } from "./InspectorParts";
 import { Button } from "./kit";
 import { closePanel, rightPanel } from "./panels";
@@ -72,13 +72,65 @@ function Body({ v }: { v: HeritageView }) {
   );
 }
 
-// A typed old building picked on the map: what it is, what bringing it back as it was costs and gives.
+// A surveyed outline (dig it, or its whole street) or an ordinary dug foundation (build on it from the build bar).
+function Outline({ v }: { v: OutlineView }) {
+  const dig = async (cmd: { type: "digFoundation"; foundationId: string } | { type: "digStreet"; streetId: string }) => {
+    const r = await sendCmd(cmd);
+    if (!r.ok) flash(r.reason ?? L("Не вышло", "That didn't work"));
+  };
+  return (
+    <>
+      <Line label={L("Площадь", "Area")}>{areaText(v.area)} ({Math.round(v.area)} {L("м²", "m²")})</Line>
+      {v.dug ? (
+        <>
+          <Line label={L("Этажей", "Floors")}>{v.floors}</Line>
+          <div class="people-note">{L("Фундамент раскопан: наведите на него здание из строительства, чтобы поставить его здесь.", "The foundation is dug: point a building from the build bar at it to put it here.")}</div>
+        </>
+      ) : v.digging !== null ? (
+        <div class="people-note" role="status">{L(`Раскапывают: ${Math.round(v.digging * 100)} %`, `Being dug: ${Math.round(v.digging * 100)}%`)}</div>
+      ) : (
+        <>
+          <div class="people-note">{L("Разведка показала только контур. Раскопанный фундамент откроет, что здесь стояло, даст старый камень, и на нём можно будет строить.", "The survey showed only an outline. Dug, the foundation tells what stood here, gives its old stone and can be built on.")}</div>
+          <Line label={L("Работа", "Work")} icon="hourglass">
+            {num(v.labor)} {L("чел.-ч", "person-h")}
+          </Line>
+          {v.blocker && <div class="prod-warn">{v.blocker}</div>}
+          <div class="insp-actions">
+            <Button variant="primary" disabled={v.blocker !== null} onClick={() => void dig({ type: "digFoundation", foundationId: v.id })}>
+              {L("Раскопать", "Dig")}
+            </Button>
+            {v.street && v.street.left > 1 && (
+              <Button onClick={() => void dig({ type: "digStreet", streetId: v.street!.id })}>
+                {L(`Всю улицу (${v.street.left})`, `The whole street (${v.street.left})`)}
+              </Button>
+            )}
+          </div>
+          {v.street && <div class="people-note">{L(`Старая улица: ${v.street.name}`, `Old street: ${v.street.name}`)}</div>}
+        </>
+      )}
+    </>
+  );
+}
+
+// An old foundation picked on the map: an outline to dig, an ordinary foundation to build on, or a typed old building:
+// what it is, what bringing it back as it was costs and gives.
 export function HeritagePanel() {
   const id = selectedSite.value;
   const st = state.value;
   if (rightPanel.value !== "heritage" || id === null || !st) return null;
-  const site = st.finds.foundations.find((f) => f.id === id) ?? typedFoundations.value.find((t) => t.id === id);
+  const rec = st.finds.foundations.find((f) => f.id === id);
+  const site = rec ?? typedFoundations.value.find((t) => t.id === id);
   if (!site) return null;
+  if (!rec || rec.ghost || !rec.cls) {
+    const v = rec ? buildOutlineView(rec, st) : null;
+    const title = rec && !rec.ghost ? L("Старый фундамент", "Old foundation") : L("Контур старой постройки", "Outline of an old building");
+    return (
+      <aside class="rs-panel inspector panel her-panel" aria-labelledby={SEMANTIC_IDS.heritageInspectorTitle}>
+        <InspectorHead icon="foundations" title={title} chip={v && !v.dug ? { label: v.digging !== null ? L("копают", "digging") : L("контур", "outline"), tone: "build" } : undefined} onClose={closePanel} headingId={SEMANTIC_IDS.heritageInspectorTitle} />
+        {v ? <Outline v={v} /> : <div class="people-note">{L("Находка ещё не занесена в записи", "The find is not recorded yet")}</div>}
+      </aside>
+    );
+  }
   const v = buildHeritageView({ site, sim: st, mul: st.heritageMul, articles: articles.value });
   return (
     <aside class="rs-panel inspector panel her-panel" aria-labelledby={SEMANTIC_IDS.heritageInspectorTitle}>

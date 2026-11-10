@@ -270,7 +270,7 @@ function parseNeeds(v: unknown): Needs | undefined {
   if (!keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0 && (v[k] as number) <= 100)) return undefined;
   return { food: v.food as number, rest: v.rest as number, social: v.social as number, warmth: v.warmth as number };
 }
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "discovery"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -375,7 +375,9 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     for (const e of sim.events) {
       if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && EVENT_KINDS.includes(e.kind) && typeof e.text === "string") {
         const pos = parsePos(e.pos);
-        events.push(pos ? { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text), pos } : { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text) });
+        const ev: TownEvent = pos ? { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text), pos } : { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text) };
+        if (typeof e.site === "string" && e.site.length <= 200) ev.site = e.site;
+        events.push(ev);
       }
     }
   }

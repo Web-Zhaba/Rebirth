@@ -1,6 +1,6 @@
 # Rebirth — restoration-first gameplay (design record)
 
-> Status: approved design (decided 2026-11-10). RB1 and RB2 done (2026-11-10); see the notes under each section and section 7.
+> Status: approved design (decided 2026-11-10). RB1, RB2 and RB3 done (2026-11-10); see the notes under each section and section 7.
 > Replaces for implementation: the restore order with "monument / working" modes (`src/sim/restore.ts`,
 > PLAN-research.ru.md §4 item 4 and §7) and the template-size fit of foundation lots (`src/sim/foundationLots.ts`,
 > PLAN.md §12). Everything else in those documents stands.
@@ -172,8 +172,17 @@ Wikipedia). Game wording stays neutral, as today: the game never claims the obje
 |---|---|---|
 | RB1 (done) | Foundation sets the building | any purpose on any foundation; size from the ring; floors from height for all foundations; limits by purpose class and technology; add-a-floor upgrade; capacity rules (2.3); heating by occupied floor area; the restore order merged into construction, monument as a purpose; save migration. Tests and a pace run on a large foundation, plus a hands-on check. |
 | RB2 (done) | Tiers and rewards | typical kinds back; unique detection (name, repetition, article match); recognisability per dig with thresholds; complete streets; monument mood takes the best, not the sum. |
-| RB3 | Two-stage excavation | survey reveals the old plan; digging per foundation and per street; the discovery moment. |
+| RB3 (done) | Two-stage excavation | survey reveals the old plan; digging per foundation and per street; the discovery moment. |
 | RB4 | Finds and museum | data sampling first; finds from real features; finds leading to places; return / exhibit / use; museum as a purpose with themed halls. |
+
+RB3 notes: the dig site is the survey, four times faster than the old dig and up to 160 m; what it records is a ghost
+outline (`FoundFoundation.ghost`): dashed on the map, its kind and name hidden, no lot, still reserved ground. Digging an
+outline is a site of the artel on the old ring (template `excavation`, 8 person-hours per 100 m2, the crews and levers of
+construction); finished, the site goes, the foundation is dug and gives its old stone (no longer given by the survey). A
+unique old building opens with a "discovery" event: the camera flies there and its card (the heritage panel) opens; a
+typical one gets a short notice; an ordinary house opens quietly. Clicking an outline (with the old city shown) opens its
+panel: «Раскопать», and «Всю улицу (N)» for the outlines of its old street still to order. Saves from before keep every
+foundation dug.
 
 RB2 notes: typical kinds come back as kinds of their own (shops of any class, a mall, a department store, a market, a
 bank, a pharmacy, a doctor's office, a car workshop, a halt, a bus station); unlike the candidates they are no reserved

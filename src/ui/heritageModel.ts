@@ -2,6 +2,7 @@ import { BUILDINGS, floorsOf, type Materials } from "../sim/buildings";
 import { domainName, type DomainId } from "../sim/domains";
 import { foundationScale } from "../sim/foundationLots";
 import { canPlaceOnFoundation } from "../sim/growth";
+import { digBlocker, streetDigs, streetOf } from "../sim/digging";
 import { asItWasTemplate, earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreWeightOf, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE, type Tier } from "../sim/heritage";
 import { SPEED } from "../sim/research";
 import { SERVICES, isService } from "../sim/services";
@@ -145,5 +146,34 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     canOrder: note === null,
     note,
     article: articleFor(site.name, articles),
+  };
+}
+
+// ---------- an outline or an ordinary foundation (docs/PLAN-restoration.md section 5) ----------
+
+export interface OutlineView {
+  id: string;
+  area: number;
+  floors: number;
+  dug: boolean;
+  labor: number; // person-hours to dig it
+  digging: number | null; // share 0..1 dug while a dig is under way
+  blocker: string | null; // why it cannot be ordered dug now
+  street: { id: string; name: string; left: number } | null; // its old street and the outlines there still to order dug
+}
+
+export function buildOutlineView(f: FoundFoundation, sim: Pick<SimState, "finds" | "buildings">): OutlineView {
+  const t = BUILDINGS.excavation;
+  const site = Object.values(sim.buildings).find((b) => b.foundationId === f.id && b.template === "excavation");
+  const street = f.ghost ? streetOf(sim, f.id) : null;
+  return {
+    id: f.id,
+    area: f.area,
+    floors: floorsOf(f.height),
+    dug: !f.ghost,
+    labor: Math.max(2, Math.round(t.labor * foundationScale(t, f) * 10) / 10),
+    digging: site ? (site.labor > 0 ? site.done / site.labor : 0) : null,
+    blocker: f.ghost ? digBlocker(sim, f) : null,
+    street: street ? { ...street, left: streetDigs(sim, street.id).length } : null,
   };
 }

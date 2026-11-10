@@ -6,6 +6,7 @@ import { isCleared } from "./clearing";
 import { levelHeight } from "./buildings";
 import { withStock } from "./storage";
 import { completeRestorations } from "./restore";
+import { completeExcavations } from "./digging";
 import type { Building, RoadGraph, SimState } from "./types";
 import { L } from "../i18n";
 
@@ -63,7 +64,7 @@ export function finishAll(s: SimState): SimState {
   const open = new Map(s.clearings.filter((c) => !isCleared(c)).map((c) => [c.id, c.labor - c.done]));
   if (roads === s.roads && buildings === s.buildings && open.size === 0) return s;
   const cleared = advanceClearings({ ...s, roads, buildings }, open);
-  return refreshServices(syncPeople(completeRestorations(cleared)));
+  return refreshServices(syncPeople(completeRestorations(completeExcavations(cleared))));
 }
 
 // Kept at the camp beyond its room: a debug grant skips the logistics.

@@ -41,7 +41,7 @@ export function digShares(s: Pick<SimState, "finds" | "buildings">): Map<number,
   const hit = inner.get(s.buildings);
   if (hit) return hit;
   const built = new Set<string>();
-  for (const b of Object.values(s.buildings)) if (b.foundationId && b.state === "active") built.add(b.foundationId);
+  for (const b of Object.values(s.buildings)) if (b.foundationId && b.state === "active" && b.template !== "excavation") built.add(b.foundationId);
   const out = new Map<number, DigShare>();
   for (const f of s.finds.foundations) {
     if (f.area < FOUNDATION_LOT.minArea) continue;

@@ -41,8 +41,8 @@ describe("dig site", () => {
     expect(t.materials).toEqual({ logs: 2, planks: 0.5, stone: 0 });
     expect(dig().radius).toBe(DIG.startRadius);
   });
-  it("starts at 0 m and grows by 40 m2 × PACE per digger-hour", () => {
-    expect(DIG.areaPerHour).toBe(40 * PACE);
+  it("starts at 0 m and grows by 160 m2 × PACE per digger-hour: the survey only reads the plan", () => {
+    expect(DIG.areaPerHour).toBe(160 * PACE);
     expect(radiusOf(dig())).toBe(0);
     const s = produceStep(town([dig()], 3), 1);
     const r = radiusOf(s.buildings[1]);
@@ -100,14 +100,14 @@ describe("recordFinds", () => {
     if (!r.ok) throw new Error(r.reason);
     return r.sim;
   };
-  it("stores finds, salvages min(1 t, 0.001 t per m2) and ignores recorded ids", () => {
+  it("stores finds as ghost outlines, no stone yet, and ignores recorded ids", () => {
     const s0 = town([dig()]);
     const s1 = rec(s0, cmd({ foundations: [found("a", 100), found("b", 1000)] }));
     expect(s1.finds.foundations.map((f) => f.id)).toEqual(["a", "b"]);
-    expect(s1.stock.stone - s0.stock.stone).toBeCloseTo(0.1 + 1);
+    expect(s1.finds.foundations.every((f) => f.ghost)).toBe(true);
+    expect(s1.stock.stone).toBe(s0.stock.stone); // the stone comes when an outline is dug (sim/digging.ts)
     const s2 = rec(s1, cmd({ foundations: [found("a", 100), found("c", 40)] }));
     expect(s2.finds.foundations.map((f) => f.id)).toEqual(["a", "b", "c"]);
-    expect(s2.stock.stone - s1.stock.stone).toBeCloseTo(0.04);
     expect(recordFinds(s2, cmd({ foundations: [found("a")] }))).toEqual({ ok: true, sim: s2 });
     expect(s1.finds.foundations[0]).toMatchObject({ digId: 1, area: 100 });
   });
@@ -123,13 +123,13 @@ describe("recordFinds", () => {
     expect(s.chronicle.map((e) => e.text)).toEqual([
       "Раскоп: найдено место «Часовня Николая»",
       "Раскоп: найдена старая улица — Милютина",
-      "Раскоп: открыто 12 фундаментов, +0,4 т камня",
+      "Разведка: 12 контуров старых построек",
     ]);
     expect(s.finds.streets).toHaveLength(1);
     const again = rec(s, cmd({ streets: [{ id: "s3", name: "Милютина" }] }));
     expect(again).toBe(s);
     const one = rec(town([dig()]), cmd({ foundations: [found("x", 90)] }));
-    expect(one.chronicle[0].text).toBe("Раскоп: открыт 1 фундамент, +0,1 т камня");
+    expect(one.chronicle[0].text).toBe("Разведка: 1 контур старых построек");
   });
   it("rejects malformed commands without touching the state", () => {
     const s = town([dig()]);

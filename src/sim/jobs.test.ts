@@ -74,7 +74,7 @@ const must = (r: { ok: boolean } & Partial<{ sim: SimState }>): SimState => {
 describe("job groups", () => {
   it("every template declares a group; houses none, workplaces one of the groups", () => {
     for (const t of Object.values(BUILDINGS)) {
-      if (t.zone === "res" || t.id === "restored") expect(t.group, t.id).toBeNull(); // a monument has no jobs
+      if (t.zone === "res" || t.id === "restored" || t.id === "excavation") expect(t.group, t.id).toBeNull(); // a monument and a dig of the artel have no jobs
       else expect(JOB_GROUPS as readonly (string | null)[], t.id).toContain(t.group);
     }
   });

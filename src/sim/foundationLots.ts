@@ -129,7 +129,7 @@ export function floorBlocker(p: Progress, b: Pick<Building, "template" | "level"
 }
 
 // A notable site is the player's to restore; every other foundation of a usable size is a lot of the zone it lies in.
-const isLotFoundation = (f: FoundFoundation): boolean => f.area >= FOUNDATION_LOT.minArea && !(isHeritage(f) && f.state !== "lost");
+const isLotFoundation = (f: FoundFoundation): boolean => f.area >= FOUNDATION_LOT.minArea && !f.ghost && !(isHeritage(f) && f.state !== "lost");
 
 // ---------- spatial index ----------
 
@@ -268,6 +268,7 @@ type LotState = Pick<SimState, "roads" | "buildings" | "zones" | "progress">;
 export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate): { ok: true; door: Pt } | { ok: false; reason: string } {
   const no = (reason: string) => ({ ok: false as const, reason });
   if (f.area < FOUNDATION_LOT.minArea) return no(L("Фундамент слишком мал для постройки", "The foundation is too small to build on"));
+  if (f.ghost) return no(L("Это пока только контур: раскопайте фундамент", "Only an outline so far: dig the foundation first"));
   if (t) {
     if (!usesFoundation(t)) return no(L(`${t.name} не ставится на старый фундамент`, `${t.name} can’t stand on an old foundation`));
     const big = sizeBlocker(s.progress, t, f);

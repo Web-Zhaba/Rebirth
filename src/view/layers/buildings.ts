@@ -77,7 +77,7 @@ export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   const lamps = new Map(lifeLights.value.map((l) => [l.id, l.kind]));
   const out: ModelItem[] = [];
   for (const b of Object.values(st.buildings)) {
-    if (b.state === "planned") continue;
+    if (b.state === "planned" || b.template === "excavation") continue; // a dig draws on the ruins layer
     const progress = b.state === "active" ? 1 : b.labor > 0 ? Math.min(1, b.done / b.labor) : 0;
     // an old building brought back as it was, or kept as a monument, is drawn as the old one
     if (b.foundationId && (b.asItWas || b.template === "restored")) {

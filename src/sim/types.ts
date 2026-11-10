@@ -181,13 +181,14 @@ export interface Household {
   served?: number; // share of its goods the household got at the last midnight, 0..1 (none yet: not counted)
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage"; // goal and unlock are no longer made: old saves still carry them
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage" | "discovery"; // goal and unlock are no longer made: old saves still carry them
 
 export interface TownEvent {
   at: number; // gameMinutes
   kind: EventKind;
   text: string;
   pos?: [number, number]; // local meters; the HUD flies the map here
+  site?: string; // a discovery: the foundation whose panel opens
 }
 
 // Notable moments kept forever (PLAN.md section 11); `kind` is a machine key, `text` the Russian line.
@@ -208,6 +209,7 @@ export interface FoundFoundation {
   name?: string;
   height?: number; // m
   state?: FoundState; // absent = untouched; set once a building "as it was" is ordered on it
+  ghost?: true; // surveyed, not dug yet: only its outline is known (sim/digging.ts); saves before the survey have none
 }
 
 // "lost": the restored building was demolished; the site can never be restored again.

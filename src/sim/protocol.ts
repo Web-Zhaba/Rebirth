@@ -34,6 +34,9 @@ export type Cmd =
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "placeOnFoundation"; template: string; foundationId: string }
+  // Dig a surveyed outline, or every outline of an old street (sim/digging.ts).
+  | { type: "digFoundation"; foundationId: string }
+  | { type: "digStreet"; streetId: string }
   | { type: "demolish"; id: number }
   // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
   | { type: "setPriority"; key: number | null }

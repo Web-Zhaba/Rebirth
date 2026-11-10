@@ -466,7 +466,7 @@ export function reportBuilt(before: Record<number, Building>, after: Record<numb
     const was = before[b.id];
     if (!was) continue;
     const pos: [number, number] = [b.lot.cx, b.lot.cy];
-    if (b.asItWas && b.state === "active" && was.state !== "active") continue; // a restoration has its own notice
+    if ((b.asItWas || b.template === "excavation") && b.state === "active" && was.state !== "active") continue; // a restoration or a dig has its own notice
     if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `${L("Достроено", "Finished")}: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
     else if (b.level > was.level) out = say(out, now, "built", b.foundationId ? L(`Надстроен этаж: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, `A floor added: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`) : L("Дом расширен", "House expanded"), pos);
   }

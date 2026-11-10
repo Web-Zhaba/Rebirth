@@ -7,6 +7,7 @@ import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales
 import { EVENING, eveningStep, isEvening } from "./evening";
 import { eraStep, researchStep } from "./research";
 import { completeRestorations } from "./restore";
+import { completeExcavations } from "./digging";
 import { recognise } from "./recognition";
 import { restoreStreets } from "./streets";
 import { buildSpeedMul } from "./tech";
@@ -119,7 +120,7 @@ export function step(s: SimState): SimState {
   let cur: SimState = advanceClearings({ ...s, roads, buildings, stock, stores, events }, clearUse);
   if (working) cur = produceStep(cur, BASE_TICK / 60, productionScales(s));
   else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
-  cur = completeRestorations(retireDigs(cur));
+  cur = completeRestorations(completeExcavations(retireDigs(cur)));
   let next: SimState = researchStep(weatherStep({ ...cur, gameMinutes: s.gameMinutes + BASE_TICK }), BASE_TICK);
   // A workplace finished in this tick hires at once, not at the next midnight.
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);

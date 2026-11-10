@@ -3,12 +3,14 @@ import { addChronicle } from "./chronicle";
 import type { Building, DigInfo, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
 import { decimal, L, plural } from "../i18n";
 
-// Excavation (PLAN.md section 12): dig sites reveal a growing disc of the buried old city.
+// Excavation (PLAN.md section 12, docs/PLAN-restoration.md section 5) in two stages. A dig site is the survey: wide, fast
+// and cheap, it reveals a growing disc of the buried old city's plan, its streets and the ghost outlines of its buildings.
+// Each outline is then dug on its own (sim/digging.ts): only a dug foundation can be built on and gives its stone.
 export const DIG = {
   template: "dig",
   startRadius: 0, // m, when the site is finished
-  maxRadius: 120, // m
-  areaPerHour: 160, // m2 of revealed area per digger-hour: 40 m2 × PACE (4), like other construction work
+  maxRadius: 160, // m
+  areaPerHour: 640, // m2 of surveyed area per digger-hour: the survey only reads the plan
   stonePerM2: 0.001, // t of salvaged stone per m2 of foundation
   stoneCap: 1, // t per foundation
   batch: 200, // foundations per recordFinds command
@@ -148,7 +150,7 @@ export const salvagedStone = (area: number): number => Math.min(DIG.stoneCap, DI
 
 export type RecordResult = { ok: true; sim: SimState } | { ok: false; reason: string };
 
-// Stores new finds (ids already recorded are ignored), adds the salvaged stone and writes the chronicle.
+// Stores new finds (ids already recorded are ignored; a new foundation is a ghost outline) and writes the chronicle.
 // Returns the same state when nothing was new.
 export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   const bad = (reason: string): RecordResult => ({ ok: false, reason });
@@ -201,7 +203,6 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     chronicle = addChronicle(chronicle, at, "dig:street", L(`Раскоп: найдена старая улица — ${t.name}`, `Dig: found an old street — ${t.name}`));
   }
   const newF: FoundFoundation[] = [];
-  let stone = 0;
   // Old saves hold foundations without a type or a height: an id that arrives again with them is enriched in place,
   // and a building on it learns the floors of the old one.
   let known = s.finds.foundations;
@@ -231,20 +232,17 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     }
     if (seenF.has(f.id) || s.finds.foundations.length + newF.length >= MAX_FOUNDATIONS) continue;
     seenF.add(f.id);
-    newF.push({ id: f.id, ring: f.ring.map((p): Pt => [r2(p[0]), r2(p[1])]), area: f.area, digId: cmd.digId, at, ...typeOf(f) });
-    stone += salvagedStone(f.area);
+    newF.push({ id: f.id, ring: f.ring.map((p): Pt => [r2(p[0]), r2(p[1])]), area: f.area, digId: cmd.digId, at, ...typeOf(f), ghost: true });
   }
   if (newF.length > 0) {
     const n = newF.length;
-    const word = n % 10 === 1 && n % 100 !== 11 ? `открыт ${n} фундамент` : `открыто ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`;
-    chronicle = addChronicle(chronicle, at, "dig:found", L(`Раскоп: ${word}, +${tonnes(stone)} т камня`, `Dig: uncovered ${n} ${plural(n, "", "", "", "foundation")}, +${tonnes(stone)} t of stone`));
+    chronicle = addChronicle(chronicle, at, "dig:found", L(`Разведка: ${n} ${plural(n, "контур", "контура", "контуров")} старых построек`, `Survey: ${n} ${plural(n, "", "", "", "outline")} of old buildings`));
   }
   if (newF.length + newPois.length + newStreets.length + enriched === 0 && knownStreets === s.finds.streets) return { ok: true, sim: s };
   return {
     ok: true,
     sim: {
       ...s,
-      stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock,
       chronicle,
       buildings,
       finds: {
@@ -275,6 +273,7 @@ export function parseFinds(v: unknown): Finds {
       if (isStr(r.name, 200)) fd.name = r.name;
       if (isNum(r.height) && r.height >= 0 && r.height <= MAX_HEIGHT) fd.height = r.height;
       if (r.state === "restoring" || r.state === "restored" || r.state === "lost") fd.state = r.state;
+      if (r.ghost === true) fd.ghost = true;
       out.foundations.push(fd);
     }
   }
