@@ -13,7 +13,8 @@ import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, dwelling, SERVICE, serviceMood } from "./services";
 import { tradeDay } from "./trade";
-import { finishedMonuments, monumentMood, monumentsNear } from "./monuments";
+import { finishedMonuments, monumentMoodAt } from "./monuments";
+import { districtMood } from "./recognition";
 import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
 import { applyFrost } from "./weather";
 import { buildFactor, EFFECTS, emptyOrchard, fieldWork, firewoodDaily, frostNight, moodShift, orchardDay, orchardQuality, spoilage, workFactor } from "./weatherEffects";
@@ -598,7 +599,7 @@ export function dailyEconomy(s: SimState): SimState {
       return age >= SERVICE.schoolFrom && age < SERVICE.schoolTo;
     });
     const home = h.home !== null ? s.buildings[h.home] : undefined;
-    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMood(monumentsNear(monuments, home.lot.cx, home.lot.cy)) : 0) : 0;
+    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMoodAt(monuments, home.lot.cx, home.lot.cy) + districtMood(s.progress, s.finds, home.lot.cx, home.lot.cy) : 0) : 0;
     const needMood = needMoodTerm(householdSatisfaction(h.members, s.residents));
     const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0) + needMood));
     const next: Household = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep, served: served.get(h.id) ?? 0 };

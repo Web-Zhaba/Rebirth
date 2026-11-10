@@ -7,7 +7,7 @@ import { assignFields, fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
 import { createFounders, demandCounts, FOUNDERS, freeHomes, MOOD_START } from "./people";
 import { clearingLogs } from "./clearing";
 import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReservedGround } from "./foundationLots";
-import { isHeritage } from "./heritage";
+import { asItWasTemplate, isHeritage } from "./heritage";
 import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
 import { orderRestoration } from "./restore";
@@ -314,7 +314,9 @@ export function spawnBuildings(s: SimState): SimState {
     let b: Building;
     if (old.length > 0) {
       const lot = pick(old, r1);
-      b = foundationBuilding(pick(lot.fits, r2), lot.f, lot.door, id, cur.gameMinutes, cur.progress);
+      // a foundation of a typical kind grows back as it was when the zone has that purpose
+      const was = asItWasTemplate(lot.f.cls);
+      b = foundationBuilding(lot.fits.find((t) => t.id === was) ?? pick(lot.fits, r2), lot.f, lot.door, id, cur.gameMinutes, cur.progress);
     } else {
       const lot = pick(lots, r1);
       const [t, far] = pick(lot.fits, r2);
@@ -327,6 +329,7 @@ export function spawnBuildings(s: SimState): SimState {
       buildings: { ...cur.buildings, [id]: b },
       lastSpawn: { ...cur.lastSpawn, [zone]: cur.gameMinutes },
     };
+    cur = orderRestoration(cur, b);
     dem = null;
   }
   return cur;

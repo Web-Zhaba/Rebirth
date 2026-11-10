@@ -106,7 +106,7 @@ export interface FindsCmd {
   digId: number;
   foundations: { id: string; ring: [number, number][]; area: number; cls?: string; name?: string; height?: number }[];
   pois: { id: string; name: string; cls: string; x: number; y: number }[];
-  streets: { id: string; name: string }[];
+  streets: { id: string; name: string; lines?: [number, number][][] }[];
 }
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -115,6 +115,21 @@ const isRec = (v: unknown): v is Record<string, unknown> => typeof v === "object
 const isPt = (p: unknown): p is Pt => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6;
 const r2 = (v: number): number => Math.round(v * 100) / 100;
 export const MAX_HEIGHT = 300; // m
+
+// A street's line: pieces of 2+ points, at most STREET_POINTS points in all.
+export const STREET_POINTS = 600;
+function linesOk(v: unknown): v is [number, number][][] {
+  if (!Array.isArray(v)) return false;
+  let n = 0;
+  for (const piece of v) {
+    if (!Array.isArray(piece) || piece.length < 2) return false;
+    for (const p of piece) if (!Array.isArray(p) || p.length !== 2 || !finite(p[0]) || !finite(p[1])) return false;
+    n += piece.length;
+  }
+  return n <= STREET_POINTS;
+}
+const linesLength = (lines: readonly (readonly [number, number])[][]): number => lines.reduce((a, l) => a + l.slice(1).reduce((b, p, i) => b + Math.hypot(p[0] - l[i][0], p[1] - l[i][1]), 0), 0);
+const roundLines = (lines: [number, number][][]): [number, number][][] => lines.map((l) => l.map((p): [number, number] => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]));
 
 // The optional type of a foundation: a kind, a name and a height, each valid when present.
 const typeOk = (f: { cls?: unknown; name?: unknown; height?: unknown }): boolean =>
@@ -152,7 +167,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   for (const p of pois) {
     if (!isRec(p) || !isStr(p.id, 200) || !isStr(p.name, 200) || typeof p.cls !== "string" || p.cls.length > 60 || !isPt([p.x, p.y])) return bad(L("Некорректное место", "Invalid place"));
   }
-  for (const t of streets) if (!isRec(t) || !isStr(t.id, 200) || !isStr(t.name, 200)) return bad(L("Некорректная улица", "Invalid street"));
+  for (const t of streets) if (!isRec(t) || !isStr(t.id, 200) || !isStr(t.name, 200) || (t.lines !== undefined && !linesOk(t.lines))) return bad(L("Некорректная улица", "Invalid street"));
 
   const at = s.gameMinutes;
   const seenF = new Set(s.finds.foundations.map((f) => f.id));
@@ -169,11 +184,20 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     chronicle = addChronicle(chronicle, at, "dig:poi", L(`Раскоп: найдено место «${p.name}»`, `Dig: found a place, “${p.name}”`));
   }
   const newStreets: FoundPlace[] = [];
+  // A street seen again with a longer line (the dig grew) keeps the longer one.
+  let knownStreets = s.finds.streets;
   for (const t of streets) {
-    if (seenS.has(t.id) || seenName.has(t.name)) continue;
+    if (seenS.has(t.id) || seenName.has(t.name)) {
+      const i = t.lines ? knownStreets.findIndex((x) => x.name === t.name) : -1;
+      if (i >= 0 && linesLength(t.lines!) > linesLength(knownStreets[i].lines ?? []) + 1) {
+        if (knownStreets === s.finds.streets) knownStreets = knownStreets.slice();
+        knownStreets[i] = { ...knownStreets[i], lines: roundLines(t.lines!) };
+      }
+      continue;
+    }
     seenS.add(t.id);
     seenName.add(t.name);
-    newStreets.push({ id: t.id, name: t.name, kind: "street", digId: cmd.digId, at });
+    newStreets.push({ id: t.id, name: t.name, kind: "street", digId: cmd.digId, at, ...(t.lines ? { lines: roundLines(t.lines) } : {}) });
     chronicle = addChronicle(chronicle, at, "dig:street", L(`Раскоп: найдена старая улица — ${t.name}`, `Dig: found an old street — ${t.name}`));
   }
   const newF: FoundFoundation[] = [];
@@ -215,7 +239,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     const word = n % 10 === 1 && n % 100 !== 11 ? `открыт ${n} фундамент` : `открыто ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`;
     chronicle = addChronicle(chronicle, at, "dig:found", L(`Раскоп: ${word}, +${tonnes(stone)} т камня`, `Dig: uncovered ${n} ${plural(n, "", "", "", "foundation")}, +${tonnes(stone)} t of stone`));
   }
-  if (newF.length + newPois.length + newStreets.length + enriched === 0) return { ok: true, sim: s };
+  if (newF.length + newPois.length + newStreets.length + enriched === 0 && knownStreets === s.finds.streets) return { ok: true, sim: s };
   return {
     ok: true,
     sim: {
@@ -227,7 +251,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
         ...s.finds,
         foundations: newF.length ? [...known, ...newF] : known,
         pois: newPois.length ? [...s.finds.pois, ...newPois] : s.finds.pois,
-        streets: newStreets.length ? [...s.finds.streets, ...newStreets] : s.finds.streets,
+        streets: newStreets.length ? [...knownStreets, ...newStreets] : knownStreets,
       },
     },
   };
@@ -264,6 +288,8 @@ export function parseFinds(v: unknown): Finds {
         p.x = r.x;
         p.y = r.y;
       }
+      if (key === "streets" && linesOk(r.lines)) p.lines = r.lines;
+      if (key === "streets" && isNum(r.restored)) p.restored = r.restored;
       out[key].push(p);
     }
   }

@@ -20,6 +20,7 @@ function Body({ v }: { v: HeritageView }) {
       <div class="insp-sub">
         {v.kind} · {v.domainName}
       </div>
+      <div class="people-note">{v.tierText}</div>
       <Line label={L("Площадь", "Area")}>{areaText(v.area)} ({Math.round(v.area)} {L("м²", "m²")})</Line>
       {v.height !== null && (
         <Line label={L("Высота", "Height")}>
@@ -51,9 +52,11 @@ function Body({ v }: { v: HeritageView }) {
           )}
           {v.note && <div class="prod-warn">{v.note}</div>}
           <div class="insp-actions">
-            <Button variant="primary" disabled={!v.canOrder} onClick={() => void order()}>
-              {L("Восстановить как было", "Restore as it was")}
-            </Button>
+            {!v.byZone && (
+              <Button variant="primary" disabled={!v.canOrder} onClick={() => void order()}>
+                {L("Восстановить как было", "Restore as it was")}
+              </Button>
+            )}
           </div>
           <div class="people-note">
             {L("Другое назначение, и памятник тоже, выбирают в строительстве, наведя здание на фундамент: так постройка не даст вклада в науку. Снос восстановленной постройки делает её утраченной.", "Another purpose, a monument included, is chosen in the build bar by pointing a building at the foundation: it then adds nothing to research. Demolishing a restored building loses it for good.")}

@@ -1,6 +1,6 @@
 # Rebirth — restoration-first gameplay (design record)
 
-> Status: approved design (decided 2026-11-10). RB1 done (2026-11-10); see the notes under each section.
+> Status: approved design (decided 2026-11-10). RB1 and RB2 done (2026-11-10); see the notes under each section and section 7.
 > Replaces for implementation: the restore order with "monument / working" modes (`src/sim/restore.ts`,
 > PLAN-research.ru.md §4 item 4 and §7) and the template-size fit of foundation lots (`src/sim/foundationLots.ts`,
 > PLAN.md §12). Everything else in those documents stands.
@@ -171,9 +171,24 @@ Wikipedia). Game wording stays neutral, as today: the game never claims the obje
 | # | Milestone | Done when |
 |---|---|---|
 | RB1 (done) | Foundation sets the building | any purpose on any foundation; size from the ring; floors from height for all foundations; limits by purpose class and technology; add-a-floor upgrade; capacity rules (2.3); heating by occupied floor area; the restore order merged into construction, monument as a purpose; save migration. Tests and a pace run on a large foundation, plus a hands-on check. |
-| RB2 | Tiers and rewards | typical kinds back; unique detection (name, repetition, article match); recognisability per dig with thresholds; complete streets; monument mood takes the best, not the sum. |
+| RB2 (done) | Tiers and rewards | typical kinds back; unique detection (name, repetition, article match); recognisability per dig with thresholds; complete streets; monument mood takes the best, not the sum. |
 | RB3 | Two-stage excavation | survey reveals the old plan; digging per foundation and per street; the discovery moment. |
 | RB4 | Finds and museum | data sampling first; finds from real features; finds leading to places; return / exhibit / use; museum as a purpose with themed halls. |
+
+RB2 notes: typical kinds come back as kinds of their own (shops of any class, a mall, a department store, a market, a
+bank, a pharmacy, a doctor's office, a car workshop, a halt, a bus station); unlike the candidates they are no reserved
+ground: zones grow on them, and a zone of the matching purpose brings them back "as it was" by itself. Tiers are derived,
+never stored: a candidate is unique unless nameless or its name is carried by more than one named place of the revealed
+area, and an article of the notebook with its name makes it unique whatever the count. A typical building "as it was"
+adds a quarter of the research weight and no idea or chronicle chapter; a unique one becomes a landmark: a monument of
+mood +2 besides its purpose (a plain monument +1; the best in reach counts). Recognisability rewards: 25 % district mood
++1, 50 % an idea, 75 % district mood +2, 100 % an idea and a chronicle chapter; the district is the dig's disc. Streets:
+the client reports each named street's line (all its pieces, again when it grew); a street's houses are the foundations
+whose centroid lies within 25 m of its line and no nearer another street's; done when they all carry a finished building
+and built roads cover 80 % of the line (within 6 m). Its name then shows on the map with the town, outside the ruins
+layer. The town panel has a "Места" tab with both. Found in the browser on Мстёра: an old street's axis runs 1-2 m from
+its houses, so a road on the old line blocked their foundations; a road now blocks a foundation only with its axis
+(within 0.5 m), its verge may touch the old walls.
 
 RB1 notes: a monument is the «Памятник» tool of the «Прошлое» category (on a foundation only); the heritage panel keeps
 the facts of a notable site and one button, «Восстановить как было», which places its matching purpose like any other

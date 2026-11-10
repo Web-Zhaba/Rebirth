@@ -21,6 +21,8 @@ export const FOUNDATION_LOT = {
   roadReach: 30, // m from the ring to a built road
   maxPoints: RESTORE.maxPoints, // points of the footprint: the walls follow the old ring, only tiny corners are cut
   probe: 2, // m between the points along the ring tested against roads
+  axis: 0.5, // m: a road whose axis comes this close to the ring runs over it; its verge may touch the old walls, as an
+  // old street's did (the houses of a village street stand 1-2 m from its axis line in the tile data)
 };
 
 // Templates that are open ground or depend on their surroundings (a garden, a pier, a log yard...): never on a foundation.
@@ -230,7 +232,7 @@ function builtRoads(roads: RoadGraph): RoadGraph {
   return { ...roads, edges };
 }
 
-// Does any road (built or planned) run over the ring?
+// Does any road (built or planned) run over the ring: its axis inside the ring or at FOUNDATION_LOT.axis from it?
 function roadOver(ring: readonly Pt[], roads: RoadGraph): boolean {
   let x0 = Infinity;
   let y0 = Infinity;
@@ -246,14 +248,15 @@ function roadOver(ring: readonly Pt[], roads: RoadGraph): boolean {
     const a = roads.nodes[e.a];
     const b = roads.nodes[e.b];
     if (!a || !b) continue;
-    const half = ROAD_KINDS[e.kind].width / 2;
+    const half = Math.min(ROAD_KINDS[e.kind].width / 2, FOUNDATION_LOT.axis);
     if (Math.max(a.x, b.x) < x0 - half || Math.min(a.x, b.x) > x1 + half || Math.max(a.y, b.y) < y0 - half || Math.min(a.y, b.y) > y1 + half) continue;
     if (pointInRing(a.x, a.y, ring) || pointInRing(b.x, b.y, ring)) return true;
     for (let i = 0; i < ring.length; i++) {
       const [px, py] = ring[i];
       const [qx, qy] = ring[(i + 1) % ring.length];
-      const n = Math.max(1, Math.ceil(Math.hypot(qx - px, qy - py) / FOUNDATION_LOT.probe));
-      for (let k = 0; k < n; k++) if (distToEdge(roads, e, px + ((qx - px) * k) / n, py + ((qy - py) * k) / n) < half) return true;
+      // probes at most 2 x half apart: an axis crossing the wall between two of them passes within half of one
+      const n = Math.max(1, Math.ceil(Math.hypot(qx - px, qy - py) / Math.min(FOUNDATION_LOT.probe, 2 * half)));
+      for (let k = 0; k < n; k++) if (distToEdge(roads, e, px + ((qx - px) * k) / n, py + ((qy - py) * k) / n) <= half) return true;
     }
   }
   return false;

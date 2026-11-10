@@ -61,7 +61,7 @@ export type Cmd =
       digId: number;
       foundations: { id: string; ring: [number, number][]; area: number }[];
       pois: { id: string; name: string; cls: string; x: number; y: number }[];
-      streets: { id: string; name: string }[];
+      streets: { id: string; name: string; lines?: [number, number][][] }[];
     };
 
 export type ToWorker =

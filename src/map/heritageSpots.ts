@@ -1,13 +1,13 @@
 import { signal } from "@preact/signals";
 import type { DomainId } from "../sim/domains";
 import { pointInRing } from "../sim/excavation";
-import { heritageDomain, heritageKind } from "../sim/heritage";
+import { heritageDomain, heritageKind, isCurated } from "../sim/heritage";
 import { HINT_BAND, ringCentroid, type Disc, type Foundation, type OldWorld, type Spot, type XY } from "../world/oldworld";
 
 // Notable old buildings (PLAN-research.ru.md sections 3 and 7): a curated POI inside a foundation ring types it.
 // Pure helpers plus the two signals the ruins layer draws from.
 
-export const TYPED_PER_DISC = 30;
+export const TYPED_PER_DISC = 60;
 export const MAX_HEIGHT = 300; // m, as the sim accepts
 
 // A foundation with a type: what the ruins layer draws and the next stage hit-tests (ring in local meters).
@@ -55,8 +55,9 @@ function smallestAround(x: number, y: number, fs: Foundation[], boxes: Box[]): n
   return best;
 }
 
-// Types foundations by the notable POIs inside them: the smallest ring wins for nested ones, a named POI beats an
-// unnamed one for the same ring. At most `cap` per dig (named first, then larger area); digOf maps a centroid to its dig.
+// Types foundations by the POIs of a known kind inside them: the smallest ring wins for nested ones, a candidate for a
+// unique building beats a typical kind and a named POI an unnamed one for the same ring. At most `cap` per dig
+// (candidates first, then named, then larger area); digOf maps a centroid to its dig.
 export function typeFoundations(foundations: Foundation[], spots: Spot[], digOf: (x: number, y: number) => number, cap = TYPED_PER_DISC): TypedFoundation[] {
   const boxes = foundations.map((f) => boxOf(f.ring));
   const picked = new Map<number, { spot: Spot; kind: string }>();
@@ -66,7 +67,8 @@ export function typeFoundations(foundations: Foundation[], spots: Spot[], digOf:
     const i = smallestAround(sp.x, sp.y, foundations, boxes);
     if (i < 0) continue;
     const prev = picked.get(i);
-    if (!prev || (sp.name && !prev.spot.name)) picked.set(i, { spot: sp, kind });
+    const rank = (k: string, sp2: Spot) => (isCurated(k) ? 2 : 0) + (sp2.name ? 1 : 0);
+    if (!prev || rank(kind, sp) > rank(prev.kind, prev.spot)) picked.set(i, { spot: sp, kind });
   }
   const perDig = new Map<number, TypedFoundation[]>();
   for (const [i, { spot, kind }] of picked) {
@@ -82,18 +84,20 @@ export function typeFoundations(foundations: Foundation[], spots: Spot[], digOf:
   }
   const out: TypedFoundation[] = [];
   for (const list of perDig.values()) {
-    list.sort((a, b) => Number(!!b.name) - Number(!!a.name) || b.area - a.area || (a.id < b.id ? -1 : 1));
+    list.sort((a, b) => Number(isCurated(b.cls)) - Number(isCurated(a.cls)) || Number(!!b.name) - Number(!!a.name) || b.area - a.area || (a.id < b.id ? -1 : 1));
     out.push(...list.slice(0, cap));
   }
   return out;
 }
 
-// Notable POIs in the band just outside the discs (beyond a disc, within `band` m of it) that no revealed foundation holds.
+// Candidates for a unique building in the band just outside the discs (beyond a disc, within `band` m of it) that no
+// revealed foundation holds.
 export function selectHints(world: Pick<OldWorld, "foundations" | "spots">, discs: Disc[], band = HINT_BAND): HintSpot[] {
   const boxes = world.foundations.map((f) => boxOf(f.ring));
   const out: HintSpot[] = [];
   for (const sp of world.spots) {
-    if (heritageKind(sp.cls, sp.subclass) === null) continue;
+    const kind = heritageKind(sp.cls, sp.subclass);
+    if (kind === null || !isCurated(kind)) continue;
     let gap = Infinity; // distance beyond the nearest disc edge
     for (const d of discs) gap = Math.min(gap, Math.hypot(sp.x - d.x, sp.y - d.y) - d.r);
     if (gap <= 0 || gap > band) continue;

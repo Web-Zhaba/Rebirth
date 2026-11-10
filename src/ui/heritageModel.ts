@@ -2,7 +2,7 @@ import { BUILDINGS, floorsOf, type Materials } from "../sim/buildings";
 import { domainName, type DomainId } from "../sim/domains";
 import { foundationScale } from "../sim/foundationLots";
 import { canPlaceOnFoundation } from "../sim/growth";
-import { asItWasTemplate, earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreWeightOf, siteDomain, siteTitle } from "../sim/heritage";
+import { asItWasTemplate, earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreWeightOf, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE, type Tier } from "../sim/heritage";
 import { SPEED } from "../sim/research";
 import { SERVICES, isService } from "../sim/services";
 import { INSIGHT_BY_ID, lockReason, TECH_BY_ID } from "../sim/tech";
@@ -30,7 +30,10 @@ export interface HeritageView {
   floors: number;
   state: FoundState | null;
   stateText: string | null;
+  tier: Tier;
+  tierText: string; // what the tier means for this building
   template: string; // the purpose "as it was"
+  byZone: boolean; // that purpose grows in a zone: the player paints the zone, no order
   purpose: string; // its name
   effects: string[]; // what the finished building does
   research: string; // «+5 % к скорости: Знание»
@@ -67,6 +70,8 @@ export function speedGain(restored: number, w: number): number {
   return (Math.min(SPEED.restoredCap, restored + w) - Math.min(SPEED.restoredCap, restored)) * SPEED.restored * 100;
 }
 
+const ZONE_WORD: Record<string, string> = { res: L("жилая", "residential"), craft: L("ремесленная", "craft"), trade: L("торговая", "trade") };
+
 function purposeEffects(id: string): string[] {
   const t = BUILDINGS[id];
   if (id === "restored")
@@ -89,8 +94,10 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   const r1 = (v: number) => Math.round(v * 10) / 10;
   const cost = { labor: Math.max(1, Math.round(t.labor * k)), logs: r1(t.materials.logs * k), planks: r1(t.materials.planks * k), stone: r1(t.materials.stone * k) };
   const base = domain ? (sim.progress.restored[domain] ?? 0) : 0;
-  const w = restoreWeightOf(mul, earlier);
-  const ins = domain && earlier === 0 ? nextInsight(sim.progress, domain) : null; // only the first of a kind brings an idea
+  const tier = tierOf(site, tierContext(sim.finds, articles));
+  const unique = tier === "unique";
+  const w = restoreWeightOf(mul, earlier) * (unique ? 1 : TYPICAL_SHARE);
+  const ins = unique && domain && earlier === 0 ? nextInsight(sim.progress, domain) : null; // only the first unique one of a kind brings an idea
   const insight = ins
     ? ins.tech
       ? L(`«${ins.text}»: «${TECH_BY_ID.get(ins.tech)?.name ?? ins.tech}» изучается быстрее на ${Math.round(ins.cut * 100)} %`, `“${ins.text}”: ${TECH_BY_ID.get(ins.tech)?.name ?? ins.tech} is researched ${Math.round(ins.cut * 100)}% faster`)
@@ -102,6 +109,7 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   else if (state === "restoring") note = L(`Строится как было: «${t.name}»`, `Being built as it was: ${t.name}`);
   else if (state === "restored") note = L(`Восстановлена как было: «${t.name}»`, `Restored as it was: ${t.name}`);
   else if (!recorded) note = L("Находка ещё не занесена в записи", "The find is not recorded yet");
+  else if (t.zone !== "placed") note = L(`Восстановится как было сам, когда здесь будет ${ZONE_WORD[t.zone]} зона`, `It comes back as it was by itself once a ${ZONE_WORD[t.zone]} zone covers it`);
   else {
     const locked = lockReason(sim, template);
     if (locked) note = L(`Назначение закрыто: ${locked.toLowerCase()}`, `Purpose locked: ${locked.toLowerCase()}`);
@@ -121,9 +129,14 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     floors,
     state,
     stateText: state ? STATE_TEXT[state] : null,
+    tier,
+    tierText: unique
+      ? L("Единственная в своём роде: идея, глава летописи, действует как памятник", "One of a kind: an idea, a chronicle chapter, works as a monument")
+      : L("Типовая постройка: малый вклад в науку, без идеи", "A typical building: a small research contribution, no idea"),
     template,
+    byZone: t.zone !== "placed",
     purpose: t.name,
-    effects: purposeEffects(template),
+    effects: unique && template !== "restored" ? [...purposeEffects(template), L(`Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.landmarkMood}`, `Houses within ${MONUMENT.radius} m: mood +${MONUMENT.landmarkMood}`)] : purposeEffects(template),
     research: `+${fmt(domain ? speedGain(base, w) : 0)}${L(" % к скорости", "% speed")}: ${domain ? domainName(domain) : "—"}`,
     insight,
     cost,

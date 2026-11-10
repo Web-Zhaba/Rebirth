@@ -58,6 +58,20 @@ const foundations = computed(() => {
 export const ruinWalls: ReadonlySignal<FeatureCollection> = computed(() => foundations.value.walls);
 export const ruinFloors: ReadonlySignal<FeatureCollection> = computed(() => foundations.value.floors);
 
+// Old streets restored in full (sim/streets.ts): their names are the town's again, shown without the old city.
+export const restoredStreets: ReadonlySignal<FeatureCollection> = computed(() => {
+  const list = finds.value?.streets ?? [];
+  const f = frame.value;
+  if (!f) return EMPTY;
+  return fc(
+    list.flatMap((t) =>
+      t.restored !== undefined && t.lines
+        ? t.lines.filter((l) => l.length >= 2).map((l): Feature => ({ type: "Feature", properties: { name: t.name }, geometry: { type: "LineString", coordinates: l.map(([x, y]) => f.toLngLat(x, y)) } }))
+        : [],
+    ),
+  );
+});
+
 export const ruinStreets: ReadonlySignal<FeatureCollection> = computed(() => {
   const w = oldWorld.value;
   const f = frame.value;

@@ -87,6 +87,8 @@ describe("foundations as lots", () => {
     expect(canPlaceOnFoundation(s, BUILDINGS.garden, "h").ok).toBe(false);
     expect(canPlaceOnFoundation(s, BUILDINGS.healer, "far")).toMatchObject({ ok: false, reason: "Нужна построенная дорога рядом" });
     expect(canPlaceOnFoundation(s, BUILDINGS.healer, "crossed")).toMatchObject({ ok: false, reason: "Через фундамент проходит дорога" });
+    // an old street's verge may touch the old walls: only its axis over the ring blocks it
+    expect(canPlaceOnFoundation(mk([found("verge", rect(-120, 41.5, 8, 10))]), BUILDINGS.healer, "verge").ok).toBe(true);
     expect(canPlaceOnFoundation(s, BUILDINGS.well, "h").ok).toBe(false); // open ground
     expect(canPlaceOnFoundation(s, BUILDINGS.market, "h").ok).toBe(true); // no size is too small
     expect(canPlaceOnFoundation(s, BUILDINGS.barn, "h").ok).toBe(true);

@@ -126,6 +126,7 @@ export interface Building {
   scale?: number; // the ring's area against the template's footprint; times the floors built it is the floor area
   floors?: number; // floors the old building had (from the tile height); `level` counts those built so far
   asItWas?: true; // the purpose matches the foundation's known old kind: a restoration in full (sim/restore.ts)
+  landmark?: true; // a unique old building restored as it was: it works as a monument too
   restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
 }
 
@@ -221,6 +222,8 @@ export interface FoundPlace {
   at: number;
   x?: number;
   y?: number;
+  lines?: [number, number][][]; // a street: its pieces in the revealed area (local metres)
+  restored?: number; // a street: gameMinutes when it was restored in full and got its name back (sim/streets.ts)
 }
 
 // A Wikipedia article unlocked by a dig (PLAN.md section 13). Text is CC BY-SA 4.0.
@@ -317,6 +320,7 @@ export interface ProgressState {
   research: { active: { techId: string; done: number } | null; queue: string[] }; // done: days of work so far; queue holds at most 3
   insights: string[]; // received and not yet used up (a tech insight goes when its tech is researched)
   restored: Partial<Record<DomainId, number>>; // weighted sum of restored old buildings per domain
+  recognised?: Record<number, number>; // dig id -> recognisability steps granted, 1..4 (sim/recognition.ts)
 }
 
 // The research as the main thread shows it.

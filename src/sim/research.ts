@@ -183,5 +183,10 @@ export function parseProgress(v: unknown): ProgressState | null {
   if (typeof r.restored === "object" && r.restored !== null && !Array.isArray(r.restored)) {
     for (const [k, n] of Object.entries(r.restored)) if (isDomain(k) && isNum(n) && n > 0) out.restored[k] = Math.min(1000, n);
   }
+  if (typeof r.recognised === "object" && r.recognised !== null && !Array.isArray(r.recognised)) {
+    const got: Record<number, number> = {};
+    for (const [k, n] of Object.entries(r.recognised)) if (Number.isInteger(Number(k)) && Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 4) got[Number(k)] = n as number;
+    if (Object.keys(got).length > 0) out.recognised = got;
+  }
   return out;
 }

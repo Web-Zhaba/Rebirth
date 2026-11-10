@@ -68,12 +68,11 @@ describe("kind table", () => {
     expect(asItWasTemplate(undefined)).toBeNull();
     expect(heritageDomain("hospital")).toBe("care");
   });
-  it("drops the trimmed kinds: no longer typed unless already restoring or restored", () => {
-    for (const k of ["pharmacy", "doctors", "mall", "car_repair", "bank", "department_store", "wholesale", "halt", "bus_station"]) {
-      expect(heritageDomain(k), k).toBeNull();
+  it("typical kinds are known but not the player's alone", () => {
+    for (const k of ["pharmacy", "doctors", "mall", "car_repair", "bank", "department_store", "wholesale", "halt", "bus_station", "shop", "marketplace"]) {
       expect(isHeritage({ cls: k }), k).toBe(false);
-      expect(isHeritage({ cls: k, state: "restoring" }), k).toBe(true);
       expect(siteDomain(k), k).not.toBeNull();
+      expect(asItWasTemplate(k), k).not.toBeNull();
     }
     expect(isHeritage({ cls: "castle" })).toBe(true);
   });

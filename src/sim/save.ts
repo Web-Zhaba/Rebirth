@@ -223,6 +223,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       // A restoration of the old order counted in full, whatever its mode: it stays "as it was".
       if (isSite || raw.asItWas === true) out[id].asItWas = true;
       if ((isSite || raw.asItWas === true) && isNum(raw.restoreWeight) && raw.restoreWeight > 0) out[id].restoreWeight = Math.min(1000, raw.restoreWeight);
+      if (raw.asItWas === true && raw.landmark === true) out[id].landmark = true;
       // The ring's area against the template's footprint: saved, or measured on the ring (a restoration had none).
       const ringArea = Math.abs(out[id].footprint.reduce((a, p, i, r) => a + p[0] * r[(i + 1) % r.length][1] - r[(i + 1) % r.length][0] * p[1], 0) / 2);
       out[id].scale = isNum(raw.scale) && raw.scale > 0 && raw.scale <= 10_000 ? raw.scale : Math.max(0.01, Math.round((ringArea / (t.along * t.deep)) * 100) / 100);

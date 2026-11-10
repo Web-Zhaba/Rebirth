@@ -7,6 +7,8 @@ import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales
 import { EVENING, eveningStep, isEvening } from "./evening";
 import { eraStep, researchStep } from "./research";
 import { completeRestorations } from "./restore";
+import { recognise } from "./recognition";
+import { restoreStreets } from "./streets";
 import { buildSpeedMul } from "./tech";
 import { settleLevers } from "./leverCmds";
 import { daySummary } from "./summary";
@@ -122,7 +124,7 @@ export function step(s: SimState): SimState {
   // A workplace finished in this tick hires at once, not at the next midnight.
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
-  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = eraStep(dailyServices(dailyStep(dailyEconomy(next)))); // a tick crossed 00:00
+  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = eraStep(restoreStreets(recognise(dailyServices(dailyStep(dailyEconomy(next)))))); // a tick crossed 00:00
   // whatever moved on the stock alone this tick (roads, trade, arrivals, gifts) is taken into the stores
   return recordChronicle(s, settleStores(settleLevers(spawnBuildings(immigrationStep(next, BASE_TICK)))));
 }

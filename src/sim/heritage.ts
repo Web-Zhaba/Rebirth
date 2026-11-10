@@ -3,11 +3,15 @@ import type { FoundFoundation, ProgressState, SimState } from "./types";
 import type { DomainId } from "./domains";
 import { L } from "../i18n";
 
-// Which OpenMapTiles POI classes mark a notable old building and which knowledge domain it feeds
-// (PLAN-research.ru.md section 3). Static; the values were checked against real z14 tiles. A game
-// abstraction: the player-facing text never claims a historical cause.
+// Which OpenMapTiles POI classes mark an old building of a known kind and which knowledge domain it feeds
+// (PLAN-research.ru.md section 3, docs/PLAN-restoration.md section 3). Static; the values were checked against real z14
+// tiles. A game abstraction: the player-facing text never claims a historical cause.
+//
+// Two groups of kinds: candidates for a unique building (worship, schools, halls, a station...), which the player alone
+// decides about, and typical ones (shops, banks, pharmacies...), a chain or an everyday service, which grow like any
+// other lot and bring a small bonus "as it was".
 
-// POI `class` -> domain, when the class alone is enough.
+// POI `class` -> domain of a candidate, when the class alone is enough.
 const BY_CLASS: Record<string, DomainId> = {
   castle: "build", // castle/castle, castle/ruins
   monument: "build",
@@ -23,10 +27,9 @@ const BY_CLASS: Record<string, DomainId> = {
   ferry_terminal: "trade",
 };
 
-// "class/subclass" where the subclass decides: [kind, domain] picks it, null drops a subclass of an accepted class.
+// "class/subclass" where the subclass decides: [kind, domain] picks a candidate, null drops a subclass of an accepted class.
 // The kind is what is stored as a foundation's `cls`, so the domain can be read back from it alone.
 const BY_SUB: Record<string, [string, DomainId] | null> = {
-  "grocery/marketplace": ["marketplace", "trade"],
   "railway/station": ["station", "trade"],
   "school/kindergarten": null,
   "town_hall/community_centre": null,
@@ -34,34 +37,102 @@ const BY_SUB: Record<string, [string, DomainId] | null> = {
 
 const BY_KIND: Record<string, DomainId> = Object.fromEntries(Object.values(BY_SUB).flatMap((v) => (v ? [v] : [])));
 
-// The stored kind of a curated POI, or null when it is not one.
+// Typical kinds: "class/subclass" first, then the class, -> the stored kind; and each kind's domain.
+const TYPICAL_SUB: Record<string, string> = {
+  "grocery/marketplace": "marketplace",
+  "shop/mall": "mall",
+  "grocery/department_store": "department_store",
+  "railway/halt": "halt",
+  "bus/bus_station": "bus_station",
+  "car/car_repair": "car_repair",
+};
+const TYPICAL_CLASS: Record<string, string> = { pharmacy: "pharmacy", doctors: "doctors", bank: "bank", shop: "shop", grocery: "shop", clothing_store: "shop", bakery: "shop", butcher: "shop" };
+const TYPICAL_DOMAIN: Record<string, DomainId> = {
+  shop: "trade",
+  mall: "trade",
+  department_store: "trade",
+  marketplace: "trade",
+  bank: "trade",
+  wholesale: "trade", // only in old saves
+  halt: "trade",
+  bus_station: "trade",
+  pharmacy: "care",
+  doctors: "care",
+  car_repair: "craft",
+};
+
+// The stored kind of a POI of a known kind (a candidate or a typical one), or null.
 export function heritageKind(cls: string, subclass?: string): string | null {
   if (subclass) {
     const k = `${cls}/${subclass}`;
     if (k in BY_SUB) return BY_SUB[k] ? BY_SUB[k]![0] : null;
+    if (k in TYPICAL_SUB) return TYPICAL_SUB[k];
   }
-  return cls in BY_CLASS ? cls : null;
+  if (cls in BY_CLASS) return cls;
+  return TYPICAL_CLASS[cls] ?? null;
 }
 
-// Domain of a POI class (with its subclass) or of a stored kind; null when not curated.
+// Domain of a POI class (with its subclass) or of a stored kind; null when the kind is not known.
 export function heritageDomain(cls: string | undefined, subclass?: string): DomainId | null {
   if (!cls) return null;
   const kind = subclass ? heritageKind(cls, subclass) : cls;
   if (kind === null) return null;
-  return BY_CLASS[kind] ?? BY_KIND[kind] ?? null;
+  return BY_CLASS[kind] ?? BY_KIND[kind] ?? TYPICAL_DOMAIN[kind] ?? null;
 }
 
-// Kinds trimmed from the table (landmarks only now). A save may still hold such a site that is being restored or is restored.
-const LEGACY_DOMAIN: Record<string, DomainId> = { doctors: "care", pharmacy: "care", bank: "trade", department_store: "trade", mall: "trade", wholesale: "trade", halt: "trade", bus_station: "trade", car_repair: "craft" };
+// A typical stored kind.
+export const isTypicalKind = (cls: string | undefined): boolean => !!cls && cls in TYPICAL_DOMAIN;
 
-// A curated stored kind.
+// A stored kind that is a candidate for a unique building.
 export const isCurated = (cls: string | undefined): boolean => !!cls && (cls in BY_CLASS || cls in BY_KIND);
 
-// A typed (notable) foundation: its kind is curated; a trimmed kind stays typed only once restoring or restored.
-export const isHeritage = (f: { cls?: string; state?: string }): boolean => isCurated(f.cls) || (!!f.cls && f.cls in LEGACY_DOMAIN && (f.state === "restoring" || f.state === "restored"));
+// A notable site: a candidate's foundation, left to the player (zones and regular lots keep off it until it is lost).
+export const isHeritage = (f: { cls?: string }): boolean => isCurated(f.cls);
 
-// Domain of a stored foundation's kind, trimmed kinds included.
-export const siteDomain = (cls: string | undefined): DomainId | null => heritageDomain(cls) ?? (cls ? (LEGACY_DOMAIN[cls] ?? null) : null);
+// Domain of a stored foundation's kind, typical kinds included.
+export const siteDomain = (cls: string | undefined): DomainId | null => heritageDomain(cls);
+
+// ---------- tiers (docs/PLAN-restoration.md section 3) ----------
+// Ordinary (no known kind): restoring gives the function and counts toward the place's recognisability. Typical (a
+// typical kind, or a candidate that is nameless or whose name repeats in the revealed area: a chain): a small bonus,
+// less for each further one. Unique: an idea, a chronicle line, and it works as a monument. A Wikipedia article of the
+// notebook with the building's name is the strongest sign of a unique one.
+
+export type Tier = "ordinary" | "typical" | "unique";
+export interface TierContext {
+  names: Map<string, number>; // normalised name -> named places of the revealed area that carry it
+  titles: Set<string>; // normalised titles of the notebook's articles
+}
+
+export const normName = (s: string): string => s.trim().toLowerCase().replace(/ё/g, "е");
+
+const ctxCache = new WeakMap<object, WeakMap<object, TierContext>>();
+export function tierContext(finds: Pick<SimState["finds"], "pois">, articles: readonly { title: string }[]): TierContext {
+  let inner = ctxCache.get(finds.pois);
+  if (!inner) ctxCache.set(finds.pois, (inner = new WeakMap()));
+  const hit = inner.get(articles);
+  if (hit) return hit;
+  const names = new Map<string, number>();
+  for (const p of finds.pois) {
+    const n = normName(p.name);
+    names.set(n, (names.get(n) ?? 0) + 1);
+  }
+  const ctx: TierContext = { names, titles: new Set(articles.map((a) => normName(a.title))) };
+  inner.set(articles, ctx);
+  return ctx;
+}
+
+export function tierOf(f: Pick<FoundFoundation, "cls" | "name">, ctx: TierContext): Tier {
+  if (!siteDomain(f.cls)) return "ordinary";
+  if (isTypicalKind(f.cls)) return "typical";
+  if (!f.name) return "typical"; // a nameless building is never unique
+  const n = normName(f.name);
+  if (ctx.titles.has(n)) return "unique";
+  return (ctx.names.get(n) ?? 0) > 1 ? "typical" : "unique";
+}
+
+// A typical building "as it was" adds this share of a unique one's research weight, and no idea.
+export const TYPICAL_SHARE = 0.25;
 
 // ---------- restoration (PLAN-research.ru.md section 7) ----------
 // Pure data and rules shared by the worker and the panel.
@@ -91,6 +162,7 @@ export const KIND_NAME: Record<string, string> = {
   halt: L("Остановочный пункт", "Railway halt"),
   bus_station: L("Автовокзал", "Bus station"),
   car_repair: L("Автомастерская", "Car workshop"),
+  shop: L("Магазин", "Shop"),
 };
 export const kindName = (cls: string | undefined): string => (cls && KIND_NAME[cls]) || L("Старая постройка", "Old building");
 
@@ -101,6 +173,15 @@ const WORK_TEMPLATE: Record<string, string> = {
   college: "school",
   hospital: "healer",
   marketplace: "market",
+  // typical kinds: a shop of any kind works as a shop (it grows in a trade zone), a pharmacy as an infirmary...
+  shop: "shop",
+  mall: "shop",
+  department_store: "shop",
+  bank: "shop",
+  pharmacy: "healer",
+  doctors: "healer",
+  wholesale: "warehouse",
+  car_repair: "smithy",
 };
 export const workTemplate = (cls: string | undefined): string | null => (cls && WORK_TEMPLATE[cls]) || null;
 
@@ -199,4 +280,4 @@ export function nextInsight(p: Pick<ProgressState, "insights" | "techs">, domain
 }
 
 // Monuments (finished, of the monument purpose) make the houses within this reach happier and the land dearer.
-export const MONUMENT = { radius: 200, mood: 1, land: 5, landCap: 15 };
+export const MONUMENT = { radius: 200, mood: 1, landmarkMood: 2, land: 5, landCap: 15 };

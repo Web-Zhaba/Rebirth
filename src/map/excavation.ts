@@ -1,5 +1,5 @@
 import { effect, signal } from "@preact/signals";
-import { DIG, MAX_HEIGHT } from "../sim/excavation";
+import { DIG, MAX_HEIGHT, STREET_POINTS } from "../sim/excavation";
 import type { DigInfo } from "../sim/types";
 import { digs, frame, sendCmd } from "../simClient";
 import { loadOldWorld, ringCentroid, type Disc, type OldWorld } from "../world/oldworld";
@@ -13,6 +13,24 @@ const RETRY_MS = 30_000;
 const GROW_M = 2; // a disc must grow this much to reload the old world
 
 const discOf = (d: DigInfo): Disc => ({ x: d.x, y: d.y, r: d.r });
+
+// The pieces of a street with at most `max` points in all: every k-th point of each piece, its ends always kept.
+export function thinLines(pieces: [number, number][][], max: number): [number, number][][] {
+  const n = pieces.reduce((a, l) => a + l.length, 0);
+  if (n <= max) return pieces;
+  const k = Math.ceil(n / Math.max(2, max - 2 * pieces.length));
+  const out: [number, number][][] = [];
+  let left = max;
+  for (const l of pieces) {
+    if (left < 2) break;
+    const kept = l.filter((_, i) => i === 0 || i === l.length - 1 || i % k === 0).slice(0, left);
+    if (kept.length >= 2) {
+      out.push(kept);
+      left -= kept.length;
+    }
+  }
+  return out;
+}
 
 // Did the set of discs change enough to reload: a new or removed dig, or a radius that grew by 2 m or more.
 export function discsChanged(prev: Disc[] | null, next: Disc[]): boolean {
@@ -45,7 +63,7 @@ const chunks = <T>(a: T[]): T[][] => {
 export function attachExcavation(): void {
   const reportedF = new Set<string>();
   const reportedP = new Set<string>();
-  const reportedS = new Set<string>(); // street names
+  const reportedS = new Map<string, number>(); // street name -> length of its line when last reported (m)
   let applied: Disc[] | null = null;
   let timer = 0;
   let loading = false;
@@ -56,7 +74,7 @@ export function attachExcavation(): void {
     if (list.length === 0) return;
     const streetNames = new Set(world.streets.flatMap((s) => (s.name ? [s.name] : [])));
     const typeOf = new Map(typed.map((t) => [t.id, t]));
-    const groups = new Map<number, { f: { id: string; ring: [number, number][]; area: number; cls?: string; name?: string; height?: number }[]; p: { id: string; name: string; cls: string; x: number; y: number }[]; s: { id: string; name: string }[] }>();
+    const groups = new Map<number, { f: { id: string; ring: [number, number][]; area: number; cls?: string; name?: string; height?: number }[]; p: { id: string; name: string; cls: string; x: number; y: number }[]; s: { id: string; name: string; lines: [number, number][][]; len: number }[] }>();
     const group = (id: number) => {
       let g = groups.get(id);
       if (!g) groups.set(id, (g = { f: [], p: [], s: [] }));
@@ -70,11 +88,18 @@ export function attachExcavation(): void {
       const h = f.height !== undefined && Number.isFinite(f.height) && f.height >= 0 && f.height <= MAX_HEIGHT ? { height: f.height } : {};
       group(digFor(cx, cy, list)).f.push({ id: f.id, ring: f.ring, area: f.area, ...h, ...(t ? { cls: t.cls, ...(t.name ? { name: t.name } : {}) } : {}) });
     }
-    const seen = new Set<string>();
-    for (const s of world.streets) {
-      if (!s.name || reportedS.has(s.name) || seen.has(s.name) || s.pts.length === 0) continue;
-      seen.add(s.name);
-      group(digFor(s.pts[0][0], s.pts[0][1], list)).s.push({ id: s.id, name: s.name });
+    // Each named street once, with its line (all its pieces), and again when the line grew with the digs.
+    const byName = new Map<string, { id: string; pieces: [number, number][][] }>();
+    for (const t of world.streets) {
+      if (!t.name || t.pts.length < 2) continue;
+      const g = byName.get(t.name);
+      if (g) g.pieces.push(t.pts);
+      else byName.set(t.name, { id: t.id, pieces: [t.pts] });
+    }
+    for (const [name, { id, pieces }] of byName) {
+      const len = pieces.reduce((a, l) => a + l.slice(1).reduce((b, q, i) => b + Math.hypot(q[0] - l[i][0], q[1] - l[i][1]), 0), 0);
+      if ((reportedS.get(name) ?? -Infinity) >= len - 1) continue;
+      group(digFor(pieces[0][0][0], pieces[0][0][1], list)).s.push({ id, name, lines: thinLines(pieces, STREET_POINTS), len });
     }
     for (const p of world.pois) {
       if (reportedP.has(p.id) || streetNames.has(p.name) || reportedS.has(p.name)) continue;
@@ -89,11 +114,11 @@ export function attachExcavation(): void {
         const foundations = F[i] ?? [];
         const pois = P[i] ?? [];
         const streets = S[i] ?? [];
-        const r = await sendCmd({ type: "recordFinds", digId, foundations, pois, streets });
+        const r = await sendCmd({ type: "recordFinds", digId, foundations, pois, streets: streets.map(({ id, name, lines }) => ({ id, name, lines })) });
         if (!r.ok) continue; // not recorded: reported again on the next disc change
         for (const f of foundations) reportedF.add(f.id);
         for (const p of pois) reportedP.add(p.id);
-        for (const s of streets) reportedS.add(s.name);
+        for (const t of streets) reportedS.set(t.name, t.len);
       }
     }
   }
