@@ -2,8 +2,8 @@ import { DIG, emptyFinds } from "./excavation";
 import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { emptyLevers } from "./levers";
 import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, startLevel, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
-import { fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
-import { createFounders, FOUNDERS, freeHomes, MOOD_START, peopleStats } from "./people";
+import { assignFields, fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
+import { createFounders, demandCounts, FOUNDERS, freeHomes, MOOD_START } from "./people";
 import { clearingLogs } from "./clearing";
 import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReservedGround } from "./foundationLots";
 import { isHeritage } from "./heritage";
@@ -114,8 +114,9 @@ export function townStats(buildings: Record<number, Building>, jobs: (b: Buildin
 export const UNFINISHED_WEIGHT = 0.5;
 
 export function demand(s: Pick<SimState, "buildings" | "roads" | "residents" | "households" | "gameMinutes" | "zones" | "prod" | "stock" | "incoming">): Demand {
-  const st = townStats(s.buildings, (b) => jobsOf(b, s));
-  const ps = peopleStats(s);
+  const assign = assignFields(s.zones.fields, s.buildings);
+  const st = townStats(s.buildings, (b) => jobsOf(b, s, assign));
+  const ps = demandCounts(s);
   const vacant = freeHomes(s.buildings, s.households, s.incoming).length;
   const jobVacancies = st.jobsFinished - ps.employed;
   return {
@@ -269,11 +270,13 @@ export function growthAdvice(s: SimState, dem: Demand, builders: number): Growth
 // At most one new building per zone type per game hour, when demand asks for it.
 export function spawnBuildings(s: SimState): SimState {
   let cur = s;
+  let dem: Demand | null = null; // asked once, and again only after a spawn changed the town
   for (const zone of ZONE_ORDER) {
     if (cur.gameMinutes - cur.lastSpawn[zone] < SPAWN_INTERVAL) continue;
     const key = zoneKey(zone);
     if (key && !isUnlocked(cur.progress, key)) continue; // a zone still locked does not grow
-    if (demand(cur)[zone] < 1) continue;
+    dem ??= demand(cur);
+    if (dem[zone] < 1) continue;
     // Old foundations in the zone are built on first; regular lots only when none is free.
     const old = foundationLots(cur, zone);
     const lots = old.length > 0 ? [] : findLots(cur, zone);
@@ -298,6 +301,7 @@ export function spawnBuildings(s: SimState): SimState {
       buildings: { ...cur.buildings, [id]: b },
       lastSpawn: { ...cur.lastSpawn, [zone]: cur.gameMinutes },
     };
+    dem = null;
   }
   return cur;
 }

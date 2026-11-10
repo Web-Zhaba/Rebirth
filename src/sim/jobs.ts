@@ -22,7 +22,7 @@ export const buildingPriority = (b: Pick<Building, "template">, l: Pick<Levers, 
 export const staffCap = (b: Pick<Building, "staff">, jobs: number): number => (b.staff === undefined ? jobs : Math.max(0, Math.min(jobs, Math.floor(b.staff))));
 
 // People a workplace may hire now: its jobs, down to the staff limit, none while its group has priority «нет».
-export function capacityOf(b: Building, s: Jobs & { levers?: Pick<Levers, "jobs"> }, assign?: Map<number, number>): number {
+export function capacityOf(b: Building, s: Jobs & { levers?: Pick<Levers, "jobs"> }, assign?: ReadonlyMap<number, number>): number {
   const g = groupOf(b);
   if (g === null || priorityOf(s.levers, g) === 0) return 0;
   return staffCap(b, jobsOf(b, s, assign));
