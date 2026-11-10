@@ -1,4 +1,4 @@
-import { BUILDINGS, capacityOf, groupOf, scaled, STORE_GROUPS, type StoreGroup } from "./buildings";
+import { BUILDINGS, capacityOf, groupOf, scaledJobs, STORE_GROUPS, type StoreGroup } from "./buildings";
 import { memoLast } from "./memo";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
 import { cropOf } from "./tech";
@@ -101,7 +101,7 @@ export function assignedHa(gumno: number, fields: readonly Field[], assign: Read
 
 // Job capacity of a building: fixed by the template (or its own, scaled by an old foundation), except a gumno, which needs one hand per 2.5 ha.
 export function jobsOf(b: Building, s: Pick<SimState, "buildings" | "zones">, assign?: ReadonlyMap<number, number>): number {
-  if (b.template !== "gumno") return scaled(BUILDINGS[b.template]?.jobs ?? 0, b);
+  if (b.template !== "gumno") return scaledJobs(BUILDINGS[b.template]?.jobs ?? 0, b);
   const a = assign ?? assignFields(s.zones.fields, s.buildings);
   return Math.max(0, Math.min(FIELD.maxJobs, Math.ceil(assignedHa(b.id, s.zones.fields, a) / FIELD.haPerJob - 1e-9)));
 }

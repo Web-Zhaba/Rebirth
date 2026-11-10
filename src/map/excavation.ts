@@ -1,5 +1,5 @@
 import { effect, signal } from "@preact/signals";
-import { DIG } from "../sim/excavation";
+import { DIG, MAX_HEIGHT } from "../sim/excavation";
 import type { DigInfo } from "../sim/types";
 import { digs, frame, sendCmd } from "../simClient";
 import { loadOldWorld, ringCentroid, type Disc, type OldWorld } from "../world/oldworld";
@@ -66,7 +66,9 @@ export function attachExcavation(): void {
       if (reportedF.has(f.id)) continue;
       const [cx, cy] = ringCentroid(f.ring);
       const t = typeOf.get(f.id);
-      group(digFor(cx, cy, list)).f.push({ id: f.id, ring: f.ring, area: f.area, ...(t ? { cls: t.cls, ...(t.name ? { name: t.name } : {}), ...(t.height !== undefined ? { height: t.height } : {}) } : {}) });
+      // every foundation keeps its height (the floors of its building); a typed one also its kind and name
+      const h = f.height !== undefined && Number.isFinite(f.height) && f.height >= 0 && f.height <= MAX_HEIGHT ? { height: f.height } : {};
+      group(digFor(cx, cy, list)).f.push({ id: f.id, ring: f.ring, area: f.area, ...h, ...(t ? { cls: t.cls, ...(t.name ? { name: t.name } : {}) } : {}) });
     }
     const seen = new Set<string>();
     for (const s of world.streets) {

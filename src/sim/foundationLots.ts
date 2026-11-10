@@ -1,46 +1,133 @@
-import { BUILDINGS, startLevel, templatesOf, type BuildingTemplate, type Materials } from "./buildings";
+import { BUILDINGS, floorsOf, FLOOR, templatesOf, type BuildingTemplate, type Materials } from "./buildings";
 import { centroid, pointInRing } from "./excavation";
-import { isHeritage } from "./heritage";
+import { asItWasTemplate, isHeritage, kindName, siteTitle } from "./heritage";
 import { RESTORE, orientedBox, polysOverlap, ringDoor, simplifyRing } from "./heritageGeo";
 import { distToEdge, ROAD_KINDS } from "./roads";
-import type { Building, FoundFoundation, RoadGraph, Site, SimState, ZoneCell, ZoneType } from "./types";
+import { TECH_BY_ID } from "./tech";
+import type { Building, FoundFoundation, ProgressState, RoadGraph, Site, SimState, ZoneCell, ZoneType } from "./types";
 import { CELL_SIZE } from "./zones";
 import { L } from "../i18n";
 
-// Old foundations as building lots (PLAN.md section 12). A foundation of a usable size is a lot of its own: a zone grows
-// its buildings there first, and the player can put a building on it. The building takes the foundation's ring as its
-// footprint, so its walls follow the old walls. Rectangular lots never cover such a foundation. Whether a foundation is
-// built on is derived (a building with its `foundationId`), so a demolition frees it again with nothing to undo.
+// Old foundations as building sites (PLAN.md section 12, docs/PLAN-restoration.md section 2). The foundation sets the
+// building: any purpose takes the ring as it is, at full size, and the floors of the old building. A zone grows its
+// buildings on the foundations in it first, and the player can put a building on any of them. Rectangular lots never
+// cover such a foundation. Whether a foundation is built on is derived (a building with its `foundationId`), so a
+// demolition frees it again with nothing to undo.
 
 type Pt = [number, number];
 
 export const FOUNDATION_LOT = {
   minArea: 20, // m2: smaller rings (sheds) are no lots and do not reserve their ground
-  fitMin: 0.4, // a template fits a ring of fitMin..fitMax times its own footprint area
-  fitMax: 4,
   roadReach: 30, // m from the ring to a built road
   maxPoints: RESTORE.maxPoints, // points of the footprint: the walls follow the old ring, only tiny corners are cut
   probe: 2, // m between the points along the ring tested against roads
 };
 
 // Templates that are open ground or depend on their surroundings (a garden, a pier, a log yard...): never on a foundation.
-const OPEN_GROUND = new Set(["garden", "orchard", "apiary", "quarry", "dig", "forager", "fisher", "well", "woodcutter", "sawpit", "restored"]);
-
-// Templates that take a foundation of any size: a store or a market hall just grows with the old building.
-const NO_SIZE_CAP = new Set(["barn", "market"]);
+const OPEN_GROUND = new Set(["garden", "orchard", "apiary", "quarry", "dig", "forager", "fisher", "well", "woodcutter", "sawpit"]);
 
 export const usesFoundation = (t: BuildingTemplate): boolean => !OPEN_GROUND.has(t.id);
 const nominal = (t: BuildingTemplate): number => t.along * t.deep;
-// The largest size of a building of template `t` on a foundation, against its own footprint.
-export const fitMaxOf = (t: BuildingTemplate): number => (NO_SIZE_CAP.has(t.id) ? Infinity : FOUNDATION_LOT.fitMax);
-export const fitsArea = (t: BuildingTemplate, area: number): boolean => area >= Math.max(FOUNDATION_LOT.minArea, nominal(t) * FOUNDATION_LOT.fitMin) && area <= nominal(t) * fitMaxOf(t);
 
-// The largest ring a template with a size cap can take; bigger ones are no lots (regular lots may cover them), though
-// the player can still put a building without a cap on them.
-const MAX_FIT = Math.max(...Object.values(BUILDINGS).filter((t) => usesFoundation(t) && !NO_SIZE_CAP.has(t.id)).map((t) => nominal(t) * FOUNDATION_LOT.fitMax));
+// ---------- size limits by purpose (section 2.2) ----------
+// Long and large wooden buildings stood where nobody needed heat; where people live and work in heat, the size grows
+// with the technology. Each stage holds once all its techs are researched; the limit is the largest stage that holds.
+// The areas were set on real tiles: half the buildings of a village are under 100-200 m2 and nine in ten under 250-400.
 
-// A heritage site keeps its own restoration; every other foundation of a usable size is a lot.
-const isLotFoundation = (f: FoundFoundation): boolean => f.area >= FOUNDATION_LOT.minArea && f.area <= MAX_FIT && !(isHeritage(f) && f.state !== "lost");
+interface Stage {
+  techs: string[];
+  area: number; // m2 of the footprint
+  floors: number;
+}
+type SizeClass = "store" | "heated" | "hall";
+
+const STAGES: Record<SizeClass, Stage[]> = {
+  // unheated stores and farm buildings: any footprint, wooden, from the start
+  store: [
+    { techs: [], area: Infinity, floors: 1 },
+    { techs: ["housing"], area: Infinity, floors: 2 },
+  ],
+  // heated houses and workplaces
+  heated: [
+    { techs: [], area: 250, floors: 1 },
+    { techs: ["housing"], area: 400, floors: 2 },
+    { techs: ["housing", "stonework"], area: 1000, floors: 3 },
+    { techs: ["trusses"], area: Infinity, floors: 5 },
+  ],
+  // public halls: a large hall needs stone masonry or roof trusses
+  hall: [
+    { techs: [], area: 250, floors: 1 },
+    { techs: ["housing"], area: 250, floors: 2 },
+    { techs: ["stonework"], area: 1000, floors: 1 },
+    { techs: ["housing", "stonework"], area: 1000, floors: 3 },
+    { techs: ["trusses"], area: Infinity, floors: 5 },
+  ],
+};
+const STORE_CLASS = new Set(["barn", "cellar", "logyard", "stoneyard", "warehouse", "market", "gumno"]);
+const HALL_CLASS = new Set(["chapel", "school", "townhall", "office", "restored"]);
+const sizeClass = (t: BuildingTemplate): SizeClass => (STORE_CLASS.has(t.id) ? "store" : HALL_CLASS.has(t.id) ? "hall" : "heated");
+
+type Progress = Pick<ProgressState, "techs">;
+const holds = (p: Progress, st: Stage): boolean => st.techs.every((id) => p.techs.includes(id));
+
+// The largest footprint (m2) and the most floors a building of template `t` may have now.
+export function sizeLimit(p: Progress, t: BuildingTemplate): { area: number; floors: number } {
+  let area = 0;
+  let floors = 1;
+  for (const st of STAGES[sizeClass(t)])
+    if (holds(p, st)) {
+      area = Math.max(area, st.area);
+      floors = Math.max(floors, st.floors);
+    }
+  return { area, floors };
+}
+
+// The techs still missing for the first stage that allows `ok`, by name; null when it is allowed now or never.
+function missing(p: Progress, t: BuildingTemplate, ok: (st: Stage) => boolean): string | null {
+  const st = STAGES[sizeClass(t)].find(ok);
+  if (!st || holds(p, st)) return null;
+  return st.techs.filter((id) => !p.techs.includes(id)).map((id) => `«${TECH_BY_ID.get(id)?.name ?? id}»`).join(L(" и ", " and "));
+}
+
+// The purpose matches the foundation's known old kind (and the site was not lost): a restoration in full. It lifts the
+// size limits, since the old building shows it could be built.
+export const isAsItWas = (t: BuildingTemplate, f: Pick<FoundFoundation, "cls" | "state">): boolean => f.state !== "lost" && asItWasTemplate(f.cls) === t.id;
+
+// What the player is told of the foundation's known old kind when giving it purpose `t`; empty for an ordinary one.
+export function foundationKindText(f: Pick<FoundFoundation, "cls" | "name" | "state">, t: BuildingTemplate): string {
+  const target = asItWasTemplate(f.cls);
+  if (!target) return "";
+  if (f.state === "lost") return L("Старая постройка утрачена: «как было» её уже не вернуть", "The old building is lost: it cannot come back as it was");
+  if (isAsItWas(t, f)) return L(`Как было: ${siteTitle(f)}`, `As it was: ${siteTitle(f)}`);
+  const name = BUILDINGS[target].name;
+  return L(`Прежде здесь: ${kindName(f.cls).toLowerCase()}; как было — «${name}»`, `Formerly here: ${kindName(f.cls).toLowerCase()}; as it was, a ${name.toLowerCase()}`);
+}
+
+// Why a building of template `t` cannot take the foundation's size now, or null.
+export function sizeBlocker(p: Progress, t: BuildingTemplate, f: Pick<FoundFoundation, "area" | "cls" | "state">): string | null {
+  if (isAsItWas(t, f) || f.area <= sizeLimit(p, t).area) return null;
+  const need = missing(p, t, (st) => st.area >= f.area);
+  const size = Math.round(f.area);
+  return need ? L(`Фундамент велик для этого (${size} м²): нужна ${need}`, `The foundation is too large for this (${size} m²): needs ${need}`) : L(`Фундамент велик для этого (${size} м²)`, `The foundation is too large for this (${size} m²)`);
+}
+
+// The floors a building of template `t` on the foundation gets when it is built: the old building's, as far as the
+// technology allows (all of them "as it was"). The rest are added later, a floor at a time.
+export function plannedFloors(p: Progress, t: BuildingTemplate, f: Pick<FoundFoundation, "height" | "cls" | "state">): { built: number; old: number } {
+  const old = floorsOf(f.height);
+  return { built: isAsItWas(t, f) ? old : Math.min(old, sizeLimit(p, t).floors), old };
+}
+
+// What holds back the next floor of a building on an old foundation, or null when the technology allows it.
+export function floorBlocker(p: Progress, b: Pick<Building, "template" | "level" | "asItWas">): string | null {
+  const t = BUILDINGS[b.template];
+  if (!t || b.asItWas || b.level < sizeLimit(p, t).floors) return null;
+  const need = missing(p, t, (st) => st.floors > b.level);
+  return need ? L(`следующий этаж — с технологией ${need}`, `the next floor comes with ${need}`) : L("выше строить нельзя", "it cannot be built higher");
+}
+
+// A notable site is the player's to restore; every other foundation of a usable size is a lot of the zone it lies in.
+const isLotFoundation = (f: FoundFoundation): boolean => f.area >= FOUNDATION_LOT.minArea && !(isHeritage(f) && f.state !== "lost");
 
 // ---------- spatial index ----------
 
@@ -172,20 +259,19 @@ function roadOver(ring: readonly Pt[], roads: RoadGraph): boolean {
   return false;
 }
 
-type LotState = Pick<SimState, "roads" | "buildings" | "zones">;
+type LotState = Pick<SimState, "roads" | "buildings" | "zones" | "progress">;
 
 // Why the foundation cannot take a building now (any template, or `t`), with the door it would have otherwise.
 export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate): { ok: true; door: Pt } | { ok: false; reason: string } {
   const no = (reason: string) => ({ ok: false as const, reason });
-  if (isHeritage(f) && f.state !== "lost") return no(L("Это значимая постройка: её можно восстановить", "This is a notable building: it can be restored"));
   if (f.area < FOUNDATION_LOT.minArea) return no(L("Фундамент слишком мал для постройки", "The foundation is too small to build on"));
   if (t) {
     if (!usesFoundation(t)) return no(L(`${t.name} не ставится на старый фундамент`, `${t.name} can’t stand on an old foundation`));
-    if (f.area < nominal(t) * FOUNDATION_LOT.fitMin) return no(L(`Фундамент мал для этой постройки (${Math.round(f.area)} м²)`, `The foundation is too small for this (${Math.round(f.area)} m²)`));
-    if (f.area > nominal(t) * fitMaxOf(t)) return no(L(`Фундамент велик для этой постройки (${Math.round(f.area)} м²)`, `The foundation is too large for this (${Math.round(f.area)} m²)`));
-  } else if (f.area > MAX_FIT) return no(L("Фундамент слишком велик для постройки", "The foundation is too large to build on"));
+    const big = sizeBlocker(s.progress, t, f);
+    if (big) return no(big);
+  }
   const ring = lotRing(f);
-  for (const b of Object.values(s.buildings)) if (b.foundationId === f.id || b.siteId === f.id || polysOverlap(ring, b.footprint)) return no(L("Место занято зданием", "The spot is taken by a building"));
+  for (const b of Object.values(s.buildings)) if (b.foundationId === f.id || polysOverlap(ring, b.footprint)) return no(L("Место занято зданием", "The spot is taken by a building"));
   for (const fd of s.zones.fields) if (polysOverlap(ring, fd.pts)) return no(L("Здесь поле", "A field is here"));
   if (roadOver(ring, s.roads)) return no(L("Через фундамент проходит дорога", "A road runs over the foundation"));
   const door = ringDoor(ring, builtRoads(s.roads));
@@ -193,20 +279,20 @@ export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate):
   return { ok: true, door: [Math.round(door.door[0] * 100) / 100, Math.round(door.door[1] * 100) / 100] };
 }
 
-// The size of a building of template `t` on the foundation against the template's own footprint.
-export const foundationScale = (t: BuildingTemplate, f: Pick<FoundFoundation, "area">): number => Math.round(Math.min(fitMaxOf(t), Math.max(FOUNDATION_LOT.fitMin, f.area / nominal(t))) * 100) / 100;
+// The ring's area against the template's own footprint.
+export const foundationScale = (t: BuildingTemplate, f: Pick<FoundFoundation, "area">): number => Math.max(0.01, Math.round((f.area / nominal(t)) * 100) / 100);
 
-// A planned building of template `t` on the foundation. It scales with the ring: its capacity (jobs, storage), labor and
-// materials follow the area against the template's own footprint, so a size costs the same per m2. A house is the
-// exception: it is built at the cost of its template and holds its families; the area raises its highest level, and
-// each level is paid when it is raised (docs/PLAN-balance.md B2).
-export function foundationBuilding(t: BuildingTemplate, f: FoundFoundation, door: Pt, id: number, now: number, site?: Site): Building {
+// A planned building of template `t` on the foundation. It takes the ring at full size and the floors of the old building
+// the technology allows (all of them "as it was"); its capacity, labor and materials follow its floor area against the
+// template's own footprint, so a size costs the same per m2. Each further floor is paid when it is added.
+export function foundationBuilding(t: BuildingTemplate, f: FoundFoundation, door: Pt, id: number, now: number, progress: Pick<ProgressState, "techs">, site?: Site): Building {
   const ring = lotRing(f);
   const box = orientedBox(ring);
   const k = foundationScale(t, f);
-  const home = t.zone === "res";
+  const { built, old } = plannedFloors(progress, t, f);
+  const cost = k * built;
   const r1 = (v: number) => Math.round(v * 10) / 10;
-  const materials: Materials = { logs: r1(t.materials.logs * k), planks: r1(t.materials.planks * k), stone: r1(t.materials.stone * k) };
+  const materials: Materials = { logs: r1(t.materials.logs * cost), planks: r1(t.materials.planks * cost), stone: r1(t.materials.stone * cost) };
   const b: Building = {
     id,
     template: t.id,
@@ -214,21 +300,21 @@ export function foundationBuilding(t: BuildingTemplate, f: FoundFoundation, door
     lot: { cx: box.cx, cy: box.cy, angle: box.angle, w: box.w / CELL_SIZE, d: box.d / CELL_SIZE },
     side: 1,
     footprint: ring,
-    height: t.height,
+    height: Math.round((t.height + (built - 1) * FLOOR.height) * 100) / 100,
     state: "planned",
-    labor: home ? t.labor : Math.max(1, Math.round(t.labor * k)),
+    labor: Math.max(1, Math.round(t.labor * cost)),
     done: 0,
     created: now,
     paid: false,
-    level: startLevel(t.id),
+    level: built,
     streak: 0,
     foundationId: f.id,
     door,
+    materials,
+    scale: k,
+    floors: old,
   };
-  if (k !== 1) {
-    if (!home) b.materials = materials;
-    b.scale = k;
-  }
+  if (isAsItWas(t, f)) b.asItWas = true;
   if (site) b.site = site;
   return b;
 }
@@ -279,7 +365,7 @@ export function foundationLots(s: LotState & { finds: Pick<SimState["finds"], "f
     let n = 0;
     for (const [z, c] of v) if (c > n || (c === n && top !== null && z < top)) [top, n] = [z, c];
     if (top !== zone) continue;
-    const fits = tpls.filter((t) => fitsArea(t, f.area));
+    const fits = tpls.filter((t) => sizeBlocker(s.progress, t, f) === null);
     if (fits.length === 0) continue;
     const ok = lotCheck(s, f);
     if (ok.ok) out.push({ f, door: ok.door, fits });

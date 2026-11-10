@@ -1,6 +1,6 @@
 # Rebirth — restoration-first gameplay (design record)
 
-> Status: approved design, nothing implemented yet (decided 2026-11-10).
+> Status: approved design (decided 2026-11-10). RB1 done (2026-11-10); see the notes under each section.
 > Replaces for implementation: the restore order with "monument / working" modes (`src/sim/restore.ts`,
 > PLAN-research.ru.md §4 item 4 and §7) and the template-size fit of foundation lots (`src/sim/foundationLots.ts`,
 > PLAN.md §12). Everything else in those documents stands.
@@ -42,6 +42,10 @@ Reversed:
 
 - **Every** foundation keeps its height from the tiles (today only typed ones do, `src/map/excavation.ts:69`).
   Floors = round(height / 3 m), at least 1; no height = 1 floor.
+  *Done with 3.66 m, not 3 m:* the tile height is OpenMapTiles `render_height` = levels x 3.66 (rounded up), or 5 m when
+  the building has no levels; on sampled tiles the values are 4, 5, 8, 11, 15, 19, 33. With 3 m every unknown building
+  (5 m, over 90 % of a village) would get two floors; with 3.66 m it gets one and tagged levels come back exactly.
+  Known foundations of old saves get their height when the client reports them again; a building on one learns its floors.
 - **Floor area = footprint × floors.** It drives capacity, cost and heating.
 - **Housing**: about one family per 50 m² of floor area, no fixed family cap. A five-storey block of 600 m² holds about
   60 families, a one-storey village house of 80 m² one or two.
@@ -62,17 +66,25 @@ Long and large wooden buildings existed where no heating was needed. Limits appl
 - A foundation above the current limit stays on the map with a hint ("needs stone masonry"): a goal, not an error.
 - The numbers are starting values. Before fixing them, measure the common foundation areas of real villages, so the
   wooden limit does not cut off ordinary village houses.
+  *Measured (2026-11-10), OpenFreeMap z14, buildings of 20 m2 and more:* villages (Вятское, Ферапонтово, Кукобой, Кимжа,
+  Варзуга, Мстёра, Палех, Кидекша, Половинное and three rural tiles) have a median of 95-210 m2, a 90th percentile of
+  190-430 m2; 14-70 % (typically a third) are over 150 m2, 4-28 % (typically a tenth) over 250 m2. Small towns (Мышкин,
+  Суздаль, Кириллов, Старица): median 110-160 m2, 90th percentile 340-570 m2. Hence the limits in code: heated
+  250 / 400 (housing) / 1000 (housing + stonework) / any (trusses), floors 1 / 2 / 3 / 5; halls 250, 1000 with stonework,
+  any with trusses; stores any size, one floor, two with housing (`sim/foundationLots.ts` STAGES).
 - «Стропильные фермы» today only lengthen bridges; large roofs fit them. The «Свод» insight fits stone halls.
 
 ### 2.3 Capacity by purpose
 
 - Housing: by floor area (2.1).
 - Workplaces: jobs grow slower than area (about the square root) and have a cap, so one huge workshop does not swallow
-  every free worker.
+  every free worker. *Done:* round(jobs x sqrt(floor area / template footprint)), at most 3x the template's.
 - Storage: capacity linear in floor area (storage does not drive growth).
 - Services: reach does not grow with size.
 - **Heating by floor area, only while the house has at least one resident.** An empty house burns nothing; a large
   half-filled house costs the whole area. Building ahead of arrivals is a conscious trade-off.
+  *Done:* the weather's firewood rate is that of 72 m2 (one family's room in a house of the old kind); a regular house and
+  a tent burn it per family as before, a house on a foundation its floor area shared by the families in it.
 - Immigration stays flow-limited (b93c238, `src/sim/attraction.ts`: 2–5 families a day): a big house fills over time,
   it does not pull families at once. The old 1000 → 3000 jump in an hour came from one family per free home.
 
@@ -158,10 +170,18 @@ Wikipedia). Game wording stays neutral, as today: the game never claims the obje
 
 | # | Milestone | Done when |
 |---|---|---|
-| RB1 | Foundation sets the building | any purpose on any foundation; size from the ring; floors from height for all foundations; limits by purpose class and technology; add-a-floor upgrade; capacity rules (2.3); heating by occupied floor area; the restore order merged into construction, monument as a purpose; save migration. Tests and a pace run on a large foundation, plus a hands-on check. |
+| RB1 (done) | Foundation sets the building | any purpose on any foundation; size from the ring; floors from height for all foundations; limits by purpose class and technology; add-a-floor upgrade; capacity rules (2.3); heating by occupied floor area; the restore order merged into construction, monument as a purpose; save migration. Tests and a pace run on a large foundation, plus a hands-on check. |
 | RB2 | Tiers and rewards | typical kinds back; unique detection (name, repetition, article match); recognisability per dig with thresholds; complete streets; monument mood takes the best, not the sum. |
 | RB3 | Two-stage excavation | survey reveals the old plan; digging per foundation and per street; the discovery moment. |
 | RB4 | Finds and museum | data sampling first; finds from real features; finds leading to places; return / exhibit / use; museum as a purpose with themed halls. |
+
+RB1 notes: a monument is the «Памятник» tool of the «Прошлое» category (on a foundation only); the heritage panel keeps
+the facts of a notable site and one button, «Восстановить как было», which places its matching purpose like any other
+building. Restorations of old saves (`siteId`, `restoreMode`) load as buildings "as it was" on their foundation; a house
+of an old save that holds more families than its floor area now does gets a second floor. Pace run (`PACE_WEATHER=1
+PACE_FOUNDATION=1 npm run pace`, two 240 m2 foundations by the first houses, one of five floors): population 50 on day 10
+(26 without them), 100 on day 66 (70); each big house fills in 1-4 days at the immigration flow. Both runs starve in
+winter past ~100 residents: the bot's 12 fields are its ceiling, not the foundations.
 
 ## 8. Open
 

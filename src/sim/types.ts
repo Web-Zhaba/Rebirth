@@ -93,8 +93,6 @@ export interface ZoneState {
   rev: number; // bumped on every change of cells, fields or terrain
 }
 
-export type RestoreMode = "monument" | "working";
-
 export type BuildingState = "planned" | "building" | "active";
 
 export interface Building {
@@ -112,23 +110,23 @@ export interface Building {
   created: number; // gameMinutes
   paid: boolean; // materials taken from the stock (done when construction starts)
   site?: Site; // terrain shares measured when a placed building was put down
-  level: number; // 1, or 2 for an izba rebuilt after the upgrade
+  level: number; // a house's families (its level); on an old foundation the floors built
   streak: number; // days in a row a house met the upgrade conditions
-  upgrade?: Upgrade; // the rebuild into level 2 in progress; the house stays active meanwhile
+  upgrade?: Upgrade; // the next level (or floor) in progress; the building stays active meanwhile
   radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
   haul?: number; // person-hours of carting its materials from the stores, added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
-  // A restored old building (PLAN-research.ru.md section 7): the footprint is the real ring (3..64 points), the lot its oriented box.
-  siteId?: string; // the foundation it stands on
-  restoreMode?: RestoreMode;
-  restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
   door?: [number, number]; // point of the ring nearest to the road: where services, jobs and walks reach the building
   materials?: Materials; // cost by area, instead of the template's
-  // A building put on an old foundation (sim/foundationLots.ts): the footprint is its simplified ring, the lot its oriented box.
+  // A building on an old foundation (sim/foundationLots.ts, docs/PLAN-restoration.md section 2): the footprint is the
+  // simplified ring (3..64 points), the lot its oriented box.
   foundationId?: string;
-  scale?: number; // the foundation's area against the template's footprint: capacity, families and storage grow by it
+  scale?: number; // the ring's area against the template's footprint; times the floors built it is the floor area
+  floors?: number; // floors the old building had (from the tile height); `level` counts those built so far
+  asItWas?: true; // the purpose matches the foundation's known old kind: a restoration in full (sim/restore.ts)
+  restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -208,7 +206,7 @@ export interface FoundFoundation {
   cls?: string; // kind of a notable old building (heritage.ts), from a POI inside the ring
   name?: string;
   height?: number; // m
-  state?: FoundState; // absent = untouched; set once a restoration is ordered
+  state?: FoundState; // absent = untouched; set once a building "as it was" is ordered on it
 }
 
 // "lost": the restored building was demolished; the site can never be restored again.

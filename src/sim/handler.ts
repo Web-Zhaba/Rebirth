@@ -6,7 +6,7 @@ import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { scarcity } from "./heritage";
-import { loseSite, restoreSite } from "./restore";
+import { loseSite } from "./restore";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
 import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
@@ -554,11 +554,6 @@ export class Handler {
           if (!r.ok) return reject(r.reason);
           this.save = { ...this.save, sim: r.sim };
         } else return reject(L("Неизвестная команда", "Unknown command"));
-        return await this.finishCommand(id);
-      } else if (cmd.type === "restoreSite") {
-        const r = restoreSite(sim, cmd.siteId, cmd.mode);
-        if (!r.ok) return reject(r.reason);
-        this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject(L("Здание уже снесено", "The building is already demolished"));

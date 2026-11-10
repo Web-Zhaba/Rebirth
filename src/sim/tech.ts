@@ -240,7 +240,7 @@ export function provenUnlocks(s: Pick<SimState, "buildings" | "zones">): string[
     const key = unlockKeyOf(b.template);
     if (key) out.add(key);
     if (b.zone === "craft" || b.zone === "trade") out.add(`zone:${b.zone}`);
-    if (b.level >= 2 || b.upgrade) out.add("upgrade");
+    if (!b.foundationId && (b.level >= 2 || b.upgrade)) out.add("upgrade");
   }
   for (const c of s.zones.cells) if (c.zone === "craft" || c.zone === "trade") out.add(`zone:${c.zone}`);
   return [...out].filter((k) => k in UNLOCK_NAME);

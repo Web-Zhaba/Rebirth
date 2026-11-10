@@ -13,13 +13,13 @@ export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | 
 export type RoadMode = "straight" | "arc";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
 export type ZoneTool = BrushTool | "field" | "clearing";
-export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "townhall" | ServiceId;
+export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "townhall" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
 export const isZoneTool = (t: Tool): t is ZoneTool => isBrushTool(t) || t === "field" || t === "clearing";
-export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "well", "market", "chapel", "school", "healer", "townhall"];
+export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "restored", "well", "market", "chapel", "school", "healer", "townhall"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).

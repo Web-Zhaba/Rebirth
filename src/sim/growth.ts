@@ -2,7 +2,7 @@ import { DIG, emptyFinds } from "./excavation";
 import { initialProgress, isUnlocked, zoneKey } from "./tech";
 import { emptyLevers } from "./levers";
 import { makeIdentityCache } from "./memo";
-import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, materialsOf, startLevel, templatesOf, UPGRADE, type BuildingTemplate, type SiteLever } from "./buildings";
+import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, levelHeight, materialsOf, startLevel, templatesOf, type BuildingTemplate, type SiteLever } from "./buildings";
 import { assignFields, fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
 import { createFounders, demandCounts, FOUNDERS, freeHomes, MOOD_START } from "./people";
 import { clearingLogs } from "./clearing";
@@ -10,6 +10,7 @@ import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReser
 import { isHeritage } from "./heritage";
 import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
+import { orderRestoration } from "./restore";
 import { nextRandom } from "./rng";
 import { CAMP_STORE_ID } from "./storage";
 import { attractionOf } from "./attraction";
@@ -313,7 +314,7 @@ export function spawnBuildings(s: SimState): SimState {
     let b: Building;
     if (old.length > 0) {
       const lot = pick(old, r1);
-      b = foundationBuilding(pick(lot.fits, r2), lot.f, lot.door, id, cur.gameMinutes);
+      b = foundationBuilding(pick(lot.fits, r2), lot.f, lot.door, id, cur.gameMinutes, cur.progress);
     } else {
       const lot = pick(lots, r1);
       const [t, far] = pick(lot.fits, r2);
@@ -361,6 +362,7 @@ export function canPlace(
   site: Site,
 ): PlaceCheck {
   if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
+  if (t.id === "restored") return NO_PLACE(L("Памятник ставится только на старый фундамент", "A monument stands only on an old foundation"));
   const hall = secondHall(s, t);
   if (hall) return hall;
   const e = s.roads.edges[edge];
@@ -395,7 +397,7 @@ export function canPlace(
 }
 
 // Can the player put `t` on the old foundation `foundationId`? (Shared by the worker and the placement tool.)
-export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds">, t: BuildingTemplate, foundationId: string): PlaceCheck {
+export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds" | "progress">, t: BuildingTemplate, foundationId: string): PlaceCheck {
   if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
   const hall = secondHall(s, t);
   if (hall) return hall;
@@ -405,13 +407,14 @@ export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buil
   return r.ok ? { ok: true } : NO_PLACE(r.reason);
 }
 
-// Adds a planned building on the old foundation. Call canPlaceOnFoundation first.
+// Adds a planned building on the old foundation; one "as it was" starts the site's restoration. Call canPlaceOnFoundation first.
 export function placeOnFoundation(s: SimState, t: BuildingTemplate, foundationId: string): SimState {
   const f = s.finds.foundations.find((x) => x.id === foundationId)!;
   const r = lotCheck(s, f, t);
   if (!r.ok) return s;
   const id = s.nextBuildingId;
-  return { ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: foundationBuilding(t, f, r.door, id, s.gameMinutes) } };
+  const b = foundationBuilding(t, f, r.door, id, s.gameMinutes, s.progress);
+  return orderRestoration({ ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: b } }, b);
 }
 
 // Adds a planned building on the lot and clears the painted zone under it. Call canPlace first.
@@ -443,7 +446,7 @@ export function advanceBuildings(buildings: Record<number, Building>, personHour
       const up = b.upgrade!;
       const done = use >= up.labor - up.done - EPS ? up.labor : up.done + use;
       const { upgrade: _u, ...rest } = b;
-      out[id] = done >= up.labor ? { ...rest, level: b.level + 1, height: b.height + UPGRADE.height } : { ...b, upgrade: { ...up, done } };
+      out[id] = done >= up.labor ? { ...rest, level: b.level + 1, height: Math.round((b.height + levelHeight(b)) * 100) / 100 } : { ...b, upgrade: { ...up, done } };
     } else {
       const done = use >= b.labor - b.done - EPS ? b.labor : b.done + use;
       out[id] = { ...b, done, state: done >= b.labor ? "active" : "building" };
@@ -452,7 +455,7 @@ export function advanceBuildings(buildings: Record<number, Building>, personHour
   return out;
 }
 
-// A "built" notice for every building that became active (or an izba rebuilt to level 2) between the two records.
+// A "built" notice for every building that became active (or raised by a level or floor) between the two records.
 export function reportBuilt(before: Record<number, Building>, after: Record<number, Building>, events: TownEvent[], now: number): TownEvent[] {
   if (after === before) return events;
   let out = events;
@@ -460,9 +463,9 @@ export function reportBuilt(before: Record<number, Building>, after: Record<numb
     const was = before[b.id];
     if (!was) continue;
     const pos: [number, number] = [b.lot.cx, b.lot.cy];
-    if (b.siteId) continue; // a restoration has its own notice
+    if (b.asItWas && b.state === "active" && was.state !== "active") continue; // a restoration has its own notice
     if (b.state === "active" && was.state !== "active") out = say(out, now, "built", `${L("Достроено", "Finished")}: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, pos);
-    else if (b.level > was.level) out = say(out, now, "built", L("Дом расширен", "House expanded"), pos);
+    else if (b.level > was.level) out = say(out, now, "built", b.foundationId ? L(`Надстроен этаж: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`, `A floor added: ${(BUILDINGS[b.template]?.name ?? b.template).toLowerCase()}`) : L("Дом расширен", "House expanded"), pos);
   }
   return out;
 }
@@ -523,7 +526,7 @@ export function reconcile(buildings: Record<number, Building>, roads: RoadGraph,
 }
 
 function survives(b: Building, edges: RoadEdge[], roads: RoadGraph, hash: Map<number, ZoneCell[]>): boolean {
-  if (b.siteId || b.foundationId) return true; // a building on an old foundation stands on its own ring, not on a lot
+  if (b.foundationId) return true; // a building on an old foundation stands on its own ring, not on a lot
   const [vx, vy] = away(b.lot.angle, b.side);
   const front = (CELL_SIZE * b.lot.d) / 2;
   const fx = b.lot.cx - vx * front;

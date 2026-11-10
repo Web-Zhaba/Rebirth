@@ -66,12 +66,12 @@ export function BuilderTasks({ view }: { view: View }) {
   const priority = s.levers?.priority ?? null;
   const tasks: Task[] = [];
   for (const b of Object.values(s.buildings)) {
-    const site = b.siteId ? s.finds.foundations.find((f) => f.id === b.siteId) : undefined;
+    const site = b.asItWas ? s.finds.foundations.find((f) => f.id === b.foundationId) : undefined;
     const name = site ? siteTitle(site) : (BUILDINGS[b.template]?.name ?? b.template);
     const at: [number, number] = [b.lot.cx, b.lot.cy];
     const job = { crew: siteCrew(b), order: b.zone === "res" ? 2 : 1, at, building: b.id, prio: priority === b.id };
     if (b.state === "building") tasks.push({ key: `b${b.id}`, title: name, value: b.labor > 0 ? b.done / b.labor : 0, left: Math.max(0, b.labor - b.done), ...job });
-    if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: ${L("перестройка", "rebuild")}`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), ...job });
+    if (b.upgrade) tasks.push({ key: `u${b.id}`, title: `${name}: ${b.foundationId ? L("надстройка этажа", "a floor added") : L("перестройка", "rebuild")}`, value: b.upgrade.labor > 0 ? b.upgrade.done / b.upgrade.labor : 0, left: Math.max(0, b.upgrade.labor - b.upgrade.done), ...job });
   }
   const reachable = new Set(workableEdges(s.roads));
   const noStone = stoneWaiting(s.roads, s.stock);

@@ -102,6 +102,7 @@ export const PLACED_BUILDING_COLORS = {
   cellar: "#7a6048",
   barn: "#94503a",
   dig: "#7d6340",
+  restored: "#8a7f6a",
   well: "#4f7f9c",
   market: "#b9772f",
   chapel: "#85689f",

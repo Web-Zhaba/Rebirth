@@ -94,7 +94,7 @@ export const KIND_NAME: Record<string, string> = {
 };
 export const kindName = (cls: string | undefined): string => (cls && KIND_NAME[cls]) || L("Старая постройка", "Old building");
 
-// The template a kind works as in the "working" mode; every other kind is a monument only.
+// The purpose a kind works as; every other kind is kept as a monument.
 const WORK_TEMPLATE: Record<string, string> = {
   place_of_worship: "chapel",
   school: "school",
@@ -104,22 +104,16 @@ const WORK_TEMPLATE: Record<string, string> = {
 };
 export const workTemplate = (cls: string | undefined): string | null => (cls && WORK_TEMPLATE[cls]) || null;
 
+// The purpose that brings a foundation of a known old kind back "as it was" (docs/PLAN-restoration.md section 2): the
+// building it worked as, or a monument; null for a foundation of no known kind.
+export const asItWasTemplate = (cls: string | undefined): string | null => (siteDomain(cls) ? (workTemplate(cls) ?? "restored") : null);
+
 export const siteTitle = (f: { cls?: string; name?: string }): string => f.name ?? kindName(f.cls);
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
-export const MIN_HEIGHT = 4;
-export const MAX_RESTORED_HEIGHT = 25;
-export const restoredHeight = (height: number | undefined, fallback: number): number => clamp(height ?? fallback, MIN_HEIGHT, MAX_RESTORED_HEIGHT);
-
-// Cost of a restoration by the foundation's area: person-hours and m3 / m3 / t.
-export function restoreCost(area: number): { labor: number; logs: number; planks: number; stone: number } {
-  const a = Math.max(0, area);
-  return { labor: clamp(40 + 0.5 * a, 60, 1200), logs: clamp(a / 20, 2, 120), planks: clamp(a / 40, 0.5, 60), stone: clamp(a / 30, 1, 80) };
-}
 
 // Scarcity (section 5): the fewer notable buildings a revealed area holds, the more each restoration is worth.
 export const SCARCITY = { target: 20, min: 1, max: 3, cell: 10, kindGap: 300 }; // target: typed foundations per km2 that count as plain 1; kindGap: same-kind sites closer than this (m) count once
-export const WORKING_SHARE = 0.5; // a working building counts half
 
 const mulCache = new WeakMap<object, number>();
 
@@ -177,15 +171,14 @@ export function scarcity(finds: { foundations: readonly Pick<FoundFoundation, "i
 // Each further restoration of a kind counts half of the one before: weight x REPEAT^n for n earlier ones.
 export const REPEAT = 0.5;
 export const repeatFactor = (n: number): number => REPEAT ** Math.max(0, n);
-export const restoreWeightOf = (mode: "monument" | "working", mul: number, earlier = 0): number =>
-  Math.round((mode === "monument" ? mul : mul * WORKING_SHARE) * repeatFactor(earlier) * 100) / 100;
+export const restoreWeightOf = (mul: number, earlier = 0): number => Math.round(mul * repeatFactor(earlier) * 100) / 100;
 
 // Sites of `cls` ordered before building `beforeId` (all when absent) that are restoring or restored; lost ones do not count.
 // A site without a building counts as earlier.
 export function earlierOfKind(s: Pick<SimState, "finds" | "buildings">, cls: string | undefined, selfId: string, beforeId?: number): number {
   if (!cls) return 0;
   const orderOf = new Map<string, number>();
-  if (beforeId !== undefined) for (const b of Object.values(s.buildings)) if (b.siteId) orderOf.set(b.siteId, b.id);
+  if (beforeId !== undefined) for (const b of Object.values(s.buildings)) if (b.foundationId && b.asItWas) orderOf.set(b.foundationId, b.id);
   let n = 0;
   for (const f of s.finds.foundations) {
     if (f.id === selfId || f.cls !== cls || (f.state !== "restoring" && f.state !== "restored")) continue;
@@ -205,5 +198,5 @@ export function nextInsight(p: Pick<ProgressState, "insights" | "techs">, domain
   return open(domain) ?? open("farm") ?? open("craft") ?? null;
 }
 
-// Monuments (finished, in "monument" mode) make the houses within this reach happier and the land dearer.
+// Monuments (finished, of the monument purpose) make the houses within this reach happier and the land dearer.
 export const MONUMENT = { radius: 200, mood: 1, land: 5, landCap: 15 };

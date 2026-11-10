@@ -1,6 +1,7 @@
 import { GOODS_UPGRADE } from "./goods";
 import { BUILDINGS, upgradable, upgradeLabor } from "./buildings";
 import { isUnlocked } from "./tech";
+import { floorBlocker } from "./foundationLots";
 import { ageOf, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
 import { roadNet } from "./roadNetCache";
 import { servicePreviewIndex } from "./servicePreviewIndex";
@@ -165,9 +166,14 @@ export function upgradeShortfall(land: number, services: number | undefined, moo
 
 export function upgradeBlockers(s: Pick<SimState, "progress" | "coverage" | "landValue">, b: Building, mood: number | undefined, goods?: number): string[] {
   if (!upgradable(b)) return [];
-  const out = isUnlocked(s.progress, "upgrade") ? [] : [L("откроется с технологией «Просторное жильё»", "unlocks with the Spacious Housing technology")];
-  return [...out, ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood, goods)];
+  const tech = b.foundationId ? floorBlocker(s.progress, b) : isUnlocked(s.progress, "upgrade") ? null : L("откроется с технологией «Просторное жильё»", "unlocks with the Spacious Housing technology");
+  // a building on an old foundation that is no house gets its next floor as soon as the technology allows
+  if (b.foundationId && b.zone !== "res") return tech ? [tech] : [];
+  return [...(tech ? [tech] : []), ...upgradeShortfall(s.landValue[b.id] ?? 0, s.coverage[b.id], mood, goods)];
 }
+
+// May the building be raised now as far as the technology goes?
+const techAllows = (s: Pick<SimState, "progress">, b: Building): boolean => (b.foundationId ? floorBlocker(s.progress, b) === null : isUnlocked(s.progress, "upgrade"));
 
 export function dailyServices(s: SimState): SimState {
   const { coverage, landValue } = refreshServices(s);
@@ -193,11 +199,12 @@ export function dailyServices(s: SimState): SimState {
   const goodsAt = houseGoods(s.households);
   let buildings = s.buildings;
   for (const b of Object.values(s.buildings)) {
-    if (!isUnlocked(s.progress, "upgrade") || !upgradable(b)) continue;
-    const good = upgradeShortfall(landValue[b.id] ?? 0, coverage[b.id], moodAt.get(b.id), goodsAt.get(b.id)).length === 0;
+    if (!upgradable(b) || !techAllows(s, b)) continue;
+    // a house is raised for a good place to live; any other building on an old foundation regains its floors at once
+    const good = b.zone !== "res" || upgradeShortfall(landValue[b.id] ?? 0, coverage[b.id], moodAt.get(b.id), goodsAt.get(b.id)).length === 0;
     const streak = good ? b.streak + 1 : 0;
     let next: Building = b;
-    if (streak >= SERVICE.upgradeDays) next = { ...b, streak: 0, upgrade: { labor: upgradeLabor(b), done: 0, paid: false } };
+    if (streak >= SERVICE.upgradeDays || (b.zone !== "res" && good)) next = { ...b, streak: 0, upgrade: { labor: upgradeLabor(b), done: 0, paid: false } };
     else if (streak !== b.streak) next = { ...b, streak };
     if (next !== b) {
       if (buildings === s.buildings) buildings = { ...buildings };

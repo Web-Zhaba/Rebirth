@@ -1,9 +1,9 @@
 import { MONUMENT } from "./heritage";
 import type { Building } from "./types";
 
-// Restored buildings kept as monuments: houses within reach feel better and sit on dearer land (PLAN-research.ru.md section 7).
+// Old buildings kept as monuments: houses within reach feel better and sit on dearer land (PLAN-research.ru.md section 7).
 
-export const isMonument = (b: Building): boolean => b.restoreMode === "monument" && b.state === "active";
+export const isMonument = (b: Building): boolean => b.template === "restored" && b.state === "active";
 
 export const finishedMonuments = (buildings: Record<number, Building>): Building[] => Object.values(buildings).filter(isMonument);
 

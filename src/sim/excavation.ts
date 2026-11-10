@@ -1,3 +1,4 @@
+import { floorsOf } from "./buildings";
 import { addChronicle } from "./chronicle";
 import type { Building, DigInfo, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
 import { decimal, L, plural } from "../i18n";
@@ -113,7 +114,7 @@ const isStr = (v: unknown, max: number): v is string => typeof v === "string" &&
 const isRec = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isPt = (p: unknown): p is Pt => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6;
 const r2 = (v: number): number => Math.round(v * 100) / 100;
-const MAX_HEIGHT = 300; // m
+export const MAX_HEIGHT = 300; // m
 
 // The optional type of a foundation: a kind, a name and a height, each valid when present.
 const typeOk = (f: { cls?: unknown; name?: unknown; height?: unknown }): boolean =>
@@ -177,17 +178,31 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   }
   const newF: FoundFoundation[] = [];
   let stone = 0;
-  // Old saves hold foundations without a type: an id that arrives again with one is enriched in place.
+  // Old saves hold foundations without a type or a height: an id that arrives again with them is enriched in place,
+  // and a building on it learns the floors of the old one.
   let known = s.finds.foundations;
   let enriched = 0;
+  let buildings = s.buildings;
+  const byId = new Map<string, number>();
   for (const f of foundations) {
-    if (seenF.has(f.id) && f.cls !== undefined) {
-      const i = known.findIndex((x) => x.id === f.id);
-      if (i >= 0 && known[i].cls === undefined) {
-        if (known === s.finds.foundations) known = known.slice();
-        known[i] = { ...known[i], ...typeOf(f) };
-        enriched++;
-      }
+    if (seenF.has(f.id) && (f.cls !== undefined || f.height !== undefined)) {
+      if (byId.size === 0) known.forEach((x, k) => byId.set(x.id, k));
+      const i = byId.get(f.id) ?? -1;
+      const was = known[i];
+      if (i < 0) continue;
+      const patch: Pick<FoundFoundation, "cls" | "name" | "height"> = {};
+      if (was.cls === undefined && f.cls !== undefined) Object.assign(patch, typeOf({ cls: f.cls, name: f.name }));
+      if (was.height === undefined && f.height !== undefined) patch.height = f.height;
+      if (Object.keys(patch).length === 0) continue;
+      if (known === s.finds.foundations) known = known.slice();
+      known[i] = { ...was, ...patch };
+      enriched++;
+      if (patch.height !== undefined)
+        for (const b of Object.values(buildings))
+          if (b.foundationId === f.id && (b.floors ?? 1) < floorsOf(patch.height)) {
+            if (buildings === s.buildings) buildings = { ...buildings };
+            buildings[b.id] = { ...b, floors: floorsOf(patch.height) };
+          }
       continue;
     }
     if (seenF.has(f.id) || s.finds.foundations.length + newF.length >= MAX_FOUNDATIONS) continue;
@@ -207,6 +222,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
       ...s,
       stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock,
       chronicle,
+      buildings,
       finds: {
         ...s.finds,
         foundations: newF.length ? [...known, ...newF] : known,

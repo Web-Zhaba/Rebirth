@@ -1,11 +1,12 @@
 import { GOOD_NAMES, GOODS_UPGRADE, needsAt } from "../sim/goods";
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
+import { BUILDINGS, floorArea, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
 import { storeAmount, storeGroupName } from "./buildMenu";
 import { domainName } from "../sim/domains";
 import { kindName, siteDomain, siteTitle } from "../sim/heritage";
 import { SPEED } from "../sim/research";
 import { upgradeBlockers } from "../sim/coverage";
+import { foundationKindText } from "../sim/foundationLots";
 import { queuedLabel } from "../sim/clock";
 import { handHours } from "../sim/production";
 import { DIG, revealedArea } from "../sim/excavation";
@@ -28,7 +29,7 @@ import { duplicateTemplate } from "./actionModel";
 import { followResident } from "./follow";
 import { NeedsBars } from "./NeedsBars";
 import { SEMANTIC_IDS } from "./semanticIds";
-import { L } from "../i18n";
+import { decimal, L } from "../i18n";
 
 const REFRESH_MS = 4000;
 
@@ -66,22 +67,21 @@ function SiteMaterials({ m, paid, hand, haul, st }: { m: Materials | undefined; 
   );
 }
 
-// A restored old building: its real name, the way it was restored and what it adds to the research.
+// A building "as it was" on the foundation of a known old kind: its real name and what it adds to the research.
 function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined }) {
   const domain = siteDomain(site?.cls);
   const w = b.restoreWeight ?? 0;
   return (
     <div class="prod">
       <div>
-        {L("Восстановленная постройка", "Restored building")}{site?.cls ? ` · ${kindName(site.cls)}` : ""}
+        {L("Восстановлено как было", "Restored as it was")}{site?.cls ? ` · ${kindName(site.cls)}` : ""}
       </div>
-      <div>{L("Назначение:", "Purpose:")} {b.restoreMode === "working" ? L(`в деле (как «${BUILDINGS[b.template]?.name.toLowerCase()}»)`, `in use (as a ${BUILDINGS[b.template]?.name.toLowerCase()})`) : L("памятник", "monument")}</div>
       {domain && (
         <div class="people-note">
           {w > 0 ? L(`Вклад в науку: +${num(w * SPEED.restored * 100)} % к скорости: ${domainName(domain)}`, `Research contribution: +${num(w * SPEED.restored * 100)}% speed: ${domainName(domain)}`) : L(`Область: ${domainName(domain)}; вклад появится, когда постройка будет готова`, `Field: ${domainName(domain)}; the contribution starts once the building is finished`)}
         </div>
       )}
-      {b.restoreMode === "monument" && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
+      {b.template === "restored" && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
     </div>
   );
 }
@@ -260,7 +260,7 @@ export function BuildingPanel() {
   const id = selectedBuilding.value;
   const b = id === null ? undefined : buildings.value?.[id];
   const t = b ? BUILDINGS[b.template] : undefined;
-  const site = b?.siteId ? state.value?.finds.foundations.find((f) => f.id === b.siteId) : undefined;
+  const site = b?.foundationId ? state.value?.finds.foundations.find((f) => f.id === b.foundationId) : undefined;
   const shown = !!b && !!t && !tool.value && rightPanel.value === "inspector";
   const dig = b && b.template === DIG.template && b.state === "active" ? digs.value.find((d) => d.id === b.id) : undefined;
   const snap = state.value;
@@ -286,7 +286,7 @@ export function BuildingPanel() {
           ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}`
           : null;
   const occupied = info?.kind === "house" ? info.households.some((h) => h.people.length > 0) : info?.kind === "workplace" && info.workers.length > 0;
-  const duplicate = duplicateTemplate(b.template, b.siteId, PLACE_TOOLS);
+  const duplicate = duplicateTemplate(b.template, b.asItWas ? b.foundationId : undefined, PLACE_TOOLS);
   const onDuplicate = () => {
     if (!duplicate) return;
     closePanel();
@@ -302,15 +302,17 @@ export function BuildingPanel() {
   const share = labor > 0 ? (labor - left) / labor : 1;
   const output = info?.kind === "workplace" && info.production?.good ? { ...OUTPUT[info.production.good], made: info.production.yesterday } : null;
   const residents = info?.kind === "house" ? info.households.reduce((a, h) => a + h.people.length, 0) : 0;
-  const size = site ? L(`${Math.round(site.area)} м², высота ${b.height} м`, `${Math.round(site.area)} m², height ${b.height} m`) : L(`${t.along} × ${t.deep} м, высота ${b.height} м`, `${t.along} × ${t.deep} m, height ${b.height} m`);
-  const level = b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level} ${L("из", "of")} ${maxLevel(b)}` : "";
+  const height = Math.round(b.height * 10) / 10;
+  const size = b.foundationId ? L(`${Math.round(floorArea(b))} м² этажей, высота ${decimal(String(height))} м`, `${Math.round(floorArea(b))} m² of floors, height ${height} m`) : L(`${t.along} × ${t.deep} м, высота ${decimal(String(height))} м`, `${t.along} × ${t.deep} m, height ${height} m`);
+  const level = b.foundationId ? ` · ${L("этажей", "floors")} ${b.level}${b.level < maxLevel(b) ? ` ${L("из", "of")} ${maxLevel(b)}` : ""}` : b.zone === "res" && b.state === "active" ? ` · ${L("уровень", "level")} ${b.level} ${L("из", "of")} ${maxLevel(b)}` : "";
   return (
     <aside class="rs-panel inspector panel" aria-labelledby={SEMANTIC_IDS.buildingInspectorTitle}>
-      <InspectorHead icon={templateIcon(b.template)} title={site ? siteTitle(site) : t.name} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
-      {(b.siteId || b.foundationId) && (
+      <InspectorHead icon={templateIcon(b.template)} title={b.asItWas && site ? siteTitle(site) : t.name} chip={chip} sub={`${size}${level}`} onClose={closePanel} headingId={SEMANTIC_IDS.buildingInspectorTitle} />
+      {b.foundationId && (
         <Section>
-          {b.siteId && <Restored b={b} site={site} />}
-          {b.foundationId && <div class="people-note">{b.state === "active" ? L("Стоит на старом фундаменте", "Stands on an old foundation") : L("Строится на старом фундаменте", "Being built on an old foundation")}</div>}
+          {b.asItWas && <Restored b={b} site={site} />}
+          {!b.asItWas && <div class="people-note">{b.state === "active" ? L("Стоит на старом фундаменте", "Stands on an old foundation") : L("Строится на старом фундаменте", "Being built on an old foundation")}</div>}
+          {!b.asItWas && site?.cls && <div class="people-note">{foundationKindText(site, t)}</div>}
         </Section>
       )}
       {(left > 0 || b.state !== "active") && (
@@ -486,7 +488,7 @@ export function BuildingPanel() {
       </div>
       {confirming && (
         <Confirm title={`${L("Снести", "Demolish")}: ${t.name}?`} okLabel={L("Снести", "Demolish")} onOk={onDemolish} onCancel={() => setConfirming(false)}>
-          {b.siteId ? L("Постройка будет утрачена навсегда: восстановить её снова нельзя. Полученные идеи останутся.", "The building will be lost forever and cannot be restored again. Ideas already gained stay.") : occupied ? (info?.kind === "house" ? L("Здесь живут люди, они останутся без дома.", "People live here; they will be left homeless.") : L("Здесь работают люди, они останутся без места.", "People work here; they will lose their jobs.")) : L("Здание будет снесено.", "The building will be demolished.")}
+          {b.asItWas ? L("Постройка будет утрачена навсегда: восстановить её снова нельзя. Полученные идеи останутся.", "The building will be lost forever and cannot be restored again. Ideas already gained stay.") : occupied ? (info?.kind === "house" ? L("Здесь живут люди, они останутся без дома.", "People live here; they will be left homeless.") : L("Здесь работают люди, они останутся без места.", "People work here; they will lose their jobs.")) : L("Здание будет снесено.", "The building will be demolished.")}
           {b.state !== "planned" && b.paid ? L(" Потраченные материалы не вернутся.", " Materials spent are not returned.") : ""}
         </Confirm>
       )}

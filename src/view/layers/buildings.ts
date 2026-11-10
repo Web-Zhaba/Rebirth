@@ -79,8 +79,9 @@ export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   for (const b of Object.values(st.buildings)) {
     if (b.state === "planned") continue;
     const progress = b.state === "active" ? 1 : b.labor > 0 ? Math.min(1, b.done / b.labor) : 0;
-    if (b.siteId) {
-      const site = st.finds.foundations.find((f) => f.id === b.siteId);
+    // an old building brought back as it was, or kept as a monument, is drawn as the old one
+    if (b.foundationId && (b.asItWas || b.template === "restored")) {
+      const site = st.finds.foundations.find((f) => f.id === b.foundationId);
       out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress, style: "heritage", lamp: lamps.get(b.id) });
     } else
       out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade, lamp: lamps.get(b.id) });

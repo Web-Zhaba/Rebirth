@@ -2,12 +2,11 @@ import { play } from "../ui/sound";
 import { roomText } from "../ui/buildMenu";
 import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect, untracked } from "@preact/signals";
-import { BUILDINGS, materialsOf, scaled, storeRoom, type BuildingTemplate } from "../sim/buildings";
+import { BUILDINGS, materialsOf, scaledJobs, storeRoom, type BuildingTemplate } from "../sim/buildings";
 import { centroid, DIG } from "../sim/excavation";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
-import { foundationBuilding, foundationIndex, lotCheck, lotRing, usesFoundation } from "../sim/foundationLots";
+import { foundationBuilding, foundationIndex, foundationKindText, lotCheck, lotRing, usesFoundation } from "../sim/foundationLots";
 import { canPlace, makeBuilding } from "../sim/growth";
-import { isHeritage } from "../sim/heritage";
 import { previewServiceCoverage } from "../sim/coverage";
 import { lotFront } from "../sim/people";
 import { isService, SERVICES } from "../sim/services";
@@ -149,19 +148,22 @@ export function attachPlaceTool(view: View): void {
     const t = BUILDINGS[placeTemplate(id)];
     if (!st || !usesFoundation(t)) return null;
     const fd = foundationIndex(st.finds.foundations).at(x, y);
-    if (!fd || (isHeritage(fd) && fd.state !== "lost")) return null; // a notable building keeps its restoration
+    if (!fd) return null;
     const check = lotCheck(st, fd, t);
     const base = { footprint: lotRing(fd), center: centroid(fd.ring), edge: -1, side: 1 as const, i: -1, radius: undefined, foundationId: fd.id };
-    if (!check.ok) return { ...base, front: null, ok: false, pending: false, text: check.reason };
+    const kind = foundationKindText(fd, t);
+    if (!check.ok) return { ...base, front: null, ok: false, pending: false, text: kind ? `${check.reason}\n${kind}` : check.reason };
     let detail = siteText(id, NO_SITE, t, base.center);
     if (isService(id)) detail += `\n${coveragePreviewText(previewServiceCoverage(st, id, check.door[0], check.door[1]))}`;
-    // The building grows with the foundation: its crew or storage and its cost.
-    const b = foundationBuilding(t, fd, check.door, 0, 0);
-    const jobs = scaled(t.jobs, b);
+    // The building grows with the foundation: its floors, its crew or storage and its cost.
+    const b = foundationBuilding(t, fd, check.door, 0, 0, st.progress);
+    const jobs = scaledJobs(t.jobs, b);
     const room = roomText(storeRoom(b));
     const holds = room ? L(`вмещает ${room}`, `holds ${room}`) : jobs > 0 ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}` : "";
-    const size = L(`Старый фундамент ${Math.round(fd.area)} м²`, `Old foundation ${Math.round(fd.area)} m²`) + (holds ? ` · ${holds}` : "");
-    return { ...base, front: check.door, ok: true, pending: false, text: `${detail}\n${size}\n${costText(b.labor, materialsOf(b))}` };
+    const old = b.floors ?? 1;
+    const floors = old > 1 ? (b.level < old ? L(` · этажей ${b.level} из ${old}`, ` · floors ${b.level} of ${old}`) : L(` · этажей ${old}`, ` · ${old} floors`)) : "";
+    const size = L(`Старый фундамент ${Math.round(fd.area)} м²`, `Old foundation ${Math.round(fd.area)} m²`) + floors + (holds ? ` · ${holds}` : "");
+    return { ...base, front: check.door, ok: true, pending: false, text: [detail, size, kind, costText(b.labor, materialsOf(b))].filter(Boolean).join("\n") };
   };
 
   const evaluate = (id: PlaceTool, x: number, y: number): Verdict | null => {

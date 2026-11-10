@@ -3,7 +3,7 @@ import { nextEra as nextEraOf, researchAll } from "./research";
 import { refreshServices } from "./coverage";
 import { syncPeople } from "./people";
 import { isCleared } from "./clearing";
-import { UPGRADE } from "./buildings";
+import { levelHeight } from "./buildings";
 import { withStock } from "./storage";
 import { completeRestorations } from "./restore";
 import type { Building, RoadGraph, SimState } from "./types";
@@ -48,7 +48,7 @@ function finishBuildings(all: Record<number, Building>): Record<number, Building
     if (out === all) out = { ...all };
     if (b.state === "active") {
       const { upgrade: _u, ...rest } = b;
-      out[b.id] = { ...rest, level: b.level + 1, height: b.height + UPGRADE.height };
+      out[b.id] = { ...rest, level: b.level + 1, height: Math.round((b.height + levelHeight(b)) * 100) / 100 };
     } else {
       out[b.id] = { ...b, paid: true, done: b.labor, state: "active" };
     }
