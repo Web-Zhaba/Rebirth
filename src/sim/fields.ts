@@ -59,8 +59,20 @@ export function fieldCentroid(f: Pick<Field, "pts">): [number, number] {
   return [cx / (3 * a), cy / (3 * a)];
 }
 
+// The last assignment per buildings object: states are copy-on-write, so the same buildings and fields objects mean
+// the same answer, and one tick asks for it many times (idle workers, the artel, demand, production).
+const assignCache = new WeakMap<object, { fields: readonly Field[]; out: ReadonlyMap<number, number> }>();
+
 // Field id -> id of the nearest active gumno within FIELD.radius (ties: lowest id). Fields out of range are absent.
-export function assignFields(fields: readonly Field[], buildings: Record<number, Building>): Map<number, number> {
+export function assignFields(fields: readonly Field[], buildings: Record<number, Building>): ReadonlyMap<number, number> {
+  const hit = assignCache.get(buildings);
+  if (hit && hit.fields === fields) return hit.out;
+  const out = nearestGumnos(fields, buildings);
+  assignCache.set(buildings, { fields, out });
+  return out;
+}
+
+function nearestGumnos(fields: readonly Field[], buildings: Record<number, Building>): Map<number, number> {
   const gumnos = Object.values(buildings).filter((b) => b.template === "gumno" && b.state === "active");
   const out = new Map<number, number>();
   if (gumnos.length === 0) return out;
@@ -80,14 +92,14 @@ export function assignFields(fields: readonly Field[], buildings: Record<number,
   return out;
 }
 
-export function assignedHa(gumno: number, fields: readonly Field[], assign: Map<number, number>): number {
+export function assignedHa(gumno: number, fields: readonly Field[], assign: ReadonlyMap<number, number>): number {
   let ha = 0;
   for (const f of fields) if (assign.get(f.id) === gumno) ha += haOf(f);
   return ha;
 }
 
 // Job capacity of a building: fixed by the template (or its own, scaled by an old foundation), except a gumno, which needs one hand per 2.5 ha.
-export function jobsOf(b: Building, s: Pick<SimState, "buildings" | "zones">, assign?: Map<number, number>): number {
+export function jobsOf(b: Building, s: Pick<SimState, "buildings" | "zones">, assign?: ReadonlyMap<number, number>): number {
   if (b.template !== "gumno") return scaled(BUILDINGS[b.template]?.jobs ?? 0, b);
   const a = assign ?? assignFields(s.zones.fields, s.buildings);
   return Math.max(0, Math.min(FIELD.maxJobs, Math.ceil(assignedHa(b.id, s.zones.fields, a) / FIELD.haPerJob - 1e-9)));

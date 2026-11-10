@@ -220,7 +220,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
   const made = (id: number, n: number) => {
     if (n > 0) today[id] = (today[id] ?? 0) + n;
   };
-  let assign: Map<number, number> | null = null;
+  let assign: ReadonlyMap<number, number> | null = null;
   let harvested = false;
   let toolless = false;
 
