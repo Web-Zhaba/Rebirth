@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.4.1...rebirth-v0.5.0) (2026-11-11)
+
+
+### Features
+
+* **restoration:** close the plan's remaining points ([dd71cb0](https://github.com/Web-Zhaba/Rebirth/commit/dd71cb059481525754731041cf4d87afb117f174))
+* **restoration:** excavation in two stages ([ad6f083](https://github.com/Web-Zhaba/Rebirth/commit/ad6f0835db7c4b2b1dec6fc37ce2d7f42e577ac5))
+* **restoration:** finds and the museum ([5a01df5](https://github.com/Web-Zhaba/Rebirth/commit/5a01df5b4281d132bc2faa0e99a7b4314b4cc485))
+* **restoration:** the foundation sets the building ([dd7b31f](https://github.com/Web-Zhaba/Rebirth/commit/dd7b31f7f03b98d2b9434aa8499e9e748afd1aa1))
+* **restoration:** tiers of old buildings and rewards by share ([b641752](https://github.com/Web-Zhaba/Rebirth/commit/b641752409a45c1686fc1b3f44d337add44e2299))
+
+
+### Performance
+
+* **sim:** delta snapshots and per-tick identity caches ([10afdad](https://github.com/Web-Zhaba/Rebirth/commit/10afdad18c39a1127fca6b9f40f9332a7b435d37))
+
+
+### Documentation
+
+* restoration-first gameplay plan ([fb2a575](https://github.com/Web-Zhaba/Rebirth/commit/fb2a5754aef7058ad3346fa10911b20e323ed39c))
+
 ## [0.4.1](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.4.0...rebirth-v0.4.1) (2026-11-10)
 
 
