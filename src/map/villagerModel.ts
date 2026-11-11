@@ -1,17 +1,18 @@
 import { ADULT_MIN } from "../sim/people";
 import { rgb, rng, type RGB } from "./modelGeometry";
 
-// Residents of the town (sim/people.ts) as low-poly figures: a faceted head with hair, one capsule for body and legs,
-// two ball hands and two elongated ball feet. The look (sex, age, stature, hair, clothes) comes from a seed, so one
-// resident keeps the same look as they grow. A pose is a rigid motion of each part, so the preview (engine/debug/
-// villagers.ts) only uploads what writeVillager() writes. Pure maths. Units: metres of the figure, feet on y = 0,
-// facing +z.
+// Residents of the town (sim/people.ts) as low-poly figures: a faceted head with hair and sometimes a hat on a short
+// neck, a body that narrows from the shoulders to a belted waist, sleeves ending in ball hands, two peg legs and two
+// elongated ball feet. The look (sex, age, stature, hair, clothes) comes from a seed, so one resident keeps the same
+// look as they grow. A pose is a rigid motion of each part, so the preview (engine/debug/villagers.ts) only uploads
+// what writeVillager() writes. Pure maths. Units: metres of the figure, feet on y = 0, facing +z.
 
 export type Vec3 = [number, number, number];
 export type Action = "idle" | "walk" | "work" | "carry" | "sleep";
 export const ACTIONS: readonly Action[] = ["idle", "walk", "work", "carry", "sleep"];
 export type Sex = "m" | "f";
 export type HairStyle = "bald" | "cap" | "long" | "bun";
+export type Hat = "none" | "brim" | "cloth" | "scarf"; // a brimmed straw hat, a cloth cap, a headscarf
 
 export interface Look {
   sex: Sex;
@@ -27,9 +28,12 @@ export interface Look {
   trousers: RGB;
   skirt: RGB | null;
   shoes: RGB;
+  hat: Hat;
+  hatColour: RGB;
+  belt: RGB;
 }
 
-export const PART = { head: 0, torso: 1, armL: 2, armR: 3, footL: 4, footR: 5 } as const;
+export const PART = { head: 0, torso: 1, armL: 2, armR: 3, footL: 4, footR: 5, legL: 6, legR: 7 } as const;
 
 export interface Rig {
   look: Look;
@@ -47,18 +51,20 @@ export interface Affine {
 }
 
 const REF_STATURE = 1.74; // m, the figure's standing height at scale 1
-const BODY_R = 0.23; // torso radius across the shoulders: a chunky capsule, not a pole
-const BODY_DEPTH = 0.8; // front-to-back depth relative to the width
-const BODY_BOTTOM = 0.25; // centre of the lower hemisphere
-const BODY_TOP = 1.3; // centre of the upper hemisphere (the shoulders)
+const BODY_R = 0.215; // half the width across the shoulders: chunky, so a figure a few pixels tall still reads
+const BODY_DEPTH = 0.74; // front-to-back depth relative to the width
+const HIP_Y = 0.72; // where the legs turn; the body closes a little below
 const WAIST = 0.8; // trousers below, shirt above: a straight belt line
-const SHOULDER_X = BODY_R + 0.03;
-const SHOULDER_Y = BODY_TOP;
+const SHOULDER_Y = 1.3;
+const SHOULDER_X = BODY_R + 0.035;
+const NECK_TOP = 1.5;
 const HEAD_Y = 1.6;
-const ARM_DROP = 0.27; // hands hang this far below the shoulder
+const ARM_LEN = 0.36; // shoulder to the hand's centre
+const HIP_X = 0.1;
+const ANKLE_Y = 0.07;
 const WALK_HZ = 0.9; // full strides per second
 const SWING = 0.5; // arm swing, rad
-const STRIDE = 0.11; // foot travel, m
+const STRIDE = 0.17; // foot travel, m
 const LIFT = 0.05; // foot lift, m
 
 const SKIN = ["#f1d2b3", "#e0b48c", "#c68e5e", "#9c6a43", "#6e4a2e"].map(rgb);
@@ -68,6 +74,8 @@ const SHIRT = ["#8c6e4a", "#5f7a5a", "#7b5a6e", "#a7a08f", "#6d7f8f", "#9a5b3e",
 const TROUSERS = ["#4e4439", "#3d4a58", "#6a5a3e", "#5b4a3a", "#2f3a33"].map(rgb);
 const SKIRT = ["#7a4b35", "#4f5d6b", "#8a6a3d", "#6e5a6e", "#5a6a4a"].map(rgb);
 const SHOES = ["#3b2b20", "#2d2a26", "#5a4632"].map(rgb);
+const STRAW = ["#d8c27a", "#c9ad63", "#e0cf98"].map(rgb);
+const BELT = ["#3a2a1c", "#5b4630", "#2b2622"].map(rgb);
 const MALE_HAIR: HairStyle[] = ["cap", "cap", "bald"];
 const FEMALE_HAIR: HairStyle[] = ["long", "bun", "cap"];
 
@@ -90,6 +98,12 @@ export function villagerLook(seed: number, age: number, known?: Sex): Look {
   const skirtRoll = rand();
   const skirt = pick(SKIRT);
   const shoes = pick(SHOES);
+  // Later draws go last, so the looks drawn before them stay as they were.
+  const hatRoll = rand();
+  const straw = pick(STRAW);
+  const cloth = pick(SKIRT);
+  const belt = pick(BELT);
+  const hat: Hat = age < 8 ? "none" : sex === "m" ? (hatRoll < 0.25 ? "brim" : hatRoll < 0.42 ? "cloth" : "none") : hatRoll < 0.32 ? "scarf" : hatRoll < 0.44 ? "brim" : "none";
 
   const grown = Math.min(1, age / ADULT_MIN);
   const elder = age > 60 ? Math.max(0.9, 1 - 0.005 * (age - 60)) : 1;
@@ -108,6 +122,9 @@ export function villagerLook(seed: number, age: number, known?: Sex): Look {
     trousers,
     skirt: sex === "f" && age >= 6 && skirtRoll < 0.7 ? skirt : null,
     shoes,
+    hat,
+    hatColour: hat === "brim" ? straw : cloth,
+    belt,
   };
 }
 
@@ -192,18 +209,31 @@ function cutAt(profile: [number, number][], y: number): [[number, number][], [nu
   return [below, above];
 }
 
+// How finely a figure is cut: sides around an axis and steps along a ball's arc. The coarse one is for figures a
+// dozen pixels tall, where the silhouette is all that shows.
+export type Detail = 0 | 1;
+interface Cut {
+  seg: number;
+  steps: number;
+}
+const CUTS: Record<Detail, Cut> = { 0: { seg: 4, steps: 2 }, 1: { seg: 6, steps: 3 } };
+
 // A solid of revolution around the body's axis, flattened front to back, in one colour.
-function solidOfRevolution(profile: [number, number][], colour: RGB): Piece {
+function solidOfRevolution(profile: [number, number][], colour: RGB, q: Cut): Piece {
   const ys = profile.map((p) => p[1]);
   const centre: Vec3 = [0, (Math.min(...ys) + Math.max(...ys)) / 2, 0];
-  return piece(scaled(lathe(profile), [1, 1, BODY_DEPTH], [0, 0, 0]), centre, colour);
+  return piece(scaled(lathe(profile, q.seg), [1, 1, BODY_DEPTH], [0, 0, 0]), centre, colour);
 }
 
 // An ellipsoid (or, with `dome`, its upper half) at c with radii r.
-const ellipsoid = (c: Vec3, r: Vec3, colour: Colour, dome = false): Piece => {
-  const profile = dome ? arc(1, 0, 0, Math.PI / 2, 3) : arc(1, 0, -Math.PI / 2, Math.PI / 2, 3);
-  return piece(scaled(lathe(profile), r, c), c, colour);
+const ellipsoid = (c: Vec3, r: Vec3, colour: Colour, q: Cut, dome = false): Piece => {
+  const profile = dome ? arc(1, 0, 0, Math.PI / 2, q.steps) : arc(1, 0, -Math.PI / 2, Math.PI / 2, q.steps);
+  return piece(scaled(lathe(profile, q.seg), r, c), c, colour);
 };
+
+// A closed upright peg around the vertical through (x, z): radius r0 at height y0, r1 at y1.
+const peg = (x: number, z: number, y0: number, r0: number, y1: number, r1: number, colour: Colour, q: Cut): Piece =>
+  piece(scaled(lathe([[0, y0], [r0, y0], [r1, y1], [0, y1]], q.seg - 1), [1, 1, 1], [x, 0, z]), [x, (y0 + y1) / 2, z], colour);
 
 // Packs the pieces of each part into the rig's vertex buffer, in figure metres.
 function flatten(parts: Piece[][]): Pick<Rig, "data" | "vertices" | "parts" | "top" | "minZ"> {
@@ -232,34 +262,58 @@ function flatten(parts: Piece[][]): Pick<Rig, "data" | "vertices" | "parts" | "t
   return { data, vertices, parts: ranges, top, minZ };
 }
 
-export function buildRig(look: Look): Rig {
+export function buildRig(look: Look, detail: Detail = 1): Rig {
+  const q = CUTS[detail];
   const c = look.childness;
   const head = 1 + 0.25 * c; // a child's head is big for the body
   const limb = 1 - 0.1 * c;
   const body = BODY_R * (1 - 0.12 * c);
   const skin = look.skin;
   const hair = look.hair;
+  const woman = look.sex === "f" && c < 0.4;
 
-  const headParts: Piece[] = [ellipsoid([0, HEAD_Y, 0], [0.12 * head, 0.135 * head, 0.12 * head], skin)];
-  if (look.hairStyle !== "bald") headParts.push(ellipsoid([0, HEAD_Y + 0.012 * head, -0.004 * head], [0.128 * head, 0.14 * head, 0.136 * head], hair, true));
-  if (look.hairStyle === "long") headParts.push(ellipsoid([0, HEAD_Y - 0.1 * head, -0.085 * head], [0.12 * head, 0.17 * head, 0.05 * head], hair));
-  if (look.hairStyle === "bun") headParts.push(ellipsoid([0, HEAD_Y + 0.14 * head, -0.075 * head], [0.065 * head, 0.065 * head, 0.065 * head], hair));
-  if (look.beard) headParts.push(ellipsoid([0, HEAD_Y - 0.1 * head, 0.08 * head], [0.085 * head, 0.085 * head, 0.075 * head], hair));
+  const covered = look.hat === "cloth" || look.hat === "scarf"; // cloth over the hair
+  const top = covered ? look.hatColour : hair;
+  const headParts: Piece[] = [ellipsoid([0, HEAD_Y, 0], [0.12 * head, 0.135 * head, 0.12 * head], skin, q)];
+  if (look.hairStyle !== "bald" || covered) headParts.push(ellipsoid([0, HEAD_Y + 0.012 * head, -0.004 * head], [0.128 * head, 0.14 * head, 0.136 * head], top, q, true));
+  if (look.hairStyle === "long" || look.hat === "scarf") headParts.push(ellipsoid([0, HEAD_Y - 0.1 * head, -0.085 * head], [0.12 * head, 0.17 * head, 0.05 * head], look.hat === "scarf" ? top : hair, q));
+  if (look.hairStyle === "bun" && look.hat === "none") headParts.push(ellipsoid([0, HEAD_Y + 0.14 * head, -0.075 * head], [0.065 * head, 0.065 * head, 0.065 * head], hair, q));
+  if (look.beard) headParts.push(ellipsoid([0, HEAD_Y - 0.1 * head, 0.08 * head], [0.085 * head, 0.085 * head, 0.075 * head], hair, q));
+  if (look.hat === "brim") {
+    const y = HEAD_Y + 0.07 * head;
+    headParts.push(peg(0, 0, y, 0.24 * head, y + 0.02, 0.23 * head, look.hatColour, q));
+    headParts.push(ellipsoid([0, y + 0.01, 0], [0.135 * head, 0.11 * head, 0.135 * head], look.hatColour, q, true));
+  }
 
-  // Body and legs: one capsule from the ankles to the shoulders. It is cut at the waist into two pieces that share the
-  // ring there, so the belt line is straight: trousers below, shirt above.
-  const capsule = [...arc(body, BODY_BOTTOM, -Math.PI / 2, 0, 3), ...arc(body, BODY_TOP, 0, Math.PI / 2, 3)];
-  const [legs, shirt] = cutAt(capsule, WAIST);
-  const torso: Piece[] = [solidOfRevolution(legs, look.trousers), solidOfRevolution(shirt, look.shirt)];
-  if (look.skirt) torso.push(piece(lathe([[body * 1.5, 0.12], [body * 1.22, 0.5], [body, WAIST]]), [0, 0.45, 0], look.skirt));
+  // The body: closed under the hips, widest at the shoulders, drawn in to a neck. It is cut at the waist into two
+  // pieces that share the ring there, so the belt line is straight: trousers below, shirt above.
+  const hips = body * (woman ? 0.95 : 0.86);
+  const waist = body * (woman ? 0.76 : 0.84);
+  const profile: [number, number][] = [
+    [0, HIP_Y - 0.1],
+    [hips, HIP_Y - 0.04],
+    [waist, WAIST + 0.06],
+    [body * 0.96, 1.14],
+    [body, SHOULDER_Y],
+    [body * 0.62, SHOULDER_Y + 0.1],
+    [0.062 * head, SHOULDER_Y + 0.14],
+    [0.058 * head, NECK_TOP],
+  ];
+  const [pelvis, upper] = cutAt(profile, WAIST);
+  const [shirt, neck] = cutAt(upper, SHOULDER_Y + 0.14);
+  const torso: Piece[] = [solidOfRevolution(pelvis, look.trousers, q), solidOfRevolution(shirt, look.shirt, q), solidOfRevolution(neck, skin, q)];
+  if (look.skirt) torso.push(piece(lathe([[body * 1.3, 0.3], [body * 1.08, 0.56], [waist * 1.04, WAIST + 0.02]], q.seg), [0, 0.5, 0], look.skirt));
+  else if (detail) torso.push(piece(scaled(lathe([[waist * 1.05, WAIST - 0.035], [waist * 1.05, WAIST + 0.035]], q.seg), [1, 1, BODY_DEPTH], [0, 0, 0]), [0, WAIST, 0], look.belt));
 
-  const armY = SHOULDER_Y - ARM_DROP;
-  const arm = (x: number) => [ellipsoid([x, armY, 0], [0.065 * limb, 0.085 * limb, 0.065 * limb], skin)];
-  const foot = (x: number) => [ellipsoid([x, 0.05, 0.03], [0.055 * limb, 0.05 * limb, 0.1 * limb], look.shoes)];
+  // Sleeves from the shoulder down to a ball hand; legs from the hip down into the shoes.
+  const hand = SHOULDER_Y - ARM_LEN * limb;
+  const arm = (x: number) => [peg(x, 0, hand + 0.03, 0.05 * limb, SHOULDER_Y + 0.03, 0.066 * limb, look.shirt, q), ellipsoid([x, hand, 0], [0.058 * limb, 0.066 * limb, 0.058 * limb], skin, q)];
+  const leg = (x: number) => [peg(x, 0, ANKLE_Y, 0.062 * limb, HIP_Y + 0.02, 0.092 * limb, look.trousers, q)];
+  const foot = (x: number) => [ellipsoid([x, 0.05, 0.03], [0.06 * limb, 0.05 * limb, 0.105 * limb], look.shoes, q)];
 
   return {
     look,
-    ...flatten([headParts, torso, arm(-SHOULDER_X), arm(SHOULDER_X), foot(-0.12), foot(0.12)]),
+    ...flatten([headParts, torso, arm(-SHOULDER_X), arm(SHOULDER_X), foot(-HIP_X), foot(HIP_X), leg(-HIP_X), leg(HIP_X)]),
   };
 }
 
@@ -267,7 +321,11 @@ export function buildRig(look: Look): Rig {
 
 const I3: Mat = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 const ZERO: Vec3 = [0, 0, 0];
-const HEAD_PIVOT: Vec3 = [0, 1.4, 0];
+const HEAD_PIVOT: Vec3 = [0, 1.45, 0];
+const HIP_PIVOT: [Vec3, Vec3] = [
+  [-HIP_X, HIP_Y, 0],
+  [HIP_X, HIP_Y, 0],
+];
 const ARM_PIVOT: [Vec3, Vec3] = [
   [-SHOULDER_X, SHOULDER_Y, 0],
   [SHOULDER_X, SHOULDER_Y, 0],
@@ -298,7 +356,7 @@ const compose = (outer: Affine, inner: Affine): Affine => {
   return { m: mul(outer.m, inner.m), t: [t[0] + outer.t[0], t[1] + outer.t[1], t[2] + outer.t[2]] };
 };
 
-// The six parts (PART order) of the figure doing `action` at `time` seconds.
+// The parts (PART order) of the figure doing `action` at `time` seconds.
 export function poseOf(rig: Rig, action: Action, time: number): Affine[] {
   const w = 2 * Math.PI * WALK_HZ * time;
   const stride = (ph: number): Vec3 => [0, LIFT * Math.max(0, Math.cos(ph)), STRIDE * Math.sin(ph)];
@@ -351,6 +409,9 @@ export function poseOf(rig: Rig, action: Action, time: number): Affine[] {
     turned(arms[1], ARM_PIVOT[1], b),
     turned(I3, ZERO, feet[0]),
     turned(I3, ZERO, feet[1]),
+    // a leg turns about the hip to where its foot stands
+    turned(rotX(-Math.asin(feet[0][2] / (HIP_Y - ANKLE_Y))), HIP_PIVOT[0], b),
+    turned(rotX(-Math.asin(feet[1][2] / (HIP_Y - ANKLE_Y))), HIP_PIVOT[1], b),
   ];
   if (!lying) return parts;
   // Lying on the back: the figure turns about x so the head points to -z, and it is lifted so its back touches y = 0.

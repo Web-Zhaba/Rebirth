@@ -6,7 +6,7 @@ import { colourBits, DOT_FLOATS, Dots, writeDot } from "../../engine/scene/dots"
 import { FIGURE_VERTEX_FLOATS, FOOT_VERTEX_FLOATS, type TownMesh } from "../../engine/scene/townMesh";
 import { lightOpacity, placeAt, standAt, type Light, type Rest, type Trip } from "../../map/life";
 import { tool } from "../../map/tools";
-import { buildRig, orient, poseOf, villagerLook, writeVillager, type Action, type Rig } from "../../map/villagerModel";
+import { buildRig, orient, poseOf, villagerLook, writeVillager, type Action, type Detail, type Rig } from "../../map/villagerModel";
 import { MAP_ONLY, PALETTE } from "../../ui/palette";
 import type { Frame } from "../../world/frame";
 import { mppAtZoom, type View } from "../view";
@@ -29,6 +29,7 @@ const HIT_PX = 10;
 const TOUCH_HIT_PX = 24; // a fingertip
 const FIGURE_TALL = 1.7; // m
 const FIGURE_MIN_PX = 5; // a figure this tall on screen reads better than a dot
+const FIGURE_FINE_PX = 16; // from this tall on it is cut finely (villagerModel.ts Detail)
 const FIGURE_SLACK = 2.5; // the foreground of a tilted view is this much nearer the eye than the target, at most
 const FIGURE_VERTICES = 120_000; // figures are rewritten on the CPU every frame: 4 MB of vertices at most
 const FIGURE_MARGIN_PX = 40; // a figure this far off the screen's edge is not drawn
@@ -70,12 +71,12 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
   let feet = new Float32Array(64 * 6 * FOOT_VERTEX_FLOATS);
   const rigs = new Map<string, Rig>();
   // The look of a resident follows them as they grow: their id is the seed, their age rounds down to a year.
-  const rigOf = (who: number, sex: "m" | "f", age: number): Rig => {
-    const key = `${who}:${sex}:${Math.floor(age)}`;
+  const rigOf = (who: number, sex: "m" | "f", age: number, detail: Detail): Rig => {
+    const key = `${who}:${sex}:${Math.floor(age)}:${detail}`;
     let rig = rigs.get(key);
     if (!rig) {
       if (rigs.size >= RIGS_KEPT) rigs.clear();
-      rigs.set(key, (rig = buildRig(villagerLook(who, Math.floor(age), sex))));
+      rigs.set(key, (rig = buildRig(villagerLook(who, Math.floor(age), sex), detail)));
     }
     return rig;
   };
@@ -185,7 +186,7 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     let nv = 0;
     let nf = 0;
     for (const m of tall) {
-      const rig = rigOf(m.who, m.sex, m.age);
+      const rig = rigOf(m.who, m.sex, m.age, m.d * FIGURE_FINE_PX < figureReach * FIGURE_MIN_PX ? 1 : 0);
       if (nv + rig.vertices > FIGURE_VERTICES) {
         writeDot(wb, nw++, m.p[0], m.p[1], m.p[2], 1.5 + 2 * t, ink, paper, 0.8, null);
         continue;
