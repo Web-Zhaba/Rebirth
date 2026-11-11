@@ -6,7 +6,7 @@ import { allocateLabor, BUILDINGS, FRONT_SETBACK, houseCapacity, levelHeight, ma
 import { assignFields, fieldCentroid, FORAGER_FOREST, jobsOf } from "./fields";
 import { createFounders, demandCounts, FOUNDERS, freeHomes, MOOD_START } from "./people";
 import { clearingLogs } from "./clearing";
-import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReservedGround } from "./foundationLots";
+import { foundationBuilding, foundationLots, FOUNDATION_TAKEN, lotCheck, onReservedGround, OUTLINE_TAKEN } from "./foundationLots";
 import { asItWasTemplate, isHeritage } from "./heritage";
 import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, handHours, say } from "./production";
@@ -170,6 +170,9 @@ function occupancy(buildings: Record<number, Building>): (x: number, y: number) 
   const h = hashBy(list, (b) => [b.lot.cx, b.lot.cy]);
   return (x, y) => near(h, x, y).some((b) => inLot(b, x, y, LOT_MARGIN));
 }
+
+// The keys of the cells a building's lot rectangle holds.
+export const lotCellKeys = (cells: readonly ZoneCell[], b: Building): string[] => cells.filter((c) => inLot(b, c.cx, c.cy, 0)).map((c) => c.key);
 
 export function occupiedKeys(cells: readonly ZoneCell[], buildings: Record<number, Building>): Set<string> {
   const occ = occupancy(buildings);
@@ -364,7 +367,6 @@ export function canPlace(
   i: number,
   site: Site,
 ): PlaceCheck {
-  if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
   if (t.id === "restored") return NO_PLACE(L("Памятник ставится только на старый фундамент", "A monument stands only on an old foundation"));
   if (t.id === "museum") return NO_PLACE(L("Музей ставится только на старый фундамент", "A museum stands only on an old foundation"));
   const hall = secondHall(s, t);
@@ -384,7 +386,7 @@ export function canPlace(
       if (c.block) return NO_PLACE(BLOCK_REASON[c.block] ?? L("Место занято", "The spot is taken"));
       if (occ(c.cx, c.cy)) return NO_PLACE(L("Место занято зданием", "The spot is taken by a building"));
       const under = onReservedGround(old, cellSquare(c));
-      if (under) return NO_PLACE(isHeritage(under) ? HERITAGE_TAKEN : FOUNDATION_TAKEN);
+      if (under) return NO_PLACE(isHeritage(under) ? HERITAGE_TAKEN : under.ghost ? OUTLINE_TAKEN : FOUNDATION_TAKEN);
       cells.push(c);
     }
   }
@@ -402,7 +404,6 @@ export function canPlace(
 
 // Can the player put `t` on the old foundation `foundationId`? (Shared by the worker and the placement tool.)
 export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds" | "progress">, t: BuildingTemplate, foundationId: string): PlaceCheck {
-  if (t.zone !== "placed") return NO_PLACE(L("Это здание строится само", "This building builds itself"));
   const hall = secondHall(s, t);
   if (hall) return hall;
   const f = s.finds.foundations.find((x) => x.id === foundationId);
@@ -412,7 +413,10 @@ export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buil
 }
 
 // Adds a planned building on the old foundation; one "as it was" starts the site's restoration. Call canPlaceOnFoundation first.
-export function placeOnFoundation(s: SimState, t: BuildingTemplate, foundationId: string): SimState {
+// The town a placement reads and writes: the worker's state, or the main thread's copy for a preview.
+export type PlaceState = Pick<SimState, "roads" | "zones" | "buildings" | "finds" | "progress" | "nextBuildingId" | "gameMinutes">;
+
+export function placeOnFoundation<S extends PlaceState>(s: S, t: BuildingTemplate, foundationId: string): S {
   const f = s.finds.foundations.find((x) => x.id === foundationId)!;
   const r = lotCheck(s, f, t);
   if (!r.ok) return s;
@@ -421,8 +425,9 @@ export function placeOnFoundation(s: SimState, t: BuildingTemplate, foundationId
   return orderRestoration({ ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: b } }, b);
 }
 
-// Adds a planned building on the lot and clears the painted zone under it. Call canPlace first.
-export function placeBuilding(s: SimState, t: BuildingTemplate, edge: number, side: 1 | -1, i: number, site: Site): SimState {
+// Adds a planned building on the lot. Call canPlace first. The lot's cells take the building's zone type ("none" for a
+// placed one), so a house laid by the player stands on its zone like a grown one (reconcile keeps it).
+export function placeBuilding<S extends Pick<SimState, "zones" | "buildings" | "nextBuildingId" | "gameMinutes">>(s: S, t: BuildingTemplate, edge: number, side: 1 | -1, i: number, site?: Site): S {
   const key = (a: number, d: number) => `${edge}:${side}:${i + a}:${d}`;
   const c0 = s.zones.cells.find((c) => c.key === key(0, 0))!;
   const far = s.zones.cells.find((c) => c.key === key(t.w - 1, t.d - 1))!;
@@ -433,7 +438,7 @@ export function placeBuilding(s: SimState, t: BuildingTemplate, edge: number, si
     ...s,
     nextBuildingId: id + 1,
     buildings: { ...s.buildings, [id]: makeBuilding(t, c0, far, id, s.gameMinutes, site) },
-    zones: { ...s.zones, cells: paintCells(s.zones.cells, keys, "none"), rev: s.zones.rev + 1 },
+    zones: { ...s.zones, cells: paintCells(s.zones.cells, keys, t.zone === "placed" ? "none" : t.zone), rev: s.zones.rev + 1 },
   };
 }
 

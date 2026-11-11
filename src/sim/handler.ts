@@ -7,6 +7,7 @@ import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clea
 import { scarcity } from "./heritage";
 import { loseSite } from "./restore";
 import { orderDig, orderStreetDig } from "./digging";
+import { applyStroke, cancelPlans, planStroke, strokeTemplate, type StrokeSpan } from "./stroke";
 import { returnFind, useFind } from "./items";
 import { museumDaily, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
@@ -455,6 +456,26 @@ export class Handler {
         if (!ok.ok) return reject(ok.reason);
         this.save = { ...this.save, sim: placeOnFoundation(sim, t, cmd.foundationId) };
         return await this.finishCommand(id);
+      } else if (cmd.type === "placeStroke") {
+        const t = strokeTemplate(cmd.template);
+        if (!t) return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
+        const locked = lockReason(sim, t.zone) ?? lockReason(sim, t.id);
+        if (locked) return reject(locked);
+        if (!validSpans(cmd.spans) || (cmd.drop !== undefined && !validKeys(cmd.drop))) return reject(L("Некорректное место", "Invalid place"));
+        const plan = planStroke(sim, t, cmd.spans, cmd.onlyFoundations === true);
+        const drop = new Set(cmd.drop ?? []);
+        const r = applyStroke(sim, plan.items.filter((it) => !drop.has(it.key)));
+        if (r.placed === 0) return reject(plan.skipped[0]?.reason ?? L("Вдоль дороги здесь нет места", "No room along the road here"));
+        this.save = { ...this.save, sim: r.sim };
+        const ids: number[] = [];
+        for (let b = sim.nextBuildingId; b < r.sim.nextBuildingId; b++) ids.push(b);
+        return await this.finishCommand(id, ids);
+      } else if (cmd.type === "cancelStroke") {
+        if (!Array.isArray(cmd.ids) || cmd.ids.length > 10_000 || !cmd.ids.every((x) => Number.isInteger(x))) return reject(L("Некорректные здания", "Invalid buildings"));
+        const r = cancelPlans(sim, cmd.ids);
+        if (r.removed === 0) return reject(L("Отменять нечего: стройка уже началась", "Nothing to undo: work has already started"));
+        this.save = { ...this.save, sim: refreshServices(syncPeople(r.sim)) };
+        return await this.finishCommand(id);
       } else if (cmd.type === "returnFind" || cmd.type === "useFind" || cmd.type === "setExhibition") {
         const r = cmd.type === "returnFind" ? returnFind(sim, cmd.id) : cmd.type === "useFind" ? useFind(sim, cmd.id) : setExhibition(sim, cmd.building, cmd.hall, cmd.theme);
         if (!r.ok) return reject(r.reason);
@@ -540,7 +561,7 @@ export class Handler {
   }
 
   // Posts, persists and acknowledges a command that already changed this.save.
-  private async finishCommand(id: number): Promise<void> {
+  private async finishCommand(id: number, ids?: number[]): Promise<void> {
     if (this.free) this.save = { ...this.save!, sim: finishAll(this.save!.sim) };
     this.postSnapshot();
     try {
@@ -548,7 +569,7 @@ export class Handler {
     } catch (e) {
       this.post({ t: "error", message: String(e) });
     }
-    this.post({ t: "cmdResult", id, ok: true });
+    this.post(ids ? { t: "cmdResult", id, ok: true, ids } : { t: "cmdResult", id, ok: true });
     this.enrich();
   }
 
@@ -585,6 +606,14 @@ export class Handler {
 
 const validSpeed = (v: unknown): v is Speed => v === 0 || v === 1 || v === 2 || v === 4;
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const MAX_SPANS = 256;
+const validSpans = (v: unknown): v is StrokeSpan[] =>
+  Array.isArray(v) &&
+  v.length >= 1 &&
+  v.length <= MAX_SPANS &&
+  v.every((x) => typeof x === "object" && x !== null && Number.isInteger(x.edge) && (x.side === 1 || x.side === -1) && [x.from, x.to].every((m) => Number.isFinite(m) && Math.abs(m) < 1e6));
+const validKeys = (v: unknown): v is string[] => Array.isArray(v) && v.length <= 10_000 && v.every((k) => typeof k === "string" && k.length <= 300);
+
 const validSite = (v: unknown): v is Site =>
   typeof v === "object" && v !== null && ["forest", "water", "rock"].every((k) => finite((v as Record<string, unknown>)[k]) && (v as Record<string, number>)[k] >= 0 && (v as Record<string, number>)[k] <= 1);
 

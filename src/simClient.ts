@@ -124,7 +124,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
     case "cmdResult": {
       const done = pending.get(m.id);
       pending.delete(m.id);
-      done?.({ ok: m.ok, reason: m.reason });
+      done?.({ ok: m.ok, reason: m.reason, ids: m.ids });
       break;
     }
     case "queryResult": {

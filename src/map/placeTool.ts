@@ -17,7 +17,7 @@ import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, isStrokeTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -80,7 +80,7 @@ export function attachPlaceTool(view: View): void {
 
   const active = (): PlaceTool | null => {
     const t = tool.value;
-    return t && isPlaceTool(t) ? t : null;
+    return t && isPlaceTool(t) && !isStrokeTool(t) ? t : null; // houses, workshops and shops go in strokes (strokeTool.ts)
   };
 
   // ----- cell lookup (rebuilt when the zone state changes) -----

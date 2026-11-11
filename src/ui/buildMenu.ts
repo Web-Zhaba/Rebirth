@@ -12,7 +12,7 @@ import type { RoadKind } from "../sim/types";
 import type { IconName } from "./icons";
 import { decimal, L } from "../i18n";
 
-export type CategoryId = "roads" | "zones" | "food" | "farm" | "services" | "past";
+export type CategoryId = "roads" | "town" | "zones" | "food" | "farm" | "services" | "past";
 
 export interface Category {
   id: CategoryId;
@@ -22,9 +22,10 @@ export interface Category {
 
 export const CATEGORIES: Category[] = [
   { id: "roads", label: L("Дороги", "Roads"), tools: ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore"] },
+  { id: "town", label: L("Город", "Town"), tools: ["house", "workshop", "shop", "barn", "cellar"] },
   { id: "zones", label: L("Зоны", "Zones"), tools: ["res", "craft", "trade", "field", "clearing", "clear"] },
   { id: "food", label: L("Еда", "Food"), tools: ["gumno", "garden", "hunter", "fisher", "forager", "orchard", "apiary"] },
-  { id: "farm", label: L("Ресурсы", "Resources"), tools: ["woodcutter", "sawpit", "quarry", "barn", "cellar"] },
+  { id: "farm", label: L("Ресурсы", "Resources"), tools: ["woodcutter", "sawpit", "quarry"] },
   { id: "services", label: L("Службы", "Services"), tools: ["well", "market", "chapel", "school", "healer", "townhall"] },
   { id: "past", label: L("Прошлое", "Past"), tools: ["dig", "restored", "museum"] },
 ];
@@ -32,7 +33,7 @@ export const CATEGORIES: Category[] = [
 // Physical key codes (layout independent: Q is the key left of W also on a Russian layout).
 export const ITEM_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI"] as const;
 export const ITEM_KEY_LABEL = ["Q", "W", "E", "R", "T", "Y", "U", "I"] as const;
-export const CATEGORY_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6"] as const;
+export const CATEGORY_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7"] as const;
 export const DEMOLISH_KEY = "KeyB";
 
 export const categoryOf = (t: Tool): Category => CATEGORIES.find((c) => c.tools.includes(t))!;
@@ -44,6 +45,9 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   bridge: "bridge",
   bulldoze: "bulldoze",
   restore: "street",
+  house: "res",
+  workshop: "craft",
+  shop: "trade",
   res: "res",
   craft: "craft",
   trade: "trade",
@@ -80,6 +84,9 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   bridge: L("Мост", "Bridge"),
   bulldoze: L("Снос", "Demolish"),
   restore: L("Старые улицы", "Old streets"),
+  house: L("Дом", "House"),
+  workshop: L("Мастерская", "Workshop"),
+  shop: L("Лавка", "Shop"),
   res: L("Жильё", "Housing"),
   craft: L("Ремесло", "Crafts"),
   trade: L("Торговля", "Trade"),
@@ -99,6 +106,9 @@ const PURPOSE: Record<Tool, string> = {
   bridge: L("Широкий мост на сваях над водой: по нему проедут грузы", "A wide bridge on piles over water: carts can cross it"),
   bulldoze: L("Снести участок дороги вместе с планами вдоль него", "Demolish a road section along with the plans beside it"),
   restore: L("Проложить заново раскопанную улицу целиком: старая тропа станет тропой, улица — дорогой", "Rebuild an excavated street whole: an old path becomes a path, a street becomes a road"),
+  house: L("Дома вдоль дороги: протяните вдоль улицы — встанет ряд. Старые фундаменты занимаются первыми", "Houses along a road: drag along a street for a row. Old foundations are taken first"),
+  workshop: L("Мастерские вдоль дороги: ткацкая (одежда), гончарня (посуда), столярная (утварь), кузница (инструменты)", "Workshops along a road: weaving (clothing), pottery (dishes), carpentry (furnishings), smithy (tools)"),
+  shop: L("Магазины и таверна вдоль дороги", "Shops and a tavern along a road"),
   res: L("Размечает участки под жильё: сюда придут новые семьи", "Zones plots for housing: new families will come here"),
   craft: L("Размечает участки под мастерские: ткацкая (одежда), гончарня (посуда), столярня (утварь), кузница (инструменты)", "Zones plots for workshops: weaving (clothing), pottery (dishes), carpentry (furnishings), smithy (tools)"),
   trade: L("Размечает участки под магазины и таверну", "Zones plots for shops and a tavern"),
@@ -141,6 +151,9 @@ const SITE: Partial<Record<Tool, string>> = {
   apiary: L("Не на воде и не на болоте", "Not on water or marsh"),
   clearing: L(`Контур до ${CLEARING.maxArea / 10000} га, не дальше ${CLEARING.reach} м от построенной дороги`, `An outline up to ${CLEARING.maxArea / 10000} ha, within ${CLEARING.reach} m of a built road`),
   field: L("Замкнутый контур на суше, не через дорогу и не поверх другого поля", "A closed outline on land, not across a road or over another field"),
+  house: L("Вдоль построенной дороги; старые фундаменты у неё — первыми, нераскопанные сначала раскопают", "Along a built road; old foundations by it go first, outlines are dug first"),
+  workshop: L("Вдоль построенной дороги; старые фундаменты у неё — первыми", "Along a built road; old foundations by it go first"),
+  shop: L("Вдоль построенной дороги; старые фундаменты у неё — первыми", "Along a built road; old foundations by it go first"),
 };
 
 // Hover text of the stone materials, which replace the tool text while chosen.

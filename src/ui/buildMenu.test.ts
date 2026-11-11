@@ -8,12 +8,14 @@ describe("build menu", () => {
     const want: Tool[] = ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore", "res", "craft", "trade", "field", "clearing", "clear", ...PLACE_TOOLS];
     expect([...all].sort()).toEqual([...want].sort());
     for (const c of CATEGORIES) expect(c.tools.length).toBeLessThanOrEqual(ITEM_KEYS.length);
-    expect(CATEGORIES.length).toBe(6);
+    expect(CATEGORIES.length).toBe(7); // six again once the zones go (docs/PLAN-build.md Z3)
   });
   it("maps keys to items of the active category, B to demolish", () => {
     expect(toolForKey("KeyQ", "food")).toBe("gumno");
     expect(toolForKey("KeyQ", "farm")).toBe("woodcutter");
-    expect(toolForKey("KeyR", "farm")).toBe("barn");
+    expect(toolForKey("KeyR", "farm")).toBeNull();
+    expect(toolForKey("KeyQ", "town")).toBe("house");
+    expect(toolForKey("KeyR", "town")).toBe("barn");
     expect(toolForKey("KeyY", "roads")).toBe("restore");
     expect(toolForKey("KeyU", "roads")).toBeNull();
     expect(toolForKey("KeyI", "roads")).toBeNull();

@@ -611,12 +611,12 @@ describe("placement", () => {
     expect(canPlace(s, t("barn"), edgeId(s), 1, 3, NO_SITE)).toEqual({ ok: true });
     expect(canPlace(s, t("gumno"), edgeId(s), -1, 3, NO_SITE)).toEqual({ ok: true }); // 1 x 2 cells
   });
-  it("rejects bad edges, unbuilt roads, lots running off the road and non-placed templates", () => {
+  it("rejects bad edges, unbuilt roads and lots running off the road; a house fits a lot (strokes lay houses)", () => {
     const s = base();
     const e = edgeId(s);
     expect(canPlace(s, t("barn"), 999, 1, 0, NO_SITE)).toMatchObject({ ok: false, reason: "Нет такой дороги" });
     expect(canPlace(s, t("barn"), e, 1, 99, NO_SITE)).toMatchObject({ ok: false, reason: "Не хватает места вдоль дороги" });
-    expect(canPlace(s, t("izba"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
+    expect(canPlace(s, t("izba"), e, 1, 3, NO_SITE)).toEqual({ ok: true });
     const slow = town([], { roads: road([[0, 0], [160, 0]], 50) });
     expect(canPlace(slow, t("barn"), edgeId(slow), 1, 3, NO_SITE)).toMatchObject({ ok: false, reason: "Дорога ещё не построена" });
   });

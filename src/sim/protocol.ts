@@ -2,6 +2,7 @@ import type { Speed } from "./clock";
 import type { Light, Rest, Trip } from "../map/life";
 import type { AdminOp } from "./admin";
 import type { SimDelta } from "./delta";
+import type { StrokeSpan } from "./stroke";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { TradeOrder } from "./trade";
@@ -34,6 +35,9 @@ export type Cmd =
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "placeOnFoundation"; template: string; foundationId: string }
+  // A row of houses, workshops or shops along roads (sim/stroke.ts); `drop` holds the keys of planned items left out.
+  | { type: "placeStroke"; template: string; spans: StrokeSpan[]; onlyFoundations?: boolean; drop?: string[] }
+  | { type: "cancelStroke"; ids: number[] } // undo of a stroke: its buildings nobody has started on
   // Dig a surveyed outline, or every outline of an old street (sim/digging.ts).
   | { type: "digFoundation"; foundationId: string }
   | { type: "digStreet"; streetId: string }
@@ -87,6 +91,7 @@ export type ToWorker =
 export interface CmdResult {
   ok: boolean;
   reason?: string;
+  ids?: number[]; // the buildings a placeStroke laid, for its undo
 }
 
 export type FromWorker =

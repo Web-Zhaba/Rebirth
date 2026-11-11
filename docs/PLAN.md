@@ -61,7 +61,8 @@ tiles hold the buildings and streets that excavation reveals later.
 - **E2** notebook: finds, Wikipedia articles unlocked by digs (saved with the town) and the chronicle.
 
 Next: pace and balance in `PLAN-pace.md`, interface in `PLAN-ui.md`, restoration-first gameplay in
-`PLAN-restoration.md`.
+`PLAN-restoration.md`, building without zones (placed houses in strokes, foundations first) in `PLAN-build.md`; it
+replaces the zones and zone growth of section 6.
 
 ## 5. Architecture
 

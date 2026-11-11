@@ -199,6 +199,8 @@ export const isUnlocked = (p: Pick<ProgressState, "techs">, key: string): boolea
 // The unlock key of a build-bar tool or template id, or null when it is available from the start.
 export function unlockKeyOf(tool: string): string | null {
   if (tool === "craft" || tool === "trade") return `zone:${tool}`;
+  if (tool === "workshop") return "zone:craft"; // the stroke tools (docs/PLAN-build.md) open with the zones they replace
+  if (tool === "shop") return "zone:trade";
   if (tool === "logyard" || tool === "stoneyard" || tool === "warehouse") return "barn"; // kinds of the storehouse
   if (tool === "stone" || tool === "stonebridge") return `road:${tool}`;
   return Object.hasOwn(UNLOCK_NAME, tool) && !tool.startsWith("zone:") && !tool.startsWith("road:") && tool !== "upgrade" ? tool : null;

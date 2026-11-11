@@ -57,6 +57,8 @@ export type OverlayId =
   | "road-hover"
   | "road-snap"
   | "place-lot"
+  | "stroke-plan"
+  | "stroke-skip"
   | "place-radius"
   | "reveal-disc"
   | "follow-target";

@@ -1,6 +1,6 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, isMaterialTool, isPlaceTool, isRoadTool, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
+import { flash, isMaterialTool, isPlaceTool, isRoadTool, isStrokeTool, onlyFoundations, setOnlyFoundations, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
@@ -48,7 +48,7 @@ effect(() => {
   }
 });
 
-const CATEGORY_ICON: Record<CategoryId, IconName> = { roads: "dirt", zones: "res", food: "food", farm: "log", services: "well", past: "dig" };
+const CATEGORY_ICON: Record<CategoryId, IconName> = { roads: "dirt", town: "town", zones: "res", food: "food", farm: "log", services: "well", past: "dig" };
 
 // A category button: the live one with its tray open closes it, any other opens its own.
 const pickCategory = (id: CategoryId): void => {
@@ -87,12 +87,18 @@ function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<
   const place = touch
     ? L(`Тап — показать участок у дороги или старый фундамент, второй тап — поставить; ${EXIT_TOUCH}`, `Tap to show a lot by a road or an old foundation, tap it again to place; ${EXIT_TOUCH}`)
     : L("Клик — поставить у дороги или на старый фундамент, ПКМ или Esc — выйти", "Click to place by a road or on an old foundation, RMB or Esc — exit");
+  const stroke = touch
+    ? L(`Проведите вдоль дороги — ряд зданий, тап по зданию в плане — убрать или вернуть, «Построить» — готово; ${EXIT_TOUCH}`, `Drag along a road for a row, tap a planned building to drop or return it, «Build» to finish; ${EXIT_TOUCH}`)
+    : L("Протяните вдоль дороги — ряд, клик — одно; Shift — обе стороны, G — только фундаменты. В плане: клик по зданию — убрать или вернуть, Enter — строить, Esc — отмена. Ctrl+Z — отменить последнюю протяжку", "Drag along a road for a row, click for one; Shift — both sides, G — foundations only. In the plan: click a building to drop or return it, Enter — build, Esc — cancel. Ctrl+Z — undo the last stroke");
   const service = (id: keyof typeof SERVICES, tail: string) => `${place}. ${L(`Подсветка дорог — охват ${SERVICES[id].reach} м по дорогам`, `Highlighted roads — reach ${SERVICES[id].reach} m by road`)}${tail}`;
   const tool: Partial<Record<Tool, string>> = {
     bulldoze: touch ? L(`Тап по участку — снести; ${EXIT_TOUCH}`, `Tap a section to demolish; ${EXIT_TOUCH}`) : L("Клик по участку — снести, Esc — выйти", "Click a section to demolish, Esc — exit"),
     restore: touch
       ? L(`Тап по раскопанной улице — она подсветится целиком с ценой, второй тап — восстановить; ${EXIT_TOUCH}`, `Tap an excavated street — it lights up whole with its cost; tap again to restore; ${EXIT_TOUCH}`)
       : L("Наведите на раскопанную улицу — она подсветится целиком с ценой, клик — восстановить, Esc — выйти", "Hover over an excavated street — it lights up whole with its cost; click to restore, Esc — exit"),
+    house: stroke,
+    workshop: stroke,
+    shop: stroke,
     res: brush,
     craft: brush,
     trade: brush,
@@ -310,6 +316,17 @@ export function BuildBar() {
               const lock = progress ? lockReason({ progress }, o.id) : null;
               return { id: o.id, label: o.label, title: lock ? `${o.title}: ${lock}` : o.title, disabled: !!lock };
             })}
+          />
+        )}
+        {active && isStrokeTool(active) && (
+          <Segmented
+            label={L("Где строить", "Where to build")}
+            value={onlyFoundations.value ? "old" : "all"}
+            onChange={(k) => setOnlyFoundations(k === "old")}
+            options={[
+              { id: "all", label: L("Фундаменты и пустые места", "Foundations and gaps"), title: L("Сначала старые фундаменты, в промежутках — новые здания", "Old foundations first, new buildings in the gaps") },
+              { id: "old", label: L("Только фундаменты", "Foundations only"), title: L("Только старые фундаменты, промежутки остаются пустыми (G)", "Only old foundations, the gaps stay empty (G)") },
+            ]}
           />
         )}
         {active && !msg && <CostLine t={active} />}

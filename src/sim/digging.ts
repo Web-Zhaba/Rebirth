@@ -2,6 +2,7 @@ import { BUILDINGS } from "./buildings";
 import { addChronicle } from "./chronicle";
 import { salvagedStone } from "./excavation";
 import { foundationScale, lotRing } from "./foundationLots";
+import { canPlaceOnFoundation, placeOnFoundation } from "./growth";
 import { kindName, siteTitle, tierContext, tierOf } from "./heritage";
 import { beyondSurvey, catalogue, foundIds } from "./items";
 import { orientedBox } from "./heritageGeo";
@@ -20,7 +21,7 @@ import { L, plural } from "../i18n";
 export const EXCAVATION = "excavation";
 export const isExcavation = (b: Pick<Building, "template">): boolean => b.template === EXCAVATION;
 
-export type DigResult = { ok: true; sim: SimState; count: number } | { ok: false; reason: string };
+export type DigResult<S = SimState> = { ok: true; sim: S; count: number } | { ok: false; reason: string };
 
 // Why the outline cannot be ordered dug, or null.
 export function digBlocker(s: Pick<SimState, "buildings">, f: FoundFoundation | undefined): string | null {
@@ -31,7 +32,7 @@ export function digBlocker(s: Pick<SimState, "buildings">, f: FoundFoundation | 
 }
 
 // The planned dig of an outline: the ring at full size, labor by its area.
-function excavationSite(f: FoundFoundation, id: number, now: number): Building {
+export function excavationSite(f: FoundFoundation, id: number, now: number): Building {
   const t = BUILDINGS[EXCAVATION];
   const ring = lotRing(f);
   const box = orientedBox(ring);
@@ -56,7 +57,9 @@ function excavationSite(f: FoundFoundation, id: number, now: number): Building {
   };
 }
 
-function order(s: SimState, list: readonly FoundFoundation[]): SimState {
+type DigState = Pick<SimState, "buildings" | "finds" | "nextBuildingId" | "gameMinutes">;
+
+function order<S extends DigState>(s: S, list: readonly FoundFoundation[]): S {
   let id = s.nextBuildingId;
   const buildings = { ...s.buildings };
   for (const f of list) buildings[id] = excavationSite(f, id++, s.gameMinutes);
@@ -64,7 +67,7 @@ function order(s: SimState, list: readonly FoundFoundation[]): SimState {
 }
 
 // Orders one outline dug.
-export function orderDig(s: SimState, foundationId: unknown): DigResult {
+export function orderDig<S extends DigState>(s: S, foundationId: unknown): DigResult<S> {
   if (typeof foundationId !== "string") return { ok: false, reason: L("Некорректная находка", "Invalid find") };
   const f = s.finds.foundations.find((x) => x.id === foundationId);
   const why = digBlocker(s, f);
@@ -127,7 +130,12 @@ export function completeExcavations(s: SimState): SimState {
   }
   const n = done.length;
   if (n > 1) chronicle = addChronicle(chronicle, s.gameMinutes, "dig:dug", L(`Раскопано ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`, `${n} foundations dug`));
-  const out: SimState = { ...s, buildings, events, chronicle, stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock, finds: { ...s.finds, foundations } };
+  let out: SimState = { ...s, buildings, events, chronicle, stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock, finds: { ...s.finds, foundations } };
+  // A dig a stroke ordered puts its building on the ring now (sim/stroke.ts); one no longer possible leaves it free.
+  for (const b of done) {
+    const t = b.then ? BUILDINGS[b.then] : undefined;
+    if (t && b.foundationId && canPlaceOnFoundation(out, t, b.foundationId).ok) out = placeOnFoundation(out, t, b.foundationId);
+  }
   return reportFinds(s, out, [done[0].lot.cx, done[0].lot.cy]);
 }
 

@@ -3,6 +3,7 @@ import { LANDS } from "../world/landcover";
 import { BUILDINGS, FLOOR, homesOf, isPriority, JOB_KEYS, levelHeight, maxLevel, startLevel } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
+import { EXCAVATION } from "./digging";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
 import { parseProgress } from "./research";
@@ -224,6 +225,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       if (isSite || raw.asItWas === true) out[id].asItWas = true;
       if ((isSite || raw.asItWas === true) && isNum(raw.restoreWeight) && raw.restoreWeight > 0) out[id].restoreWeight = Math.min(1000, raw.restoreWeight);
       if (raw.asItWas === true && raw.landmark === true) out[id].landmark = true;
+      if (raw.template === EXCAVATION && typeof raw.then === "string" && Object.hasOwn(BUILDINGS, raw.then)) out[id].then = raw.then;
       if (Array.isArray(raw.exhibits) && raw.exhibits.length <= 8 && raw.exhibits.every((x) => x === null || (typeof x === "string" && x.length <= 300))) out[id].exhibits = raw.exhibits as (string | null)[];
       // The ring's area against the template's footprint: saved, or measured on the ring (a restoration had none).
       const ringArea = Math.abs(out[id].footprint.reduce((a, p, i, r) => a + p[0] * r[(i + 1) % r.length][1] - r[(i + 1) % r.length][0] * p[1], 0) / 2);

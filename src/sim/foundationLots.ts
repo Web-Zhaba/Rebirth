@@ -193,7 +193,8 @@ export function foundationIndex(list: readonly FoundFoundation[]): FoundationInd
   return idx;
 }
 
-// Does a polygon (a lot cell) lie on a foundation that is a lot or a heritage site still standing? Regular lots avoid them.
+// Does a polygon (a lot cell) lie on a foundation that is a lot, an outline still to dig, or a heritage site still
+// standing? Regular lots avoid them.
 export function onReservedGround(list: readonly FoundFoundation[], poly: readonly Pt[]): FoundFoundation | null {
   if (list.length === 0) return null;
   let x0 = Infinity;
@@ -207,13 +208,15 @@ export function onReservedGround(list: readonly FoundFoundation[], poly: readonl
     y1 = Math.max(y1, y);
   }
   for (const { f } of foundationIndex(list).near(x0, y0, x1, y1)) {
-    if (!isLotFoundation(f) && !(isHeritage(f) && f.state !== "lost")) continue;
+    const outline = f.ghost === true && f.area >= FOUNDATION_LOT.minArea;
+    if (!isLotFoundation(f) && !outline && !(isHeritage(f) && f.state !== "lost")) continue;
     if (polysOverlap(poly, f.ring)) return f;
   }
   return null;
 }
 
 export const FOUNDATION_TAKEN = L("Здесь старый фундамент: наведите на него, чтобы строить прямо на нём", "An old foundation is here: point at it to build right on it");
+export const OUTLINE_TAKEN = L("Здесь контур старой постройки: раскопайте его, чтобы строить на нём", "An old outline is here: dig it to build on it");
 
 // ---------- one foundation ----------
 

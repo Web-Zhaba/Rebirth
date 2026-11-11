@@ -5,6 +5,7 @@ import { PALETTE } from "../../ui/palette";
 // (later on top). Sources are the overlay ids.
 
 const placeColour = (p: Record<string, unknown>) => (p.pending ? PALETTE.warn : p.ok ? PALETTE.ok : PALETTE.bad);
+const strokeColour = (p: Record<string, unknown>) => (p.dropped ? PALETTE.pencilFaint : p.kind === "asItWas" ? PALETTE.info : p.kind === "dig" ? PALETTE.warn : PALETTE.ok);
 
 export const TOOL_OVERLAYS: OverlayLayer[] = [
   // red under the bulldozer; a road a drawing tool would rebuild: on a paper halo, green, amber while priced, red when it can't be
@@ -18,6 +19,14 @@ export const TOOL_OVERLAYS: OverlayLayer[] = [
   { source: "place-radius", style: { kind: "line", color: PALETTE.ink2, widthPx: 1.5, dash: [3, 2], opacity: 0.7 } },
   { source: "place-lot", style: { kind: "fill", color: placeColour, opacity: 0.45 } },
   { source: "place-lot", style: { kind: "line", color: placeColour, widthPx: 2 } },
+  // A stroke's plan (map/strokeTool.ts): new lots plain, old foundations stronger, "as it was" in the info ink, digs
+  // dashed, buildings the player dropped faint; foundations it leaves alone muted and dashed.
+  { source: "stroke-skip", style: { kind: "fill", color: PALETTE.pencilFaint, opacity: 0.3 } },
+  { source: "stroke-skip", style: { kind: "line", color: PALETTE.pencil, widthPx: 1.5, dash: [2, 2], opacity: 0.8 } },
+  { source: "stroke-plan", style: { kind: "fill", color: strokeColour, opacity: (p) => (p.dropped ? 0.08 : p.kind === "lot" ? 0.32 : 0.5) } },
+  { source: "stroke-plan", style: { kind: "line", color: PALETTE.paperRaised, widthPx: (p) => (p.hover ? 6 : 4), opacity: 0.6, filter: (p) => !p.dropped } },
+  { source: "stroke-plan", style: { kind: "line", color: strokeColour, widthPx: (p) => (p.dropped ? 1 : p.hover ? 3.5 : p.kind === "lot" ? 1.5 : 2.5), opacity: (p) => (p.dropped ? 0.6 : 1), filter: (p) => p.kind !== "dig" } },
+  { source: "stroke-plan", style: { kind: "line", color: strokeColour, widthPx: (p) => (p.hover ? 3.5 : 2.5), dash: [2, 1.5], filter: (p) => p.kind === "dig" } },
   { source: "reveal-disc", style: { kind: "fill", color: PALETTE.info, opacity: 0.18 } },
   { source: "reveal-disc", style: { kind: "line", color: PALETTE.info, widthPx: 2, dash: [3, 2] } },
   { source: "follow-target", style: { kind: "circle", radiusPx: 12, color: PALETTE.warn, opacity: 0.12, strokeColor: PALETTE.warn, strokeWidthPx: 2, strokeOpacity: 0.9 } },

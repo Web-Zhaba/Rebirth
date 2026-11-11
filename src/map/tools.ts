@@ -13,13 +13,17 @@ export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | 
 export type RoadMode = "straight" | "arc";
 export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
 export type ZoneTool = BrushTool | "field" | "clearing";
-export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "museum" | "townhall" | ServiceId;
+// Laid in strokes along roads (map/strokeTool.ts, sim/stroke.ts): the buildings zones grew, as variants of three tools.
+export type StrokeTool = "house" | "workshop" | "shop";
+export type PlaceTool = StrokeTool | "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "museum" | "townhall" | ServiceId;
 export type Tool = RoadTool | ZoneTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
 export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
 export const isZoneTool = (t: Tool): t is ZoneTool => isBrushTool(t) || t === "field" || t === "clearing";
-export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "restored", "museum", "well", "market", "chapel", "school", "healer", "townhall"];
+export const STROKE_TOOLS: StrokeTool[] = ["house", "workshop", "shop"];
+export const isStrokeTool = (t: Tool | null): t is StrokeTool => t === "house" || t === "workshop" || t === "shop";
+export const PLACE_TOOLS: PlaceTool[] = [...STROKE_TOOLS, "gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "restored", "museum", "well", "market", "chapel", "school", "healer", "townhall"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
@@ -70,6 +74,20 @@ export interface PlaceVariant {
   title: string;
 }
 export const PLACE_VARIANTS: Partial<Record<PlaceTool, PlaceVariant[]>> = {
+  house: [
+    { id: "izba", label: L("Дом", "House"), title: L("Дом на одну семью", "A house for one family") },
+    { id: "izba5", label: L("Большой", "Large"), title: L("Большой дом на две семьи", "A large house for two families") },
+  ],
+  workshop: [
+    { id: "weaver", label: L("Ткацкая", "Weaving"), title: L("Ткацкая мастерская: одежда", "Weaving workshop: clothing") },
+    { id: "pottery", label: L("Гончарня", "Pottery"), title: L("Гончарня: посуда", "Pottery: dishes") },
+    { id: "carpentry", label: L("Столярная", "Carpentry"), title: L("Столярная мастерская: утварь из досок", "Carpentry workshop: furnishings from planks") },
+    { id: "smithy", label: L("Кузница", "Smithy"), title: L("Кузница: инструменты", "Smithy: tools") },
+  ],
+  shop: [
+    { id: "shop", label: L("Магазин", "Shop"), title: L("Магазин: раздаёт товары по домам", "Shop: hands goods out to the houses") },
+    { id: "tavern", label: L("Таверна", "Tavern"), title: L("Таверна: вечерний отдых", "Tavern: evening rest") },
+  ],
   barn: [
     { id: "barn", label: L("Еда", "Food"), title: L("Амбар: зерно и припасы", "Barn: grain and provisions") },
     { id: "logyard", label: L("Лес", "Timber"), title: L("Склад леса: брёвна и доски", "Timber yard: logs and planks") },
@@ -84,6 +102,25 @@ export const PLACE_VARIANTS: Partial<Record<PlaceTool, PlaceVariant[]>> = {
 export const placeVariant = signal<Partial<Record<PlaceTool, string>>>({});
 // The template a placement tool puts down: the kind chosen for it, or its first kind, or the tool itself.
 export const placeTemplate = (t: PlaceTool, chosen: Partial<Record<PlaceTool, string>> = placeVariant.value): string => chosen[t] ?? PLACE_VARIANTS[t]?.[0].id ?? t;
+
+// A stroke takes only old foundations and leaves the gaps empty (G); kept between sessions.
+const ONLY_FOUNDATIONS_STORE = "rebirth.stroke.onlyFoundations";
+const readOnlyFoundations = (): boolean => {
+  try {
+    return localStorage.getItem(ONLY_FOUNDATIONS_STORE) === "1";
+  } catch {
+    return false;
+  }
+};
+export const onlyFoundations = signal(readOnlyFoundations());
+export function setOnlyFoundations(on: boolean): void {
+  onlyFoundations.value = on;
+  try {
+    localStorage.setItem(ONLY_FOUNDATIONS_STORE, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
 
 // Brief message about a rejected action, shown by the toolbar.
 export const toolMsg = signal<string | null>(null);

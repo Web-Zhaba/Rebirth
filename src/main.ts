@@ -3,6 +3,7 @@ import { computed, effect } from "@preact/signals";
 import { attachArticles } from "./map/articles";
 import { attachExcavation } from "./map/excavation";
 import { attachPlaceTool } from "./map/placeTool";
+import { attachStrokeTool } from "./map/strokeTool";
 import { attachRevealTool } from "./map/revealTool";
 import { attachRoadTool } from "./map/roadTool";
 import { attachZoneTool } from "./map/zoneTool";
@@ -86,6 +87,7 @@ function start(view: View): void {
   attachRoadTool(view);
   attachZoneTool(view);
   attachPlaceTool(view);
+  attachStrokeTool(view);
   if (import.meta.env.DEV) attachRevealTool(view); // admin-only; production has no admin panel
   attachToolRepeat(view);
   let centred = false;

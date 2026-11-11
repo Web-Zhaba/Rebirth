@@ -10,13 +10,13 @@ import { L } from "../i18n";
 // whose purpose matches its known old kind (`Building.asItWas`). This module keeps its consequences: the site is being
 // restored once ordered, restored once finished (research, an idea, a chronicle line) and lost once demolished.
 
-const withFoundation = (s: SimState, id: string, patch: Partial<FoundFoundation>): SimState => ({
+const withFoundation = <S extends Pick<SimState, "finds">>(s: S, id: string, patch: Partial<FoundFoundation>): S => ({
   ...s,
   finds: { ...s.finds, foundations: s.finds.foundations.map((f) => (f.id === id ? { ...f, ...patch } : f)) },
 });
 
 // A building "as it was" has just been planned on its foundation: the site is being restored.
-export function orderRestoration(s: SimState, b: Building): SimState {
+export function orderRestoration<S extends Pick<SimState, "finds">>(s: S, b: Building): S {
   if (!b.asItWas || !b.foundationId) return s;
   return withFoundation(s, b.foundationId, { state: "restoring" });
 }
