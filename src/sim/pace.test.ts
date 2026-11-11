@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceTo, BASE_TICK, clockAt, OFFLINE, OFFLINE_CAP, tickMs, type Pace, type Speed } from "./clock";
+import { advanceTo, BASE_TICK, clockAt, OFFLINE, OFFLINE_CAP, POLL_MS, tickMs, type Pace, type Speed } from "./clock";
 import { Handler, type Storage } from "./handler";
 import { emptyGrowth, seedOf } from "./growth";
 import type { FromWorker, ToWorker } from "./protocol";
@@ -37,7 +37,7 @@ describe("tickMs", () => {
   it("clockAt interpolates with the live rate and freezes when paused", () => {
     expect(clockAt(100, NOW, NOW + 1000, 1)).toBeCloseTo(104);
     expect(clockAt(100, NOW, NOW + 500, 4)).toBeCloseTo(108);
-    expect(clockAt(100, NOW, NOW + 60_000, 1)).toBeCloseTo(100 + BASE_TICK, 2); // never past the next tick
+    expect(clockAt(100, NOW, NOW + 60_000, 1)).toBeCloseTo(100 + (BASE_TICK * (tickMs(100, live(1)) + 2 * POLL_MS)) / tickMs(100, live(1))); // a stalled worker stops it
     expect(clockAt(100, NOW, NOW + 1000, 0)).toBe(100);
   });
 });
