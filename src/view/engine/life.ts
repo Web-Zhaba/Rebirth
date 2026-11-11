@@ -3,7 +3,7 @@ import { START_MINUTE_OF_DAY } from "../../sim/clock";
 import type { Engine } from "../../engine/engine";
 import { packColor } from "../../engine/overlay/geometry";
 import { colourBits, DOT_FLOATS, Dots, writeDot } from "../../engine/scene/dots";
-import { FIGURE_VERTEX_FLOATS, type TownMesh } from "../../engine/scene/townMesh";
+import { FIGURE_VERTEX_FLOATS, FOOT_VERTEX_FLOATS, type TownMesh } from "../../engine/scene/townMesh";
 import { lightOpacity, placeAt, standAt, type Light, type Rest, type Trip } from "../../map/life";
 import { tool } from "../../map/tools";
 import { buildRig, orient, poseOf, villagerLook, writeVillager, type Action, type Rig } from "../../map/villagerModel";
@@ -32,6 +32,11 @@ const FIGURE_MIN_PX = 5; // a figure this tall on screen reads better than a dot
 const FIGURE_SLACK = 2.5; // the foreground of a tilted view is this much nearer the eye than the target, at most
 const FIGURE_VERTICES = 120_000; // figures are rewritten on the CPU every frame: 4 MB of vertices at most
 const FIGURE_MARGIN_PX = 40; // a figure this far off the screen's edge is not drawn
+const FOOT_R = 0.3; // m: a figure's contact shadow, a soft ellipse under it
+const FOOT_REACH = 2.4; // m it stretches away from a low sun, at most
+const FOOT_LIFT = 0.06; // m over the ground
+const FOOT_DARK = 0.5;
+const FOOT_QUAD = [-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1];
 const RIGS_KEPT = 1500; // looks remembered before the cache starts over
 const EQUATOR = 2 * Math.PI * 6378137;
 
@@ -62,6 +67,7 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
   };
   const ink = colourBits(packColor(PALETTE.ink));
   let figures = new Float32Array(64 * FIGURE_VERTEX_FLOATS);
+  let feet = new Float32Array(64 * 6 * FOOT_VERTEX_FLOATS);
   const rigs = new Map<string, Rig>();
   // The look of a resident follows them as they grow: their id is the seed, their age rounds down to a year.
   const rigOf = (who: number, sex: "m" | "f", age: number): Rig => {
@@ -135,7 +141,7 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     const height = engine.canvas.clientHeight;
     const moving = o.gameMinPerSec() > 0;
     const seconds = now / 1000;
-    const tall: { d: number; who: number; sex: "m" | "f"; age: number; p: [number, number, number]; dir: [number, number]; action: Action }[] = [];
+    const tall: { d: number; who: number; sex: "m" | "f"; age: number; p: [number, number, number]; at: [number, number]; g: number; dir: [number, number]; action: Action }[] = [];
     const person = (who: number | undefined, sex: "m" | "f" | undefined, age: number | undefined, at: [number, number], dir: [number, number], action: Action) => {
       const [lng, lat] = f.toLngLat(at[0], at[1]);
       const g = ground(lat, lng);
@@ -145,7 +151,7 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
         const d = Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]);
         const s = d < figureReach ? engine.project(lat, lng, g + 1) : null;
         if (s && s[0] > -FIGURE_MARGIN_PX && s[0] < width + FIGURE_MARGIN_PX && s[1] > -FIGURE_MARGIN_PX && s[1] < height + FIGURE_MARGIN_PX) {
-          tall.push({ d, who, sex, age, p, dir, action });
+          tall.push({ d, who, sex, age, p, at, g, dir, action });
           return;
         }
       }
@@ -171,7 +177,13 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     }
     // The nearest as figures while the vertex budget lasts, the others as dots.
     tall.sort((a, b) => a.d - b.d);
+    // Contact shadows point away from the sun and grow as it sinks (the town's light, in the same east/north/up frame).
+    const sun = town.look.light;
+    const flat = Math.hypot(sun[0], sun[1]);
+    const away: [number, number] = flat > 1e-3 ? [-sun[0] / flat, -sun[1] / flat] : [0, 0];
+    const stretch = (town.look.sunStrength * flat) / Math.max(sun[2], 0.05);
     let nv = 0;
+    let nf = 0;
     for (const m of tall) {
       const rig = rigOf(m.who, m.sex, m.age);
       if (nv + rig.vertices > FIGURE_VERTICES) {
@@ -186,10 +198,28 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
       // The steps follow the wall clock, not the walker: at game speed the town crosses in seconds.
       const pose = orient(poseOf(rig, moving ? m.action : "idle", seconds + m.who * 0.37), m.dir[0], m.dir[1]);
       nv = writeVillager(rig, pose, [m.p[0], m.p[1], m.p[2] - 1], figures, nv * FIGURE_VERTEX_FLOATS) / FIGURE_VERTEX_FLOATS;
+
+      // Its shadow: from under the feet to `len` away, following the ground's slope that way.
+      const r = FOOT_R * rig.look.scale;
+      const len = Math.min(FOOT_REACH, rig.look.stature * stretch);
+      const [lng, lat] = f.toLngLat(m.at[0] + away[0] * (len + r), m.at[1] + away[1] * (len + r));
+      const slope = len > 0.05 ? (ground(lat, lng) - m.g) / (len + r) : 0;
+      if ((nf + 6) * FOOT_VERTEX_FLOATS > feet.length) {
+        const bigger = new Float32Array(2 * feet.length);
+        bigger.set(feet);
+        feet = bigger;
+      }
+      for (let k = 0; k < 6; k++) {
+        const u = FOOT_QUAD[k * 2];
+        const w = FOOT_QUAD[k * 2 + 1];
+        const along = len / 2 + u * (r + len / 2);
+        feet.set([m.p[0] + away[0] * along - away[1] * w * r, m.p[1] + away[1] * along + away[0] * w * r, m.p[2] - 1 + FOOT_LIFT + slope * along, u, w, FOOT_DARK], nf++ * FOOT_VERTEX_FLOATS);
+      }
     }
     dots.set(1, cb, nc);
     dots.set(2, wb, nw);
     town.setFigures(figures, nv);
+    town.setFootShadows(feet, nf);
   });
 
   // A click on a resident follows them (a larger hit target than the dot, as before). It takes the click: this handler

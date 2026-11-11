@@ -39,8 +39,11 @@ Each one ends with tests, a build and screenshots in the preview, and is committ
 
 ### G3 — shadows
 
-- A 100 m map step for close-ups (10 cm texels), a wider, rotated PCF kernel.
-- Residents get a soft contact shadow stretched away from the sun.
+- The 3×3 PCF weighted as a tent, so an edge ramps evenly.
+- Residents get a soft contact shadow stretched away from the sun (a blended ellipse on the ground, following its
+  slope): on 20–40 cm texels a figure in the shadow map would be two texels wide and swim as it walks.
+- Not done: a 100 m map step for close-ups. A tilted close view sees ground well past 100 m, where the shadows
+  would then end; it needs a second cascade, not a smaller map.
 
 ### G4 — residents
 

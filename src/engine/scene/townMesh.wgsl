@@ -105,6 +105,29 @@ fn figureFs(v: FigureOut) -> @location(0) vec4f {
   return vec4f(v.c * k * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
 }
 
+// The residents' contact shadows (TownMesh.setFootShadows): a soft dark ellipse on the ground under each figure,
+// stretched away from the sun by the game (view/engine/life.ts). Multiplied into what is drawn under it.
+struct FootOut {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+  @location(1) a: f32,
+};
+
+@vertex
+fn footVs(@location(0) pos: vec3f, @location(1) uv: vec2f, @location(2) a: f32) -> FootOut {
+  var o: FootOut;
+  o.pos = frame.viewProj * vec4f(toRel(pos), 1.0);
+  o.uv = uv;
+  o.a = a;
+  return o;
+}
+
+@fragment
+fn footFs(v: FootOut) -> @location(0) vec4f {
+  let a = v.a * (1.0 - smoothstep(0.25, 1.0, length(v.uv)));
+  return vec4f(mix(vec3f(1.0), vec3f(0.42, 0.46, 0.58), a), 1.0);
+}
+
 // Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
 // metres along s and z; once windows get that small the grid turns into its average coverage. Returns (cover, id).
 fn windows(s: f32, len: f32, z: f32, top: f32, aw: f32, az: f32, floorH: f32, sill: f32, wh: f32, ww: f32, sp: f32) -> vec2f {

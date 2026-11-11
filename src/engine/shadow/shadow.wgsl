@@ -12,8 +12,9 @@ const SHADOW_INK = vec3f(0.84, 0.89, 1.0);
 
 // How lit a camera-relative point with normal `n` (ECEF) is by the sun: 1 in the open, 0 in full shadow. The point is
 // pushed off its surface along the normal (more where the sun grazes it) and towards the sun, by a texel or so, so a
-// surface does not shadow itself in stripes. PCF 3x3 over the hardware's 2x2 comparison filter; the shadows fade out
-// towards the map's edge and with frame.shadowData.y (the camera's height, the sun at the horizon).
+// surface does not shadow itself in stripes. PCF 3x3 over the hardware's 2x2 comparison filter, weighted as a tent so
+// an edge ramps evenly instead of in three steps; the shadows fade out towards the map's edge and with
+// frame.shadowData.y (the camera's height, the sun at the horizon).
 fn sunShadow(rel: vec3f, n: vec3f) -> f32 {
   let fade = frame.shadowData.y;
   if (fade <= 0.0) {
@@ -32,10 +33,11 @@ fn sunShadow(rel: vec3f, n: vec3f) -> f32 {
   var sum = 0.0;
   for (var dy = -1; dy <= 1; dy++) {
     for (var dx = -1; dx <= 1; dx++) {
-      sum += textureSampleCompareLevel(shadowMap, shadowCompare, uv + vec2f(f32(dx), f32(dy)) * du, c.z);
+      let w = f32((2 - abs(dx)) * (2 - abs(dy)));
+      sum += w * textureSampleCompareLevel(shadowMap, shadowCompare, uv + vec2f(f32(dx), f32(dy)) * du, c.z);
     }
   }
-  return mix(1.0, sum / 9.0, fade * (1.0 - smoothstep(0.8, 1.0, edge)));
+  return mix(1.0, sum / 16.0, fade * (1.0 - smoothstep(0.8, 1.0, edge)));
 }
 
 // The ink-blue cast of a shadow on a surface lit by a flat 0.55..1 ramp: `s` from sunShadow, `d` the unshadowed sun
