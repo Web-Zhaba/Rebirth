@@ -9,14 +9,14 @@ import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { PACE, payMaterials, produceStep } from "./production";
-import type { Building, City, Resident, SaveV4, SimState, ZoneCell } from "./types";
+import type { Building, City, Resident, SaveV4, SimState, LotCell } from "./types";
 import { emptyZones } from "./zones";
 
 const NOW = 1_800_000_000_000;
 const NOON = 100 * 1440 + 12 * 60 - 360; // inside work hours
 const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
 
-const cell = (cx: number): ZoneCell => ({ key: `1:1:${cx}:0`, edge: 1, side: 1, i: 0, depth: 0, cx, cy: 4, angle: 0, zone: "none", block: null });
+const cell = (cx: number): LotCell => ({ key: `1:1:${cx}:0`, edge: 1, side: 1, i: 0, depth: 0, cx, cy: 4, angle: 0, block: null });
 const dig = (id = 1, state: Building["state"] = "active"): Building => ({ ...makeBuilding(BUILDINGS.dig, cell(10), cell(10), id, 0), state, done: state === "active" ? 30 : 0, paid: true });
 
 function town(bs: Building[], diggers = 0, gm = NOON): SimState {

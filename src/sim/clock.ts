@@ -2,7 +2,7 @@ import { recordChronicle } from "./chronicle";
 import { dailyServices, refreshServices } from "./coverage";
 import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { digDone, keepRevealed } from "./excavation";
-import { advanceBuildings, advanceClearings, reportBuilt, spawnBuildings } from "./growth";
+import { advanceBuildings, advanceClearings, reportBuilt } from "./growth";
 import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales, rebalanceJobs, syncPeople } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
 import { eraStep, researchStep } from "./research";
@@ -131,7 +131,7 @@ export function step(s: SimState): SimState {
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
   if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = eraStep(museumDaily(restoreStreets(recognise(dailyServices(dailyStep(dailyEconomy(next))))))); // a tick crossed 00:00
   // whatever moved on the stock alone this tick (roads, trade, arrivals, gifts) is taken into the stores
-  return recordChronicle(s, settleStores(settleLevers(spawnBuildings(immigrationStep(next, BASE_TICK)))));
+  return recordChronicle(s, settleStores(settleLevers(immigrationStep(next, BASE_TICK))));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.

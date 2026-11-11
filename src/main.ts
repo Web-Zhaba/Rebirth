@@ -6,7 +6,7 @@ import { attachPlaceTool } from "./map/placeTool";
 import { attachStrokeTool } from "./map/strokeTool";
 import { attachRevealTool } from "./map/revealTool";
 import { attachRoadTool } from "./map/roadTool";
-import { attachZoneTool } from "./map/zoneTool";
+import { attachLandTool } from "./map/landTool";
 import { attachToolRepeat } from "./map/tools";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
@@ -22,7 +22,7 @@ import { attachBadges } from "./view/layers/badges";
 import { attachBuildingPick } from "./view/layers/buildings";
 import { attachServiceReach } from "./view/layers/reach";
 import { attachSitePick } from "./view/layers/ruins";
-import { attachClearingPick } from "./view/layers/zones";
+import { attachClearingPick } from "./view/layers/land";
 import { App } from "./ui/App";
 import { followResidentById } from "./ui/follow";
 import { lang } from "./i18n";
@@ -85,7 +85,7 @@ function start(view: View): void {
   attachArticleMarkers(view); // the notebook's Wikipedia entries where they belong
   attachServiceReach(); // what a service reaches, and its coverage overlay while one is selected
   attachRoadTool(view);
-  attachZoneTool(view);
+  attachLandTool(view);
   attachPlaceTool(view);
   attachStrokeTool(view);
   if (import.meta.env.DEV) attachRevealTool(view); // admin-only; production has no admin panel

@@ -1,5 +1,5 @@
 import { ROAD_KINDS } from "./roads";
-import type { Field, RoadEdge, RoadGraph, TerrainInfo, ZoneBlock, ZoneCell, ZoneState, ZoneType } from "./types";
+import type { Field, RoadEdge, RoadGraph, TerrainInfo, ZoneBlock, LotCell, ZoneState } from "./types";
 import { L } from "../i18n";
 
 export const CELL_SIZE = 8; // m, both along and across the road
@@ -73,7 +73,7 @@ function pointSegDist(px: number, py: number, ax: number, ay: number, bx: number
 }
 
 // Oriented squares with half side `h`: true when their interiors overlap.
-function squaresOverlap(a: ZoneCell, b: ZoneCell, h: number): boolean {
+function squaresOverlap(a: LotCell, b: LotCell, h: number): boolean {
   const dx = b.cx - a.cx;
   const dy = b.cy - a.cy;
   if (Math.hypot(dx, dy) >= 2 * h * Math.SQRT2) return false;
@@ -81,7 +81,7 @@ function squaresOverlap(a: ZoneCell, b: ZoneCell, h: number): boolean {
   for (const th of axes) {
     const ax = Math.cos(th);
     const ay = Math.sin(th);
-    const radius = (c: ZoneCell) => h * (Math.abs(Math.cos(c.angle) * ax + Math.sin(c.angle) * ay) + Math.abs(-Math.sin(c.angle) * ax + Math.cos(c.angle) * ay));
+    const radius = (c: LotCell) => h * (Math.abs(Math.cos(c.angle) * ax + Math.sin(c.angle) * ay) + Math.abs(-Math.sin(c.angle) * ax + Math.cos(c.angle) * ay));
     if (Math.abs(dx * ax + dy * ay) >= radius(a) + radius(b) - EPS) return false;
   }
   return true;
@@ -133,8 +133,8 @@ function segmentsDistance(p1: P, p2: P, p3: P, p4: P): number {
 
 const sortedEdgeIds = (g: RoadGraph) => Object.keys(g.edges).map(Number).sort((p, q) => p - q);
 
-function rawCells(g: RoadGraph): ZoneCell[] {
-  const out: ZoneCell[] = [];
+function rawCells(g: RoadGraph): LotCell[] {
+  const out: LotCell[] = [];
   for (const id of sortedEdgeIds(g)) {
     const e = g.edges[id];
     const a = g.nodes[e.a];
@@ -162,7 +162,6 @@ function rawCells(g: RoadGraph): ZoneCell[] {
             cx: a.x + ux * along - uy * across,
             cy: a.y + uy * along + ux * across,
             angle,
-            zone: "none",
             block: null,
           });
         }
@@ -200,7 +199,7 @@ function indexEdges(g: RoadGraph): Map<number, number[]> {
   return index;
 }
 
-function blockedByRoad(c: ZoneCell, g: RoadGraph, index: Map<number, number[]>): boolean {
+function blockedByRoad(c: LotCell, g: RoadGraph, index: Map<number, number[]>): boolean {
   const near = index.get(bucketKey(bucketOf(c.cx), bucketOf(c.cy)));
   if (!near) return false;
   const ux = Math.cos(c.angle);
@@ -224,7 +223,7 @@ function blockedByRoad(c: ZoneCell, g: RoadGraph, index: Map<number, number[]>):
 }
 
 // Terrain verdict for a cell: pending until its qkey has been sampled.
-function terrainBlock(c: ZoneCell, terrain: Record<string, TerrainInfo>): ZoneBlock | null {
+function terrainBlock(c: LotCell, terrain: Record<string, TerrainInfo>): ZoneBlock | null {
   const t = terrain[qkey(c.cx, c.cy)];
   if (!t) return "pending";
   if (t.land === "water") return "water";
@@ -232,12 +231,9 @@ function terrainBlock(c: ZoneCell, terrain: Record<string, TerrainInfo>): ZoneBl
   return null;
 }
 
-export function regenerateCells(
-  graph: RoadGraph,
-  oldCells: readonly ZoneCell[],
-  fields: readonly Field[],
-  terrain: Record<string, TerrainInfo>,
-): ZoneCell[] {
+// The lot cells of the road graph, each with what blocks it (another road, a field, water, a steep slope, terrain not
+// sampled yet). Pure: the same roads, fields and terrain give the same cells.
+export function regenerateCells(graph: RoadGraph, fields: readonly Field[], terrain: Record<string, TerrainInfo>): LotCell[] {
   const cells = rawCells(graph);
   const edgeIndex = indexEdges(graph);
   const fieldBoxes = fields.map((f) => {
@@ -247,7 +243,7 @@ export function regenerateCells(
   });
 
   // Roads, then overlap against older edges' surviving cells (cells arrive in edge order).
-  const accepted = new Map<number, ZoneCell[]>();
+  const accepted = new Map<number, LotCell[]>();
   for (const c of cells) {
     if (blockedByRoad(c, graph, edgeIndex)) {
       c.block = "road";
@@ -293,46 +289,11 @@ export function regenerateCells(
     if (c.depth > 0 && !c.block && prev.block) c.block = prev.block;
   }
 
-  // Zones follow the nearest previously zoned cell within 4 m. A cell still waiting for its terrain sample keeps the
-  // zone too: a road that splits a street moves its cells onto new sample points, and that must not erase the zone.
-  const zoned = new Map<number, ZoneCell[]>();
-  for (const o of oldCells) {
-    if (o.zone === "none") continue;
-    const key = bucketKey(Math.floor(o.cx / 8), Math.floor(o.cy / 8));
-    const list = zoned.get(key);
-    if (list) list.push(o);
-    else zoned.set(key, [o]);
-  }
-  if (zoned.size > 0) {
-    for (const c of cells) {
-      if (c.block && c.block !== "pending") continue;
-      const bx = Math.floor(c.cx / 8);
-      const by = Math.floor(c.cy / 8);
-      let best = 4 + EPS;
-      for (let ox = -1; ox <= 1; ox++) {
-        for (let oy = -1; oy <= 1; oy++) {
-          for (const o of zoned.get(bucketKey(bx + ox, by + oy)) ?? []) {
-            const d = Math.hypot(o.cx - c.cx, o.cy - c.cy);
-            if (d < best) {
-              best = d;
-              c.zone = o.zone;
-            }
-          }
-        }
-      }
-    }
-  }
   return cells;
 }
 
-// Sets `zone` on the listed cells; blocked cells are left alone. "none" clears.
-export function paintCells(cells: readonly ZoneCell[], keys: Iterable<string>, zone: "none" | ZoneType): ZoneCell[] {
-  const want = new Set(keys);
-  return cells.map((c) => (want.has(c.key) && !c.block && c.zone !== zone ? { ...c, zone } : c));
-}
-
 // Terrain grid points still to be sampled.
-export function pendingKeys(cells: readonly ZoneCell[]): string[] {
+export function pendingKeys(cells: readonly LotCell[]): string[] {
   const set = new Set<string>();
   for (const c of cells) if (c.block === "pending") set.add(qkey(c.cx, c.cy));
   return [...set];
@@ -392,8 +353,9 @@ function touchesRoad(pts: readonly [number, number][], g: RoadGraph): boolean {
   return false;
 }
 
-// Returns the polygon in counter-clockwise order with its area, or a Russian reason.
-export function validateField(pts: [number, number][], graph: RoadGraph, fields: readonly Field[]): FieldCheck {
+// Returns the polygon in counter-clockwise order with its area, or a Russian reason. `footprints`: the buildings standing
+// or planned, which a field may not cover.
+export function validateField(pts: [number, number][], graph: RoadGraph, fields: readonly Field[], footprints: readonly (readonly [number, number][])[] = []): FieldCheck {
   if (!Array.isArray(pts) || pts.length < 3) return bad(L("Нужно минимум 3 точки", "At least 3 points are needed"));
   if (!pts.every((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6)) {
     return bad(L("Некорректный контур", "Invalid outline"));
@@ -407,6 +369,7 @@ export function validateField(pts: [number, number][], graph: RoadGraph, fields:
   const ccw: [number, number][] = signed >= 0 ? pts.map((p) => [p[0], p[1]]) : pts.map((p) => [p[0], p[1]] as [number, number]).reverse();
   if (touchesRoad(ccw, graph)) return bad(L("Поле пересекает дорогу", "The field crosses a road"));
   if (fields.some((f) => polygonsOverlap(ccw, f.pts))) return bad(L("Поле накладывается на другое", "The field overlaps another"));
+  if (footprints.some((fp) => fp.length >= 3 && polygonsOverlap(ccw, fp))) return bad(L("Поле накладывается на здание", "The field covers a building"));
   return { ok: true, pts: ccw, area };
 }
 

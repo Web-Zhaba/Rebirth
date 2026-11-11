@@ -25,7 +25,7 @@ const builtRoad = (): RoadGraph => {
 
 const mk = (foundations: FoundFoundation[] = [], techs = allResearched().techs): SimState => {
   const roads = builtRoad();
-  const cells = regenerateCells(roads, [], [], {}).map((c) => ({ ...c, block: c.block === "pending" ? null : c.block }));
+  const cells = regenerateCells(roads, [], {}).map((c) => ({ ...c, block: c.block === "pending" ? null : c.block }));
   return {
     realTime: 0,
     gameMinutes: 1000,
@@ -61,7 +61,7 @@ describe("a stroke", () => {
     expect(xs(s, back)).toEqual([...xs(s, back)].sort((p, q) => q - p));
   });
 
-  it("places what it planned: houses on their lots, standing on their own zone", () => {
+  it("places what it planned: houses on their lots, kept while their road stands", () => {
     const s = mk();
     const plan = planStroke(s, BUILDINGS.izba, [span(s, -100, -20), span(s, -100, -20, -1)]);
     const r = applyStroke(s, plan.items);
@@ -71,7 +71,7 @@ describe("a stroke", () => {
     expect(built.every((b) => b.zone === "res" && b.state === "planned")).toBe(true);
     // ids follow the stroke: the build queue takes them in that order
     expect(built.map((b) => b.id)).toEqual(built.map((_, i) => i + 1));
-    expect(reconcile(r.sim.buildings, r.sim.roads, r.sim.zones.cells)).toBe(r.sim.buildings);
+    expect(reconcile(r.sim.buildings, r.sim.roads)).toBe(r.sim.buildings);
     // the ground is taken: a second stroke over it plans nothing
     expect(planStroke(r.sim, BUILDINGS.izba, [span(s, -100, -20)]).items).toEqual([]);
   });
@@ -141,7 +141,7 @@ describe("a stroke", () => {
     expect(planStroke(raw, BUILDINGS.izba, [span(s, -100, -20)]).items).toEqual([]);
   });
 
-  it("is undone while nobody has started on it: lots unpainted, a restoration no longer under way, started ones kept", () => {
+  it("is undone while nobody has started on it: a restoration no longer under way, started ones kept", () => {
     const s = mk([fnd("shop", rect(-4, 46, 10, 10), { cls: "shop" })]);
     const r = applyStroke(s, planStroke(s, BUILDINGS.shop, [span(s, -60, 40)]).items);
     const ids = Object.keys(r.sim.buildings).map(Number);
@@ -152,8 +152,6 @@ describe("a stroke", () => {
     expect(back.removed).toBe(ids.length - 1);
     expect(Object.keys(back.sim.buildings).map(Number)).toEqual([started]);
     expect(back.sim.finds.foundations[0].state).toBe(r.sim.buildings[started].foundationId ? "restoring" : undefined);
-    const painted = back.sim.zones.cells.filter((c) => c.zone !== "none").length;
-    expect(painted).toBe(r.sim.buildings[started].foundationId ? 0 : BUILDINGS.shop.w * BUILDINGS.shop.d);
     expect(cancelPlans(back.sim, ids).removed).toBe(0);
   });
 });

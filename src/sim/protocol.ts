@@ -7,7 +7,7 @@ import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { TradeOrder } from "./trade";
 import type { FeatureKind } from "./types";
-import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState, ZoneType } from "./types";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState } from "./types";
 
 export interface ArticleInput {
   id: string;
@@ -26,7 +26,6 @@ export type Cmd =
   | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[]; span?: number } // span: longest water run (m) of the line, for the bridge span limit
   | { type: "removeRoad"; edgeId: number }
   | { type: "upgradeRoad"; kind: RoadKind; edges: number[]; labor: number[]; span?: number } // labor: each edge built anew as `kind`; span: longest water run of the bridge
-  | { type: "paintZones"; keys: string[]; zone: "none" | ZoneType }
   | { type: "addField"; pts: [number, number][] }
   | { type: "removeField"; id: number }
   // Forest to clear; `forest` is the share 0..1 of the polygon that is forest, measured on the main thread.

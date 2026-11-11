@@ -5,7 +5,7 @@ import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
 import { SERVICES } from "../sim/services";
-import type { GrowthWhy } from "../sim/types";
+import type { Housing } from "../sim/types";
 import { people, state } from "../simClient";
 import { CATEGORIES, CATEGORY_KEYS, categoryOf, ITEM_KEY_LABEL, toolForKey, toolInfo, toolLabel, TOOL_ICON, type CategoryId } from "./buildMenu";
 import { Icon } from "./Icon";
@@ -48,7 +48,7 @@ effect(() => {
   }
 });
 
-const CATEGORY_ICON: Record<CategoryId, IconName> = { roads: "dirt", town: "town", zones: "res", food: "food", farm: "log", services: "well", past: "dig" };
+const CATEGORY_ICON: Record<CategoryId, IconName> = { roads: "dirt", town: "town", food: "food", farm: "log", services: "well", past: "dig" };
 
 // A category button: the live one with its tray open closes it, any other opens its own.
 const pickCategory = (id: CategoryId): void => {
@@ -81,9 +81,6 @@ function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<
         straight: L("Протяните от начала до конца — прямая; Shift — угол 15°, Пробел — двигать карту, ПКМ или Esc — закончить", "Drag from start to end — straight; Shift — 15° steps, Space — pan the map, RMB or Esc — finish"),
         arc: L("Протяните от начала до конца (или клик, клик), затем движение мышью — изгиб, клик — готово; Shift — угол 15°, ПКМ или Esc — отмена", "Drag from start to end (or click, click), then move the mouse to bend, click to finish; Shift — 15° steps, RMB or Esc — cancel"),
       };
-  const brush = touch
-    ? L(`Ведите пальцем — закрасить, двумя пальцами — двигать карту; ${EXIT_TOUCH}`, `Drag a finger to paint, two fingers to move the map; ${EXIT_TOUCH}`)
-    : L("Тяните — закрасить, Shift+клик — вся сторона дороги, Пробел — двигать карту, Esc — выйти", "Drag to paint, Shift+click — the whole side of a road, Space — pan the map, Esc — exit");
   const place = touch
     ? L(`Тап — показать участок у дороги или старый фундамент, второй тап — поставить; ${EXIT_TOUCH}`, `Tap to show a lot by a road or an old foundation, tap it again to place; ${EXIT_TOUCH}`)
     : L("Клик — поставить у дороги или на старый фундамент, ПКМ или Esc — выйти", "Click to place by a road or on an old foundation, RMB or Esc — exit");
@@ -99,10 +96,6 @@ function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<
     house: stroke,
     workshop: stroke,
     shop: stroke,
-    res: brush,
-    craft: brush,
-    trade: brush,
-    clear: `${brush}. ${touch ? L("Тап по полю или вырубке в работе — убрать", "Tap a field or an active clearing to remove it") : L("Клик по полю или вырубке в работе — убрать", "Click a field or an active clearing to remove it")}`,
     gumno: `${place}. ${L(`Круг — досягаемость полей (${FIELD.radius} м)`, `Circle — field reach (${FIELD.radius} m)`)}`,
     woodcutter: `${place}. ${L(`Круг — лес вокруг (${SITE_RADIUS.woodcutter} м)`, `Circle — forest around (${SITE_RADIUS.woodcutter} m)`)}`,
     sawpit: place,
@@ -122,22 +115,17 @@ function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<
     healer: service("healer", L(", нужен работник", ", needs a worker")),
     dig: `${place}. ${L(`Круг — первое вскрытие (${DIG.startRadius} м), потом растёт до ${DIG.maxRadius} м и снимается, а найденное остаётся на карте`, `Circle — the first opening (${DIG.startRadius} m); it grows to ${DIG.maxRadius} m and is then removed, while the finds stay on the map`)}`,
     field: touch
-      ? L(`Тап — вершина, тап по первой точке — замкнуть, тап по последней — убрать её; ${EXIT_TOUCH}`, `Tap — add a corner, tap the first point — close, tap the last one — remove it; ${EXIT_TOUCH}`)
-      : L("Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить", "Click — add a corner, click the first point or Enter — close, RMB — undo a point, Esc — reset"),
-    clearing: L("Как поле: контур леса до 5 га у построенной дороги (до 300 м). Строители рубят после строек, а когда брёвен на складе меньше, чем на дом, — раньше них. Брёвна идут на склад, земля станет лугом", "Like a field: an outline of forest up to 5 ha near a built road (within 300 m). Builders fell it after the building sites, or before them when the store holds fewer logs than a house needs. Logs go to the store; the land becomes meadow"),
+      ? L(`Тап — вершина, тап по первой точке — замкнуть, тап по последней — убрать её, тап по готовому полю — убрать поле; ${EXIT_TOUCH}`, `Tap — add a corner, tap the first point — close, tap the last one — remove it, tap a field — remove the field; ${EXIT_TOUCH}`)
+      : L("Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить; клик по готовому полю — убрать его", "Click — add a corner, click the first point or Enter — close, RMB — undo a point, Esc — reset; click a field to remove it"),
+    clearing: L("Как поле: контур леса до 5 га у построенной дороги (до 300 м). Строители рубят после строек, а когда брёвен на складе меньше, чем на дом, — раньше них. Брёвна идут на склад, земля станет лугом. Клик по вырубке в работе — убрать её", "Like a field: an outline of forest up to 5 ha near a built road (within 300 m). Builders fell it after the building sites, or before them when the store holds fewer logs than a house needs. Logs go to the store; the land becomes meadow. Click a clearing under way to remove it"),
   };
   return { road, tool };
 }
 const HINTS = { mouse: hints(false), touch: hints(true) };
 
-const ADVICE: Record<GrowthWhy, string | null> = {
-  ok: null,
-  nozone: L("Не растёт: нет размеченных участков", "Not growing: no zoned plots"),
-  demand: L("Не растёт: нет спроса", "Not growing: no demand"),
-  lots: L("Не растёт: нет свободных участков у построенной дороги", "Not growing: no free plots along a built road"),
-  hands: L("Не растёт: некому строить", "Not growing: no one to build"),
-  materials: L("Растёт медленно: не хватает материалов, часть работы делают вручную", "Growing slowly: short of materials, part of the work is done by hand"),
-};
+// The house tool's line: who waits for a home and what is on the way.
+const housingLine = (h: Housing): string =>
+  L(`Семей в палатках: ${h.tents} · свободных домов: ${h.free} · домов строится: ${h.underway}`, `Households in tents: ${h.tents} · free homes: ${h.free} · houses under way: ${h.underway}`);
 
 // Why a tool is closed (the tech that opens it), or null. Before the town is loaded nothing is locked.
 const lockOf = (t: Tool): string | null => {
@@ -147,7 +135,7 @@ const lockOf = (t: Tool): string | null => {
 
 const isTyping = (el: HTMLElement | null) => !!el && (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable || !!el.closest("dialog"));
 
-// F1-F5 pick a category, Q W E R T Y U I an item of it, B demolish. Layout independent (key codes).
+// F1-F6 pick a category, Q W E R T Y U I an item of it, B demolish. Layout independent (key codes).
 function onKey(e: KeyboardEvent): void {
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
   const el = e.target as HTMLElement | null;
@@ -278,7 +266,7 @@ export function BuildBar() {
   const open = trayOpen.value;
   const msg = toolMsg.value;
   const progress = state.value?.progress;
-  const growth = active === "res" || active === "craft" || active === "trade" ? ADVICE[people.value?.growth?.[active] ?? "ok"] : null;
+  const housing = active === "house" && people.value ? housingLine(people.value.housing) : null;
   const mode = roadMode.value;
   const drawsRoad = !!active && isRoadTool(active) && active !== "bulldoze" && active !== "restore";
   const materials = active && isMaterialTool(active) ? ROAD_MATERIALS[active] : null;
@@ -289,10 +277,10 @@ export function BuildBar() {
     <section class="build-bar" aria-label={LANDMARK_LABELS.build}>
       <div class="bb-lines" aria-live="polite">
         {msg && <div class="road-msg">{msg}</div>}
-        {(hint || growth) && (
+        {(hint || housing) && (
           <div class="road-hint">
             {hint}
-            {growth && <div>{growth}</div>}
+            {housing && <div>{housing}</div>}
           </div>
         )}
         {drawsRoad && <Segmented label={L("Режим дороги", "Road mode")} value={mode} onChange={(m) => (roadMode.value = m)} options={ROAD_MODES.map((o) => ({ id: o.id, label: o.label, title: o.title }))} />}

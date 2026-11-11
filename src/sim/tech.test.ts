@@ -38,7 +38,7 @@ describe("tech graph", () => {
   });
   it("opens every unlock key with exactly one tech", () => {
     for (const k of ALL_UNLOCKS) expect(TECHS.filter((t) => t.unlocks.includes(k))).toHaveLength(1);
-    for (const k of ["sawpit", "barn", "quarry", "fisher", "garden", "hunter", "cellar", "forager", "orchard", "apiary", "market", "chapel", "school", "healer", "zone:craft", "zone:trade", "upgrade", "road:stone", "road:stonebridge"]) expect(k in UNLOCK_NAME).toBe(true);
+    for (const k of ["sawpit", "barn", "quarry", "fisher", "garden", "hunter", "cellar", "forager", "orchard", "apiary", "market", "chapel", "school", "healer", "workshop", "shop", "upgrade", "road:stone", "road:stonebridge"]) expect(k in UNLOCK_NAME).toBe(true);
   });
   it("insights point at real techs", () => {
     for (const i of INSIGHTS) expect(i.tech === null || TECH_BY_ID.has(i.tech)).toBe(true);
@@ -96,6 +96,7 @@ describe("era II condition", () => {
 
 describe("old saves", () => {
   it("a save with goals gives the techs its paid unlocks cover, with prerequisites", () => {
+    // the key the craft zone had is read as the workshops' (docs/PLAN-build.md Z3)
     const sim = parseSave(old(town([bld(1, "izba")]), { done: ["izbas2", "logs20"], unlocks: ["sawpit", "barn", "cellar", "hunter", "forager", "quarry", "zone:craft"] }), NOW + 1)!.sim;
     for (const id of ["carpentry", "storage", "foraging", "cellars", "stonework", "crafts"]) expect(sim.progress.techs).toContain(id);
     expect(sim.progress.techs).not.toContain("fishing");
@@ -111,8 +112,9 @@ describe("old saves", () => {
   it("a save without goals takes what the buildings prove, and never closes a built template", () => {
     const s = town([bld(1, "market"), bld(2, "hunter"), { ...bld(3, "izba"), level: 2 }]);
     expect(provenUnlocks(s).sort()).toEqual(["hunter", "market", "upgrade"]);
+    expect(provenUnlocks(town([bld(1, "smithy"), bld(2, "tavern")])).sort()).toEqual(["shop", "workshop"]); // a workshop or a shop standing opens its tool
     const sim = parseSave(old(s), NOW + 1)!.sim;
-    for (const k of ["market", "zone:trade", "zone:craft", "hunter", "forager", "upgrade", "sawpit"]) expect(isUnlocked(sim.progress, k)).toBe(true);
+    for (const k of ["market", "shop", "workshop", "hunter", "forager", "upgrade", "sawpit"]) expect(isUnlocked(sim.progress, k)).toBe(true);
     expect(isUnlocked(sim.progress, "chapel")).toBe(false);
   });
   it("a town with a school keeps it though era II is not met", () => {

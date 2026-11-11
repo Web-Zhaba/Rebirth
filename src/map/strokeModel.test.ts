@@ -21,7 +21,7 @@ const roads = (): RoadGraph => {
 
 const town = (foundations: FoundFoundation[] = []): SimState => {
   const g = roads();
-  const cells = regenerateCells(g, [], [], {}).map((c) => ({ ...c, block: c.block === "pending" ? null : c.block }));
+  const cells = regenerateCells(g, [], {}).map((c) => ({ ...c, block: c.block === "pending" ? null : c.block }));
   return { realTime: 0, gameMinutes: 1000, roads: g, zones: { ...emptyZones(), cells }, ...emptyGrowth(1), progress: allResearched(), articles: [], finds: { foundations, pois: [], streets: [], revealed: [], features: [], fates: {} } } as SimState;
 };
 

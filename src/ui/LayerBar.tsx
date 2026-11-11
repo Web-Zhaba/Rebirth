@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { OVERLAY_COLORS, OVERLAYS, overlay, setManualOverlay, setManualZonesShown, TRAFFIC_STOPS, zonesShown, type Overlay } from "../map/tools";
+import { OVERLAY_COLORS, OVERLAYS, overlay, setManualOverlay, TRAFFIC_STOPS, type Overlay } from "../map/tools";
 import { placeLabelsOn, togglePlaceLabels } from "../view/placeNames";
 import { cloudsOn, toggleClouds } from "../map/clouds/settings";
 import { ruinsShown, toggleRuins } from "../view/ruinsShown";
@@ -96,7 +96,7 @@ export function LayerBar() {
       <button class="layer-head" type="button" aria-expanded={!collapsed} aria-controls={SEMANTIC_IDS.layerControls} onClick={toggle}>
         <Icon name="layers" size={16} />
         <span>{L("Слои", "Layers")}</span>
-        <b class="layer-name">{zonesShown.value ? L("зоны", "zones") : active?.label}</b>
+        <b class="layer-name">{active?.label}</b>
         <Icon name={collapsed ? "caretDown" : "caretUp"} size={12} />
       </button>
       {collapsed ? (
@@ -117,7 +117,6 @@ export function LayerBar() {
           <Legend id={cur} />
           <span class="layer-caption">{L("Поверх карты", "On top of the map")}</span>
           <div class="layer-group" role="toolbar" aria-label={L("Пометки на карте", "Map marks")} aria-orientation="horizontal">
-            <IconButton icon="layers" label={L("Зоны", "Zones")} aria-pressed={zonesShown.value} onClick={() => setManualZonesShown(!zonesShown.value)} />
             <IconButton icon="placeNames" label={L("Старые названия", "Old names")} aria-pressed={placeLabelsOn.value} onClick={togglePlaceLabels} />
             <IconButton icon="dig" label={L("Старый город", "Old town")} aria-pressed={ruinsShown.value} onClick={toggleRuins} />
             <IconButton icon="weatherRain" label={L("Погода на карте", "Weather on the map")} aria-pressed={weatherMapOn.value} onClick={toggleWeatherMap} />

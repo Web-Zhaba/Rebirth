@@ -52,11 +52,9 @@ function Body({ v }: { v: HeritageView }) {
           )}
           {v.note && <div class="prod-warn">{v.note}</div>}
           <div class="insp-actions">
-            {!v.byZone && (
-              <Button variant="primary" disabled={!v.canOrder} onClick={() => void order()}>
-                {L("Восстановить как было", "Restore as it was")}
-              </Button>
-            )}
+            <Button variant="primary" disabled={!v.canOrder} onClick={() => void order()}>
+              {L("Восстановить как было", "Restore as it was")}
+            </Button>
           </div>
           <div class="people-note">
             {L("Другое назначение, и памятник тоже, выбирают в строительстве, наведя здание на фундамент: так постройка не даст вклада в науку. Снос восстановленной постройки делает её утраченной.", "Another purpose, a monument included, is chosen in the build bar by pointing a building at the foundation: it then adds nothing to research. Demolishing a restored building loses it for good.")}

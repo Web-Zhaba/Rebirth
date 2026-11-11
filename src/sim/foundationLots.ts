@@ -1,16 +1,16 @@
-import { BUILDINGS, floorsOf, FLOOR, templatesOf, type BuildingTemplate, type Materials } from "./buildings";
-import { centroid, pointInRing } from "./excavation";
+import { BUILDINGS, floorsOf, FLOOR, type BuildingTemplate, type Materials } from "./buildings";
+import { pointInRing } from "./excavation";
 import { asItWasTemplate, isHeritage, kindName, siteTitle } from "./heritage";
 import { RESTORE, orientedBox, polysOverlap, ringDoor, simplifyRing } from "./heritageGeo";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import { TECH_BY_ID } from "./tech";
-import type { Building, FoundFoundation, ProgressState, RoadGraph, Site, SimState, ZoneCell, ZoneType } from "./types";
+import type { Building, FoundFoundation, ProgressState, RoadGraph, Site, SimState } from "./types";
 import { CELL_SIZE } from "./zones";
 import { L } from "../i18n";
 
 // Old foundations as building sites (PLAN.md section 12, docs/PLAN-restoration.md section 2). The foundation sets the
-// building: any purpose takes the ring as it is, at full size, and the floors of the old building. A zone grows its
-// buildings on the foundations in it first, and the player can put a building on any of them. Rectangular lots never
+// building: any purpose takes the ring as it is, at full size, and the floors of the old building. A stroke of houses
+// (sim/stroke.ts) takes the foundations along it first, and the player can put a building on any of them. Rectangular lots never
 // cover such a foundation. Whether a foundation is built on is derived (a building with its `foundationId`), so a
 // demolition frees it again with nothing to undo.
 
@@ -128,7 +128,7 @@ export function floorBlocker(p: Progress, b: Pick<Building, "template" | "level"
   return need ? L(`следующий этаж — с технологией ${need}`, `the next floor comes with ${need}`) : L("выше строить нельзя", "it cannot be built higher");
 }
 
-// A notable site is the player's to restore; every other foundation of a usable size is a lot of the zone it lies in.
+// A notable site is the player's to restore; every other dug foundation of a usable size is a lot of its own.
 const isLotFoundation = (f: FoundFoundation): boolean => f.area >= FOUNDATION_LOT.minArea && !f.ghost && !(isHeritage(f) && f.state !== "lost");
 
 // ---------- spatial index ----------
@@ -324,59 +324,4 @@ export function foundationBuilding(t: BuildingTemplate, f: FoundFoundation, door
   if (isAsItWas(t, f)) b.asItWas = true;
   if (site) b.site = site;
   return b;
-}
-
-// ---------- zone growth ----------
-
-export interface FoundationLot {
-  f: FoundFoundation;
-  door: Pt;
-  fits: BuildingTemplate[];
-}
-
-// Free foundations of the zone `zone`: those whose painted cells (unblocked, on a built road) are of that zone, judged by the
-// cells whose centres the ring holds, or by the cell under its centroid when it holds none. Each with the templates it fits.
-export function foundationLots(s: LotState & { finds: Pick<SimState["finds"], "foundations"> }, zone: ZoneType): FoundationLot[] {
-  const list = s.finds.foundations;
-  if (list.length === 0) return [];
-  const built = new Set<number>();
-  for (const e of Object.values(s.roads.edges)) if (e.done >= e.labor) built.add(e.id);
-  const painted: ZoneCell[] = s.zones.cells.filter((c) => c.zone !== "none" && !c.block && built.has(c.edge));
-  if (painted.length === 0) return [];
-  const tpls = templatesOf(zone).filter(usesFoundation);
-  const idx = foundationIndex(list);
-  const votes = new Map<FoundFoundation, Map<string, number>>();
-  const centre = new Map<FoundFoundation, Pt>();
-  const half = CELL_SIZE / 2;
-  for (const c of painted) {
-    for (const { f } of idx.near(c.cx - half, c.cy - half, c.cx + half, c.cy + half)) {
-      if (!isLotFoundation(f)) continue;
-      let v = votes.get(f);
-      if (!v) votes.set(f, (v = new Map()));
-      if (pointInRing(c.cx, c.cy, f.ring)) v.set(c.zone, (v.get(c.zone) ?? 0) + 2);
-      else {
-        let m = centre.get(f);
-        if (!m) centre.set(f, (m = centroid(f.ring)));
-        // The cell under the centroid counts only for a ring that holds no cell centre (weight 1 < 2).
-        const dx = m[0] - c.cx;
-        const dy = m[1] - c.cy;
-        const u = dx * Math.cos(c.angle) + dy * Math.sin(c.angle);
-        const w = -dx * Math.sin(c.angle) + dy * Math.cos(c.angle);
-        if (Math.abs(u) <= half && Math.abs(w) <= half) v.set(c.zone, (v.get(c.zone) ?? 0) + 1);
-      }
-    }
-  }
-  const out: FoundationLot[] = [];
-  for (const [f, v] of votes) {
-    let top: string | null = null;
-    let n = 0;
-    for (const [z, c] of v) if (c > n || (c === n && top !== null && z < top)) [top, n] = [z, c];
-    if (top !== zone) continue;
-    const fits = tpls.filter((t) => sizeBlocker(s.progress, t, f) === null);
-    if (fits.length === 0) continue;
-    const ok = lotCheck(s, f);
-    if (ok.ok) out.push({ f, door: ok.door, fits });
-  }
-  out.sort((a, b) => (a.f.id < b.f.id ? -1 : a.f.id > b.f.id ? 1 : 0)); // the order of a Map of objects is the cells', keep it stable by id
-  return out;
 }

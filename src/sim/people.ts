@@ -564,16 +564,6 @@ export function foodPerDay(residents: Record<number, Resident>, now: number, lev
   return (c.adults * FOOD.adult + c.children * FOOD.child) * rationFood(levers) * foodNeedFactor(weather);
 }
 
-// What building demand reads of the people (growth.ts): the panel's peopleStats without the needs, the artel and the
-// commute it does not use, since demand is asked several times a tick.
-export function demandCounts(s: ArtelState & Pick<SimState, "households">): Pick<PeopleStats, "pop" | "employed" | "unemployed" | "tents"> {
-  const c = countResidents(s.residents, s.gameMinutes);
-  const work = constructionWork(s.buildings, s.roads, s.clearings, s.stock);
-  let tents = 0;
-  for (const h of Object.values(s.households)) if (h.home === null) tents++;
-  return { pop: c.pop, employed: c.employed, unemployed: work ? 0 : c.jobless + idleFarmers(s), tents };
-}
-
 export function peopleStats(s: ArtelState & Pick<SimState, "households">): PeopleStats {
   const c = countResidents(s.residents, s.gameMinutes);
   const work = constructionWork(s.buildings, s.roads, s.clearings, s.stock);

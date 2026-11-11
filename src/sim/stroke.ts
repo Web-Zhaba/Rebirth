@@ -2,10 +2,9 @@ import { BUILDINGS, type BuildingTemplate } from "./buildings";
 import { orderDig } from "./digging";
 import { centroid } from "./excavation";
 import { foundationBuilding, foundationIndex, foundationKindText, FOUNDATION_LOT, lotCheck } from "./foundationLots";
-import { canPlace, canPlaceOnFoundation, lotCellKeys, placeBuilding, placeOnFoundation, type PlaceState } from "./growth";
+import { canPlace, canPlaceOnFoundation, placeBuilding, placeOnFoundation, type PlaceState } from "./growth";
 import { asItWasTemplate, isHeritage, siteTitle } from "./heritage";
 import { distToEdge, ROAD_KINDS } from "./roads";
-import { paintCells } from "./zones";
 import type { Building, FoundFoundation, Site, SimState } from "./types";
 import { L } from "../i18n";
 
@@ -16,7 +15,7 @@ import { L } from "../i18n";
 
 type Pt = [number, number];
 
-// A piece of the stroke: road `edge`, `side` of it (as a zone cell's), from `from` to `to` metres along it from node a.
+// A piece of the stroke: road `edge`, `side` of it (as a lot cell's), from `from` to `to` metres along it from node a.
 // `to` < `from` runs the stroke backwards along the edge.
 export interface StrokeSpan {
   edge: number;
@@ -43,7 +42,7 @@ export interface StrokePlan {
 const NO_SITE: Site = { forest: 0, water: 0, rock: 0 }; // the stroke templates ask nothing of their surroundings
 const PREVIEW_ID = 0; // a planned building of the preview has no id yet
 
-// The templates a stroke lays: those zones grew (houses, workshops, shops). Null for any other.
+// The templates a stroke lays: houses, workshops and shops (class other than "placed"). Null for any other.
 export function strokeTemplate(id: unknown): BuildingTemplate | null {
   if (typeof id !== "string" || !Object.hasOwn(BUILDINGS, id)) return null;
   const t = BUILDINGS[id];
@@ -215,12 +214,10 @@ export function applyStroke<S extends PlaceState>(s: S, items: readonly StrokeIt
   return { sim: cur, placed };
 }
 
-// Takes back the buildings of a stroke nobody has started on (the undo of a stroke): the plan goes, a lot's painted cells
-// are cleared (so no zone grows there instead), and a restoration it ordered is no longer under way (not lost, as a
-// demolition would make it). Started or paid buildings stay.
+// Takes back the buildings of a stroke nobody has started on (the undo of a stroke): the plan goes, and a restoration it
+// ordered is no longer under way (not lost, as a demolition would make it). Started or paid buildings stay.
 export function cancelPlans<S extends PlaceState>(s: S, ids: readonly number[]): { sim: S; removed: number } {
   let buildings = s.buildings;
-  let cells = s.zones.cells;
   let foundations = s.finds.foundations;
   let removed = 0;
   for (const id of ids) {
@@ -229,8 +226,7 @@ export function cancelPlans<S extends PlaceState>(s: S, ids: readonly number[]):
     if (buildings === s.buildings) buildings = { ...s.buildings };
     delete buildings[id];
     removed++;
-    if (!b.foundationId) cells = paintCells(cells, lotCellKeys(cells, b), "none");
-    else if (b.asItWas)
+    if (b.asItWas)
       foundations = foundations.map((f) => {
         if (f.id !== b.foundationId || f.state !== "restoring") return f;
         const { state: _s, ...rest } = f;
@@ -238,6 +234,5 @@ export function cancelPlans<S extends PlaceState>(s: S, ids: readonly number[]):
       });
   }
   if (removed === 0) return { sim: s, removed };
-  const zones = cells === s.zones.cells ? s.zones : { ...s.zones, cells, rev: s.zones.rev + 1 };
-  return { sim: { ...s, buildings, zones, finds: { ...s.finds, foundations } }, removed };
+  return { sim: { ...s, buildings, finds: { ...s.finds, foundations } }, removed };
 }

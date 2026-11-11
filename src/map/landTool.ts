@@ -1,29 +1,25 @@
 import { play } from "../ui/sound";
 import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect } from "@preact/signals";
-import type { ZoneCell, ZoneType } from "../sim/types";
 import { clearingLabor, clearingLogs, validateClearing } from "../sim/clearing";
+import type { Cmd } from "../sim/protocol";
+import type { Building } from "../sim/types";
 import { pointInPolygon, validateField } from "../sim/zones";
 import { frame, roads, sendCmd, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { landAt } from "../world/landcover";
-import { fieldDraft, hoverKeys, paintPreview } from "../view/layers/zones";
+import { fieldDraft } from "../view/layers/land";
 import { etaText } from "./buildCost";
-import { flash, isBrushTool, ZONE_MAX_MPP, setSpacePan, syncPan, tool, type BrushTool } from "./tools";
+import { flash, setSpacePan, syncPan, tool } from "./tools";
 import { decimal, L } from "../i18n";
 
-const BRUSH_PX = 16;
-const MIN_BRUSH_M = 6;
 const CLOSE_PX = 12;
 const TOUCH_CLOSE_PX = 28; // a fingertip covers far more than a cursor
 const FIELD_MAX_MPP = mppAtZoom(14); // old FIELD_MIN_ZOOM 14
 const GRID_STEP = 10; // m, land sampling inside a field
 const ANALYZE_MS = 200;
-const BUCKET = 16;
 
 type Pt = [number, number];
-const bucketKey = (bx: number, by: number) => bx * 65536 + by;
-const brushZone = (t: BrushTool): "none" | ZoneType => (t === "clear" ? "none" : t);
 
 const areaText = (m2: number) => `${decimal((m2 / 10000).toFixed(m2 < 10000 ? 2 : 1))} ${L("га", "ha")}`;
 const clearingText = (area: number, forest: number) =>
@@ -59,8 +55,8 @@ async function analyzeField(f: Frame, poly: Pt[]): Promise<Analysis> {
   };
 }
 
-// Zone brush and field drawing on top of the map.
-export function attachZoneTool(view: View): void {
+// Field and clearing drawing on top of the map; a click on a field (or an unfinished clearing) with its tool removes it.
+export function attachLandTool(view: View): void {
   const label = document.createElement("div");
   label.className = "road-label";
   label.hidden = true;
@@ -73,35 +69,6 @@ export function attachZoneTool(view: View): void {
   const activePointers = new Set<number>();
   let multiPointer = false;
 
-  // ----- cell lookup -----
-  let indexFor: unknown = null;
-  let index = new Map<number, ZoneCell[]>();
-  const freeCells = () => {
-    const z = zones.value;
-    if (indexFor !== z) {
-      indexFor = z;
-      index = new Map();
-      for (const c of z?.cells ?? []) {
-        if (c.block) continue;
-        const k = bucketKey(Math.floor(c.cx / BUCKET), Math.floor(c.cy / BUCKET));
-        const list = index.get(k);
-        if (list) list.push(c);
-        else index.set(k, [c]);
-      }
-    }
-    return index;
-  };
-  const cellsNear = (x: number, y: number, r: number): ZoneCell[] => {
-    const idx = freeCells();
-    const out: ZoneCell[] = [];
-    for (let bx = Math.floor((x - r) / BUCKET); bx <= Math.floor((x + r) / BUCKET); bx++) {
-      for (let by = Math.floor((y - r) / BUCKET); by <= Math.floor((y + r) / BUCKET); by++) {
-        for (const c of idx.get(bucketKey(bx, by)) ?? []) if (Math.hypot(c.cx - x, c.cy - y) <= r) out.push(c);
-      }
-    }
-    return out;
-  };
-
   const setLabel = (text: string | null) => {
     if (text === null || !cursor) {
       label.hidden = true;
@@ -112,176 +79,21 @@ export function attachZoneTool(view: View): void {
     label.style.transform = `translate(${cursor.x + 16}px, ${cursor.y + 16}px)`;
   };
 
-  const activeBrush = (): BrushTool | null => {
-    const t = tool.value;
-    return t && isBrushTool(t) ? t : null;
-  };
   const clearingActive = () => tool.value === "clearing";
   const fieldActive = () => tool.value === "field" || clearingActive(); // both are drawn as a polygon
 
-  const radiusM = () => Math.max(MIN_BRUSH_M, BRUSH_PX * view.metersPerPixel());
-
-  // ----- brush -----
-  let dragging = false;
-  let painted = new Map<string, "none" | ZoneType>();
-  let dragBase = new Map<string, "none" | ZoneType>(); // earlier in-flight paints, kept visible during a drag
-  let inflight = 0;
-  let strokeEnd: [number, number] | null = null; // last brush point of the current drag
-
-  const send = (keys: string[], zone: "none" | ZoneType) => {
-    if (keys.length === 0) {
-      if (!dragging && inflight === 0) paintPreview.value = null;
-      return;
-    }
-    inflight++;
-    void sendCmd({ type: "paintZones", keys, zone }).then((r) => {
-      inflight--;
-      if (inflight === 0 && !dragging) paintPreview.value = null; // the snapshot already arrived
-      if (!r.ok) flash(r.reason ?? L("Не удалось разметить", "Could not mark the zone"));
-      else play("place");
-    });
-  };
-
   const fieldAt = (x: number, y: number) => zones.value?.fields.find((fl) => pointInPolygon(x, y, fl.pts)) ?? null;
   const clearingAt = (x: number, y: number) => state.value?.clearings.find((c) => c.done < c.labor && pointInPolygon(x, y, c.pts)) ?? null;
-
-  const brushAt = (e: ViewPointer, t: BrushTool) => {
-    const f = frame.value;
-    if (!f) return null;
-    const [x, y] = f.toLocal(e.lngLat[0], e.lngLat[1]);
-    local = [x, y];
-    return { x, y, r: radiusM(), zone: brushZone(t) };
-  };
-
-  const onBrushMove = (e: ViewPointer, t: BrushTool) => {
-    if (view.metersPerPixel() > ZONE_MAX_MPP) {
-      hoverKeys.value = [];
-      setLabel(L("Приблизьте карту", "Zoom in on the map"));
-      return;
+  // Before the first corner, a point over a field (with the field tool) or over an unfinished clearing (with the clearing
+  // tool) removes it instead of starting an outline: neither can be drawn over the other anyway.
+  const removalAt = (x: number, y: number): { label: string; cmd: Cmd; fail: string } | null => {
+    if (pts.length > 0) return null;
+    if (clearingActive()) {
+      const c = clearingAt(x, y);
+      return c ? { label: L("Клик — убрать вырубку", "Click — remove the clearing"), cmd: { type: "removeClearing", id: c.id }, fail: L("Не удалось убрать вырубку", "Could not remove the clearing") } : null;
     }
-    if (spaceDown) {
-      hoverKeys.value = [];
-      setLabel(null);
-      return;
-    }
-    const b = brushAt(e, t);
-    if (!b) return;
-    const near = cellsNear(b.x, b.y, b.r);
-    hoverKeys.value = near.map((c) => c.key);
-    setLabel(t === "clear" ? (fieldAt(b.x, b.y) ? L("Убрать поле", "Remove field") : clearingAt(b.x, b.y) ? L("Убрать вырубку", "Remove clearing") : null) : null);
-    if (dragging) {
-      // Mouse events are sparse on fast drags: sweep the brush along the stroke so no cells are skipped.
-      const [px, py] = strokeEnd ?? [b.x, b.y];
-      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - px, b.y - py) / (b.r / 2)));
-      strokeEnd = [b.x, b.y];
-      let grew = false;
-      for (let s = 1; s <= steps; s++) {
-        const k = s / steps;
-        for (const c of cellsNear(px + (b.x - px) * k, py + (b.y - py) * k, b.r)) {
-          if (painted.get(c.key) !== b.zone) {
-            painted.set(c.key, b.zone);
-            grew = true;
-          }
-        }
-      }
-      if (grew) paintPreview.value = new Map([...dragBase, ...painted]);
-    }
-  };
-
-  const cancelBrush = () => {
-    if (!dragging) return;
-    dragging = false;
-    strokeEnd = null;
-    painted = new Map();
-    paintPreview.value = dragBase.size > 0 ? new Map(dragBase) : null;
-  };
-
-  const onDown = (e: ViewPointer) => {
-    if (e.pointerId === null) return;
-    if (activePointers.size === 0) multiPointer = false;
-    activePointers.add(e.pointerId);
-    if (activePointers.size > 1 || !e.isPrimary) {
-      multiPointer = true;
-      activePointerId = null;
-      cancelBrush();
-      hoverKeys.value = [];
-      setLabel(null);
-      return;
-    }
-    activePointerId = e.pointerId;
-    const t = activeBrush();
-    if (!t || e.original.button !== 0 || spaceDown || view.metersPerPixel() > ZONE_MAX_MPP) return;
-    const b = brushAt(e, t);
-    if (!b) return;
-    if (t === "clear") {
-      const field = fieldAt(b.x, b.y);
-      if (field) {
-        void sendCmd({ type: "removeField", id: field.id }).then((r) => {
-          if (!r.ok) flash(r.reason ?? L("Не удалось убрать поле", "Could not remove the field"));
-          else play("place");
-        });
-        return;
-      }
-      const clearing = clearingAt(b.x, b.y);
-      if (clearing) {
-        void sendCmd({ type: "removeClearing", id: clearing.id }).then((r) => {
-          if (!r.ok) flash(r.reason ?? L("Не удалось убрать вырубку", "Could not remove the clearing"));
-          else play("place");
-        });
-        return;
-      }
-    }
-    if (e.original.shiftKey) {
-      // The whole side of the nearest edge, all depths.
-      let best: ZoneCell | null = null;
-      let bestD = Math.max(b.r, 8);
-      for (const c of cellsNear(b.x, b.y, bestD)) {
-        const d = Math.hypot(c.cx - b.x, c.cy - b.y);
-        if (d <= bestD) {
-          bestD = d;
-          best = c;
-        }
-      }
-      if (!best) return;
-      const keys = [...freeCells().values()].flat().filter((c) => c.edge === best!.edge && c.side === best!.side).map((c) => c.key);
-      const next = new Map(paintPreview.value ?? []);
-      for (const k of keys) next.set(k, b.zone);
-      paintPreview.value = next;
-      send(keys, b.zone);
-      return;
-    }
-    dragging = true;
-    strokeEnd = [b.x, b.y];
-    dragBase = paintPreview.value ?? new Map();
-    painted = new Map();
-    for (const c of cellsNear(b.x, b.y, b.r)) painted.set(c.key, b.zone);
-    paintPreview.value = new Map([...dragBase, ...painted]);
-  };
-
-  const onUp = (e: PointerEvent) => {
-    activePointers.delete(e.pointerId);
-    if (activePointers.size === 0) multiPointer = false;
-    if (activePointerId !== e.pointerId) return;
-    activePointerId = null;
-    if (!dragging) return;
-    dragging = false;
-    strokeEnd = null;
-    const zone = [...painted.values()][0];
-    const keys = [...painted.keys()];
-    painted = new Map();
-    if (zone === undefined) {
-      if (inflight === 0) paintPreview.value = null;
-      return;
-    }
-    send(keys, zone);
-  };
-
-  const onCancel = (e: PointerEvent) => {
-    activePointers.delete(e.pointerId);
-    if (activePointers.size === 0) multiPointer = false;
-    if (activePointerId !== e.pointerId) return;
-    activePointerId = null;
-    cancelBrush();
+    const fl = fieldAt(x, y);
+    return fl ? { label: L("Клик — убрать поле", "Click — remove the field"), cmd: { type: "removeField", id: fl.id }, fail: L("Не удалось убрать поле", "Could not remove the field") } : null;
   };
 
   // ----- field -----
@@ -292,8 +104,8 @@ export function attachZoneTool(view: View): void {
   let analysis: { sig: string; a: Analysis } | null = null;
 
   // The same checks the sim makes; the forest share is only known after the land is sampled.
-  const check = (poly: Pt[], g: NonNullable<typeof roads.value>, z: NonNullable<typeof zones.value>) =>
-    clearingActive() ? validateClearing(poly, 0, g, z.fields, state.value?.clearings ?? []) : validateField(poly, g, z.fields);
+  const check = (poly: Pt[], g: NonNullable<typeof roads.value>, z: NonNullable<typeof zones.value>, buildings: Record<number, Building> = {}) =>
+    clearingActive() ? validateClearing(poly, 0, g, z.fields, state.value?.clearings ?? []) : validateField(poly, g, z.fields, Object.values(buildings).map((b) => b.footprint));
 
   const sig = (poly: Pt[]) => poly.map((p) => `${Math.round(p[0] * 10)},${Math.round(p[1] * 10)}`).join(";");
 
@@ -303,7 +115,7 @@ export function attachZoneTool(view: View): void {
     const z = zones.value;
     if (!f || !g || !z || !local || pts.length === 0) {
       fieldDraft.value = pts.length > 0 ? { pts: [...pts], ok: true } : null;
-      setLabel(null);
+      setLabel(local ? (removalAt(local[0], local[1])?.label ?? null) : null);
       return;
     }
     const poly: Pt[] = [...pts, local];
@@ -312,7 +124,7 @@ export function attachZoneTool(view: View): void {
       setLabel(L("Клик — следующая точка", "Click — next point"));
       return;
     }
-    const v = check(poly, g, z);
+    const v = check(poly, g, z, state.value?.buildings);
     fieldDraft.value = { pts: poly, ok: v.ok };
     if (!v.ok) {
       seq++;
@@ -367,7 +179,7 @@ export function attachZoneTool(view: View): void {
       flash(L("Нужно минимум 3 точки", "At least 3 points are needed"));
       return;
     }
-    const v = check(pts, g, z);
+    const v = check(pts, g, z, state.value?.buildings);
     if (!v.ok) {
       flash(v.reason);
       return;
@@ -407,6 +219,15 @@ export function attachZoneTool(view: View): void {
       const s = view.project(f.toLngLat(p[0], p[1]));
       return Math.hypot(s[0] - e.point[0], s[1] - e.point[1]) <= (touch ? TOUCH_CLOSE_PX : CLOSE_PX);
     };
+    const gone = removalAt(x, y);
+    if (gone) {
+      void sendCmd(gone.cmd).then((r) => {
+        if (!r.ok) flash(r.reason ?? gone.fail);
+        else play("place");
+        showDraft(); // the label over what was removed
+      });
+      return;
+    }
     if (pts.length >= 3 && near(pts[0])) {
       finishField();
       return;
@@ -429,36 +250,29 @@ export function attachZoneTool(view: View): void {
   const onMove = (e: ViewPointer) => {
     if (multiPointer || !e.isPrimary || (activePointerId !== null && e.pointerId !== activePointerId)) return;
     cursor = { x: e.point[0], y: e.point[1] };
-    const t = tool.value;
-    if (!t) return;
-    if (fieldActive()) {
-      if (spaceDown) {
-        setLabel(null);
-        return;
-      }
-      const f = frame.value;
-      if (!f) return;
-      if (view.metersPerPixel() > FIELD_MAX_MPP) {
-        setLabel(L("Приблизьте карту", "Zoom in on the map"));
-        return;
-      }
-      local = f.toLocal(e.lngLat[0], e.lngLat[1]);
-      showDraft();
+    if (!fieldActive()) return;
+    if (spaceDown) {
+      setLabel(null);
       return;
     }
-    const b = activeBrush();
-    if (b) onBrushMove(e, b);
+    const f = frame.value;
+    if (!f) return;
+    if (view.metersPerPixel() > FIELD_MAX_MPP) {
+      setLabel(L("Приблизьте карту", "Zoom in on the map"));
+      return;
+    }
+    local = f.toLocal(e.lngLat[0], e.lngLat[1]);
+    showDraft();
   };
 
   const onClick = (e: ViewPointer) => {
-    if (fieldActive() && !spaceDown) onFieldClick(e);
+    if (fieldActive() && !spaceDown && !multiPointer) onFieldClick(e);
   };
 
   const onContext = (e: ViewPointer) => {
-    const t = tool.value;
-    if (!t || !(fieldActive() || isBrushTool(t))) return;
+    if (!fieldActive()) return;
     e.original.preventDefault();
-    if (fieldActive() && pts.length > 0) {
+    if (pts.length > 0) {
       pts.pop();
       showDraft();
     }
@@ -470,22 +284,20 @@ export function attachZoneTool(view: View): void {
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (typing(e)) return;
-    if (e.key === " " && (fieldActive() || activeBrush())) {
+    if (typing(e) || !fieldActive()) return;
+    if (e.key === " ") {
       e.preventDefault();
       if (!spaceDown) {
         spaceDown = true;
-        if (activeBrush()) hoverKeys.value = [];
         setSpacePan(true);
         syncPan(view);
       }
       return;
     }
-    if (!fieldActive() && !activeBrush()) return;
     if (e.key === "Escape") {
-      if (fieldActive() && pts.length > 0) resetField();
+      if (pts.length > 0) resetField();
       else tool.value = null;
-    } else if (e.key === "Enter" && fieldActive()) {
+    } else if (e.key === "Enter") {
       finishField();
     }
   };
@@ -499,57 +311,49 @@ export function attachZoneTool(view: View): void {
     if (e.key === " ") releaseSpacePan();
   };
 
-  view.on("pointermove", onMove);
-  view.on("click", onClick);
-  view.on("pointerdown", onDown);
-  // Track every canvas pointer, including a second finger placed over the sky.
-  // The View event above only dispatches when the ray hits the planet.
-  const trackPointerDown = (e: PointerEvent) => {
+  // Every canvas pointer, including a second finger placed over the sky (the View events only fire when the ray hits
+  // the planet): two fingers pinch the map, they draw nothing.
+  const onPointerDown = (e: PointerEvent) => {
     if (activePointers.size === 0) multiPointer = false;
     activePointers.add(e.pointerId);
     if (activePointers.size > 1 || !e.isPrimary) {
-      const wasMultiPointer = multiPointer;
       multiPointer = true;
       activePointerId = null;
-      if (!wasMultiPointer) {
-        cancelBrush();
-        hoverKeys.value = [];
-        setLabel(null);
-      }
-    }
+      setLabel(null);
+    } else activePointerId = e.pointerId;
   };
-  view.canvas.addEventListener("pointerdown", trackPointerDown);
+  const onPointerEnd = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    if (activePointerId === e.pointerId) activePointerId = null;
+    if (activePointers.size === 0) multiPointer = false;
+  };
+
+  view.on("pointermove", onMove);
+  view.on("click", onClick);
+  view.canvas.addEventListener("pointerdown", onPointerDown);
   view.on("contextmenu", onContext);
   view.on("move", () => syncPan(view));
-  window.addEventListener("pointerup", onUp);
-  window.addEventListener("pointercancel", onCancel);
+  window.addEventListener("pointerup", onPointerEnd);
+  window.addEventListener("pointercancel", onPointerEnd);
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", () => {
     activePointers.clear();
     activePointerId = null;
     multiPointer = false;
-    cancelBrush();
     releaseSpacePan();
   });
   view.canvas.addEventListener("pointerleave", () => {
     cursor = null;
-    hoverKeys.value = [];
     setLabel(null);
   });
 
   // Tool switched or cleared: drop everything in progress.
   effect(() => {
     void tool.value;
-    if (dragging) {
-      dragging = false;
-      painted = new Map();
-    }
-    hoverKeys.value = [];
     resetField();
     busy = false;
-    if (!fieldActive() && !activeBrush()) releaseSpacePan();
-    if (inflight === 0) paintPreview.value = null;
+    if (!fieldActive()) releaseSpacePan();
     syncPan(view);
   });
 }

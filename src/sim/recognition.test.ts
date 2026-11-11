@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { finishAll } from "./admin";
 import { BUILDINGS } from "./buildings";
 import { recordFinds } from "./excavation";
-import { canPlaceOnFoundation, emptyGrowth, placeOnFoundation, spawnBuildings } from "./growth";
+import { canPlaceOnFoundation, emptyGrowth, placeOnFoundation } from "./growth";
 import { tierContext, tierOf, TYPICAL_SHARE, restoreWeightOf, scarcity } from "./heritage";
 import { finishedMonuments, monumentMoodAt, TYPICAL_LOCAL } from "./monuments";
 import { computeLandValue } from "./coverage";
 import { digShares, districtMood, recognise, RECOGNITION, stepsOf } from "./recognition";
 import { addRoad, emptyRoads } from "./roads";
 import { lineCovered, restoreStreets, streetFoundations, streetProgress } from "./streets";
+import { applyStroke, planStroke } from "./stroke";
 import { allResearched } from "./tech";
 import type { FoundFoundation, FoundPlace, ProgressState, RoadGraph, SimState, StoredArticle } from "./types";
 import { emptyZones, regenerateCells } from "./zones";
@@ -88,16 +89,17 @@ describe("rewards by tier", () => {
     expect(monumentMoodAt(ms.filter((m) => !m.landmark), 20, 50)).toBe(1);
     expect(monumentMoodAt(ms, 2000, 50)).toBe(0);
   });
-  it("zone growth brings a typical workshop back as it was", () => {
+  it("a stroke of workshops brings a typical workshop back as it was", () => {
     const shop = found("s", rect(0, 46, 10, 12), { cls: "car_repair", name: "Мастерская" });
     const roads = builtRoad();
-    const cells = regenerateCells(roads, [], [], {}).map((c) => ({ ...c, block: null, zone: "craft" as const }));
-    const s = mk([shop], { roads, zones: { ...emptyZones(), cells }, lastSpawn: { res: -1000, craft: -1000, trade: -1000 } });
-    const grown = spawnBuildings(s);
+    const cells = regenerateCells(roads, [], {}).map((c) => ({ ...c, block: null }));
+    const s = mk([shop], { roads, zones: { ...emptyZones(), cells } });
+    const spans = Object.keys(roads.edges).map((e) => ({ edge: Number(e), side: 1 as const, from: 0, to: 1000 }));
+    const grown = applyStroke(s, planStroke(s, BUILDINGS.weaver, spans, true).items).sim;
     const b = Object.values(grown.buildings).find((x) => x.foundationId === "s");
     expect(b).toBeDefined();
     if (!b) return;
-    expect(b.template).toBe("smithy"); // not any other workshop of the zone
+    expect(b.template).toBe("smithy"); // not the weaving workshop the stroke was of
     expect(b.asItWas).toBe(true);
     expect(grown.finds.foundations[0].state).toBe("restoring");
   });

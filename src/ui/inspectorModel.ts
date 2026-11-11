@@ -31,7 +31,7 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
 const CRAFT = new Set(["smithy", "carpentry", "pottery", "weaver"]);
 const TRADE = new Set(["shop", "tavern"]);
 
-// Icon of a building template: houses and zone buildings share their zone's icon, placed ones have their own.
+// Icon of a building template: houses, workshops and shops share their class's icon, other ones have their own.
 export function templateIcon(template: string): IconName {
   if (BUILDINGS[template]?.zone === "res") return "res";
   if (template === "restored") return "foundations";

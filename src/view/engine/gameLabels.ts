@@ -1,7 +1,7 @@
 import { computed, type ReadonlySignal } from "@preact/signals";
 import type { FeatureCollection } from "geojson";
 import type { Engine } from "../../engine/engine";
-import { clearingLabels } from "../layers/zones";
+import { clearingLabels } from "../layers/land";
 import { restoredStreets, ruinPois, ruinStreets, ruinTypedNames } from "../layers/ruins";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { mppAtZoom } from "../view";

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { addChronicle, CHRONICLE_CAP, recordChronicle } from "./chronicle";
 import { advanceTo, BASE_TICK, OFFLINE, step, TICK_MS } from "./clock";
+import { BUILDINGS } from "./buildings";
 import { emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
+import { applyStroke, planStroke } from "./stroke";
 import { YEAR_MIN } from "./time";
 import type { Building, City, Resident, SaveV4, SimState, TerrainInfo } from "./types";
 import { startWeather } from "./weather";
@@ -15,14 +17,18 @@ const NOW = 1_800_000_000_000;
 const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
 const meadow: TerrainInfo = { land: "meadow", slope: 0 };
 
-// A short zoned road: houses, workshops and shops grow on it by themselves.
+// A short road laid with houses on both sides, a workshop and a shop: the artel builds them.
 function grower(realTime = NOW): SimState {
   const r = addRoad(emptyRoads(), [[0, 0], [240, 0]], "dirt", 1, [0]);
   if (!r.ok) throw new Error(r.reason);
   const terrain: Record<string, TerrainInfo> = {};
-  for (const c of regenerateCells(r.graph, [], [], {})) terrain[qkey(c.cx, c.cy)] = meadow;
-  const cells = regenerateCells(r.graph, [], [], terrain).map((c) => (c.block ? c : { ...c, zone: c.i < 14 ? ("res" as const) : c.i < 22 ? ("craft" as const) : ("trade" as const) }));
-  return { realTime, gameMinutes: 0, roads: r.graph, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(seedOf(city.foundedAt)) };
+  for (const c of regenerateCells(r.graph, [], {})) terrain[qkey(c.cx, c.cy)] = meadow;
+  const cells = regenerateCells(r.graph, [], terrain);
+  const edge = Number(Object.keys(r.graph.edges)[0]);
+  const lay = (s: SimState, template: string, from: number, to: number, n = 99) =>
+    applyStroke(s, planStroke(s, BUILDINGS[template], [{ edge, side: 1, from, to }, { edge, side: -1, from, to }]).items.slice(0, n)).sim;
+  const s: SimState = { realTime, gameMinutes: 0, roads: r.graph, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(seedOf(city.foundedAt)) };
+  return lay(lay(lay(s, "izba", 0, 112), "weaver", 112, 176, 1), "shop", 176, 240, 1);
 }
 
 function setup(initial: unknown) {
@@ -172,7 +178,7 @@ describe("load", () => {
     const { h, out } = setup({ version: 4, city, sim: start });
     const p = h.handle({ t: "load", legacy: null, now: NOW });
     const c1 = h.handle({ t: "cmd", id: 1, cmd: { type: "removeRoad", edgeId: 9999 } });
-    const c2 = h.handle({ t: "cmd", id: 2, cmd: { type: "paintZones", keys: [], zone: "none" } });
+    const c2 = h.handle({ t: "cmd", id: 2, cmd: { type: "setRations", rations: "normal" } });
     const q = h.handle({ t: "query", id: 3, q: { type: "building", id: 12345 } });
     await Promise.all([p, c1, c2, q]);
     const tags = out.map((m) => (m.t === "cmdResult" || m.t === "queryResult" ? `${m.t}${m.id}` : m.t));

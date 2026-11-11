@@ -5,7 +5,7 @@ import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { EXCAVATION } from "./digging";
 import { DIG, parseFinds } from "./excavation";
-import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
+import { emptyGrowth, seedOf } from "./growth";
 import { parseProgress } from "./research";
 import { migrateProgress } from "./tech";
 import { emptyLevers, type Levers } from "./levers";
@@ -45,7 +45,7 @@ import type {
   TownEvent,
   Upgrade,
   ZoneBlock,
-  ZoneCell,
+  LotCell,
   ZoneState,
   ZoneType,
 } from "./types";
@@ -118,24 +118,22 @@ function parseRoadUpgrade(v: unknown): RoadEdge["upgrade"] | null {
   return { kind: v.kind as RoadEdge["kind"], labor: v.labor, done: v.done, ...(v.stone !== undefined ? { stone: v.stone } : {}) };
 }
 
-const ZONES = ["none", "res", "craft", "trade"];
 const BLOCKS = ["road", "overlap", "field", "water", "steep", "pending"];
 
 const isPoint = (p: unknown): p is [number, number] => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]);
 
-// Saves from before zoning have no `zones`: that is an empty state, not an error.
+// Saves from before the lot cells have no `zones`: that is an empty state, not an error.
 function parseZones(v: unknown): ZoneState | null {
   if (v === undefined) return emptyZones();
   if (!isRecord(v) || !Array.isArray(v.cells) || !Array.isArray(v.fields) || !isRecord(v.terrain)) return null;
   if (!Number.isInteger(v.rev) || (v.rev as number) < 0) return null;
-  const cells: ZoneCell[] = [];
+  const cells: LotCell[] = [];
   for (const raw of v.cells) {
     if (!isRecord(raw) || typeof raw.key !== "string") return null;
     if (!Number.isInteger(raw.edge) || !Number.isInteger(raw.i) || (raw.i as number) < 0) return null;
     if (raw.side !== 1 && raw.side !== -1) return null;
     if (!Number.isInteger(raw.depth) || (raw.depth as number) < 0 || (raw.depth as number) > 3) return null;
     if (!isNum(raw.cx) || !isNum(raw.cy) || !isNum(raw.angle)) return null;
-    if (typeof raw.zone !== "string" || !ZONES.includes(raw.zone)) return null;
     if (raw.block !== null && (typeof raw.block !== "string" || !BLOCKS.includes(raw.block))) return null;
     cells.push({
       key: raw.key,
@@ -146,7 +144,6 @@ function parseZones(v: unknown): ZoneState | null {
       cx: raw.cx,
       cy: raw.cy,
       angle: raw.angle,
-      zone: raw.zone as ZoneCell["zone"],
       block: raw.block as ZoneBlock | null,
     });
   }
@@ -611,10 +608,6 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   g.weather = parseWeather(sim.weather);
-  const ls = sim.lastSpawn;
-  if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
-    g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };
-  } else g.lastSpawn = { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN };
   return g;
 }
 
@@ -651,12 +644,13 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   if (!isNum(sim.gameMinutes) || sim.gameMinutes < 0) return null;
   const roads = parseRoads(sim.roads);
   if (!roads) return null;
-  // Cells are rebuilt from roads on load, so broken zone data only costs the paint,
-  // never the whole town (a rejected save would send the player back to founding).
+  // Cells are rebuilt from roads on load, so broken cell data never costs the whole town (a rejected save would send
+  // the player back to founding). Saves from before docs/PLAN-build.md Z3 carry painted zones and a lastSpawn record:
+  // both are left out, and the buildings the zones grew stay where they stand.
   const zones = parseZones(sim.zones) ?? emptyZones();
   const growth = parseGrowth(sim, city, sim.gameMinutes);
   // A save without progress is an existing town: it gets the techs its old goals and buildings prove, silently.
-  growth.progress = parseProgress(sim.progress) ?? migrateProgress({ ...growth, zones }, sim.goals);
+  growth.progress = parseProgress(sim.progress) ?? migrateProgress(growth, sim.goals);
   return { version: 4, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...growth } };
 }
 

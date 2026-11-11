@@ -3,12 +3,11 @@ import { finishAll } from "./admin";
 import { BUILDINGS } from "./buildings";
 import { completeExcavations, orderDig, orderStreetDig, streetDigs, streetOf } from "./digging";
 import { salvagedStone } from "./excavation";
-import { foundationLots } from "./foundationLots";
 import { canPlaceOnFoundation, emptyGrowth } from "./growth";
 import { addRoad, emptyRoads } from "./roads";
 import { allResearched } from "./tech";
 import type { FoundFoundation, FoundPlace, RoadGraph, SimState } from "./types";
-import { emptyZones, regenerateCells } from "./zones";
+import { emptyZones } from "./zones";
 import { buildOutlineView } from "../ui/heritageModel";
 
 // Excavation in two stages (docs/PLAN-restoration.md section 5): the survey leaves ghost outlines, each dug on its own.
@@ -35,11 +34,9 @@ const ok = <T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> => {
 
 describe("an outline", () => {
   const house = ghost("h", rect(0, 46, 10, 10));
-  it("cannot be built on or grown on until it is dug", () => {
+  it("cannot be built on until it is dug", () => {
     const s = mk([house]);
     expect(canPlaceOnFoundation(s, BUILDINGS.healer, "h")).toEqual({ ok: false, reason: "Это пока только контур: раскопайте фундамент" });
-    const cells = regenerateCells(s.roads, [], [], {}).map((c) => ({ ...c, block: null, zone: "res" as const }));
-    expect(foundationLots({ ...s, zones: { ...s.zones, cells } }, "res")).toEqual([]);
   });
   it("is dug by the artel as a site on its ring; finished, it opens, gives its stone and quietly, for an ordinary house", () => {
     const s0 = mk([house]);

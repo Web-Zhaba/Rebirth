@@ -100,8 +100,8 @@ describe("placing services", () => {
   const zoned = (): SimState => {
     const roads = roadAlong(600);
     const terrain: Record<string, { land: "meadow"; slope: number }> = {};
-    for (const c of regenerateCells(roads, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
-    const cells = regenerateCells(roads, [], [], terrain);
+    for (const c of regenerateCells(roads, [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
+    const cells = regenerateCells(roads, [], terrain);
     return { ...town([], roads), zones: { cells, fields: [], terrain, rev: 1 } };
   };
   const site = { forest: 0, water: 0, rock: 0 };

@@ -1,7 +1,7 @@
 import { play } from "../ui/sound";
 import { effect, signal } from "@preact/signals";
-import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
-import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
+import { mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
+import type { RoadKind, ServiceId } from "../sim/types";
 import { shouldRepeatTool } from "../ui/inputModel";
 import { storedChoice } from "../ui/preferenceModel";
 import { mppAtZoom, type View } from "../view/view";
@@ -11,16 +11,15 @@ import { L } from "../i18n";
 export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
 // How a road segment is drawn: dragged straight between two points, or an arc through a bend point.
 export type RoadMode = "straight" | "arc";
-export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
-export type ZoneTool = BrushTool | "field" | "clearing";
-// Laid in strokes along roads (map/strokeTool.ts, sim/stroke.ts): the buildings zones grew, as variants of three tools.
+// Outlines drawn on the land (map/landTool.ts).
+export type LandTool = "field" | "clearing";
+// Laid in strokes along roads (map/strokeTool.ts, sim/stroke.ts): houses, workshops and shops, as variants of three tools.
 export type StrokeTool = "house" | "workshop" | "shop";
 export type PlaceTool = StrokeTool | "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "museum" | "townhall" | ServiceId;
-export type Tool = RoadTool | ZoneTool | PlaceTool;
+export type Tool = RoadTool | LandTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
-export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
-export const isZoneTool = (t: Tool): t is ZoneTool => isBrushTool(t) || t === "field" || t === "clearing";
+export const isLandTool = (t: Tool): t is LandTool => t === "field" || t === "clearing";
 export const STROKE_TOOLS: StrokeTool[] = ["house", "workshop", "shop"];
 export const isStrokeTool = (t: Tool | null): t is StrokeTool => t === "house" || t === "workshop" || t === "shop";
 export const PLACE_TOOLS: PlaceTool[] = [...STROKE_TOOLS, "gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "restored", "museum", "well", "market", "chapel", "school", "healer", "townhall"];
@@ -134,7 +133,7 @@ export function flash(text: string): void {
 }
 
 // Drawing is allowed only when the map is closer than these (metres per pixel; the zoom they were set at is noted).
-export const ZONE_MAX_MPP = mppAtZoom(15); // old MIN_ZONE_ZOOM 15
+export const BUILD_MAX_MPP = mppAtZoom(15); // old MIN_ZONE_ZOOM 15
 export const ROAD_MAX_MPP = mppAtZoom(14); // old MIN_ROAD_ZOOM 14
 
 // Drawing and placement tools own map input; Space temporarily gives panning back to the camera.
@@ -146,7 +145,7 @@ export const setSpacePan = (on: boolean): void => {
 export function panLockedForTool(t: Tool | null, mpp: number, temporaryPan = false): boolean {
   if (!t || temporaryPan) return false;
   if (isRoadTool(t)) return mpp <= ROAD_MAX_MPP;
-  return (isZoneTool(t) || isPlaceTool(t)) && mpp <= ZONE_MAX_MPP;
+  return (isLandTool(t) || isPlaceTool(t)) && mpp <= BUILD_MAX_MPP;
 }
 
 export function syncPan(view: View): void {
@@ -155,10 +154,6 @@ export function syncPan(view: View): void {
   panOff = want;
   view.setPanEnabled(!want);
 }
-
-export const ZONE_COLORS: Record<ZoneType, string> = { res: PALETTE.ok, craft: PALETTE.warn, trade: PALETTE.info };
-
-export const BUILDING_COLORS: Record<ZoneType, string> = BUILDING_ZONE_COLORS;
 
 // Colours of player-placed buildings, per template.
 export const PLACED_COLORS: Record<PlaceTool, string> = PLACED_BUILDING_COLORS;
@@ -198,47 +193,19 @@ export function setManualOverlay(id: Overlay): void {
   }
 }
 
-// Zoning is a separate map layer: hidden during normal play, available manually from the layer menu,
-// and temporarily enabled while a zoning brush is active.
-const ZONES_STORE = "rebirth.layers.zones";
-const readZonesShown = (): boolean => {
-  try {
-    return localStorage.getItem(ZONES_STORE) === "1";
-  } catch {
-    return false;
-  }
-};
-export const manualZonesShown = signal(readZonesShown());
-export const zonesShown = signal(manualZonesShown.peek());
-
-export function setManualZonesShown(on: boolean): void {
-  manualZonesShown.value = on;
-  zonesShown.value = on;
-  try {
-    localStorage.setItem(ZONES_STORE, on ? "1" : "0");
-  } catch {
-    /* ignore */
-  }
-}
-
 const SERVICE_OVERLAY_TOOLS: readonly ServiceId[] = ["well", "market", "chapel", "school", "healer"];
 export const serviceOverlayForTool = (t: Tool | null): ServiceId | null =>
   t && (SERVICE_OVERLAY_TOOLS as readonly string[]).includes(t) ? (t as ServiceId) : null;
 
-// Tools may temporarily own a map layer. Only layers enabled by a tool are reset when that mode ends;
-// manually selected layers otherwise stay exactly as the player left them.
+// A service tool shows its coverage overlay while it is active; the overlay the player chose comes back after it.
 let hadAutomaticLayer = false;
 effect(() => {
-  const t = tool.value;
-  const service = serviceOverlayForTool(t);
-  const zoning = !!t && isBrushTool(t);
-  if (service || zoning) {
+  const service = serviceOverlayForTool(tool.value);
+  if (service) {
     hadAutomaticLayer = true;
-    zonesShown.value = zoning;
-    overlay.value = service ?? "none";
+    overlay.value = service;
   } else if (hadAutomaticLayer) {
     hadAutomaticLayer = false;
-    zonesShown.value = manualZonesShown.peek();
     overlay.value = manualOverlay.peek();
   }
 });

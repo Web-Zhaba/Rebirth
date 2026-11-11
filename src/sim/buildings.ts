@@ -10,7 +10,7 @@ export interface Materials {
 export interface BuildingTemplate {
   id: string;
   name: string;
-  zone: ZoneType | "placed"; // "placed": put down by the player
+  zone: ZoneType | "placed"; // the class: res (house), craft (workshop), trade (shop), placed (any other)
   w: number; // lot width in cells, along the road
   d: number; // lot depth in cells
   along: number; // footprint size along the road, m
@@ -212,8 +212,6 @@ export const upgradeMaterials = (b: Pick<Building, "template" | "level" | "scale
 // Height a finished level adds.
 export const levelHeight = (b: Pick<Building, "foundationId">): number => (onFoundation(b) ? FLOOR.height : UPGRADE.height);
 
-// Templates of one zone type, in table order.
-export const templatesOf = (zone: ZoneType | "placed"): BuildingTemplate[] => Object.values(BUILDINGS).filter((t) => t.zone === zone);
 
 export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 

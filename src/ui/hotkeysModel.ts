@@ -22,8 +22,8 @@ export const HOTKEY_SECTIONS: HotkeySection[] = [
   {
     title: L("Строительство", "Building"),
     rows: [
-      { keys: ["F1 – F5"], desc: L("Категории (Дороги, Зоны, Хозяйство, Службы, Прошлое)", "Categories (Roads, Zones, Economy, Services, Past)") },
-      { keys: ["Q – Y"], desc: L("Выбор инструмента в выбранной категории", "Pick a tool in the open category") },
+      { keys: ["F1 – F6"], desc: L("Категории (Дороги, Город, Еда, Ресурсы, Службы, Прошлое)", "Categories (Roads, Town, Food, Resources, Services, Past)") },
+      { keys: ["Q – I"], desc: L("Выбор инструмента в выбранной категории", "Pick a tool in the open category") },
       { keys: ["B"], desc: L("Снос (Бульдозер)", "Demolish (Bulldozer)") },
     ],
   },

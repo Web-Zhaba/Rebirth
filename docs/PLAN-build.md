@@ -106,7 +106,7 @@ What the player sees before releasing, and again after release until confirmed:
 |---|---|---|
 | Z1 | Lots without zones | Pure lot cutter over road edges (from `sim/zones.ts`), foundation selection for a template along edges (from `foundationLots`), batch placement command, plans in stroke order. Tests: cutter, foundation priority, skip reasons, dig-first chain. **Done** (see Z1 notes). |
 | Z2 | Stroke tool and preview | House/workshop/shop tools with variants, drag stroke, sides, «Только по фундаментам», preview looks of 3.4, summary card, freeze-and-confirm, undo. Browser check on a town with dug and ghost foundations. **Done** (see Z2 notes). |
-| Z3 | Zones removed | Zone tools, painting, zone layer, `spawnBuildings`, demand growth and advisor go; save migration; goals and unlocks that named zones point to the new tools. |
+| Z3 | Zones removed | Zone tools, painting, zone layer, `spawnBuildings`, demand growth and advisor go; save migration; goals and unlocks that named zones point to the new tools. **Done** (see Z3 notes). |
 | Z4 | Quick access | Pipette, search line, recent tools on 1–4, «Построить ещё»; road tool «с домами». |
 | Z5 | Pace | Harness on strokes, constants re-tuned to `PLAN-pace.md` section 2. |
 
@@ -141,3 +141,22 @@ buildings by kind, families or jobs, person-hours with digs, materials and ETA, 
 clears their painted cells and puts a restoration back to not ordered (a demolition would mark it lost). Browser check
 on Мстёра: 18 outlines along a rebuilt street planned as digs with houses, one dropped, 17 placed, undo left the one
 already started, «Достроить всё» put houses on the dug rings («Стоит на старом фундаменте», 209 м², 4 families).
+
+Z3 notes: nothing grows by itself any more: `spawnBuildings`, `demand`, `growthAdvice`, `findLots`, the zone half of
+`foundationLots` and `lastSpawn` are gone, and so are the brush tools («Жильё», «Ремесло», «Торговля», «Снять зону»),
+the `paintZones` command, the zone layer and its layer-menu switch. The cells stay as the ground lots are cut from
+(`LotCell`, no `zone`): `regenerateCells(roads, fields, terrain)` is pure, and `reconcile(buildings, roads)` keeps a
+building while the front of its lot is on a road (a building on a foundation always). `Building.zone` stays as the
+building's class (res house, craft workshop, trade shop, placed the rest): it is read in many places and means the
+class, not paint. Saves keep version 4: the painted zone of an old cell and `lastSpawn` are left out when read, the
+buildings zones grew stay where they stand. Unlock keys `zone:craft` / `zone:trade` became `workshop` / `shop` (an old
+save's goal record is read through the old names); a class locks with its tool, so the heritage card restores a house,
+a workshop or a shop "as it was" like any other purpose, and both single-place commands take any template. The bar has
+six categories again: Город, Еда (поле first, eight tools), Ресурсы (вырубка first). A field or an unfinished clearing
+is removed by clicking it with its own tool (the brush «Снять зону» did that before); a field may not cover a building
+now (before, a zone-grown house under a new field was dropped by `reconcile`). The house tool's hint shows the
+households in tents, the free homes and the houses under way (`people.housing` in the snapshot). Pace harness: the bot
+lays one building of a class per game hour by a stroke over its stretch of road (foundations first) while the demand
+rule the zones grew by asks for it; against the pre-Z3 run on the same seed: 10 houses day 16 (was 17), population 100
+day 66 (was 70); era II waits on the population crossing exactly 100 at a midnight, which both runs reach only by noise
+on a plateau near 100 (day 356, was 177): a Z5 matter.

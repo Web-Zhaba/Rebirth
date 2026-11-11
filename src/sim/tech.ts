@@ -8,7 +8,7 @@ import { L } from "../i18n";
 // What a technology changes besides its unlock keys. Fractions are added up over the researched techs: 0.1 = +10 %.
 export interface TechModifiers {
   fieldYield?: number; // yield of the fields
-  workshopOutput?: number; // output of the workshops (craft zone)
+  workshopOutput?: number; // output of the workshops
   buildSpeed?: number; // construction progress
   bridgeSpan?: Partial<Record<RoadKind, number>>; // metres added to the span limit of a bridge kind (roads.ts effectiveSpans)
 }
@@ -20,7 +20,7 @@ export interface TechDef {
   name: string;
   days: number; // base research time, game days
   requires: string[];
-  unlocks: string[]; // unlock keys: template ids, "zone:craft", "zone:trade", "upgrade", "road:stone"...
+  unlocks: string[]; // unlock keys: tool or template ids, "upgrade", "road:stone"...
   modifiers?: TechModifiers;
   description: string;
 }
@@ -55,10 +55,10 @@ export const TECHS: TechDef[] = [
   { id: "storage", era: 1, domain: "farm", name: L("Хранение запасов", "Storing supplies"), days: 3, requires: [], unlocks: ["barn"], description: L("Склады для зерна и припасов.", "Stores for grain and provisions.") },
   { id: "foraging", era: 1, domain: "farm", name: L("Лесной промысел", "Forest craft"), days: 3, requires: [], unlocks: ["hunter", "forager"], description: L("Охота и сбор в лесу.", "Hunting and foraging in the forest.") },
   { id: "stonework", era: 1, domain: "build", name: L("Работа с камнем", "Stonework"), days: 9, requires: ["carpentry"], unlocks: ["quarry"], description: L("Добыча и обработка камня: карьер.", "Quarrying and dressing stone: quarry.") },
-  { id: "crafts", era: 1, domain: "craft", name: L("Ремёсла", "Crafts"), days: 9, requires: ["carpentry"], unlocks: ["zone:craft"], description: L("Мастерские: ремесленная зона.", "Workshops: the craft zone.") },
+  { id: "crafts", era: 1, domain: "craft", name: L("Ремёсла", "Crafts"), days: 9, requires: ["carpentry"], unlocks: ["workshop"], description: L("Мастерские: ткацкая, гончарня, столярная, кузница.", "Workshops: weaving, pottery, carpentry, smithy.") },
   { id: "fishing", era: 1, domain: "farm", name: L("Рыболовство", "Fishing"), days: 9, requires: [], unlocks: ["fisher"], description: L("Лов рыбы: рыболовный причал.", "Catching fish: fishing pier.") },
   { id: "gardening", era: 1, domain: "farm", name: L("Огородничество", "Gardening"), days: 9, requires: ["storage"], unlocks: ["garden"], description: L("Грядки у дома: огород.", "Beds by the house: vegetable garden.") },
-  { id: "trade", era: 1, domain: "trade", name: L("Торговля", "Trade"), days: 15, requires: ["crafts"], unlocks: ["zone:trade", "market"], description: L("Обмен с соседями: торговая зона и рынок.", "Exchange with neighbours: the trade zone and the market.") },
+  { id: "trade", era: 1, domain: "trade", name: L("Торговля", "Trade"), days: 15, requires: ["crafts"], unlocks: ["shop", "market"], description: L("Обмен с соседями: лавки и рынок.", "Exchange with neighbours: shops and the market.") },
   { id: "orchards", era: 1, domain: "farm", name: L("Садоводство", "Orcharding"), days: 15, requires: ["gardening"], unlocks: ["orchard"], description: L("Плодовые деревья: сад.", "Fruit trees: orchard.") },
   { id: "faith", era: 1, domain: "care", name: L("Общие обряды", "Shared rites"), days: 15, requires: ["stonework"], unlocks: ["chapel"], description: L("Место для общих собраний и обрядов: храм.", "A place for gatherings and rites: temple.") },
   { id: "threefield", era: 1, domain: "farm", name: L("Трёхполье", "Three-field rotation"), days: 15, requires: ["gardening"], unlocks: [], modifiers: { fieldYield: 0.1 }, description: L("Севооборот: урожай полей выше на 10 %.", "Crop rotation: field yield is 10% higher.") },
@@ -114,8 +114,8 @@ export const UNLOCK_NAME: Record<string, string> = {
   healer: L("лечебница", "infirmary"),
   townhall: L("ратуша", "town hall"),
   office: L("районная управа", "district office"),
-  "zone:craft": L("ремесленная зона", "craft zone"),
-  "zone:trade": L("торговая зона", "trade zone"),
+  workshop: L("мастерские", "workshops"),
+  shop: L("лавки", "shops"),
   upgrade: L("расширение домов", "house expansion"),
   "road:stone": L("каменная дорога", "stone road"),
   "road:stonebridge": L("каменный мост", "stone bridge"),
@@ -198,14 +198,12 @@ export const isUnlocked = (p: Pick<ProgressState, "techs">, key: string): boolea
 
 // The unlock key of a build-bar tool or template id, or null when it is available from the start.
 export function unlockKeyOf(tool: string): string | null {
-  if (tool === "craft" || tool === "trade") return `zone:${tool}`;
-  if (tool === "workshop") return "zone:craft"; // the stroke tools (docs/PLAN-build.md) open with the zones they replace
-  if (tool === "shop") return "zone:trade";
+  if (tool === "craft") return "workshop"; // a building class opens with the tool that lays it
+  if (tool === "trade") return "shop";
   if (tool === "logyard" || tool === "stoneyard" || tool === "warehouse") return "barn"; // kinds of the storehouse
   if (tool === "stone" || tool === "stonebridge") return `road:${tool}`;
-  return Object.hasOwn(UNLOCK_NAME, tool) && !tool.startsWith("zone:") && !tool.startsWith("road:") && tool !== "upgrade" ? tool : null;
+  return Object.hasOwn(UNLOCK_NAME, tool) && !tool.startsWith("road:") && tool !== "upgrade" ? tool : null;
 }
-export const zoneKey = (z: string): string | null => (z === "res" ? null : `zone:${z}`);
 
 // Russian reason a tool or template is closed, or null when it can be used.
 export function lockReason(s: { progress: Pick<ProgressState, "techs" | "era"> }, tool: string): string | null {
@@ -236,37 +234,40 @@ export const cropOf = (s: { weather?: { crop: number }; progress?: Techs & { see
 
 // ---------- old towns ----------
 
-// Unlocks a town already proves by what stands in it (an old save has no goals): a placed template, a craft or trade
-// building or painted zone, an izba of level 2.
-export function provenUnlocks(s: Pick<SimState, "buildings" | "zones">): string[] {
+// Unlocks a town already proves by what stands in it (an old save has no goals): a placed template, a workshop or a
+// shop, an izba of level 2.
+export function provenUnlocks(s: Pick<SimState, "buildings">): string[] {
   const out = new Set<string>();
   for (const b of Object.values(s.buildings)) {
     const key = unlockKeyOf(b.template);
     if (key) out.add(key);
-    if (b.zone === "craft" || b.zone === "trade") out.add(`zone:${b.zone}`);
+    const cls = unlockKeyOf(b.zone);
+    if (cls) out.add(cls);
     if (!b.foundationId && (b.level >= 2 || b.upgrade)) out.add("upgrade");
   }
-  for (const c of s.zones.cells) if (c.zone === "craft" || c.zone === "trade") out.add(`zone:${c.zone}`);
   return [...out].filter((k) => k in UNLOCK_NAME);
 }
 
 // What each goal of the old chain paid, for saves written before the research (the goals themselves are gone).
 const LEGACY_GOAL_UNLOCKS: Record<string, string[]> = {
   izbas2: ["sawpit", "barn", "cellar", "hunter", "forager"],
-  logs20: ["quarry", "zone:craft"],
+  logs20: ["quarry", "workshop"],
   sow2: ["fisher", "garden"],
-  pop25: ["zone:trade", "market", "apiary"],
+  pop25: ["shop", "market", "apiary"],
   harvest: ["chapel", "orchard"],
   pop50: ["school", "healer"],
   craft5: ["upgrade"],
 };
+
+// Keys the zones had before docs/PLAN-build.md Z3.
+const LEGACY_KEY: Record<string, string> = { "zone:craft": "workshop", "zone:trade": "shop" };
 
 // Unlock keys an old save's `goals` record had paid (its unlock list plus what its done goals pay); empty without one.
 export function paidUnlocks(goals: unknown): string[] {
   if (typeof goals !== "object" || goals === null) return [];
   const g = goals as Record<string, unknown>;
   const out = new Set<string>();
-  if (Array.isArray(g.unlocks)) for (const k of g.unlocks) if (typeof k === "string") out.add(k);
+  if (Array.isArray(g.unlocks)) for (const k of g.unlocks) if (typeof k === "string") out.add(LEGACY_KEY[k] ?? k);
   if (Array.isArray(g.done)) for (const id of g.done) if (typeof id === "string") for (const k of LEGACY_GOAL_UNLOCKS[id] ?? []) out.add(k);
   return [...out].filter((k) => k in UNLOCK_NAME);
 }
@@ -277,7 +278,7 @@ export const eraTwoMet = (s: { residents: Record<number, unknown>; progress: Pic
 // Progress for a town loaded without any: the techs whose unlocks are all paid or proven by the buildings, and any tech
 // one of whose unlocks stands built (so nothing built is ever closed), with every prerequisite; the era by its
 // condition. Silent: no chronicle line, no toast.
-export function migrateProgress(s: Pick<SimState, "buildings" | "zones" | "residents">, goals?: unknown): ProgressState {
+export function migrateProgress(s: Pick<SimState, "buildings" | "residents">, goals?: unknown): ProgressState {
   const proven = new Set(provenUnlocks(s));
   const known = new Set([...proven, ...paidUnlocks(goals)]);
   const hit = TECHS.filter((t) => t.unlocks.length > 0 && (t.unlocks.every((k) => known.has(k)) || t.unlocks.some((k) => proven.has(k)))).map((t) => t.id);

@@ -11,7 +11,7 @@ import { frame, sendCmd, state } from "../simClient";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { itemLook, spansAlong, strokePad, strokeSummary } from "./strokeModel";
-import { flash, isStrokeTool, onlyFoundations, placeTemplate, setOnlyFoundations, setSpacePan, syncPan, tool, ZONE_MAX_MPP, type StrokeTool } from "./tools";
+import { flash, isStrokeTool, onlyFoundations, placeTemplate, setOnlyFoundations, setSpacePan, syncPan, tool, BUILD_MAX_MPP, type StrokeTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
 // The stroke tool (docs/PLAN-build.md sections 3.3-3.4): houses, workshops and shops laid in rows along roads. Hover
@@ -187,7 +187,7 @@ export function attachStrokeTool(view: View): void {
     frameReq = 0;
     const id = active();
     if (!id || held) return;
-    if (!local || view.metersPerPixel() > ZONE_MAX_MPP) {
+    if (!local || view.metersPerPixel() > BUILD_MAX_MPP) {
       draw(null);
       setLabel(local ? L("Приблизьте карту", "Zoom in on the map") : null);
       return;
@@ -370,7 +370,7 @@ export function attachStrokeTool(view: View): void {
     const id = active();
     const f = frame.value;
     if (!id || !f || held || busy || spaceDown || e.original.button !== 0 || !e.isPrimary) return;
-    if (view.metersPerPixel() > ZONE_MAX_MPP) {
+    if (view.metersPerPixel() > BUILD_MAX_MPP) {
       flash(L("Приблизьте карту", "Zoom in on the map"));
       return;
     }

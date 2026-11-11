@@ -29,7 +29,7 @@ const ANGLE_STEP_DEG = 15;
 const CURVE_SNAP_M = 1; // curve ends are already resolved; interior points must not jump onto nearby roads
 const SHORT_WAY_M = MIN_SEGMENT + 2.5; // an old way shorter than a road segment is laid this long, over the ways it joins
 
-// The active tool when it is a road tool, else null (zone tools are handled by zoneTool.ts).
+// The active tool when it is a road tool, else null (fields and clearings are drawn by landTool.ts).
 const roadT = (): RoadTool | null => {
   const t = tool.value;
   return t && isRoadTool(t) ? t : null;

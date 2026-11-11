@@ -51,8 +51,8 @@ export interface RoadGraph {
 export type ZoneType = "res" | "craft" | "trade";
 export type ZoneBlock = "road" | "overlap" | "field" | "water" | "steep" | "pending";
 
-// One 8 x 8 m lot beside a road edge (see sim/zones.ts for the geometry).
-export interface ZoneCell {
+// An 8 x 8 m cell beside a road: the ground lots are cut from (sim/zones.ts); a lot is t.w x t.d of them.
+export interface LotCell {
   key: string; // `${edge}:${side}:${i}:${depth}`
   edge: number;
   side: 1 | -1; // +1 left of a -> b, -1 right
@@ -61,7 +61,6 @@ export interface ZoneCell {
   cx: number;
   cy: number;
   angle: number; // direction of the road, radians
-  zone: "none" | ZoneType;
   block: ZoneBlock | null;
 }
 
@@ -87,7 +86,7 @@ export interface TerrainInfo {
 }
 
 export interface ZoneState {
-  cells: ZoneCell[];
+  cells: LotCell[];
   fields: Field[];
   terrain: Record<string, TerrainInfo>; // keyed by qkey (4 m grid)
   rev: number; // bumped on every change of cells, fields or terrain
@@ -98,10 +97,10 @@ export type BuildingState = "planned" | "building" | "active";
 export interface Building {
   id: number;
   template: string; // key of BUILDINGS
-  zone: ZoneType | "placed"; // "placed": put down by the player, not grown on a zone
+  zone: ZoneType | "placed"; // the class: house, workshop, shop, or "placed" for every other building
   // Local meters; centre of the lot rectangle, angle = road direction.
   lot: { cx: number; cy: number; angle: number; w: number; d: number };
-  side: 1 | -1; // side of the road, as in ZoneCell
+  side: 1 | -1; // side of the road, as in LotCell
   footprint: [number, number][]; // 4 corners, counter-clockwise
   height: number; // m
   state: BuildingState;
@@ -379,7 +378,6 @@ export interface SimState extends PeopleState {
   clearings: Clearing[]; // finished ones stay as cleared land
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
-  lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
   incoming: Incoming[]; // families on their way, by arrival time
   attraction: Attraction; // how attractive the town is to newcomers and why (sim/attraction.ts); set at 00:00
   // Derived once per game day (and on load): bit i of coverage[house] is set when service i covers it.
@@ -480,21 +478,18 @@ export interface JobReport {
   drafted: number; // of them, taken from jobs
 }
 
-export interface Demand {
-  res: number;
-  craft: number;
-  trade: number;
+// Homes at a glance, for the house tool's hint.
+export interface Housing {
+  tents: number; // households still in tents
+  free: number; // homes no household holds or is promised
+  underway: number; // houses planned or being built
 }
-
-// Why a zone type is (not) growing, see growthAdvice in growth.ts.
-export type GrowthWhy = "ok" | "nozone" | "demand" | "lots" | "hands" | "materials";
-export type GrowthAdvice = Record<ZoneType, GrowthWhy>;
 
 // What the worker streams every tick: no individual residents, only aggregates.
 // Zones, the chronicle, finds and articles travel separately, only when they changed.
 export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod" | "finds" | "articles"> & {
   digs: DigInfo[]; // finished dig sites with their discs and find counts
-  people: PeopleStats & { demand: Demand; growth: GrowthAdvice; jobs: JobReport };
+  people: PeopleStats & { housing: Housing; jobs: JobReport };
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
