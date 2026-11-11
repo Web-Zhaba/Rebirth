@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { summarize, newTally, observe } from "./away";
 import { addChronicle, CHRONICLE_CAP, recordChronicle } from "./chronicle";
 import { advanceTo, BASE_TICK, OFFLINE, step, TICK_MS } from "./clock";
 import { emptyGrowth, seedOf } from "./growth";
@@ -167,40 +166,9 @@ describe("save", () => {
   });
 });
 
-describe("catch-up", () => {
-  const GAP = 5 * 1440 * 1000; // five game days
-
-  it("chunked catch-up through the handler equals a single advanceTo", async () => {
-    // a save with a weather site: the handler adds one to a save without it, which would make the direct run differ
-    const start = { ...grower(NOW - GAP), weather: startWeather({ lat: 50, lng: 30, elev: 0, seed: 7, phase: 0 }) };
-    const { h, out, get } = setup({ version: 4, city, sim: start });
-    await h.handle({ t: "load", legacy: null, now: NOW });
-    const loaded = out.find((m) => m.t === "loaded") as Extract<FromWorker, { t: "loaded" }>;
-    const direct = advanceTo(start, NOW);
-    const saved = get().sim;
-    expect(saved.gameMinutes).toBe(direct.gameMinutes);
-    expect(saved.realTime).toBe(direct.realTime);
-    expect(saved.stock).toEqual(direct.stock);
-    expect(saved.residents).toEqual(direct.residents);
-    expect(saved.households).toEqual(direct.households);
-    expect(saved.chronicle).toEqual(direct.chronicle);
-    expect(saved.events).toEqual(direct.events);
-    expect(Object.keys(saved.buildings)).toEqual(Object.keys(direct.buildings));
-    expect(saved.rng).toBe(direct.rng);
-    // progress: starts at 0, ends at total, one report per game day; no snapshots; one life at the end
-    const progress = out.filter((m): m is Extract<FromWorker, { t: "progress" }> => m.t === "progress");
-    expect(progress[0].done).toBe(0);
-    expect(progress.at(-1)).toEqual({ t: "progress", done: progress[0].total, total: progress[0].total });
-    expect(progress).toHaveLength(6); // 0 and one per day
-    expect(out.filter((m) => m.t === "snapshot")).toHaveLength(0);
-    expect(out.filter((m) => m.t === "life")).toHaveLength(1);
-    const tags = out.map((m) => m.t);
-    expect(tags.indexOf("loaded")).toBeGreaterThan(tags.lastIndexOf("progress"));
-    expect(loaded.away?.gameMinutes).toBe(direct.gameMinutes - start.gameMinutes);
-  });
-
-  it("commands and queries arriving during catch-up wait and apply in order afterwards", async () => {
-    const start = grower(NOW - GAP);
+describe("load", () => {
+  it("commands and queries arriving during a load wait and apply in order afterwards", async () => {
+    const start = grower(NOW - 3_600_000);
     const { h, out } = setup({ version: 4, city, sim: start });
     const p = h.handle({ t: "load", legacy: null, now: NOW });
     const c1 = h.handle({ t: "cmd", id: 1, cmd: { type: "removeRoad", edgeId: 9999 } });
@@ -212,46 +180,6 @@ describe("catch-up", () => {
     expect(tags.indexOf("cmdResult1")).toBeGreaterThan(tags.indexOf("loaded"));
     expect(out.find((m) => m.t === "cmdResult" && m.id === 1)).toMatchObject({ ok: false });
     expect(out.find((m) => m.t === "cmdResult" && m.id === 2)).toMatchObject({ ok: true });
-  });
-
-  it("away summary counts people, buildings, goods and chronicle of the period", () => {
-    const start = grower(NOW - GAP);
-    const tally = newTally();
-    const end = advanceTo(start, NOW, OFFLINE, Infinity, (p, n) => observe(tally, p, n));
-    const a = summarize(tally, start, end, GAP);
-    expect(a.gameMinutes).toBe(end.gameMinutes - start.gameMinutes);
-    expect(a.popBefore).toBe(14);
-    expect(a.popAfter).toBe(Object.keys(end.residents).length);
-    // exact: every person is a founder, a birth or an arrival, minus deaths and departures
-    expect(a.popAfter).toBe(a.popBefore + a.births + a.arrivals - a.deaths - a.departures);
-    expect(a.built).toBe(Object.values(end.buildings).filter((b) => b.state === "active").length);
-    expect(a.chronicle).toEqual(end.chronicle.filter((e) => e.at > start.gameMinutes));
-    expect(Object.values(a.produced).every((n) => n >= 0)).toBe(true);
-  });
-
-  it("counts goods made by producers", () => {
-    const s = base();
-    const t = newTally();
-    const next = { ...s, buildings: { 5: bld(5, "woodcutter", "active"), 6: bld(6, "pottery", "active") }, prod: { ...s.prod, today: { 5: 3, 6: 2 } } };
-    observe(t, { ...next, prod: { ...s.prod, today: { 5: 1 } } }, next);
-    expect(t.produced).toMatchObject({ logs: 2, dishes: 2, food: 0 });
-  });
-
-  it("a tab returning after a long gap catches up with progress, one snapshot, one life and a summary", async () => {
-    const { h, out } = setup(undefined);
-    await h.handle({ t: "found", city, now: NOW });
-    out.length = 0;
-    h.tick(NOW + 3 * 1440 * 1000);
-    h.tick(NOW + 3 * 1440 * 1000 + 1000); // ignored while catching up
-    await h.idle();
-    const tags = out.map((m) => m.t);
-    expect(tags.filter((t) => t === "progress")).toHaveLength(4);
-    expect(tags.filter((t) => t === "snapshot")).toHaveLength(1);
-    expect(tags.filter((t) => t === "life")).toHaveLength(1);
-    const away = out.find((m) => m.t === "away") as Extract<FromWorker, { t: "away" }>;
-    expect(away.away.gameMinutes).toBe(3 * 1440);
-    const snap = out.find((m) => m.t === "snapshot") as Extract<FromWorker, { t: "snapshot" }>;
-    expect(snap.sim).not.toHaveProperty("chronicle");
   });
 
   it("snapshots carry the chronicle only when it changed", async () => {

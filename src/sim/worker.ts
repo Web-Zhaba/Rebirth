@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { POLL_MS } from "./clock";
 import { Handler } from "./handler";
 import { idbStorage } from "./idbStorage";
 import type { FromWorker, ToWorker } from "./protocol";
@@ -12,4 +13,4 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
 };
 
 // No-op until a save is loaded or founded.
-setInterval(() => handler.tick(Date.now()), 250);
+setInterval(() => handler.tick(Date.now()), POLL_MS);

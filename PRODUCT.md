@@ -15,7 +15,7 @@ into what the ground remembers. They value depth and a world that behaves on its
 than speed-running a build order.
 
 They may play in Russian or English; both locales are first-class (see Language). Returning players
-open a town that kept running while they were away, so the product serves both "a long evening of
+open a town exactly where they left it, so the product serves both "a long evening of
 planning" and "come back to the town tomorrow".
 
 Not yet an audience: mobile-first players, short casual sessions, and players of rival titles who
@@ -28,8 +28,8 @@ planet; the game projects that place into a local metric world and gives a handf
 primitive infrastructure and one problem: **make this place survive.**
 
 The town is simulated, not drawn: households live, work, commute on a road graph, farm on
-seasons, learn, age, arrive and leave. It keeps running while the player is away and reports what
-happened when they return.
+seasons, learn, age, arrive and leave. It runs while the game is open and waits, unchanged, while
+the player is away.
 
 Beneath the new settlement lies another city — the one that used to be there. Excavation uncovers
 foundations, streets and named places derived from real geography; restoring them turns the past
@@ -57,7 +57,7 @@ What a neighbouring product could not truthfully copy:
 
 Supporting truths (real, but not the claim): the settlement is a *graph* — services and jobs
 require reachability, not radius; every resident is simulated individually and the town persists
-through IndexedDB and offline catch-up with a chronicle of missed time.
+through IndexedDB, with a chronicle of what happened.
 
 ## Operating Context
 
@@ -66,8 +66,8 @@ through IndexedDB and offline catch-up with a chronicle of missed time.
 - **Online play, local persistence.** Map, terrain, place search and article data are fetched from
   public open-data endpoints; the town itself is saved locally (IndexedDB) and lives without a
   server account.
-- **Returning visits.** A town advanced while the tab was closed is the normal opening state, so
-  "what happened while you were away" is a routine ritual, not an edge case.
+- **Returning visits.** A town opens at the moment it was left: time away is never played back,
+  so absence earns nothing.
 - **Sourced material.** Findings and notebook entries are attributed (OpenStreetMap, Wikipedia,
   open terrain data); the product's factual claims about places must remain traceable.
 - **Development flow.** `main` is release-only and deploys to Vercel; `dev` integrates work through
@@ -92,8 +92,7 @@ records):
   restore "as it was" as a monument or a working building.
 - Progression: a technology tree with two eras, insights from restorations, a scarcity multiplier
   that favours find-poor places.
-- Idle continuity: IndexedDB saves, offline catch-up with progress, a chronicle and a "while you
-  were away" summary.
+- Continuity: IndexedDB saves and a chronicle; no offline catch-up.
 - Interface: «Полевой атлас» field-atlas direction (being replaced, see Brand Commitments), icon system, in-app dialogs, toasts, event
   cards, a day summary, a town panel, an inspector, a notebook and an "About" dialog.
 
@@ -164,8 +163,8 @@ Deployment: Vercel, production from `main`; licensed Apache-2.0.
 1. **The ground is the game.** Real coordinates, real data and real metres are the rules engine,
    not decoration; any feature that could work on a fictional map is optional, any that cannot is
    core.
-2. **The town runs without the player.** Simulation lives outside the interface and continues while
-   the player is away; the UI is a view of the world, never the world itself.
+2. **The simulation is not the interface.** Simulation lives outside the interface, in a worker; the
+   UI is a view of the world, never the world itself. Time passes only while the game is open.
 3. **The past is a resource.** Excavation, restoration and research make heritage materially useful;
    progress is partly earned by learning what was already here.
 4. **Reachability over radius.** Distance is measured along real networks and real routes; a badly

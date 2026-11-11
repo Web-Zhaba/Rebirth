@@ -72,8 +72,8 @@ export const showMs = (t: Pick<Toast, "important">): number => (t.important ? SH
 
 export const eventKey = (e: TownEvent): string => `${e.at}|${e.kind}|${e.text}`;
 
-// Events not seen yet, oldest first, plus the new set of seen keys. A null `seen` is the baseline (a load, a new town or
-// a catch-up): everything is marked seen and nothing is news.
+// Events not seen yet, oldest first, plus the new set of seen keys. A null `seen` is the baseline (a load or a new town):
+// everything is marked seen and nothing is news.
 export function diffEvents(events: readonly TownEvent[], seen: ReadonlySet<string> | null): { fresh: TownEvent[]; seen: Set<string> } {
   const keys = new Set(events.map(eventKey));
   if (!seen) return { fresh: [], seen: keys };

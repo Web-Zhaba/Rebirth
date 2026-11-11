@@ -34,6 +34,7 @@ export const OFFLINE_MS_PER_GAME_MINUTE = 1000; // catch-up: 1 real second = 1 g
 export const TICK_MS = BASE_TICK * OFFLINE_MS_PER_GAME_MINUTE; // one tick of a catch-up, real ms
 export const OFFLINE_CAP = 24 * 3600 * 1000; // real ms
 export const NIGHT_BOOST = 4; // live play runs this much faster at night
+export const POLL_MS = 250; // the worker advances the sim this often, real ms
 const NIGHT_START = 22;
 const NIGHT_END = 5;
 export { calendar, DAYS_PER_SEASON, type Calendar } from "./time";
@@ -58,11 +59,13 @@ export function tickMs(gameMinutes: number, pace: Pace): number {
   return (BASE_TICK * LIVE_MS_PER_GAME_MINUTE) / (pace.speed * (isNight(gameMinutes) ? NIGHT_BOOST : 1));
 }
 
-// The game clock interpolated between snapshots (live play), never past the next tick.
+// The game clock interpolated between snapshots (live play). A snapshot's realTime is when its tick fell due, so the
+// next one can come up to a tick plus a worker poll (and some message latency) later; the clock runs on through that
+// gap and stops only if the worker falls behind further.
 export function clockAt(gameMinutes: number, realTime: number, now: number, speed: Speed): number {
   if (speed === 0) return gameMinutes;
-  const msPerMinute = tickMs(gameMinutes, { speed, offline: false }) / BASE_TICK;
-  return gameMinutes + Math.min(Math.max(0, (now - realTime) / msPerMinute), BASE_TICK - 0.001);
+  const ms = tickMs(gameMinutes, { speed, offline: false });
+  return gameMinutes + (Math.min(Math.max(0, now - realTime), ms + 2 * POLL_MS) * BASE_TICK) / ms;
 }
 
 // «начнут в 07:00» while the artel is off work (evening, night, early morning), else null; for queued roads and sites.

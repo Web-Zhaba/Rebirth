@@ -171,7 +171,7 @@ Do not make every panel bark (the screen becomes one sheet of old paper) and do 
 
 - **Radius is zero.** Bark is torn, not rounded: `--radius` and `--radius-sm` are `0px`.
 - Torn edges come from `clip-path` polygons with 2–3 % corner bites, never from a radius or a mask image.
-- **The rule is a lenticel**, not a hairline: `--lenticel` is a row of 3 px dashes with 7 px gaps. Horizontal fact rows, list rows and the away-card ledger use it. Vertical coloured edge bars are forbidden.
+- **The rule is a lenticel**, not a hairline: `--lenticel` is a row of 3 px dashes with 7 px gaps. Horizontal fact rows and list rows use it. Vertical coloured edge bars are forbidden.
 - Borders are 1.5 px tar where a real boundary is needed (inputs, buttons, panels).
 
 ## Components
