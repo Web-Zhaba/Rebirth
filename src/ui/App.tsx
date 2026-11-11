@@ -4,7 +4,6 @@ import { useEffect } from "preact/hooks";
 import { city, state } from "../simClient";
 import { AboutDialog } from "./AboutDialog";
 import { AdminPanel } from "./AdminPanel";
-import { AwayNotice } from "./AwayNotice";
 import { BuildBar } from "./BuildBar";
 import { BuildingPanel } from "./BuildingPanel";
 import { CentreColumn } from "./CentreColumn";
@@ -50,7 +49,6 @@ export function App({ view }: { view: View }) {
       {import.meta.env.DEV && c && <AdminPanel />}
       {/* A readout for a running town: on the first-launch screen it would sit on the founding sheet. */}
       {c && <FpsCounter />}
-      <AwayNotice />
       <AboutDialog />
       <HotkeysDialog />
       <SettingsDialog />

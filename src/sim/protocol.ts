@@ -1,15 +1,12 @@
 import type { Speed } from "./clock";
 import type { Light, Rest, Trip } from "../map/life";
 import type { AdminOp } from "./admin";
-import type { Away } from "./away";
 import type { SimDelta } from "./delta";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { TradeOrder } from "./trade";
 import type { FeatureKind } from "./types";
 import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState, ZoneType } from "./types";
-
-export type { Away };
 
 export interface ArticleInput {
   id: string;
@@ -83,7 +80,7 @@ export type ToWorker =
   | { t: "flush" }
   // Session setting, not saved: 0 = paused. `now` keeps paused wall time from being owed later.
   | { t: "speed"; speed: Speed; now: number }
-  // The tab was hidden or shown; hidden for long enough, the town runs at the offline rate.
+  // The tab was hidden or shown; hidden for long enough, the town runs at the slower hidden-tab rate.
   | { t: "visibility"; hidden: boolean; now: number }
   | { t: "reset" };
 
@@ -93,17 +90,13 @@ export interface CmdResult {
 }
 
 export type FromWorker =
-  | { t: "loaded"; save: ClientSave | null; migrated: boolean; away: Away | null }
+  | { t: "loaded"; save: ClientSave | null; migrated: boolean }
   // what changed since the previous state the main thread got ("loaded" carries all of it; see delta.ts): zones only
   // when their rev changed; the chronicle, finds and articles only when they changed
   | { t: "snapshot"; sim: SimDelta; zones?: ZoneState; chronicle?: ChronicleEntry[]; finds?: Finds; articles?: StoredArticle[] }
-  // catch-up in progress (game minutes); no snapshots or life messages until it ends
-  | { t: "progress"; done: number; total: number }
-  // the summary of a catch-up after the tab was hidden (a catch-up at load reports it in "loaded")
-  | { t: "away"; away: Away }
   | ({ t: "cmdResult"; id: number } & CmdResult)
   | { t: "queryResult"; id: number; data: BuildingQuery | ResidentQuery | null }
-  // cosmetic, once per game day, whenever the families on their way change, and on load, never during catch-up; not part of the sim state or saves
+  // cosmetic, once per game day, whenever the families on their way change, and on load; not part of the sim state or saves
   | { t: "life"; day: number; trips: Trip[]; rests: Rest[]; traffic: Record<number, number>; lights: Light[] }
   | { t: "resetDone" }
   | { t: "error"; message: string };

@@ -3,7 +3,7 @@ import { computed, effect, signal } from "@preact/signals";
 import type { Light, Rest, Trip } from "./map/life";
 import { BASE_TICK, clockAt, tickMs, type Speed } from "./sim/clock";
 import { applyDelta } from "./sim/delta";
-import type { Away, Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
+import type { Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";
 import { makeFrame } from "./world/frame";
 
@@ -30,11 +30,8 @@ export const daySummary = computed(() => state.value?.summary ?? null);
 export const chronicle = computed(() => state.value?.chronicle ?? []);
 export const finds = computed(() => state.value?.finds ?? null);
 export const articles = computed(() => state.value?.articles ?? []);
-export const away = signal<Away | null>(null);
 // The save (or its absence) has come back from the worker: the game can be played from here on.
 export const loaded = signal(false);
-// Catch-up progress in game minutes while the worker advances the town; null otherwise.
-export const catchUp = signal<{ done: number; total: number } | null>(null);
 
 // Visual life of the current game day (cosmetic, from the worker; see PLAN.md section 10).
 export const lifeTrips = signal<Trip[]>([]);
@@ -115,16 +112,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       speed.value = 1; // the worker starts every town at 1x
       city.value = m.save?.city ?? null;
       state.value = m.save?.sim ?? null;
-      away.value = m.away;
-      catchUp.value = null;
       loaded.value = true;
-      break;
-    case "progress":
-      catchUp.value = { done: m.done, total: m.total };
-      break;
-    case "away":
-      away.value = m.away;
-      catchUp.value = null;
       break;
     case "snapshot": {
       // A snapshot carries only what changed (zones, the chronicle, finds and articles too); the rest stays as we have

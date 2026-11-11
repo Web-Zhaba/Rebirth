@@ -1,10 +1,10 @@
 import { effect, signal } from "@preact/signals";
-import { catchUp, state } from "../simClient";
+import { state } from "../simClient";
 import { play } from "./sound";
 import { diffEvents, isImportant, pushToast, soundFor, type Toast } from "./toastModel";
 
-// The stack of toasts, fed from the snapshot's event ring. The first snapshot after a load, a new town
-// or a catch-up is only a baseline: history is never replayed.
+// The stack of toasts, fed from the snapshot's event ring. The first snapshot after a load or a new town
+// is only a baseline: history is never replayed.
 export const toasts = signal<Toast[]>([]);
 
 // The last unique old building uncovered since the page loaded (docs/PLAN-restoration.md section 5): the map flies to it
@@ -26,7 +26,7 @@ effect(() => {
     toasts.value = [];
     return;
   }
-  const r = diffEvents(s.events, catchUp.value ? null : seen);
+  const r = diffEvents(s.events, seen);
   seen = r.seen;
   if (r.fresh.length === 0) return;
   if (r.fresh.some((e) => soundFor(e.kind))) play("finished");

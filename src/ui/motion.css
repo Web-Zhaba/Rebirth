@@ -111,9 +111,4 @@
   .dialog[open] {
     animation: card-in var(--dur-3) var(--ease-out) both;
   }
-
-  /* 10. The away card's list arrives a beat after the card itself, so the eye lands on the title first. */
-  .away .away-list {
-    animation: card-in var(--dur-3) var(--ease-out) 60ms both;
-  }
 }

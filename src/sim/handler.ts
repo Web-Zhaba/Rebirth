@@ -1,7 +1,6 @@
 import { houseGoods } from "./coverage";
 import { finishAll, grantStock, nextEra, reveal, unlockAll } from "./admin";
-import { newTally, observe, summarize, type Tally } from "./away";
-import { advanceTo, BASE_TICK, capGap, OFFLINE, TICK_MS, type Pace, type Speed } from "./clock";
+import { advanceTo, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
@@ -42,15 +41,12 @@ export interface Storage {
   keepOld?(raw: unknown, version: number): Promise<void>;
 }
 
-const AWAY_MIN_MS = 60_000;
 const PERSIST_MS = 10_000; // wall ms between saves while ticking
-const CATCHUP_MIN = 60; // game minutes: a longer catch-up reports progress
-const AWAY_GAP_MS = 70_000; // a longer gap between ticks is caught up in chunks with progress
-const HIDDEN_OFFLINE_MS = 5 * 60_000; // a tab hidden this long counts as offline
+const MAX_GAP_MS = 70_000; // a longer gap between ticks (a sleeping device) is dropped: time away is never played back
+const HIDDEN_SLOW_MS = 5 * 60_000; // a tab hidden this long runs at the slower hidden-tab rate
 
 // Errors go to the console of the main thread, which cannot see the worker's stack: send it along.
 const errorText = (e: unknown): string => (e instanceof Error ? (e.stack ?? e.message) : String(e));
-const CHUNK_TICKS = 144; // one game day per chunk
 
 // What the main thread sees: aggregates instead of individual residents.
 export function toSnapshot(sim: SimState): SimSnapshot {
@@ -111,9 +107,8 @@ export class Handler {
   private postedChronicle: ChronicleEntry[] | null = null; // the chronicle array the main thread already has
   private postedFinds: Finds | null = null;
   private postedArticles: StoredArticle[] | null = null;
-  private busy = false; // loading or catching up: other messages wait in `queue`
+  private busy = false; // loading: other messages wait in `queue`
   private queue: ToWorker[] = [];
-  private catching: Promise<void> | null = null;
   private enriching: Promise<void> | null = null;
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -146,12 +141,12 @@ export class Handler {
 
   // Resolves when no terrain enrichment is running (for tests).
   async idle(): Promise<void> {
-    while (this.enriching || this.catching) await (this.enriching ?? this.catching);
+    while (this.enriching) await this.enriching;
   }
 
   async handle(msg: ToWorker): Promise<void> {
     if (this.busy) {
-      this.queue.push(msg); // applied, in order, when the catch-up ends
+      this.queue.push(msg); // applied, in order, when the load ends
       return;
     }
     try {
@@ -173,7 +168,7 @@ export class Handler {
           save.sim.weather = await this.weatherFor(msg.city, 0);
           this.setSave(save);
           await this.storage.put(save);
-          this.postLoaded(save, false, null);
+          this.postLoaded(save, false);
           return;
         }
         case "query": {
@@ -215,51 +210,11 @@ export class Handler {
     while (this.queue.length > 0 && !this.busy) await this.handle(this.queue.shift()!);
   }
 
-  // Advances in chunks of one game day, yielding between them, and counts what happens on the way.
-  // The result equals one advanceTo(from, now).
-  private async catchUp(from: SimState, now: number): Promise<{ sim: SimState; tally: Tally }> {
-    let cur = capGap(from, now);
-    const tally = newTally();
-    const startGm = cur.gameMinutes;
-    const total = Math.floor((now - cur.realTime) / TICK_MS) * BASE_TICK;
-    const report = total > CATCHUP_MIN;
-    const count = (p: SimState, n: SimState) => observe(tally, p, n);
-    if (report) this.post({ t: "progress", done: 0, total });
-    while (cur.realTime + TICK_MS <= now) {
-      cur = advanceTo(cur, Math.min(now, cur.realTime + CHUNK_TICKS * TICK_MS), OFFLINE, Infinity, count);
-      if (report) {
-        this.post({ t: "progress", done: cur.gameMinutes - startGm, total });
-        if (cur.realTime + TICK_MS <= now) await new Promise((r) => setTimeout(r, 0));
-      }
-    }
-    return { sim: cur, tally };
-  }
-
   // Cells are derived data: rebuild them so saves without zones (or with stale ones) are consistent.
   private settle(sim: SimState): SimState {
     const z = sim.zones;
     const cells = regenerateCells(sim.roads, z.cells, z.fields, z.terrain);
     return refreshServices(syncPeople({ ...sim, zones: { ...z, cells, rev: z.rev + 1 }, buildings: reconcile(sim.buildings, sim.roads, cells) }));
-  }
-
-  // The tab came back after a long gap: catch up with progress, then one snapshot, one life and the summary.
-  private async runAway(now: number): Promise<void> {
-    this.busy = true;
-    try {
-      const save = this.save;
-      if (!save) return;
-      const realMs = now - save.sim.realTime;
-      const { sim, tally } = await this.catchUp(save.sim, now);
-      this.save = { ...save, sim: this.settle(sim) };
-      this.postSnapshot();
-      this.postLife();
-      this.post({ t: "away", away: summarize(tally, save.sim, sim, realMs) });
-      await this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));
-    } catch (e) {
-      this.post({ t: "error", message: errorText(e) });
-    } finally {
-      await this.release();
-    }
   }
 
   private async load(legacy: string | null, now: number): Promise<void> {
@@ -277,26 +232,24 @@ export class Handler {
       }
     }
     if (!save) {
-      this.post({ t: "loaded", save: null, migrated: false, away: null });
+      this.post({ t: "loaded", save: null, migrated: false });
       return;
     }
     if (!save.sim.weather.site) save = { ...save, sim: { ...save.sim, weather: await this.weatherFor(save.city, save.sim.gameMinutes) } };
-    const realMs = now - save.sim.realTime;
-    const { sim, tally } = await this.catchUp(save.sim, now);
-    const away = realMs > AWAY_MIN_MS ? summarize(tally, save.sim, sim, realMs) : null;
-    save = { ...save, sim: this.settle(sim) };
+    // The town waits where it was left: the time since the last save is not played back.
+    save = { ...save, sim: this.settle({ ...save.sim, realTime: now }) };
     this.setSave(save);
     await this.storage.put(save);
-    this.postLoaded(save, migrated, away);
-    this.postLife(); // after the catch-up above has finished
+    this.postLoaded(save, migrated);
+    this.postLife();
     this.enrich();
   }
 
   // The whole town goes to the main thread; the snapshots after it carry what differs from it.
-  private postLoaded(save: SaveV4, migrated: boolean, away: Extract<FromWorker, { t: "loaded" }>["away"]): void {
+  private postLoaded(save: SaveV4, migrated: boolean): void {
     const snap = toSnapshot(save.sim);
     this.posted = { snap, text: {} };
-    this.post({ t: "loaded", save: toClientSave(save, snap), migrated, away });
+    this.post({ t: "loaded", save: toClientSave(save, snap), migrated });
   }
 
   private setSave(save: SaveV4 | null): void {
@@ -396,7 +349,7 @@ export class Handler {
               }
             }),
           );
-          while (this.busy) await new Promise((r) => setTimeout(r, 20)); // not while a catch-up owns the state
+          while (this.busy) await new Promise((r) => setTimeout(r, 20)); // not while a load owns the state
           const cur = this.save;
           if (!cur || cur.city !== city) return; // reset or re-founded meanwhile
           if (Object.keys(got).length === 0) continue;
@@ -600,22 +553,20 @@ export class Handler {
   }
 
   private pace(now: number): Pace {
-    return { speed: this.speed, offline: this.hiddenAt !== null && now - this.hiddenAt > HIDDEN_OFFLINE_MS };
+    return { speed: this.speed, offline: this.hiddenAt !== null && now - this.hiddenAt > HIDDEN_SLOW_MS };
   }
 
   // Called by the worker timer every 250 ms.
   tick(now: number): void {
     if (!this.save || this.busy) return;
     const pace = this.pace(now);
-    if (pace.speed !== 0 && now - this.save.sim.realTime > AWAY_GAP_MS) {
-      this.catching = this.runAway(now).finally(() => (this.catching = null));
-      return;
-    }
-    const prev = this.save.sim.gameMinutes;
-    const advanced = advanceTo(this.save.sim, now, pace);
+    // a device that slept owes nothing: the wall time of the gap is dropped
+    const cur = now - this.save.sim.realTime > MAX_GAP_MS ? { ...this.save.sim, realTime: now } : this.save.sim;
+    const prev = cur.gameMinutes;
+    const advanced = advanceTo(cur, now, pace);
     let sim = this.free ? finishAll(advanced) : advanced;
     // a road rebuilt as a wider kind moves the lots beside it
-    if (kindsChanged(this.save.sim.roads, sim.roads)) sim = this.settle(sim);
+    if (kindsChanged(cur.roads, sim.roads)) sim = this.settle(sim);
     if (sim.gameMinutes === prev) {
       if (sim.realTime !== this.save.sim.realTime) this.save = { ...this.save, sim }; // paused: the wall time just follows
       return;

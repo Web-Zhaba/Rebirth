@@ -61,7 +61,7 @@ describe("advanceTo", () => {
     const after = advanceTo(paused, NOW + 3_600_000 + 2500, live(1));
     expect(after.gameMinutes).toBe(BASE_TICK);
   });
-  it("offline catch-up uses 1 game minute per second and caps at 24 real hours", () => {
+  it("the offline pace spends 1 game minute per second and caps at 24 real hours", () => {
     const s = advanceTo(start(), NOW + 3 * OFFLINE_CAP, OFFLINE);
     expect(s.gameMinutes).toBe(OFFLINE_CAP / 1000);
     expect(s.realTime).toBe(NOW + 3 * OFFLINE_CAP);
@@ -79,13 +79,13 @@ function setup() {
 }
 
 describe("handler pace", () => {
-  it("pause: no game time, no catch-up and nothing owed after unpausing", async () => {
+  it("pause: no game time and nothing owed after unpausing", async () => {
     const { h, out, gm } = setup();
     await h.handle({ t: "found", city, now: NOW });
     await h.handle({ t: "speed", speed: 0, now: NOW });
     out.length = 0;
     h.tick(NOW + 3_600_000);
-    expect(out).toEqual([]); // no snapshot, no progress, no away
+    expect(out).toEqual([]); // no snapshot
     await h.handle({ t: "speed", speed: 1, now: NOW + 3_600_000 });
     h.tick(NOW + 3_600_000 + 2500);
     expect(gm()).toBe(BASE_TICK);
@@ -125,16 +125,17 @@ describe("handler pace", () => {
     expect(out).toEqual([]);
     expect(gm()).toBeUndefined();
   });
-  it("a gap of more than a minute is caught up at the offline rate, whatever the speed", async () => {
+  it("a gap of more than a minute is dropped, whatever the speed: the town does not play the time back", async () => {
     const { h, out, gm } = setup();
     await h.handle({ t: "found", city, now: NOW });
     await h.handle({ t: "speed", speed: 4, now: NOW });
+    out.length = 0;
     h.tick(NOW + 120_000);
-    await h.idle();
-    expect(out.some((m) => m.t === "away")).toBe(true);
-    expect(gm()).toBe(120);
+    expect(out).toEqual([]); // no time passed, nothing to show
+    h.tick(NOW + 120_000 + 625);
+    expect(gm()).toBe(BASE_TICK); // the clock went on from the wake-up
   });
-  it("load catches up at 1 game minute per second and caps at 24 real hours", async () => {
+  it("load resumes where the town was left, however long ago that was", async () => {
     const a = setup();
     await a.h.handle({ t: "found", city, now: NOW });
     const save = a.stored();
@@ -142,7 +143,8 @@ describe("handler pace", () => {
     const loader = new Handler({ get: async () => save, put: async () => {}, clear: async () => {} }, (m) => out.push(m));
     await loader.handle({ t: "load", legacy: null, now: NOW + 3 * OFFLINE_CAP });
     const loaded = out.find((m) => m.t === "loaded") as Extract<FromWorker, { t: "loaded" }>;
-    expect(loaded.save?.sim.gameMinutes).toBe(OFFLINE_CAP / 1000);
+    expect(loaded.save?.sim.gameMinutes).toBe(0);
+    expect(loaded.save?.sim.realTime).toBe(NOW + 3 * OFFLINE_CAP);
   });
   it("ignores malformed speed and visibility messages", async () => {
     const { h, out, gm } = setup();

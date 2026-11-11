@@ -196,7 +196,7 @@ describe("handler", () => {
   it("load with nothing", async () => {
     const { h, out } = setup();
     await h.handle({ t: "load", legacy: null, now: NOW });
-    expect(out).toEqual([{ t: "loaded", save: null, migrated: false, away: null }]);
+    expect(out).toEqual([{ t: "loaded", save: null, migrated: false }]);
   });
   it("load legacy migrates and persists", async () => {
     const { h, out, get } = setup();
@@ -205,28 +205,23 @@ describe("handler", () => {
     const m = out[0] as Extract<FromWorker, { t: "loaded" }>;
     expect(m.migrated).toBe(true);
     expect(m.save?.city).toEqual(city);
-    expect(m.away).toBeNull();
     expect((get() as SaveV4).version).toBe(4);
   });
-  it("load existing reports away", async () => {
+  it("load existing resumes at the saved game time, not the wall time", async () => {
     const saved: SaveV4 = { version: 4, city, sim: { realTime: NOW - 3_600_000, gameMinutes: 100, roads: emptyRoads(), zones: emptyZones(), ...growth() } };
     const { h, out, get } = setup(saved);
     await h.handle({ t: "load", legacy: null, now: NOW });
     const m = out.find((x) => x.t === "loaded") as Extract<FromWorker, { t: "loaded" }>;
     expect(m.migrated).toBe(false);
-    expect(m.away).toMatchObject({ realMs: 3_600_000, gameMinutes: 3600 });
-    expect(m.save?.sim.gameMinutes).toBe(3700);
-    expect((get() as SaveV4).sim.gameMinutes).toBe(3700);
-  });
-  it("short gap gives no away report", async () => {
-    const { h, out } = setup({ version: 4, city, sim: { realTime: NOW - 30_000, gameMinutes: 0, roads: emptyRoads() } });
-    await h.handle({ t: "load", legacy: null, now: NOW });
-    expect((out[0] as Extract<FromWorker, { t: "loaded" }>).away).toBeNull();
+    expect(m.save?.sim.gameMinutes).toBe(100);
+    expect(m.save?.sim.realTime).toBe(NOW);
+    expect((get() as SaveV4).sim.gameMinutes).toBe(100);
+    expect(out.map((x) => x.t)).toEqual(["loaded", "life"]);
   });
   it("found", async () => {
     const { h, out, get } = setup();
     await h.handle({ t: "found", city, now: NOW });
-    expect(out[0]).toMatchObject({ t: "loaded", migrated: false, away: null });
+    expect(out[0]).toMatchObject({ t: "loaded", migrated: false });
     expect(get()).toEqual({ version: 4, city, sim: { realTime: NOW, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...growth(), weather: (get() as SaveV4).sim.weather } });
     expect((get() as SaveV4).sim.weather.site).toMatchObject({ lat: city.lat, lng: city.lng });
   });

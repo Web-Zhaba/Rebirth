@@ -118,13 +118,7 @@ It is badly connected.
 
 The simulation runs separately from the UI in a Web Worker.
 
-Closing the tab does not reduce the city to a timestamp plus a few resource multipliers. Rebirth persists simulation state in IndexedDB and can advance the world when the player returns.
-
-During catch-up it tracks what happened:
-
-**births · deaths · arrivals · departures · construction · production · research · events**
-
-Then it gives the player a summary of the time they missed.
+Rebirth persists simulation state in IndexedDB. Time passes only while the game is open: closing the tab pauses the city, and it resumes exactly where it was left. There is no offline catch-up, so being away earns nothing.
 
 ---
 
