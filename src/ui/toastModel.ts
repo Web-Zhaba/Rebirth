@@ -31,6 +31,7 @@ export const KIND_ICON: Record<EventKind, IconName> = {
   tech: "scroll",
   era: "flag",
   heritage: "scroll",
+  discovery: "foundations",
 };
 
 export const KIND_TONE: Record<EventKind, ToastTone> = {
@@ -51,13 +52,14 @@ export const KIND_TONE: Record<EventKind, ToastTone> = {
   tech: "ok",
   era: "ok",
   heritage: "ok",
+  discovery: "ok",
 };
 
-const IMPORTANT = new Set<EventKind>(["goal", "unlock", "tech", "era", "heritage", "shortage", "death"]);
+const IMPORTANT = new Set<EventKind>(["goal", "unlock", "tech", "era", "heritage", "discovery", "shortage", "death"]);
 export const isImportant = (k: EventKind): boolean => IMPORTANT.has(k);
 
 // The sound a fresh event gets: a finished building or a goal chimes; event cards have their own «notify».
-export const soundFor = (k: EventKind): "finished" | null => (k === "built" || k === "goal" || k === "tech" || k === "era" || k === "heritage" ? "finished" : null);
+export const soundFor = (k: EventKind): "finished" | null => (k === "built" || k === "goal" || k === "tech" || k === "era" || k === "heritage" || k === "discovery" ? "finished" : null);
 
 // News of a finished tech or a new era open the science panel when clicked.
 export const opensScience = (k: EventKind): boolean => k === "tech" || k === "era";

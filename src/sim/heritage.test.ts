@@ -20,19 +20,21 @@ describe("heritage table", () => {
       ["place_of_worship", "christian", "care"],
       ["place_of_worship", undefined, "care"],
       ["hospital", "clinic", "care"],
-      ["doctors", "doctors", null],
-      ["pharmacy", "pharmacy", null],
-      ["bank", "bank", null],
-      ["shop", "mall", null],
-      ["railway", "halt", null],
+      // typical kinds (docs/PLAN-restoration.md section 3)
+      ["doctors", "doctors", "care"],
+      ["pharmacy", "pharmacy", "care"],
+      ["bank", "bank", "trade"],
+      ["shop", "mall", "trade"],
+      ["railway", "halt", "trade"],
       ["grocery", "marketplace", "trade"],
-      ["grocery", "supermarket", null],
+      ["grocery", "supermarket", "trade"],
       ["railway", "station", "trade"],
       ["railway", "subway", null],
       ["harbor", "marina", "trade"],
-      ["car", "car_repair", null],
+      ["car", "car_repair", "craft"],
+      ["car", "car_parts", null],
       ["restaurant", "restaurant", null],
-      ["shop", "bakery", null],
+      ["shop", "bakery", "trade"],
       ["parking", "parking", null],
     ];
     for (const [cls, sub, want] of cases) expect(heritageDomain(cls, sub), `${cls}/${sub}`).toBe(want);
@@ -44,7 +46,10 @@ describe("heritage table", () => {
     expect(heritageKind("grocery", "marketplace")).toBe("marketplace");
     expect(heritageDomain("marketplace")).toBe("trade");
     expect(heritageKind("school", "school")).toBe("school");
-    expect(heritageKind("shop", "bakery")).toBeNull();
+    expect(heritageKind("shop", "bakery")).toBe("shop");
+    expect(heritageKind("shop", "mall")).toBe("mall");
+    expect(heritageKind("cafe", "cafe")).toBeNull();
+    expect(isHeritage({ cls: "shop" })).toBe(false); // typical: a lot like any other, not the player's alone
     expect(heritageDomain(undefined)).toBeNull();
     expect(isHeritage({ cls: "station" })).toBe(true);
     expect(isHeritage({ cls: "cafe" })).toBe(false);

@@ -1,4 +1,5 @@
 import type { Land } from "../world/landcover";
+import { makeIdentityCache } from "./memo";
 import { bridgeSpanBonus } from "./tech";
 import type { ProgressState, RoadEdge, RoadGraph, RoadKind, RoadUpgrade, Stock } from "./types";
 import { L as tr } from "../i18n";
@@ -499,14 +500,25 @@ export const stoneOwed = (e: RoadEdge): number => (unfinished(e) ? e.stone : e.u
 // An edge that still owes stone the stock cannot cover waits for it.
 const lacksStone = (e: RoadEdge, stock: Pick<Stock, "stone"> | undefined): boolean => !!stock && stoneOwed(e) > stock.stone + EPS;
 
+// The edges with work waiting a work party can reach, lowest id first, and whether any of them still owes stone.
+// Kept per graph: a tick asks many times (the artel, demand, the panels).
+const waitingEdges = makeIdentityCache((g: RoadGraph): { ids: readonly number[]; stone: boolean } => {
+  const reached = reachedNodes(g);
+  const ids: number[] = [];
+  let stone = false;
+  for (const e of Object.values(g.edges)) {
+    if (!needsWork(e) || !(reached.has(e.a) || reached.has(e.b))) continue;
+    ids.push(e.id);
+    if (stoneOwed(e) > 0) stone = true;
+  }
+  return { ids: ids.sort((p, q) => p - q), stone };
+});
+
 // Edges with work waiting (unbuilt, or being rebuilt) a work party can reach, lowest id first. With a `stock`, edges
 // short of stone are left out.
-export function workableEdges(g: RoadGraph, stock?: Pick<Stock, "stone">): number[] {
-  const reached = reachedNodes(g);
-  return Object.values(g.edges)
-    .filter((e) => needsWork(e) && (reached.has(e.a) || reached.has(e.b)) && !lacksStone(e, stock))
-    .map((e) => e.id)
-    .sort((p, q) => p - q);
+export function workableEdges(g: RoadGraph, stock?: Pick<Stock, "stone">): readonly number[] {
+  const w = waitingEdges(g);
+  return stock && w.stone ? w.ids.filter((id) => !lacksStone(g.edges[id], stock)) : w.ids;
 }
 
 // Reachable unfinished edges that wait only for stone.

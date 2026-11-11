@@ -76,12 +76,16 @@ export const roadItems: ReadonlySignal<ModelItem[]> = computed(() => {
 
 // Chains under construction (active, waiting, cut) as lines: `kind`, `w` (real width, m) and `state`. Built chains are
 // 3D only, so they are left out; a built edge being rebuilt adds its new kind as a line over it, as construction does.
+// The same collection comes back while no line changed: work on a road moves its progress every tick, not its line.
+const NO_LINES: FeatureCollection = { type: "FeatureCollection", features: [] };
+let lines = NO_LINES;
+let linesSig = "[]";
 export const roadLines: ReadonlySignal<FeatureCollection> = computed(() => {
   const f = frame.value;
   const g = roads.value;
   const list = chains.value;
   const state = edgeState.value;
-  if (!f || !g || !list || !state) return { type: "FeatureCollection", features: [] };
+  if (!f || !g || !list || !state) return NO_LINES;
   const features: Feature[] = list
     .filter((ch) => ch.state !== "built")
     .map((ch) => ({
@@ -98,5 +102,10 @@ export const roadLines: ReadonlySignal<FeatureCollection> = computed(() => {
       geometry: { type: "LineString", coordinates: [f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y)] },
     });
   }
-  return { type: "FeatureCollection", features };
+  const sig = JSON.stringify(features);
+  if (sig !== linesSig) {
+    linesSig = sig;
+    lines = { type: "FeatureCollection", features };
+  }
+  return lines;
 });

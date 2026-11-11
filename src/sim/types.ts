@@ -93,8 +93,6 @@ export interface ZoneState {
   rev: number; // bumped on every change of cells, fields or terrain
 }
 
-export type RestoreMode = "monument" | "working";
-
 export type BuildingState = "planned" | "building" | "active";
 
 export interface Building {
@@ -112,23 +110,25 @@ export interface Building {
   created: number; // gameMinutes
   paid: boolean; // materials taken from the stock (done when construction starts)
   site?: Site; // terrain shares measured when a placed building was put down
-  level: number; // 1, or 2 for an izba rebuilt after the upgrade
+  level: number; // a house's families (its level); on an old foundation the floors built
   streak: number; // days in a row a house met the upgrade conditions
-  upgrade?: Upgrade; // the rebuild into level 2 in progress; the house stays active meanwhile
+  upgrade?: Upgrade; // the next level (or floor) in progress; the building stays active meanwhile
   radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
   haul?: number; // person-hours of carting its materials from the stores, added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
-  // A restored old building (PLAN-research.ru.md section 7): the footprint is the real ring (3..64 points), the lot its oriented box.
-  siteId?: string; // the foundation it stands on
-  restoreMode?: RestoreMode;
-  restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
   door?: [number, number]; // point of the ring nearest to the road: where services, jobs and walks reach the building
   materials?: Materials; // cost by area, instead of the template's
-  // A building put on an old foundation (sim/foundationLots.ts): the footprint is its simplified ring, the lot its oriented box.
+  // A building on an old foundation (sim/foundationLots.ts, docs/PLAN-restoration.md section 2): the footprint is the
+  // simplified ring (3..64 points), the lot its oriented box.
   foundationId?: string;
-  scale?: number; // the foundation's area against the template's footprint: capacity, families and storage grow by it
+  scale?: number; // the ring's area against the template's footprint; times the floors built it is the floor area
+  floors?: number; // floors the old building had (from the tile height); `level` counts those built so far
+  asItWas?: true; // the purpose matches the foundation's known old kind: a restoration in full (sim/restore.ts)
+  landmark?: true; // a unique old building restored as it was: it works as a monument too
+  restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
+  exhibits?: (string | null)[]; // a museum: the theme each hall shows (sim/museum.ts)
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -182,13 +182,14 @@ export interface Household {
   served?: number; // share of its goods the household got at the last midnight, 0..1 (none yet: not counted)
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage"; // goal and unlock are no longer made: old saves still carry them
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage" | "discovery"; // goal and unlock are no longer made: old saves still carry them
 
 export interface TownEvent {
   at: number; // gameMinutes
   kind: EventKind;
   text: string;
   pos?: [number, number]; // local meters; the HUD flies the map here
+  site?: string; // a discovery: the foundation whose panel opens
 }
 
 // Notable moments kept forever (PLAN.md section 11); `kind` is a machine key, `text` the Russian line.
@@ -208,7 +209,8 @@ export interface FoundFoundation {
   cls?: string; // kind of a notable old building (heritage.ts), from a POI inside the ring
   name?: string;
   height?: number; // m
-  state?: FoundState; // absent = untouched; set once a restoration is ordered
+  state?: FoundState; // absent = untouched; set once a building "as it was" is ordered on it
+  ghost?: true; // surveyed, not dug yet: only its outline is known (sim/digging.ts); saves before the survey have none
 }
 
 // "lost": the restored building was demolished; the site can never be restored again.
@@ -223,6 +225,8 @@ export interface FoundPlace {
   at: number;
   x?: number;
   y?: number;
+  lines?: [number, number][][]; // a street: its pieces in the revealed area (local metres)
+  restored?: number; // a street: gameMinutes when it was restored in full and got its name back (sim/streets.ts)
 }
 
 // A Wikipedia article unlocked by a dig (PLAN.md section 13). Text is CC BY-SA 4.0.
@@ -234,6 +238,8 @@ export interface StoredArticle {
   lang: "ru" | "en";
   lat: number;
   lng: number;
+  x?: number; // local metres, as the client placed it (saves before have none)
+  y?: number;
   at: number; // gameMinutes
 }
 
@@ -250,7 +256,24 @@ export interface Finds {
   pois: FoundPlace[];
   streets: FoundPlace[];
   revealed: RevealedSite[];
+  features: FoundFeature[]; // real features that give finds (sim/items.ts); saves before them have none
+  fates: Record<string, FindFate>; // find id -> what the player did with it
 }
+
+// A real feature of the tile data that gives one find (docs/PLAN-restoration.md section 6): a garden (seeds), an
+// industrial ground (machine parts), a railway (rails), a well (bucket), a house number (counted per street, no item), or
+// a named place beyond the revealed discs (a sign that points to it).
+export type FeatureKind = "seeds" | "parts" | "rails" | "bucket" | "number" | "sign";
+export interface FoundFeature {
+  id: string;
+  kind: FeatureKind;
+  x: number; // local metres
+  y: number;
+  digId: number;
+  name?: string; // a sign's place name, a house number
+  cls?: string; // a sign's POI class
+}
+export type FindFate = "returned" | "used";
 
 // A finished dig site as the snapshot shows it.
 export interface DigInfo {
@@ -319,6 +342,10 @@ export interface ProgressState {
   research: { active: { techId: string; done: number } | null; queue: string[] }; // done: days of work so far; queue holds at most 3
   insights: string[]; // received and not yet used up (a tech insight goes when its tech is researched)
   restored: Partial<Record<DomainId, number>>; // weighted sum of restored old buildings per domain
+  seeds?: number; // old seeds put to use: each raises field yield (sim/items.ts)
+  exhibits?: Partial<Record<DomainId, number>>; // research weight of the complete museum exhibitions, set daily (sim/museum.ts)
+  museumPull?: number; // attraction share the complete exhibitions add, set daily
+  recognised?: Record<number, number>; // dig id -> recognisability steps granted, 1..4 (sim/recognition.ts)
 }
 
 // The research as the main thread shows it.

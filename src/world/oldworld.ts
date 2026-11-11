@@ -1,5 +1,6 @@
 import type { VectorTile } from "@mapbox/vector-tile";
 import { heritageKind } from "../sim/heritage";
+import type { FeatureKind } from "../sim/types";
 import type { Frame } from "./frame";
 import { lngLatToTile } from "./mercator";
 import { loadVector } from "./tiles";
@@ -47,12 +48,27 @@ export interface Spot {
   x: number;
   y: number;
 }
+// A real feature that gives a find (sim/items.ts): within the discs, or a named place in the band beyond them (a sign
+// that points there).
+export interface FindFeature {
+  id: string;
+  kind: FeatureKind;
+  x: number;
+  y: number;
+  name?: string;
+  cls?: string;
+}
 export interface OldWorld {
   foundations: Foundation[];
   streets: Street[];
   pois: Poi[];
   spots: Spot[];
+  features: FindFeature[];
 }
+
+// Land cover subclasses that are old gardens (seeds) and land uses that are old industry (machine parts).
+const GARDENS = new Set(["orchard", "allotments", "garden", "vineyard", "plant_nursery"]);
+const INDUSTRY = new Set(["industrial"]);
 
 export const STREET_CLASSES = [
   "motorway",
@@ -531,7 +547,7 @@ function parseTileFeatures(
   discs: Disc[],
   band: number,
 ): OldWorld {
-  const out: OldWorld = { foundations: [], streets: [], pois: [], spots: [] };
+  const out: OldWorld = { foundations: [], streets: [], pois: [], spots: [], features: [] };
   if (!vt) return out;
   const conv = (extent: number) => (p: { x: number; y: number }): XY => {
     const [lng, lat] = tilePointToLngLat(z, tx, ty, extent, p.x, p.y);
@@ -552,12 +568,52 @@ function parseTileFeatures(
       for (const line of f.loadGeometry()) named.push({ name, pts: line.map(c) });
     }
   }
+  // Old gardens, industry, railways, wells and house numbers: one find each (house numbers are counted, not kept).
+  const firstPoint = (f: { loadGeometry(): { x: number; y: number }[][] }, c: (p: { x: number; y: number }) => XY, area: boolean): XY | null => {
+    const g = f.loadGeometry();
+    if (!g[0] || g[0].length === 0) return null;
+    if (area) return ringCentroid(g[0].map(c));
+    const line = g[0];
+    return c(line[Math.floor(line.length / 2)]);
+  };
+  const feature = (kind: FeatureKind, id: string, at: XY | null, where: Disc[], extra: Partial<FindFeature> = {}) => {
+    if (at && inDiscs(at[0], at[1], where)) out.features.push({ id, kind, x: at[0], y: at[1], ...extra });
+  };
+  for (const [layer, kind, keep] of [
+    ["landcover", "seeds", (p: Record<string, unknown>) => GARDENS.has(String(p.subclass ?? ""))],
+    ["landuse", "parts", (p: Record<string, unknown>) => INDUSTRY.has(String(p.class ?? ""))],
+  ] as const) {
+    const l = vt.layers[layer];
+    if (!l) continue;
+    const c = conv(l.extent);
+    for (let i = 0; i < l.length; i++) {
+      const f = l.feature(i);
+      if (f.type !== 3 || !keep(f.properties)) continue;
+      const id = idOf(f);
+      feature(kind, id ? `osm:${id}` : `${tag}#${layer}${i}`, firstPoint(f, c, true), discs);
+    }
+  }
+  const hn = vt.layers.housenumber;
+  if (hn) {
+    const c = conv(hn.extent);
+    for (let i = 0; i < hn.length; i++) {
+      const f = hn.feature(i);
+      const n = f.properties.housenumber;
+      if (f.type !== 1 || typeof n !== "string" || n.length === 0 || n.length > 20) continue;
+      feature("number", `${tag}#hn${i}`, firstPoint(f, c, false), discs, { name: n });
+    }
+  }
   const tl = vt.layers.transportation;
   if (tl) {
     const c = conv(tl.extent);
     for (let i = 0; i < tl.length; i++) {
       const f = tl.feature(i);
       const cls = f.properties.class;
+      if (cls === "rail" && f.type === 2) {
+        const id = idOf(f);
+        feature("rails", id ? `osm:${id}` : `${tag}#rail${i}`, firstPoint(f, c, false), discs);
+        continue;
+      }
       if (f.type !== 2 || typeof cls !== "string" || !STREET_CLASSES.includes(cls)) continue;
       if (f.properties.brunnel === "tunnel") continue;
       const own = nameOf(f.properties);
@@ -584,7 +640,7 @@ function parseTileFeatures(
       const cls = String(f.properties.class ?? "");
       const subclass = String(f.properties.subclass ?? "");
       const notable = heritageKind(cls, subclass) !== null;
-      if (!name && !notable) continue;
+      if (!name && !notable && cls !== "drinking_water") continue;
       const g = f.loadGeometry()[0]?.[0];
       if (!g) continue;
       const [x, y] = c(g);
@@ -592,6 +648,8 @@ function parseTileFeatures(
       const key = id ? `osm:${id}` : `${tag}#${i}`;
       if (notable && inDiscs(x, y, wide)) out.spots.push({ id: key, ...(name ? { name } : {}), cls, subclass, x, y });
       if (name && inDiscs(x, y, discs)) out.pois.push({ id: key, name, cls, subclass, x, y });
+      else if (name && inDiscs(x, y, wide)) feature("sign", key, [x, y], wide, { name, cls }); // beyond the survey: its sign points there
+      if (cls === "drinking_water") feature("bucket", `${key}:well`, [x, y], discs);
     }
   }
   return out;
@@ -617,11 +675,19 @@ export function mergeOldWorld(parts: OldWorld[]): OldWorld {
     spotKeys.add(key);
     spots.push(p);
   }
+  const featureKeys = new Set<string>();
+  const features: FindFeature[] = [];
+  for (const f of parts.flatMap((o) => o.features ?? [])) {
+    if (featureKeys.has(f.id)) continue;
+    featureKeys.add(f.id);
+    features.push(f);
+  }
   return {
     foundations: dedupeFoundations(parts.flatMap((o) => o.foundations)),
     streets: parts.flatMap((o) => o.streets),
     pois,
     spots,
+    features,
   };
 }
 

@@ -23,7 +23,8 @@ export function researchSpeed(s: Pick<SimState, "progress" | "residents" | "game
   const c = countResidents(s.residents, s.gameMinutes);
   const literate = c.adults > 0 ? c.literate / c.adults : 0;
   const idea = s.progress.insights.reduce((m, id) => m + (INSIGHT_BY_ID.get(id)?.speed ?? 0), 0);
-  const v = 1 + SPEED.literacy * literate + SPEED.restored * Math.min(SPEED.restoredCap, s.progress.restored[domain] ?? 0) + idea;
+  const restored = (s.progress.restored[domain] ?? 0) + (s.progress.exhibits?.[domain] ?? 0); // complete museum exhibitions add theirs
+  const v = 1 + SPEED.literacy * literate + SPEED.restored * Math.min(SPEED.restoredCap, restored) + idea;
   return Math.min(SPEED.max, v);
 }
 
@@ -182,6 +183,18 @@ export function parseProgress(v: unknown): ProgressState | null {
   out.research.queue = [...new Set(list(res.queue))].filter((id) => TECH_BY_ID.has(id) && !out.techs.includes(id) && id !== out.research.active?.techId).slice(0, MAX_QUEUE);
   if (typeof r.restored === "object" && r.restored !== null && !Array.isArray(r.restored)) {
     for (const [k, n] of Object.entries(r.restored)) if (isDomain(k) && isNum(n) && n > 0) out.restored[k] = Math.min(1000, n);
+  }
+  if (Number.isInteger(r.seeds) && (r.seeds as number) > 0) out.seeds = Math.min(1000, r.seeds as number);
+  if (typeof r.exhibits === "object" && r.exhibits !== null && !Array.isArray(r.exhibits)) {
+    const ex: Partial<Record<DomainId, number>> = {};
+    for (const [k, n] of Object.entries(r.exhibits)) if (isDomain(k) && isNum(n) && n > 0) ex[k] = Math.min(100, n);
+    if (Object.keys(ex).length > 0) out.exhibits = ex;
+  }
+  if (isNum(r.museumPull) && r.museumPull > 0) out.museumPull = Math.min(1, r.museumPull);
+  if (typeof r.recognised === "object" && r.recognised !== null && !Array.isArray(r.recognised)) {
+    const got: Record<number, number> = {};
+    for (const [k, n] of Object.entries(r.recognised)) if (Number.isInteger(Number(k)) && Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 4) got[Number(k)] = n as number;
+    if (Object.keys(got).length > 0) out.recognised = got;
   }
   return out;
 }

@@ -24,7 +24,7 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
   }
   if (info?.kind === "house" && info.households.length === 0) return { label: L("пустует", "empty"), tone: "warn" };
   if (info?.kind === "house") return { label: L("заселён", "occupied"), tone: "ok" };
-  if (b.restoreMode === "monument") return { label: L("памятник", "monument"), tone: "ok" };
+  if (b.template === "restored") return { label: L("памятник", "monument"), tone: "ok" };
   return { label: b.template === "dig" ? L("раскоп готов", "dig finished") : L("работает", "working"), tone: "ok" };
 }
 

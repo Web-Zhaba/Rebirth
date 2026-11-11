@@ -29,16 +29,16 @@ describe("typeFoundations", () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ cls: "library", name: "Библиотека" });
   });
-  it("keeps at most 30 per dig, named first then larger area; digs count separately", () => {
+  it("keeps at most TYPED_PER_DISC per dig, named first then larger area; digs count separately", () => {
     const fs: Foundation[] = [];
     const sp: Spot[] = [];
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < TYPED_PER_DISC + 10; i++) {
       fs.push(fd(`f${i}`, i * 20, 0, 5 + (i % 7)));
-      sp.push(spot(`p${i}`, i * 20 + 2, 2, "school", i < 8 ? undefined : `S${i}`)); // 8 unnamed, 32 named
+      sp.push(spot(`p${i}`, i * 20 + 2, 2, "school", i < 8 ? undefined : `S${i}`)); // 8 unnamed, the rest named
     }
     const out = typeFoundations(fs, sp, one);
     expect(out).toHaveLength(TYPED_PER_DISC);
-    expect(out.every((t) => t.name)).toBe(true); // 32 named: all unnamed and two of the named are cut
+    expect(out.every((t) => t.name)).toBe(true); // all unnamed and two of the named are cut
     const named = fs.filter((_, i) => i >= 8).sort((a, b) => b.area - a.area || (a.id < b.id ? -1 : 1));
     expect(out.map((t) => t.id)).toEqual(named.slice(0, TYPED_PER_DISC).map((f) => f.id));
     const two = typeFoundations(fs, sp, (x) => (x < 400 ? 1 : 2));

@@ -1,7 +1,6 @@
 import { GOODS, WARES_SPLIT } from "./goods";
 import { LANDS } from "../world/landcover";
-import { BUILDINGS, homesOf, isPriority, JOB_KEYS, maxLevel, startLevel, UPGRADE } from "./buildings";
-import { FOUNDATION_LOT, fitMaxOf } from "./foundationLots";
+import { BUILDINGS, FLOOR, homesOf, isPriority, JOB_KEYS, levelHeight, maxLevel, startLevel } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { DIG, parseFinds } from "./excavation";
@@ -179,11 +178,11 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (raw.side !== 1 && raw.side !== -1) return null;
     const lot = raw.lot;
     if (!isRecord(lot) || !isNum(lot.cx) || !isNum(lot.cy) || !isNum(lot.angle)) return null;
-    // A restored old building has the real ring as its footprint and a lot that is a free-sized box (PLAN-research.ru.md section 7).
-    const isSite = typeof raw.siteId === "string" && raw.siteId.length > 0 && raw.siteId.length <= 200;
-    // A building on an old foundation (sim/foundationLots.ts) has the same free shape.
-    const onFoundation = !isSite && typeof raw.foundationId === "string" && raw.foundationId.length > 0 && raw.foundationId.length <= 200;
-    const ringShaped = isSite || onFoundation;
+    // A building on an old foundation (sim/foundationLots.ts) has the real ring as its footprint and a lot that is a
+    // free-sized box. Saves from before docs/PLAN-restoration.md held a restoration ordered apart as `siteId`.
+    const idOk = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
+    const isSite = idOk(raw.siteId);
+    const ringShaped = isSite || idOk(raw.foundationId);
     if (ringShaped ? !isNum(lot.w) || !isNum(lot.d) || (lot.w as number) <= 0 || (lot.d as number) <= 0 : !Number.isInteger(lot.w) || !Number.isInteger(lot.d) || (lot.w as number) < 1 || (lot.d as number) < 1) return null;
     if (!Array.isArray(raw.footprint) || (ringShaped ? raw.footprint.length < 3 || raw.footprint.length > 64 : raw.footprint.length !== 4) || !raw.footprint.every(isPoint)) return null;
     if (!isNum(raw.height) || raw.height <= 0) return null;
@@ -218,16 +217,18 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     if (site) out[id].site = site;
     // Saves from before excavation: a dig site starts at its first radius.
     if (raw.template === DIG.template) out[id].radius = isNum(raw.radius) && raw.radius >= DIG.startRadius ? Math.min(DIG.maxRadius, raw.radius) : DIG.startRadius;
-    if (isSite) {
-      out[id].siteId = raw.siteId as string;
-      if (raw.restoreMode === "monument" || raw.restoreMode === "working") out[id].restoreMode = raw.restoreMode;
-      if (isNum(raw.restoreWeight) && raw.restoreWeight > 0) out[id].restoreWeight = Math.min(1000, raw.restoreWeight);
-    }
-    if (onFoundation) {
-      out[id].foundationId = raw.foundationId as string;
-      if (isNum(raw.scale) && raw.scale >= FOUNDATION_LOT.fitMin && raw.scale <= fitMaxOf(BUILDINGS[raw.template as string])) out[id].scale = raw.scale;
-    }
     if (ringShaped) {
+      const t = BUILDINGS[raw.template as string];
+      out[id].foundationId = (isSite ? raw.siteId : raw.foundationId) as string;
+      // A restoration of the old order counted in full, whatever its mode: it stays "as it was".
+      if (isSite || raw.asItWas === true) out[id].asItWas = true;
+      if ((isSite || raw.asItWas === true) && isNum(raw.restoreWeight) && raw.restoreWeight > 0) out[id].restoreWeight = Math.min(1000, raw.restoreWeight);
+      if (raw.asItWas === true && raw.landmark === true) out[id].landmark = true;
+      if (Array.isArray(raw.exhibits) && raw.exhibits.length <= 8 && raw.exhibits.every((x) => x === null || (typeof x === "string" && x.length <= 300))) out[id].exhibits = raw.exhibits as (string | null)[];
+      // The ring's area against the template's footprint: saved, or measured on the ring (a restoration had none).
+      const ringArea = Math.abs(out[id].footprint.reduce((a, p, i, r) => a + p[0] * r[(i + 1) % r.length][1] - r[(i + 1) % r.length][0] * p[1], 0) / 2);
+      out[id].scale = isNum(raw.scale) && raw.scale > 0 && raw.scale <= 10_000 ? raw.scale : Math.max(0.01, Math.round((ringArea / (t.along * t.deep)) * 100) / 100);
+      if (Number.isInteger(raw.floors) && (raw.floors as number) >= 1 && (raw.floors as number) <= 99) out[id].floors = raw.floors as number;
       if (isPoint(raw.door)) out[id].door = [raw.door[0], raw.door[1]];
       const m = raw.materials;
       if (isRecord(m) && isNum(m.logs) && isNum(m.planks) && isNum(m.stone) && m.logs >= 0 && m.planks >= 0 && m.stone >= 0) out[id].materials = { logs: m.logs, planks: m.planks, stone: m.stone };
@@ -235,7 +236,19 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     // Saves from before services have no level (1), no streak. Saves from before house levels (docs/PLAN-balance.md B2)
     // had level 2 only for the house and a large house of level 1 holding two families: a house is at least at the
     // level its template starts at, at most at the highest its area allows.
-    if (out[id].zone === "res") out[id].level = Math.min(maxLevel(out[id]), Math.max(startLevel(out[id].template), Number.isInteger(raw.level) ? (raw.level as number) : 1));
+    const level = Number.isInteger(raw.level) ? (raw.level as number) : 1;
+    if (ringShaped) {
+      const b = out[id];
+      if (b.floors !== undefined) b.level = Math.min(b.floors, Math.max(1, level));
+      else {
+        // Saves from before floors: a level counted families, the highest one being the upper floor of the rebuild. The
+        // building keeps one floor, or two when its families no longer fit one.
+        b.level = 1;
+        if (b.zone === "res" && level > homesOf(b)) b.level = 2;
+        b.floors = b.level;
+        if (b.level === 2 && b.height < BUILDINGS[b.template].height + FLOOR.height) b.height = Math.round((b.height + levelHeight(b)) * 100) / 100;
+      }
+    } else if (out[id].zone === "res") out[id].level = Math.min(maxLevel(out[id]), Math.max(startLevel(out[id].template), level));
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
     if (isNum(raw.haul) && raw.haul > 0) out[id].haul = raw.haul;
     if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
@@ -258,7 +271,7 @@ function parseNeeds(v: unknown): Needs | undefined {
   if (!keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0 && (v[k] as number) <= 100)) return undefined;
   return { food: v.food as number, rest: v.rest as number, social: v.social as number, warmth: v.warmth as number };
 }
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "discovery"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -323,7 +336,9 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
       if (!Number.isInteger(h.home)) return null;
       const n = homes.get(h.home as number) ?? 0;
       // up to the highest level: saves from before house levels may hold more families than the level (raised below)
-      if (isFinishedHouse(buildings[h.home as number]) && n < maxLevel(buildings[h.home as number])) {
+      const hb = buildings[h.home as number];
+      // a house on an old foundation takes them all: its floors are raised to fit below
+      if (isFinishedHouse(hb) && (hb.foundationId || n < maxLevel(hb))) {
         home = h.home as number;
         homes.set(home, n + 1);
       }
@@ -337,7 +352,13 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
   // A house holds as many families as its level: one with more (saved before house levels) is raised to them, so no family is evicted.
   for (const [id, n] of homes) {
     const b = buildings[id];
-    if (n > homesOf(b)) buildings[id] = { ...b, level: n, height: b.height + UPGRADE.height * (n - b.level) };
+    if (n <= homesOf(b)) continue;
+    if (!b.foundationId) buildings[id] = { ...b, level: n, height: b.height + levelHeight(b) * (n - b.level) };
+    else {
+      let level = b.level;
+      while (homesOf({ ...b, level }) < n) level++;
+      buildings[id] = { ...b, level, floors: Math.max(b.floors ?? 1, level), height: Math.round((b.height + levelHeight(b) * (level - b.level)) * 100) / 100 };
+    }
   }
   for (const r of Object.values(residents)) {
     if (!households[r.household]) return null;
@@ -355,7 +376,9 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     for (const e of sim.events) {
       if (isRecord(e) && isNum(e.at) && typeof e.kind === "string" && EVENT_KINDS.includes(e.kind) && typeof e.text === "string") {
         const pos = parsePos(e.pos);
-        events.push(pos ? { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text), pos } : { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text) });
+        const ev: TownEvent = pos ? { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text), pos } : { at: e.at, kind: e.kind as EventKind, text: migrateText(e.text) };
+        if (typeof e.site === "string" && e.site.length <= 200) ev.site = e.site;
+        events.push(ev);
       }
     }
   }

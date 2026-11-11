@@ -1,62 +1,59 @@
 import { addChronicle } from "./chronicle";
-import { earlierOfKind, nextInsight, restoreWeightOf, scarcity, siteDomain, siteTitle } from "./heritage";
-import { restoreBlocker, restoredBuilding } from "./heritageGeo";
+import { earlierOfKind, nextInsight, restoreWeightOf, scarcity, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE } from "./heritage";
 import { say } from "./production";
 import { grantInsight } from "./research";
 import { INSIGHT_BY_ID } from "./tech";
 import type { Building, FoundFoundation, SimState } from "./types";
 import { L } from "../i18n";
 
-// Restoring an old typed building (PLAN-research.ru.md section 7): the order, the finish and the loss.
-
-export type RestoreResult = { ok: true; sim: SimState } | { ok: false; reason: string };
+// Restoring an old building "as it was" (docs/PLAN-restoration.md section 2): ordinary construction on an old foundation
+// whose purpose matches its known old kind (`Building.asItWas`). This module keeps its consequences: the site is being
+// restored once ordered, restored once finished (research, an idea, a chronicle line) and lost once demolished.
 
 const withFoundation = (s: SimState, id: string, patch: Partial<FoundFoundation>): SimState => ({
   ...s,
   finds: { ...s.finds, foundations: s.finds.foundations.map((f) => (f.id === id ? { ...f, ...patch } : f)) },
 });
 
-// The order: a planned building of the foundation's real shape, built by the artel like any placed building.
-export function restoreSite(s: SimState, siteId: unknown, mode: unknown): RestoreResult {
-  if (typeof siteId !== "string") return { ok: false, reason: L("Некорректная постройка", "Invalid building") };
-  if (mode !== "monument" && mode !== "working") return { ok: false, reason: L("Некорректное назначение", "Invalid purpose") };
-  const why = restoreBlocker(s, siteId, mode);
-  if (why) return { ok: false, reason: why };
-  const f = s.finds.foundations.find((x) => x.id === siteId)!;
-  const id = s.nextBuildingId;
-  const b = restoredBuilding(f, mode, s.roads, id, s.gameMinutes);
-  if (!b) return { ok: false, reason: L("Нужна дорога", "Needs a road") };
-  return { ok: true, sim: withFoundation({ ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: b } }, siteId, { state: "restoring" }) };
+// A building "as it was" has just been planned on its foundation: the site is being restored.
+export function orderRestoration(s: SimState, b: Building): SimState {
+  if (!b.asItWas || !b.foundationId) return s;
+  return withFoundation(s, b.foundationId, { state: "restoring" });
 }
 
-// Every restored building that has just been finished counts: the foundation is restored, the domain's research
-// grows by the scarcity-weighted share, an insight comes. Driven by the state (not a diff), so admin finishing works too.
+// Every building "as it was" that has just been finished counts: the foundation is restored and the domain's research
+// grows by the scarcity-weighted share. A unique one (heritage.ts tierOf) brings an idea (the first of its kind), a
+// chronicle line and the monument effect; a typical one a quarter of the share. Driven by the state (not a diff), so admin
+// finishing works too.
 export function completeRestorations(s: SimState): SimState {
   let cur = s;
   for (const b of Object.values(s.buildings)) {
-    if (!b.siteId || b.state !== "active" || b.upgrade || (b.restoreMode !== "monument" && b.restoreMode !== "working")) continue;
-    const f = cur.finds.foundations.find((x) => x.id === b.siteId);
+    if (!b.asItWas || !b.foundationId || b.state !== "active") continue;
+    const f = cur.finds.foundations.find((x) => x.id === b.foundationId);
     if (!f || f.state !== "restoring") continue;
     const domain = siteDomain(f.cls);
+    const unique = tierOf(f, tierContext(cur.finds, cur.articles ?? [])) === "unique";
     const earlier = earlierOfKind(cur, f.cls, f.id, b.id);
-    const weight = restoreWeightOf(b.restoreMode, scarcity(cur.finds), earlier);
+    const weight = Math.round(restoreWeightOf(scarcity(cur.finds), earlier) * (unique ? 1 : TYPICAL_SHARE) * 100) / 100;
     let progress = cur.progress;
     if (domain) progress = { ...progress, restored: { ...progress.restored, [domain]: (progress.restored[domain] ?? 0) + weight } };
-    const ins = domain && earlier === 0 ? nextInsight(progress, domain) : null; // only the first of a kind brings an idea
-    cur = withFoundation({ ...cur, progress, buildings: { ...cur.buildings, [b.id]: { ...b, restoreWeight: weight } } }, f.id, { state: "restored" });
+    const ins = unique && domain && earlier === 0 ? nextInsight(progress, domain) : null; // only the first of a kind brings an idea
+    const done: Building = { ...b, restoreWeight: weight, ...(unique ? { landmark: true as const } : {}) };
+    cur = withFoundation({ ...cur, progress, buildings: { ...cur.buildings, [b.id]: done } }, f.id, { state: "restored" });
     if (ins) cur = grantInsight(cur, ins.id);
     const name = siteTitle(f);
     const text = `${L("Восстановлено", "Restored")}: ${name}${ins ? ` — ${L("идея", "idea")} «${INSIGHT_BY_ID.get(ins.id)?.text ?? ins.text}»` : ""}`;
-    cur = { ...cur, events: say(cur.events, cur.gameMinutes, "heritage", text, [b.lot.cx, b.lot.cy]), chronicle: addChronicle(cur.chronicle, cur.gameMinutes, `heritage:${f.id}`, text) };
+    cur = { ...cur, events: say(cur.events, cur.gameMinutes, "heritage", text, [b.lot.cx, b.lot.cy]) };
+    if (unique) cur = { ...cur, chronicle: addChronicle(cur.chronicle, cur.gameMinutes, `heritage:${f.id}`, text) };
   }
   return cur;
 }
 
-// A restoring or restored building is demolished: the site is lost for good, its weight leaves the research.
+// A building "as it was" is demolished: the site is lost for good, its weight leaves the research.
 export function loseSite(s: SimState, gone: Building): SimState {
-  if (!gone.siteId) return s;
-  const f = s.finds.foundations.find((x) => x.id === gone.siteId);
-  if (!f || f.state === "lost") return s;
+  if (!gone.asItWas || !gone.foundationId) return s;
+  const f = s.finds.foundations.find((x) => x.id === gone.foundationId);
+  if (!f || f.state === "lost" || !f.state) return s;
   let out = withFoundation(s, f.id, { state: "lost" });
   const domain = siteDomain(f.cls);
   const w = gone.restoreWeight ?? 0;
@@ -69,4 +66,3 @@ export function loseSite(s: SimState, gone: Building): SimState {
   }
   return { ...out, chronicle: addChronicle(out.chronicle, out.gameMinutes, `heritage-lost:${f.id}`, L(`Утрачено: ${siteTitle(f)}`, `Lost: ${siteTitle(f)}`)) };
 }
-

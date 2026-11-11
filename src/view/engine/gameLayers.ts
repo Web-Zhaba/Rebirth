@@ -9,7 +9,7 @@ import { mixHex, PALETTE } from "../../ui/palette";
 import { buildingShapes } from "../layers/buildings";
 import { campArea, cityPoint } from "../layers/city";
 import { serviceReach } from "../layers/reach";
-import { ruinFloors, ruinHints, ruinStreets, ruinTyped, ruinWalls } from "../layers/ruins";
+import { ruinFloors, ruinGhosts, ruinHints, ruinStreets, ruinTyped, ruinWalls } from "../layers/ruins";
 import { roadTraffic } from "../layers/traffic";
 import { roadLines } from "../layers/roads";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
@@ -60,6 +60,9 @@ export const GAME_LAYERS: OverlayLayer[] = [
   },
   { source: "ruins-streets", maxMpp: z(12), style: { kind: "line", color: (p) => (p.bridge ? PALETTE.pencil : PALETTE.warn), widthM: (p) => Number(p.w), widthPx: 1, opacity: (p) => (p.bridge ? 0.6 : 0.3) } },
   { source: "ruins-walls", maxMpp: z(14), style: { kind: "line", color: PALETTE.pencil, widthPx: 1.2, opacity: 0.85, filter: (p) => p.thin === 1 } },
+  // surveyed outlines nobody has dug yet, dashed; a dig under way draws its outline solid as the work goes
+  { source: "ruins-ghosts", maxMpp: z(14), style: { kind: "line", color: PALETTE.pencil, widthPx: 1.6, opacity: 0.9, dash: [3, 2], filter: (p) => p.dig === 0 } },
+  { source: "ruins-ghosts", maxMpp: z(14), style: { kind: "line", color: PALETTE.warn, widthPx: 2.5, opacity: 0.95, filter: (p) => p.dig === 1 } },
   {
     source: "ruins-typed",
     maxMpp: z(13),
@@ -110,6 +113,7 @@ const SOURCES: [string, ReadonlySignal<FeatureCollection>][] = [
   ["ruins-typed", shownRuins(ruinTyped)],
   ["ruins-streets", shownRuins(ruinStreets)],
   ["ruins-walls", shownRuins(ruinWalls)],
+  ["ruins-ghosts", shownRuins(ruinGhosts)],
   ["ruins-hints", shownRuins(ruinHints)],
   ["clearings", clearings],
   ["fields", fields],

@@ -1,7 +1,7 @@
 import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_USERS, TOOL_WEAR, TOOLLESS } from "./goods";
 import { leverMood, workHours } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
-import { allocateLabor, BUILDINGS, FOUNDING_STOCK, foodCapacity, groupOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
+import { allocateLabor, BUILDINGS, floorArea, FOUNDING_STOCK, foodCapacity, groupOf, homesOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
 import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, lotFront, MAX_EVENTS, productionScales } from "./people";
@@ -13,7 +13,8 @@ import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
 import { covers, dwelling, SERVICE, serviceMood } from "./services";
 import { tradeDay } from "./trade";
-import { finishedMonuments, monumentMood, monumentsNear } from "./monuments";
+import { finishedMonuments, monumentMoodAt } from "./monuments";
+import { districtMood } from "./recognition";
 import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
 import { applyFrost } from "./weather";
 import { buildFactor, EFFECTS, emptyOrchard, fieldWork, firewoodDaily, frostNight, moodShift, orchardDay, orchardQuality, spoilage, workFactor } from "./weatherEffects";
@@ -44,6 +45,36 @@ export const HARVEST_OK = 0.25;
 export const HAND_HOURS = { logs: 4, planks: 12, stone: 2 };
 
 const EPS = 1e-9;
+
+// Heating (docs/PLAN-restoration.md section 2.3): a house burns by its floor area, and only while somebody lives in it.
+// The firewood rate of the weather is that of HEAT_AREA m2, the room of one family in a house of the old kind; a house
+// of the old kind (and a tent) heats that much per family, a building on an old foundation its whole floor area, shared
+// by the families in it, so a large half-filled house costs its whole area.
+export const HEAT_AREA = 72; // m2
+
+// m3 of firewood each household burns today, by household id.
+export function heatShares(s: Pick<SimState, "households" | "buildings" | "weather">): Map<number, number> {
+  const wood = firewoodDaily(s.weather);
+  const out = new Map<number, number>();
+  if (wood <= 0) return out;
+  const living = new Map<number, number>(); // house id -> families in it
+  for (const h of Object.values(s.households)) if (h.home !== null) living.set(h.home, (living.get(h.home) ?? 0) + 1);
+  for (const h of Object.values(s.households)) {
+    const b = h.home !== null ? s.buildings[h.home] : undefined;
+    if (!b?.foundationId) {
+      out.set(h.id, wood);
+      continue;
+    }
+    const area = homesOf(b) > 0 ? floorArea(b) : HEAT_AREA;
+    out.set(h.id, (wood * area) / HEAT_AREA / (living.get(b.id) ?? 1));
+  }
+  return out;
+}
+const heatDemand = (s: Pick<SimState, "households" | "buildings" | "weather">): number => {
+  let sum = 0;
+  for (const v of heatShares(s).values()) sum += v;
+  return sum;
+};
 
 export const emptyStock = (): Stock => ({ ...FOUNDING_STOCK });
 export const emptyFlags = (year = 1): ProdFlags => ({ year, sowing: false, harvest: false, done: false, closed: false, hungry: false, rot: 0 });
@@ -505,10 +536,14 @@ export function dailyEconomy(s: SimState): SimState {
 
   // firewood: every household burns by the cold of the day that ended; those the logs do not reach stay cold
   const cold = new Set<number>();
-  const wood = firewoodDaily(s.weather);
-  ledger.put("logs", brushwood(s, wood * ids.length), camp); // the idle gather brushwood when the logs will not last the day
-  if (wood > 0) {
+  const heat = heatShares(s);
+  let burn = 0;
+  for (const v of heat.values()) burn += v;
+  ledger.put("logs", brushwood(s, burn), camp); // the idle gather brushwood when the logs will not last the day
+  if (burn > 0) {
     for (const id of ids) {
+      const wood = heat.get(id) ?? 0;
+      if (wood <= 0) continue;
       const ok = stock.logs >= wood - EPS;
       ledger.take("logs", Math.min(wood, stock.logs), homeAt(s.households[id]));
       if (!ok) cold.add(id);
@@ -564,7 +599,7 @@ export function dailyEconomy(s: SimState): SimState {
       return age >= SERVICE.schoolFrom && age < SERVICE.schoolTo;
     });
     const home = h.home !== null ? s.buildings[h.home] : undefined;
-    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMood(monumentsNear(monuments, home.lot.cx, home.lot.cy)) : 0) : 0;
+    const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMoodAt(monuments, home.lot.cx, home.lot.cy) + districtMood(s.progress, s.finds, home.lot.cx, home.lot.cy) : 0) : 0;
     const needMood = needMoodTerm(householdSatisfaction(h.members, s.residents));
     const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0) + needMood));
     const next: Household = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep, served: served.get(h.id) ?? 0 };
@@ -677,13 +712,13 @@ export function economyStats(s: SimState): EconomyStats {
     fields: { count: s.zones.fields.length, ha, assignedHa: aHa, sown: sowNeed > 0 ? sownH / sowNeed : 0, reaped, expected, window: windowAt(s.gameMinutes) },
     avgMood: hs > 0 ? moods / hs : 0,
     forage: forageKg(s),
-    brushwood: brushwood(s, firewoodDaily(s.weather) * hs),
+    brushwood: brushwood(s, heatDemand(s)),
     outlook: foodOutlook(s),
     eveningWares: eveningRate(s),
     ...(s.prod.trade ? { trade: s.prod.trade } : {}),
     fieldWork: fieldWork(s.weather),
     buildFactor: buildFactor(s.weather),
-    firewood: firewoodDaily(s.weather) * hs,
+    firewood: heatDemand(s),
     unheated: { households: unheated, people: unheatedPeople },
     admin: adminOf(s),
   };

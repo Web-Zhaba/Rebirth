@@ -2,10 +2,12 @@ import type { Speed } from "./clock";
 import type { Light, Rest, Trip } from "../map/life";
 import type { AdminOp } from "./admin";
 import type { Away } from "./away";
+import type { SimDelta } from "./delta";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { TradeOrder } from "./trade";
-import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, SimSnapshot, RestoreMode, Site, StoredArticle, ZoneState, ZoneType } from "./types";
+import type { FeatureKind } from "./types";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState, ZoneType } from "./types";
 
 export type { Away };
 
@@ -17,6 +19,8 @@ export interface ArticleInput {
   lang: "ru" | "en";
   lat: number;
   lng: number;
+  x?: number; // local metres of the article's point
+  y?: number;
 }
 
 export type Cmd =
@@ -33,9 +37,14 @@ export type Cmd =
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "placeOnFoundation"; template: string; foundationId: string }
+  // Dig a surveyed outline, or every outline of an old street (sim/digging.ts).
+  | { type: "digFoundation"; foundationId: string }
+  | { type: "digStreet"; streetId: string }
+  // What to do with a find (sim/items.ts), and what a museum hall shows (sim/museum.ts; null empties the hall).
+  | { type: "returnFind"; id: string }
+  | { type: "useFind"; id: string }
+  | { type: "setExhibition"; building: number; hall: number; theme: string | null }
   | { type: "demolish"; id: number }
-  // Order the restoration of a typed old building (a foundation with a kind), as a monument or in working order.
-  | { type: "restoreSite"; siteId: string; mode: RestoreMode }
   // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
   | { type: "setPriority"; key: number | null }
   | { type: "callToloka"; key: number }
@@ -62,7 +71,8 @@ export type Cmd =
       digId: number;
       foundations: { id: string; ring: [number, number][]; area: number }[];
       pois: { id: string; name: string; cls: string; x: number; y: number }[];
-      streets: { id: string; name: string }[];
+      streets: { id: string; name: string; lines?: [number, number][][] }[];
+      features?: { id: string; kind: FeatureKind; x: number; y: number; name?: string; cls?: string }[];
     };
 
 export type ToWorker =
@@ -84,8 +94,9 @@ export interface CmdResult {
 
 export type FromWorker =
   | { t: "loaded"; save: ClientSave | null; migrated: boolean; away: Away | null }
-  // zones only when their rev changed; the chronicle, finds and articles only when they changed since the previous snapshot
-  | { t: "snapshot"; sim: SimSnapshot; zones?: ZoneState; chronicle?: ChronicleEntry[]; finds?: Finds; articles?: StoredArticle[] }
+  // what changed since the previous state the main thread got ("loaded" carries all of it; see delta.ts): zones only
+  // when their rev changed; the chronicle, finds and articles only when they changed
+  | { t: "snapshot"; sim: SimDelta; zones?: ZoneState; chronicle?: ChronicleEntry[]; finds?: Finds; articles?: StoredArticle[] }
   // catch-up in progress (game minutes); no snapshots or life messages until it ends
   | { t: "progress"; done: number; total: number }
   // the summary of a catch-up after the tab was hidden (a catch-up at load reports it in "loaded")

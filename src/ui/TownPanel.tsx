@@ -21,15 +21,17 @@ import { amount, pad, roadQueue } from "./topbarModel";
 import { effectLines, weatherReason } from "./weatherModel";
 import { tabId, tabPanelId } from "./tabSemantics";
 import { SEMANTIC_IDS } from "./semanticIds";
+import { placesView } from "./placesModel";
 import { decimal, L } from "../i18n";
 
-type Tab = "people" | "work" | "services" | "events" | "orders";
+type Tab = "people" | "work" | "services" | "events" | "places" | "orders";
 
 const TABS: TabItem<Tab>[] = [
   { id: "people", label: L("Жители", "People") },
   { id: "work", label: L("Работа", "Work") },
   { id: "services", label: L("Службы", "Services") },
   { id: "events", label: L("События", "Events") },
+  { id: "places", label: L("Места", "Places") },
   { id: "orders", label: L("Приказы", "Orders") },
 ];
 
@@ -294,6 +296,37 @@ function ServicesTab() {
   );
 }
 
+// How recognisable the dug places are again, and the old streets on their way to getting their names back.
+function PlacesTab() {
+  const st = state.value;
+  if (!st || st.finds.foundations.length === 0) return <div class="people-note">{L("Раскопов пока нет: старые места появятся здесь, когда откроются фундаменты.", "No digs yet: old places will show here once foundations are uncovered.")}</div>;
+  const { places, streets } = placesView(st);
+  const pct = (v: number) => `${Math.round(v * 100)} %`;
+  return (
+    <div class="rs-list">
+      <div class="people-note">{L("Место узнаётся по доле старых фундаментов (по площади), на которых снова стоят здания. Каждая четверть даёт награду один раз.", "A place is recognised by the share of its old foundations (by area) that carry buildings again. Each quarter gives a reward once.")}</div>
+      {places.map((p) => (
+        <div class="demand-card" key={p.digId}>
+          <Line label={p.name}>{pct(p.share)}</Line>
+          <ProgressBar value={p.share} label={`${L("Узнаваемость", "Recognisability")}: ${p.name}`} />
+          {p.next ? <div class="people-note">{L(`При ${pct(p.next.at)}: ${p.next.reward}`, `At ${pct(p.next.at)}: ${p.next.reward}`)}</div> : <div class="people-note">{L("Место узнаётся целиком", "The place is whole again")}</div>}
+        </div>
+      ))}
+      {streets.length > 0 && <div class="people-note">{L("Улица получает имя назад, когда все её дома стоят на старых фундаментах, а дорога идёт по старой линии.", "A street gets its name back once all its houses stand on their old foundations and a road runs on its old line.")}</div>}
+      {streets.map((t) => (
+        <div class="demand-card" key={t.id}>
+          <Line label={t.name}>{t.restored ? L("имя возвращено", "name restored") : L(`дома ${t.built} из ${t.houses} · дорога ${pct(t.road)}`, `houses ${t.built} of ${t.houses} · road ${pct(t.road)}`)}</Line>
+          {(t.numbers.total > 0 || t.household.total > 0) && (
+            <div class="people-note">
+              {[t.numbers.total > 0 ? L(`номера домов: ${t.numbers.found} из ${t.numbers.total}`, `house numbers: ${t.numbers.found} of ${t.numbers.total}`) : "", t.household.total > 0 ? L(`утварь улицы: ${t.household.found} из ${t.household.total} домов`, `the street's household: ${t.household.found} of ${t.household.total} houses`) : ""].filter(Boolean).join(" · ")}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function EventsTab({ view }: { view: View }) {
   const list = events.value.slice().reverse();
   const fl = frame.value;
@@ -416,6 +449,7 @@ export function TownPanel({ city, view }: { city: City; view: View }) {
         {tab.value === "work" && <WorkTab city={city} view={view} />}
         {tab.value === "services" && <ServicesTab />}
         {tab.value === "events" && <EventsTab view={view} />}
+        {tab.value === "places" && <PlacesTab />}
         {tab.value === "orders" && <OrdersTab />}
       </div>
     </aside>

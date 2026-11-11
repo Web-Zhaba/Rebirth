@@ -112,8 +112,14 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   office: T("office", L("Районная управа", "District office"), "placed", 2, 2, 10, 10, 7, 160, 2, [30, 6, 6], "services"),
   // Excavation (PLAN.md section 12).
   dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 6, [2, 0.5, 0], "services"),
-  // A restored old building kept as a monument (sim/restore.ts): no jobs, no residents; its size, cost and shape come from the foundation.
-  restored: T("restored", L("Памятник", "Monument"), "placed", 1, 1, 8, 8, 8, 100, 0, [10, 2, 3], null),
+  // A museum: a purpose of any old foundation, its halls by floor area (sim/museum.ts).
+  museum: T("museum", L("Музей", "Museum"), "placed", 2, 2, 10, 10, 6, 140, 2, [30, 6, 4], "services"),
+  // Digging one surveyed outline (sim/digging.ts): a site of the artel on the old ring, gone once it is dug; 8
+  // person-hours per 100 m2.
+  excavation: T("excavation", L("Раскопки фундамента", "Foundation dig"), "placed", 1, 1, 10, 10, 0.5, 8, 0, [0, 0, 0], null),
+  // An old building kept as a monument, one of the purposes of an old foundation (docs/PLAN-restoration.md section 2): no
+  // jobs, no residents; its shape, size and cost come from the foundation it stands on.
+  restored: T("restored", L("Памятник", "Monument"), "placed", 1, 1, 8, 8, 8, 50, 0, [6, 1.5, 4], null),
 };
 
 // Materials of a building: its own (a restored old building is priced by its area) or its template's.
@@ -123,35 +129,88 @@ export const materialsOf = (b: Pick<Building, "template" | "materials">): Materi
 // The cost of a level is this times the level the house has now; each level adds this much height.
 export const UPGRADE = { labor: 60, materials: { logs: 10, planks: 2, stone: 0 } as Materials, height: 1.5 };
 
-// A template's capacity on a building whose old foundation scaled it (`scale`: its area against the template's footprint).
-export const scaled = (v: number, b: Pick<Building, "scale">): number => (b.scale && v > 0 ? Math.max(1, Math.round(v * b.scale)) : v);
+// ---------- buildings on old foundations (docs/PLAN-restoration.md section 2) ----------
+// The foundation sets the building: its ring is the footprint and its old height the floors. `scale` is the ring's area
+// against the template's own footprint; times the floors built (`level`) it is the floor area, which sets the capacity,
+// the cost and the heating.
+
+export const FLOOR = {
+  height: 3.66, // m of one storey: the tile heights are levels x 3.66 (OpenMapTiles render_height), 5 m when unknown
+  familyArea: 50, // m2 of floor area per family
+  jobsCap: 3, // a workplace employs at most this many times its template's crew
+};
+
+// Floors of an old building of height `h` (m): one when the data has no height.
+export const floorsOf = (h: number | undefined): number => (h !== undefined && h > 0 ? Math.max(1, Math.round(h / FLOOR.height)) : 1);
+
+const onFoundation = (b: Pick<Building, "foundationId">): boolean => !!b.foundationId;
+const footArea = (t: BuildingTemplate): number => t.along * t.deep;
+
+// Floor area against the template's footprint: the ring's share times the floors built (1 for a regular building).
+export const floorScale = (b: Pick<Building, "scale" | "level" | "foundationId">): number => (b.scale ?? 1) * (onFoundation(b) ? Math.max(1, b.level) : 1);
+
+// Floor area in m2.
+export const floorArea = (b: Pick<Building, "template" | "scale" | "level" | "foundationId">): number => {
+  const t = BUILDINGS[b.template];
+  return t ? footArea(t) * floorScale(b) : 0;
+};
+
+// Jobs (and clerks' room) of a workplace: they grow slower than its floor area, about with the square root, and stop at
+// FLOOR.jobsCap times the template's, so one huge workshop does not take every free worker.
+export const scaledJobs = (v: number, b: Pick<Building, "scale" | "level" | "foundationId">): number => {
+  const k = floorScale(b);
+  if (k === 1 || v <= 0) return v;
+  return Math.max(1, Math.min(Math.round(v * Math.sqrt(k)), v * FLOOR.jobsCap));
+};
 
 // House levels (docs/PLAN-balance.md B2): a house holds as many families as its level. A new house starts at the
-// families its template is built for (a house 1, a large house 2); the area of its lot sets the highest level: the
-// families that area holds (an old foundation scales it) and one more for the upper floor of the rebuild.
+// families its template is built for (a house 1, a large house 2) and may be raised once more, by the upper floor of
+// the rebuild. A house on an old foundation has no such levels: it holds a family per FLOOR.familyArea of the floors
+// built, and its highest level is the floors of the old building.
 export const startLevel = (template: string): number => Math.max(1, BUILDINGS[template]?.homes ?? 1);
-export const maxLevel = (b: Pick<Building, "template" | "scale">): number => (BUILDINGS[b.template]?.homes ? scaled(BUILDINGS[b.template].homes, b) + 1 : 1);
+export const maxLevel = (b: Pick<Building, "template" | "foundationId" | "floors">): number => {
+  if (onFoundation(b)) return Math.max(1, b.floors ?? 1);
+  return BUILDINGS[b.template]?.homes ? BUILDINGS[b.template].homes + 1 : 1;
+};
 
 // Families a house holds now, and the people each of them may grow to.
-export const homesOf = (b: Pick<Building, "template" | "level">): number => (BUILDINGS[b.template]?.homes ? b.level : 0);
+export const homesOf = (b: Pick<Building, "template" | "level" | "scale" | "foundationId">): number => {
+  if (!BUILDINGS[b.template]?.homes) return 0;
+  return onFoundation(b) ? Math.max(1, Math.round(floorArea(b) / FLOOR.familyArea)) : b.level;
+};
 export const familyCapacity = (b: Pick<Building, "template">): number => {
   const t = BUILDINGS[b.template];
   return t?.homes ? Math.floor(t.residents / t.homes) : 0;
 };
 
 // People a house holds: a family's room for each family.
-export const houseCapacity = (b: Pick<Building, "template" | "level">): number => homesOf(b) * familyCapacity(b);
+export const houseCapacity = (b: Pick<Building, "template" | "level" | "scale" | "foundationId">): number => homesOf(b) * familyCapacity(b);
 
-// A finished house that may be raised by a level: below its highest level, not being raised already.
-export const upgradable = (b: Pick<Building, "template" | "zone" | "state" | "level" | "scale" | "upgrade">): boolean =>
-  b.zone === "res" && b.state === "active" && !b.upgrade && b.level < maxLevel(b);
+// A finished building that may be raised by a level: a house below its highest level, or a building on an old
+// foundation below the floors of the old one; not being raised already. (Technology may still hold it back.)
+export const upgradable = (b: Pick<Building, "template" | "zone" | "state" | "level" | "foundationId" | "floors" | "upgrade">): boolean =>
+  (b.zone === "res" || onFoundation(b)) && b.state === "active" && !b.upgrade && b.level < maxLevel(b);
 
-// The work and materials of raising a house from its level now to the next.
-export const upgradeLabor = (b: Pick<Building, "level">): number => UPGRADE.labor * b.level;
-export const upgradeMaterials = (b: Pick<Building, "level">): Materials => {
+// The work and materials of raising a house from its level now to the next; on an old foundation, of one more floor
+// (the cost of the building's ring once).
+export const upgradeLabor = (b: Pick<Building, "template" | "level" | "scale" | "foundationId">): number => {
+  const t = BUILDINGS[b.template];
+  if (onFoundation(b) && t) return Math.max(1, Math.round(t.labor * (b.scale ?? 1)));
+  return UPGRADE.labor * b.level;
+};
+export const upgradeMaterials = (b: Pick<Building, "template" | "level" | "scale" | "foundationId">): Materials => {
+  const t = BUILDINGS[b.template];
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  if (onFoundation(b) && t) {
+    const k = b.scale ?? 1;
+    return { logs: r1(t.materials.logs * k), planks: r1(t.materials.planks * k), stone: r1(t.materials.stone * k) };
+  }
   const k = b.level;
   return { logs: UPGRADE.materials.logs * k, planks: UPGRADE.materials.planks * k, stone: UPGRADE.materials.stone * k };
 };
+
+// Height a finished level adds.
+export const levelHeight = (b: Pick<Building, "foundationId">): number => (onFoundation(b) ? FLOOR.height : UPGRADE.height);
 
 // Templates of one zone type, in table order.
 export const templatesOf = (zone: ZoneType | "placed"): BuildingTemplate[] => Object.values(BUILDINGS).filter((t) => t.zone === zone);
@@ -175,12 +234,13 @@ export const CAMP_STORE: Required<StoreRoom> = { food: FOOD_CAMP_CAP, wood: 200,
 export const STORES: Record<string, StoreRoom> = { barn: { food: BARN_CAP }, cellar: { food: CELLAR_CAP }, logyard: { wood: 400 }, stoneyard: { stone: 300 }, warehouse: { goods: 500 } };
 export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, clothes: 12, dishes: 6, furniture: 2, tools: 10 };
 
-// The room of a finished store (scaled with its old foundation); empty for any other building.
-export function storeRoom(b: Pick<Building, "template" | "scale">): StoreRoom {
+// The room of a finished store (linear in the floor area on an old foundation); empty for any other building.
+export function storeRoom(b: Pick<Building, "template" | "scale" | "level" | "foundationId">): StoreRoom {
   const r = STORES[b.template];
   if (!r) return {};
   const out: StoreRoom = {};
-  for (const k of Object.keys(r) as StoreGroup[]) out[k] = r[k]! * (b.scale ?? 1);
+  const k = floorScale(b);
+  for (const g of Object.keys(r) as StoreGroup[]) out[g] = r[g]! * k;
   return out;
 }
 
@@ -193,7 +253,7 @@ export function capacityOf(buildings: Record<number, Building>, group: StoreGrou
 export const foodCapacity = (buildings: Record<number, Building>): number => capacityOf(buildings, "food");
 
 // Kg of food a finished building holds on top of the camp (scaled with its old foundation).
-export const storageOf = (b: Pick<Building, "template" | "scale">): number => storeRoom(b).food ?? 0;
+export const storageOf = (b: Pick<Building, "template" | "scale" | "level" | "foundationId">): number => storeRoom(b).food ?? 0;
 
 // ---------- construction labor ----------
 

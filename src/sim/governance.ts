@@ -1,4 +1,4 @@
-import { BUILDINGS, scaled } from "./buildings";
+import { BUILDINGS, scaledJobs } from "./buildings";
 import type { Building, Resident } from "./types";
 
 // Administration (docs/PLAN-balance.md B7). The founding elders manage a hamlet; a town hall and district offices
@@ -45,8 +45,8 @@ export function adminOf(s: { residents: Record<number, Resident>; buildings: Rec
   let capacity = ADMIN.elders;
   for (const b of Object.values(s.buildings)) {
     if (b.state !== "active" || !isOffice(b.template)) continue;
-    const jobs = scaled(BUILDINGS[b.template].jobs, b);
-    capacity += scaled(ADMIN.room[b.template], b) * (jobs > 0 ? Math.min(1, (clerks.get(b.id) ?? 0) / jobs) : 1);
+    const jobs = scaledJobs(BUILDINGS[b.template].jobs, b);
+    capacity += scaledJobs(ADMIN.room[b.template], b) * (jobs > 0 ? Math.min(1, (clerks.get(b.id) ?? 0) / jobs) : 1);
   }
   const out = { pop, capacity, factor: overload(pop, capacity) };
   byBuildings.set(s.buildings, out);

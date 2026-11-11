@@ -2,7 +2,7 @@ import { computed, effect, type ReadonlySignal } from "@preact/signals";
 import { calendar } from "../../sim/clock";
 import { ROAD_KINDS } from "../../sim/roads";
 import type { WeatherState } from "../../sim/weather";
-import { buildings, frame, roads, state, zones } from "../../simClient";
+import { buildings, buildingSet, frame, roads, state, zones } from "../../simClient";
 import { TREE_COLORS } from "../../ui/palette";
 import type { Frame } from "../../world/frame";
 import { latToMy, lngToMx } from "../../engine/geo/mercator";
@@ -59,8 +59,8 @@ export function attachForest(engine: Engine, o: ForestOptions): Forest {
   let dirty = true;
   effect(() => {
     void frame.value;
-    void buildings.value;
-    void roads.value;
+    void buildingSet.value; // lots never move: only a building that appears or goes changes the mask
+    void roadShape.value;
     void zones.value;
     void clearingSteps.value;
     void ruins.value;
@@ -117,6 +117,18 @@ export function attachForest(engine: Engine, o: ForestOptions): Forest {
   });
   return forest;
 }
+
+// The roads as the mask sees them: where every edge runs and its kind (the width). Work on a road does not change it.
+const roadShape = computed(() => {
+  const g = roads.value;
+  let out = "";
+  for (const e of Object.values(g?.edges ?? {})) {
+    const a = g!.nodes[e.a];
+    const b = g!.nodes[e.b];
+    if (a && b) out += `${e.kind}:${a.x},${a.y},${b.x},${b.y};`;
+  }
+  return out;
+});
 
 // The clearings' progress in steps, so cutting a tree does not redraw the mask every tick.
 const clearingSteps = computed(() => (state.value?.clearings ?? []).map((c) => `${c.id}:${Math.floor((c.done / Math.max(c.labor, 1e-9)) * PROGRESS_STEPS)}`).join(","));

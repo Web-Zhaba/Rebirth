@@ -559,8 +559,8 @@ describe("house upgrade", () => {
     expect(houseCapacity(big)).toBe(2 * BUILDINGS.izba.residents);
     expect(houseCapacity(s.buildings[4])).toBe(BUILDINGS.izba.residents);
     expect(upgradeLabor(s.buildings[4])).toBe(UPGRADE.labor);
-    expect(upgradeLabor({ level: 3 })).toBe(3 * UPGRADE.labor);
-    expect(upgradeMaterials({ level: 2 })).toEqual({ logs: 20, planks: 4, stone: 0 });
+    expect(upgradeLabor({ template: "izba", level: 3 })).toBe(3 * UPGRADE.labor);
+    expect(upgradeMaterials({ template: "izba", level: 2 })).toEqual({ logs: 20, planks: 4, stone: 0 });
   });
 });
 

@@ -60,7 +60,8 @@ tiles hold the buildings and streets that excavation reveals later.
   (founding search box or the layer bar).
 - **E2** notebook: finds, Wikipedia articles unlocked by digs (saved with the town) and the chronicle.
 
-Next: pace and balance in `PLAN-pace.md`, interface in `PLAN-ui.md`.
+Next: pace and balance in `PLAN-pace.md`, interface in `PLAN-ui.md`, restoration-first gameplay in
+`PLAN-restoration.md`.
 
 ## 5. Architecture
 

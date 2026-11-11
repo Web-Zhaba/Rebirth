@@ -6,13 +6,17 @@ import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { scarcity } from "./heritage";
-import { loseSite, restoreSite } from "./restore";
+import { loseSite } from "./restore";
+import { orderDig, orderStreetDig } from "./digging";
+import { returnFind, useFind } from "./items";
+import { museumDaily, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
 import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
+import { snapshotDelta, type Posted } from "./delta";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, canPlaceOnFoundation, placeOnFoundation, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
 import { freeHomes, peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
@@ -90,7 +94,7 @@ function inspect(sim: SimState, id: number): BuildingQuery | null {
   return q;
 }
 
-const toClientSave = (save: SaveV4): ClientSave => ({ version: 4, city: save.city, sim: { ...toSnapshot(save.sim), zones: save.sim.zones, chronicle: save.sim.chronicle, finds: save.sim.finds, articles: save.sim.articles } });
+const toClientSave = (save: SaveV4, snap: SimSnapshot): ClientSave => ({ version: 4, city: save.city, sim: { ...snap, zones: save.sim.zones, chronicle: save.sim.chronicle, finds: save.sim.finds, articles: save.sim.articles } });
 const ENRICH_BATCH = 32;
 const ENRICH_RETRY_MS = 30_000;
 
@@ -102,6 +106,7 @@ export type ElevationSampler = (lng: number, lat: number) => Promise<number>;
 
 export class Handler {
   private save: SaveV4 | null = null;
+  private posted: Posted | null = null; // the snapshot the main thread already has; snapshot messages carry what differs
   private postedRev = -1; // zones rev the main thread already has
   private postedChronicle: ChronicleEntry[] | null = null; // the chronicle array the main thread already has
   private postedFinds: Finds | null = null;
@@ -168,7 +173,7 @@ export class Handler {
           save.sim.weather = await this.weatherFor(msg.city, 0);
           this.setSave(save);
           await this.storage.put(save);
-          this.post({ t: "loaded", save: toClientSave(save), migrated: false, away: null });
+          this.postLoaded(save, false, null);
           return;
         }
         case "query": {
@@ -282,13 +287,21 @@ export class Handler {
     save = { ...save, sim: this.settle(sim) };
     this.setSave(save);
     await this.storage.put(save);
-    this.post({ t: "loaded", save: toClientSave(save), migrated, away });
+    this.postLoaded(save, migrated, away);
     this.postLife(); // after the catch-up above has finished
     this.enrich();
   }
 
+  // The whole town goes to the main thread; the snapshots after it carry what differs from it.
+  private postLoaded(save: SaveV4, migrated: boolean, away: Extract<FromWorker, { t: "loaded" }>["away"]): void {
+    const snap = toSnapshot(save.sim);
+    this.posted = { snap, text: {} };
+    this.post({ t: "loaded", save: toClientSave(save, snap), migrated, away });
+  }
+
   private setSave(save: SaveV4 | null): void {
     this.save = save;
+    this.posted = null;
     this.postedRev = save ? save.sim.zones.rev : -1;
     this.postedChronicle = save ? save.sim.chronicle : null;
     this.postedFinds = save ? save.sim.finds : null;
@@ -303,11 +316,11 @@ export class Handler {
     this.retryTimer = null;
   }
 
-  // Zones and the chronicle are attached only when they changed since the last message that carried them.
+  // Carries what changed since the last message with the town in it: parts of the snapshot, the zones, the chronicle.
   private postSnapshot(): void {
-    if (!this.save) return;
+    if (!this.save || !this.posted) return; // nothing to differ from before "loaded"
     const { zones, chronicle } = this.save.sim;
-    const msg: Extract<FromWorker, { t: "snapshot" }> = { t: "snapshot", sim: toSnapshot(this.save.sim) };
+    const msg: Extract<FromWorker, { t: "snapshot" }> = { t: "snapshot", sim: snapshotDelta(this.posted, toSnapshot(this.save.sim)) };
     if (zones.rev !== this.postedRev) {
       this.postedRev = zones.rev;
       msg.zones = zones;
@@ -489,6 +502,16 @@ export class Handler {
         if (!ok.ok) return reject(ok.reason);
         this.save = { ...this.save, sim: placeOnFoundation(sim, t, cmd.foundationId) };
         return await this.finishCommand(id);
+      } else if (cmd.type === "returnFind" || cmd.type === "useFind" || cmd.type === "setExhibition") {
+        const r = cmd.type === "returnFind" ? returnFind(sim, cmd.id) : cmd.type === "useFind" ? useFind(sim, cmd.id) : setExhibition(sim, cmd.building, cmd.hall, cmd.theme);
+        if (!r.ok) return reject(r.reason);
+        this.save = { ...this.save, sim: r.ok && cmd.type === "setExhibition" ? museumDaily(r.sim) : r.sim };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "digFoundation" || cmd.type === "digStreet") {
+        const r = cmd.type === "digFoundation" ? orderDig(sim, cmd.foundationId) : orderStreetDig(sim, cmd.streetId);
+        if (!r.ok) return reject(r.reason);
+        this.save = { ...this.save, sim: r.sim };
+        return await this.finishCommand(id);
       } else if (cmd.type === "recordFinds") {
         const r = recordFinds(sim, cmd);
         if (!r.ok) return reject(r.reason);
@@ -544,11 +567,6 @@ export class Handler {
           if (!r.ok) return reject(r.reason);
           this.save = { ...this.save, sim: r.sim };
         } else return reject(L("Неизвестная команда", "Unknown command"));
-        return await this.finishCommand(id);
-      } else if (cmd.type === "restoreSite") {
-        const r = restoreSite(sim, cmd.siteId, cmd.mode);
-        if (!r.ok) return reject(r.reason);
-        this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
       } else if (cmd.type === "demolish") {
         if (!Object.hasOwn(sim.buildings, cmd.id)) return reject(L("Здание уже снесено", "The building is already demolished"));

@@ -1,13 +1,16 @@
+import { floorsOf } from "./buildings";
 import { addChronicle } from "./chronicle";
-import type { Building, DigInfo, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
+import type { Building, DigInfo, FeatureKind, FoundFeature, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
 import { decimal, L, plural } from "../i18n";
 
-// Excavation (PLAN.md section 12): dig sites reveal a growing disc of the buried old city.
+// Excavation (PLAN.md section 12, docs/PLAN-restoration.md section 5) in two stages. A dig site is the survey: wide, fast
+// and cheap, it reveals a growing disc of the buried old city's plan, its streets and the ghost outlines of its buildings.
+// Each outline is then dug on its own (sim/digging.ts): only a dug foundation can be built on and gives its stone.
 export const DIG = {
   template: "dig",
   startRadius: 0, // m, when the site is finished
-  maxRadius: 120, // m
-  areaPerHour: 160, // m2 of revealed area per digger-hour: 40 m2 × PACE (4), like other construction work
+  maxRadius: 160, // m
+  areaPerHour: 640, // m2 of surveyed area per digger-hour: the survey only reads the plan
   stonePerM2: 0.001, // t of salvaged stone per m2 of foundation
   stoneCap: 1, // t per foundation
   batch: 200, // foundations per recordFinds command
@@ -20,7 +23,7 @@ const EPS = 1e-9;
 
 type Pt = [number, number];
 
-export const emptyFinds = (): Finds => ({ foundations: [], pois: [], streets: [], revealed: [] });
+export const emptyFinds = (): Finds => ({ foundations: [], pois: [], streets: [], revealed: [], features: [], fates: {} });
 export const isDig = (b: Pick<Building, "template">): boolean => b.template === DIG.template;
 export const radiusOf = (b: Pick<Building, "radius">): number => b.radius ?? DIG.startRadius;
 export const revealedArea = (r: number): number => Math.PI * r * r;
@@ -105,15 +108,36 @@ export interface FindsCmd {
   digId: number;
   foundations: { id: string; ring: [number, number][]; area: number; cls?: string; name?: string; height?: number }[];
   pois: { id: string; name: string; cls: string; x: number; y: number }[];
-  streets: { id: string; name: string }[];
+  streets: { id: string; name: string; lines?: [number, number][][] }[];
+  features?: { id: string; kind: FeatureKind; x: number; y: number; name?: string; cls?: string }[];
 }
+
+const FEATURE_KINDS: readonly FeatureKind[] = ["seeds", "parts", "rails", "bucket", "number", "sign"];
+const MAX_FEATURES = 20_000;
+const featureOk = (f: unknown): f is NonNullable<FindsCmd["features"]>[number] =>
+  isRec(f) && isStr(f.id, 200) && typeof f.kind === "string" && (FEATURE_KINDS as readonly string[]).includes(f.kind) && finite(f.x) && finite(f.y) && (f.name === undefined || isStr(f.name, 200)) && (f.cls === undefined || isStr(f.cls, 60));
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
 const isRec = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isPt = (p: unknown): p is Pt => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && Math.abs(p[0]) < 1e6 && Math.abs(p[1]) < 1e6;
 const r2 = (v: number): number => Math.round(v * 100) / 100;
-const MAX_HEIGHT = 300; // m
+export const MAX_HEIGHT = 300; // m
+
+// A street's line: pieces of 2+ points, at most STREET_POINTS points in all.
+export const STREET_POINTS = 600;
+function linesOk(v: unknown): v is [number, number][][] {
+  if (!Array.isArray(v)) return false;
+  let n = 0;
+  for (const piece of v) {
+    if (!Array.isArray(piece) || piece.length < 2) return false;
+    for (const p of piece) if (!Array.isArray(p) || p.length !== 2 || !finite(p[0]) || !finite(p[1])) return false;
+    n += piece.length;
+  }
+  return n <= STREET_POINTS;
+}
+const linesLength = (lines: readonly (readonly [number, number])[][]): number => lines.reduce((a, l) => a + l.slice(1).reduce((b, p, i) => b + Math.hypot(p[0] - l[i][0], p[1] - l[i][1]), 0), 0);
+const roundLines = (lines: [number, number][][]): [number, number][][] => lines.map((l) => l.map((p): [number, number] => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]));
 
 // The optional type of a foundation: a kind, a name and a height, each valid when present.
 const typeOk = (f: { cls?: unknown; name?: unknown; height?: unknown }): boolean =>
@@ -132,7 +156,7 @@ export const salvagedStone = (area: number): number => Math.min(DIG.stoneCap, DI
 
 export type RecordResult = { ok: true; sim: SimState } | { ok: false; reason: string };
 
-// Stores new finds (ids already recorded are ignored), adds the salvaged stone and writes the chronicle.
+// Stores new finds (ids already recorded are ignored; a new foundation is a ghost outline) and writes the chronicle.
 // Returns the same state when nothing was new.
 export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   const bad = (reason: string): RecordResult => ({ ok: false, reason });
@@ -141,7 +165,9 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   const gone = !dig || !isDig(dig);
   if (gone && !s.finds.revealed.some((d) => d.digId === cmd.digId)) return bad(L("Раскопа уже нет", "The dig is gone"));
   const { foundations, pois, streets } = cmd;
-  if (!Array.isArray(foundations) || !Array.isArray(pois) || !Array.isArray(streets)) return bad(L("Некорректные находки", "Invalid finds"));
+  const features = cmd.features ?? [];
+  if (!Array.isArray(foundations) || !Array.isArray(pois) || !Array.isArray(streets) || !Array.isArray(features)) return bad(L("Некорректные находки", "Invalid finds"));
+  if (features.length > MAX_LIST || !features.every(featureOk)) return bad(L("Некорректная находка", "Invalid find"));
   if (foundations.length > DIG.batch || pois.length > MAX_LIST || streets.length > MAX_LIST) return bad(L("Слишком много находок", "Too many finds"));
   for (const f of foundations) {
     if (!isRec(f) || !isStr(f.id, 200) || !finite(f.area) || f.area <= 0 || f.area > 1e7) return bad(L("Некорректный фундамент", "Invalid foundation"));
@@ -151,7 +177,7 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
   for (const p of pois) {
     if (!isRec(p) || !isStr(p.id, 200) || !isStr(p.name, 200) || typeof p.cls !== "string" || p.cls.length > 60 || !isPt([p.x, p.y])) return bad(L("Некорректное место", "Invalid place"));
   }
-  for (const t of streets) if (!isRec(t) || !isStr(t.id, 200) || !isStr(t.name, 200)) return bad(L("Некорректная улица", "Invalid street"));
+  for (const t of streets) if (!isRec(t) || !isStr(t.id, 200) || !isStr(t.name, 200) || (t.lines !== undefined && !linesOk(t.lines))) return bad(L("Некорректная улица", "Invalid street"));
 
   const at = s.gameMinutes;
   const seenF = new Set(s.finds.foundations.map((f) => f.id));
@@ -168,50 +194,80 @@ export function recordFinds(s: SimState, cmd: FindsCmd): RecordResult {
     chronicle = addChronicle(chronicle, at, "dig:poi", L(`Раскоп: найдено место «${p.name}»`, `Dig: found a place, “${p.name}”`));
   }
   const newStreets: FoundPlace[] = [];
+  // A street seen again with a longer line (the dig grew) keeps the longer one.
+  let knownStreets = s.finds.streets;
   for (const t of streets) {
-    if (seenS.has(t.id) || seenName.has(t.name)) continue;
+    if (seenS.has(t.id) || seenName.has(t.name)) {
+      const i = t.lines ? knownStreets.findIndex((x) => x.name === t.name) : -1;
+      if (i >= 0 && linesLength(t.lines!) > linesLength(knownStreets[i].lines ?? []) + 1) {
+        if (knownStreets === s.finds.streets) knownStreets = knownStreets.slice();
+        knownStreets[i] = { ...knownStreets[i], lines: roundLines(t.lines!) };
+      }
+      continue;
+    }
     seenS.add(t.id);
     seenName.add(t.name);
-    newStreets.push({ id: t.id, name: t.name, kind: "street", digId: cmd.digId, at });
+    newStreets.push({ id: t.id, name: t.name, kind: "street", digId: cmd.digId, at, ...(t.lines ? { lines: roundLines(t.lines) } : {}) });
     chronicle = addChronicle(chronicle, at, "dig:street", L(`Раскоп: найдена старая улица — ${t.name}`, `Dig: found an old street — ${t.name}`));
   }
   const newF: FoundFoundation[] = [];
-  let stone = 0;
-  // Old saves hold foundations without a type: an id that arrives again with one is enriched in place.
+  // Old saves hold foundations without a type or a height: an id that arrives again with them is enriched in place,
+  // and a building on it learns the floors of the old one.
   let known = s.finds.foundations;
   let enriched = 0;
+  let buildings = s.buildings;
+  const byId = new Map<string, number>();
   for (const f of foundations) {
-    if (seenF.has(f.id) && f.cls !== undefined) {
-      const i = known.findIndex((x) => x.id === f.id);
-      if (i >= 0 && known[i].cls === undefined) {
-        if (known === s.finds.foundations) known = known.slice();
-        known[i] = { ...known[i], ...typeOf(f) };
-        enriched++;
-      }
+    if (seenF.has(f.id) && (f.cls !== undefined || f.height !== undefined)) {
+      if (byId.size === 0) known.forEach((x, k) => byId.set(x.id, k));
+      const i = byId.get(f.id) ?? -1;
+      const was = known[i];
+      if (i < 0) continue;
+      const patch: Pick<FoundFoundation, "cls" | "name" | "height"> = {};
+      if (was.cls === undefined && f.cls !== undefined) Object.assign(patch, typeOf({ cls: f.cls, name: f.name }));
+      if (was.height === undefined && f.height !== undefined) patch.height = f.height;
+      if (Object.keys(patch).length === 0) continue;
+      if (known === s.finds.foundations) known = known.slice();
+      known[i] = { ...was, ...patch };
+      enriched++;
+      if (patch.height !== undefined)
+        for (const b of Object.values(buildings))
+          if (b.foundationId === f.id && (b.floors ?? 1) < floorsOf(patch.height)) {
+            if (buildings === s.buildings) buildings = { ...buildings };
+            buildings[b.id] = { ...b, floors: floorsOf(patch.height) };
+          }
       continue;
     }
     if (seenF.has(f.id) || s.finds.foundations.length + newF.length >= MAX_FOUNDATIONS) continue;
     seenF.add(f.id);
-    newF.push({ id: f.id, ring: f.ring.map((p): Pt => [r2(p[0]), r2(p[1])]), area: f.area, digId: cmd.digId, at, ...typeOf(f) });
-    stone += salvagedStone(f.area);
+    newF.push({ id: f.id, ring: f.ring.map((p): Pt => [r2(p[0]), r2(p[1])]), area: f.area, digId: cmd.digId, at, ...typeOf(f), ghost: true });
   }
   if (newF.length > 0) {
     const n = newF.length;
-    const word = n % 10 === 1 && n % 100 !== 11 ? `открыт ${n} фундамент` : `открыто ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`;
-    chronicle = addChronicle(chronicle, at, "dig:found", L(`Раскоп: ${word}, +${tonnes(stone)} т камня`, `Dig: uncovered ${n} ${plural(n, "", "", "", "foundation")}, +${tonnes(stone)} t of stone`));
+    chronicle = addChronicle(chronicle, at, "dig:found", L(`Разведка: ${n} ${plural(n, "контур", "контура", "контуров")} старых построек`, `Survey: ${n} ${plural(n, "", "", "", "outline")} of old buildings`));
   }
-  if (newF.length + newPois.length + newStreets.length + enriched === 0) return { ok: true, sim: s };
+  // Features that give finds (sim/items.ts): each id once.
+  const known0 = s.finds.features ?? [];
+  const seenX = new Set(known0.map((f) => f.id));
+  const newX: FoundFeature[] = [];
+  for (const f of features) {
+    if (seenX.has(f.id) || known0.length + newX.length >= MAX_FEATURES) continue;
+    seenX.add(f.id);
+    newX.push({ id: f.id, kind: f.kind, x: r2(f.x), y: r2(f.y), digId: cmd.digId, ...(f.name ? { name: f.name } : {}), ...(f.cls ? { cls: f.cls } : {}) });
+  }
+  if (newF.length + newPois.length + newStreets.length + newX.length + enriched === 0 && knownStreets === s.finds.streets) return { ok: true, sim: s };
   return {
     ok: true,
     sim: {
       ...s,
-      stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock,
       chronicle,
+      buildings,
       finds: {
         ...s.finds,
         foundations: newF.length ? [...known, ...newF] : known,
         pois: newPois.length ? [...s.finds.pois, ...newPois] : s.finds.pois,
-        streets: newStreets.length ? [...s.finds.streets, ...newStreets] : s.finds.streets,
+        streets: newStreets.length ? [...knownStreets, ...newStreets] : knownStreets,
+        features: newX.length ? [...known0, ...newX] : known0,
       },
     },
   };
@@ -235,6 +291,7 @@ export function parseFinds(v: unknown): Finds {
       if (isStr(r.name, 200)) fd.name = r.name;
       if (isNum(r.height) && r.height >= 0 && r.height <= MAX_HEIGHT) fd.height = r.height;
       if (r.state === "restoring" || r.state === "restored" || r.state === "lost") fd.state = r.state;
+      if (r.ghost === true) fd.ghost = true;
       out.foundations.push(fd);
     }
   }
@@ -248,6 +305,8 @@ export function parseFinds(v: unknown): Finds {
         p.x = r.x;
         p.y = r.y;
       }
+      if (key === "streets" && linesOk(r.lines)) p.lines = r.lines;
+      if (key === "streets" && isNum(r.restored)) p.restored = r.restored;
       out[key].push(p);
     }
   }
@@ -257,5 +316,11 @@ export function parseFinds(v: unknown): Finds {
       out.revealed.push({ digId: r.digId as number, x: r.x, y: r.y, r: r.r });
     }
   }
+  if (Array.isArray(v.features))
+    for (const f of v.features) {
+      const digId = isRec(f) ? f.digId : undefined;
+      if (featureOk(f) && Number.isInteger(digId)) out.features.push({ id: f.id, kind: f.kind, x: f.x, y: f.y, digId: digId as number, ...(f.name ? { name: f.name } : {}), ...(f.cls ? { cls: f.cls } : {}) });
+    }
+  if (isRec(v.fates)) for (const [k, fate] of Object.entries(v.fates)) if (k.length <= 260 && (fate === "returned" || fate === "used")) out.fates[k] = fate;
   return out;
 }

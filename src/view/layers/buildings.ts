@@ -77,10 +77,11 @@ export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   const lamps = new Map(lifeLights.value.map((l) => [l.id, l.kind]));
   const out: ModelItem[] = [];
   for (const b of Object.values(st.buildings)) {
-    if (b.state === "planned") continue;
+    if (b.state === "planned" || b.template === "excavation") continue; // a dig draws on the ruins layer
     const progress = b.state === "active" ? 1 : b.labor > 0 ? Math.min(1, b.done / b.labor) : 0;
-    if (b.siteId) {
-      const site = st.finds.foundations.find((f) => f.id === b.siteId);
+    // an old building brought back as it was, or kept as a monument, is drawn as the old one
+    if (b.foundationId && (b.asItWas || b.template === "restored")) {
+      const site = st.finds.foundations.find((f) => f.id === b.foundationId);
       out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress, style: "heritage", lamp: lamps.get(b.id) });
     } else
       out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade, lamp: lamps.get(b.id) });
@@ -89,11 +90,21 @@ export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   return lastItems;
 });
 
-// Footprints in lng/lat with `state` and `up` (upgrading).
+// Footprints in lng/lat with `state` and `up` (upgrading). The same collection comes back while none of that changed:
+// work on a site moves its progress every tick, and the overlay is not drawn again for it.
+const NO_SHAPES: FeatureCollection = { type: "FeatureCollection", features: [] };
+let shapes = NO_SHAPES;
+let shapesFrame: Frame | null = null;
+let shapesSig = "";
 export const buildingShapes: ReadonlySignal<FeatureCollection> = computed(() => {
   const list = buildings.value;
   const f = frame.value;
-  if (!list || !f) return { type: "FeatureCollection", features: [] };
+  if (!list || !f) return NO_SHAPES;
+  let sig = "";
+  for (const b of Object.values(list)) sig += `${b.id}:${b.state}:${b.upgrade ? 1 : 0},`;
+  if (f === shapesFrame && sig === shapesSig) return shapes;
+  shapesFrame = f;
+  shapesSig = sig;
   const features: Feature[] = Object.values(list).map((b) => ({
     type: "Feature",
     properties: { id: b.id, state: b.state, up: !!b.upgrade },
@@ -102,7 +113,8 @@ export const buildingShapes: ReadonlySignal<FeatureCollection> = computed(() => 
   if (ringCache.size > features.length * 3 + 100) {
     for (const id of ringCache.keys()) if (!(id in list)) ringCache.delete(id);
   }
-  return { type: "FeatureCollection", features };
+  shapes = { type: "FeatureCollection", features };
+  return shapes;
 });
 
 // Hit-test footprints in the town frame (an index, not the renderer: neither renderer can be asked reliably).

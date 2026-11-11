@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { frame } from "../simClient";
 import { Icon } from "./Icon";
 import { IconButton } from "./kit";
-import { dismissToast, toasts } from "./toastStore";
+import { discovered, dismissToast, toasts } from "./toastStore";
+import { selectedSite } from "../map/heritageSpots";
 import { openPanel } from "./panels";
 import { KIND_ICON, KIND_TONE, opensScience, showMs, type Toast } from "./toastModel";
 import { L } from "../i18n";
@@ -57,6 +58,14 @@ function ToastItem({ t, view }: { t: Toast; view: View }) {
 
 // The live region stays mounted even when empty so that screen readers announce what appears in it.
 export function Toasts({ view }: { view: View }) {
+  // The moment of discovery: the camera flies to a unique old building just uncovered and its card opens.
+  const found = discovered.value;
+  useEffect(() => {
+    const fl = frame.peek();
+    if (!found || !fl) return;
+    view.flyTo({ center: fl.toLngLat(found.pos[0], found.pos[1]), mpp: atLeastAsClose(view.metersPerPixel(), CLOSE_UP_MPP) });
+    selectedSite.value = found.site;
+  }, [found?.n]);
   return (
     <ul class="toasts" aria-live="polite" aria-label={L("Новости города", "Town news")}>
       {toasts.value.map((t) => (

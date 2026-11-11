@@ -26,7 +26,7 @@ export const CATEGORIES: Category[] = [
   { id: "food", label: L("Еда", "Food"), tools: ["gumno", "garden", "hunter", "fisher", "forager", "orchard", "apiary"] },
   { id: "farm", label: L("Ресурсы", "Resources"), tools: ["woodcutter", "sawpit", "quarry", "barn", "cellar"] },
   { id: "services", label: L("Службы", "Services"), tools: ["well", "market", "chapel", "school", "healer", "townhall"] },
-  { id: "past", label: L("Прошлое", "Past"), tools: ["dig"] },
+  { id: "past", label: L("Прошлое", "Past"), tools: ["dig", "restored", "museum"] },
 ];
 
 // Physical key codes (layout independent: Q is the key left of W also on a Russian layout).
@@ -69,6 +69,8 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   healer: "healer",
   townhall: "townhall",
   dig: "dig",
+  restored: "monument",
+  museum: "museum",
 };
 
 const TOOL_LABEL: Partial<Record<Tool, string>> = {
@@ -122,6 +124,8 @@ const PURPOSE: Record<Tool, string> = {
   healer: L("Лечит: меньше смертей, настроение выше", "Heals: fewer deaths, higher mood"),
   townhall: L(`Управление поселением: без управ работа замедляется, когда жителей больше ${ADMIN.elders}. Ратуша (одна на город) справляется ещё с ${ADMIN.room.townhall} жителями, каждая районная управа — с ${ADMIN.room.office}, пока в них работают писари`, `Running the settlement: without offices work slows once there are more than ${ADMIN.elders} residents. A town hall (one per town) manages ${ADMIN.room.townhall} more, each district office ${ADMIN.room.office}, while clerks work in them`),
   dig: L("Раскоп на месте старых построек: находки для тетради, камень от фундаментов", "A dig on the site of old buildings: finds for the notebook, stone from foundations"),
+  museum: L("Музей на старом фундаменте: в залах тематические выставки находок; полная выставка даёт знания и привлекает людей", "A museum on an old foundation: its halls show themed exhibitions of finds; a complete one gives knowledge and draws people"),
+  restored: L("Сохранить старую постройку памятником на её фундаменте: без жителей и работы, рядом людям лучше и земля дороже", "Keep an old building as a monument on its foundation: no residents or jobs; people nearby feel better and land is worth more"),
 };
 
 const SITE: Partial<Record<Tool, string>> = {

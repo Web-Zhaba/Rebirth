@@ -1,8 +1,9 @@
 import { homeGoods } from "../sim/goods";
 import { CALL } from "../sim/levers";
 import { it } from "vitest";
-import { BUILDINGS, CAMP_STORE, capacityOf, STORE_GROUPS } from "../sim/buildings";
+import { BUILDINGS, CAMP_STORE, capacityOf, homesOf, STORE_GROUPS } from "../sim/buildings";
 import { calendar } from "../sim/clock";
+import { applyDelta } from "../sim/delta";
 import { canPlace } from "../sim/growth";
 import { freeHomes } from "../sim/people";
 import { Handler, type Storage } from "../sim/handler";
@@ -32,7 +33,7 @@ it("pacing harness", async () => {
   const results = new Map<number, { ok: boolean; reason?: string }>();
   const post = (m: FromWorker) => {
     if (m.t === "loaded" && m.save) st = m.save.sim;
-    else if (m.t === "snapshot") st = { ...st, ...m.sim, zones: m.zones ?? st.zones, chronicle: m.chronicle ?? st.chronicle };
+    else if (m.t === "snapshot") st = { ...applyDelta(st, m.sim), zones: m.zones ?? st.zones, chronicle: m.chronicle ?? st.chronicle };
     else if (m.t === "cmdResult") results.set(m.id, m);
     else if (m.t === "error") throw new Error(m.message);
   };
@@ -42,6 +43,16 @@ it("pacing harness", async () => {
   const h = new Handler(mem, post, async () => ({ land: "meadow", slope: 0 }), async () => 200);
   await h.handle({ t: "found", city: { name: "Тест", lat: weather ? 50 : 59.12, lng: 37.9, foundedAt: T0 }, now: T0 });
   if (!weather) h["save"]!.sim.weather = emptyWeather();
+  // PACE_FOUNDATION=1: two old foundations of 240 m² by the first houses (docs/PLAN-restoration.md RB1): one of a
+  // five-storey building (19 m), one of unknown height. The zone builds on them first; their floors follow the techs.
+  const foundations = process.env.PACE_FOUNDATION === "1";
+  if (foundations) {
+    const sim = h["save"]!.sim;
+    const ring = (x: number, y: number): [number, number][] => [[x, y], [x + 20, y], [x + 20, y + 12], [x, y + 12]];
+    sim.finds = { ...sim.finds, foundations: [{ id: "big-n", ring: ring(20, 4), area: 240, digId: 0, at: 0, height: 19 }, { id: "big-s", ring: ring(20, -16), area: 240, digId: 0, at: 0 }] };
+  }
+  const oldLog: string[] = []; // changes of the buildings on the foundations
+  const oldSeen = new Map<number, string>();
 
   let now = T0;
   let seq = 0;
@@ -120,7 +131,9 @@ it("pacing harness", async () => {
   // with a new gumno when the field lies beyond the reach of every one placed.
   const tillMore = async () => {
     if (houses() < 4) return; // the first four houses come first (the sowing window reaches into summer)
-    while (fields < Math.min(FIELD_SLOTS.length, 1 + Math.floor(houses() / 2))) {
+    // a house on an old foundation holds several families: count its extra homes like houses
+    const homes = houses() + Object.values(st.buildings).reduce((n, b) => n + (b.foundationId && isFinishedHouse(b) ? homesOf(b) - 1 : 0), 0);
+    while (fields < Math.min(FIELD_SLOTS.length, 1 + Math.floor(homes / 2))) {
       const cx = 110 + 104 * FIELD_SLOTS[fields];
       const near = gumnos.some((gx) => Math.hypot(gx - cx, 150) < 330);
       const gx = Math.max(30, cx - 60);
@@ -270,6 +283,18 @@ it("pacing harness", async () => {
       process.stderr.write(`d${lastDebugDay + 1} pop ${st.people.pop} houses ${houses()} free ${st.inflow.free} score ${a.score.toFixed(2)} food ${a.food.toFixed(2)} mood ${a.mood.toFixed(2)} jobs ${a.jobs.toFixed(2)} serv ${a.services.toFixed(2)} perDay ${st.inflow.perDay.toFixed(2)} admin ${st.economy.admin.capacity.toFixed(0)} x${st.economy.admin.factor.toFixed(2)} demand ${st.people.demand.res.toFixed(1)}
 `);
     }
+    if (foundations) {
+      const sim = (h as unknown as { save: { sim: import("../sim/types").SimState } }).save.sim;
+      for (const b of Object.values(sim.buildings)) {
+        if (!b.foundationId) continue;
+        const fam = Object.values(sim.households).filter((x) => x.home === b.id).length;
+        const sig = `${b.template} ${b.state} floors ${b.level}/${b.floors ?? 1}${b.upgrade ? " +floor" : ""}, families ${fam}/${homesOf(b)}`;
+        if (oldSeen.get(b.id) !== sig) {
+          oldSeen.set(b.id, sig);
+          oldLog.push(`${stamp()}  ${b.foundationId}: ${sig}`);
+        }
+      }
+    }
     for (let k = 0; k < 6; k++) {
       now += STEP_MS;
       h.tick(now);
@@ -292,6 +317,7 @@ it("pacing harness", async () => {
     "",
     `End: game day ${dayOf(st.gameMinutes) + 1} (year ${cal.year}), ${houses()} houses finished, population ${st.people.pop}, road ${roadEnd} m.`,
     "",
+    ...(foundations ? ["Old foundations:", ...oldLog.map((l) => `- ${l}`), `Firewood now: ${st.economy.firewood.toFixed(2)} m³/day`, ""] : []),
     "Build log:",
     ...log.map((l) => `- ${l}`),
     "",

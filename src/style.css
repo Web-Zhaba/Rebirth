@@ -727,6 +727,12 @@ button:hover:not(:disabled) {
   letter-spacing: 0.05em;
 }
 
+/* A restored old street: its name is the town's again, set like a street sign. */
+.engine-game-label--town {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
 .engine-unsupported {
   position: fixed;
   inset: 0;

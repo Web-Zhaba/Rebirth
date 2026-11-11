@@ -1,4 +1,4 @@
-/* World «Береста и грамота» — heritage panel: a typed old building and the two ways to restore it.
+/* World «Береста и грамота» — heritage panel: a typed old building and its restoration as it was.
    The choice is a stack of bark slips; the picked one is pinned in resin, never by colour alone. */
 
 .her-opts {
@@ -59,4 +59,9 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* The panel scrolls as a whole: its rows keep their height instead of shrinking into each other. */
+.her-panel > * {
+  flex-shrink: 0;
 }

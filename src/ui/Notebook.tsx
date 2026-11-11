@@ -4,6 +4,7 @@ import { Icon } from "./Icon";
 import { IconButton } from "./kit";
 import { calendar } from "../sim/clock";
 import { formatDate, newestFirst, type Article, type ChronicleEntry, type Find } from "./notebookLogic";
+import { foundCount, type FindGroup } from "./findsModel";
 import { articleDomId, notebookTabForArticle } from "./notebookFocusModel";
 import { notebookArticleFocus } from "./notebookFocus";
 import { tabId, tabPanelId } from "./tabSemantics";
@@ -14,6 +15,8 @@ export type { Article, ChronicleEntry, Find } from "./notebookLogic";
 
 export interface NotebookProps {
   finds: Find[];
+  items: FindGroup[]; // the finds found, by theme (findsModel.ts)
+  onItem: (action: "return" | "use", id: string) => void;
   articles: Article[];
   chronicle: ChronicleEntry[];
   seen: number;
@@ -23,14 +26,17 @@ export interface NotebookProps {
   onArticleMap: (article: Article) => void;
 }
 
-// Two sections only: what the place was, and what the town did. Dug foundations and streets are not listed —
-// the player sees those on the map, so the book keeps only what cannot be read there.
-type Tab = "history" | "chronicle";
+// What the place was, what was found of it, and what the town did. Dug foundations and streets are not listed — the
+// player sees those on the map, so the book keeps only what cannot be read there.
+type Tab = "history" | "finds" | "chronicle";
 
 const TABS: [Tab, string][] = [
   ["history", L("История", "History")],
+  ["finds", L("Находки", "Finds")],
   ["chronicle", L("Хроника", "Chronicle")],
 ];
+
+const FATE_TEXT = { returned: L("на своём месте", "back in its place"), used: L("пущена в дело", "put to use") };
 
 const yearOf = (at: number): number => calendar(at).year;
 
@@ -52,13 +58,13 @@ const hit = (q: string, ...parts: string[]): boolean => {
   return parts.some((p) => p.toLowerCase().includes(needle));
 };
 
-export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange, onArticleMap }: NotebookProps) {
+export function Notebook({ articles, items, onItem, chronicle, seen, onSeen, open, onOpenChange, onArticleMap }: NotebookProps) {
   const [tab, setTab] = useState<Tab>("history");
   const [q, setQ] = useState("");
   const total = articles.length;
   const unseen = Math.max(0, total - seen);
   const focusedArticle = notebookArticleFocus.value;
-  const counts: Record<Tab, number> = { history: articles.length, chronicle: chronicle.length };
+  const counts: Record<Tab, number> = { history: articles.length, finds: foundCount(items), chronicle: chronicle.length };
 
   useEffect(() => {
     if (!open || !focusedArticle) return;
@@ -83,7 +89,8 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
   const matches = (a: Article): boolean => hit(q, a.title, a.extract, formatDate(a.at));
   const matchedArticles = articles.filter(matches);
   const matchedChronicle = chronicle.filter((c) => hit(q, c.text, formatDate(c.at)));
-  const shown = tab === "history" ? matchedArticles.length : matchedChronicle.length;
+  const matchedItems = items.map((g) => ({ ...g, rows: g.rows.filter((r) => hit(q, r.name, g.name)) })).filter((g) => g.rows.length > 0);
+  const shown = tab === "history" ? matchedArticles.length : tab === "finds" ? foundCount(matchedItems) : matchedChronicle.length;
 
   return (
     <aside class="notebook" aria-label={L("Записная книжка", "Notebook")}>
@@ -144,7 +151,9 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
                   ? L("Ничего не найдено.", "Nothing found.")
                   : tab === "history"
                     ? L("Ведите раскопки — здесь появятся статьи о том, что стояло на этом месте.", "Run digs — articles about what once stood here will appear.")
-                    : L("Хроника пуста: история города только начинается.", "The chronicle is empty: the town’s story is just beginning.")}
+                    : tab === "finds"
+                      ? L("Раскапывайте фундаменты: вокруг них находятся вещи старого места.", "Dig foundations: the things of the old place turn up around them.")
+                      : L("Хроника пуста: история города только начинается.", "The chronicle is empty: the town’s story is just beginning.")}
               </div>
             )}
             {tab === "history" &&
@@ -180,6 +189,44 @@ export function Notebook({ articles, chronicle, seen, onSeen, open, onOpenChange
                           </a>
                         </div>
                         <div class="notebook-date">{formatDate(a.at)} · {L("Википедия", "Wikipedia")}, CC BY-SA 4.0</div>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+              ))}
+            {tab === "finds" &&
+              matchedItems.map((g) => (
+                <section class="notebook-year-group" key={g.theme} aria-label={g.name}>
+                  <div class="notebook-year">
+                    {g.name}
+                    {g.hall ? ` · ${g.hall}${g.complete ? L(", выставка полная", ", the exhibition is complete") : ""}` : ""}
+                    {g.unfound > 0 ? L(` · ещё ${g.unfound} не найдено`, ` · ${g.unfound} more not found`) : ""}
+                  </div>
+                  {g.rows.map((r) => (
+                    <div class="notebook-entry" key={r.id}>
+                      <span class="notebook-kind">
+                        <Icon name="foundations" size={18} />
+                      </span>
+                      <div class="notebook-main">
+                        <div class="notebook-entry-title">{r.name}</div>
+                        <div class="notebook-date">
+                          {r.fate === "found" ? (r.beyond ? L("лежит за раскопом: место ещё не открыто", "lies beyond the dig: its place is not open yet") : L("найдена", "found")) : FATE_TEXT[r.fate]} · {r.source}
+                        </div>
+                        {r.fate === "found" && (r.hasPlace || r.usable) && (
+                          <div class="notebook-actions">
+                            {r.hasPlace && (
+                              <button type="button" class="link" disabled={r.returnWhy !== null} title={r.returnWhy ?? undefined} onClick={() => onItem("return", r.id)}>
+                                {L("Вернуть на место", "Return to its place")}
+                              </button>
+                            )}
+                            {r.usable && (
+                              <button type="button" class="link" onClick={() => onItem("use", r.id)}>
+                                {L("Пустить в дело", "Put to use")}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {r.fate === "found" && r.hasPlace && r.returnWhy && <div class="notebook-date">{r.returnWhy}</div>}
                       </div>
                     </div>
                   ))}

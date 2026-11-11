@@ -26,12 +26,13 @@ export const inflowCap = (pop: number): number => INFLOW.base + ((INFLOW.max - I
 
 const unit = (v: number): number => Math.min(1, Math.max(0, v));
 
-export function attractionOf(p: { food: number; mood: number; unemployment: number; services: number; pop: number }): Attraction {
+export function attractionOf(p: { food: number; mood: number; unemployment: number; services: number; pop: number; museum?: number }): Attraction {
   const food = unit(p.food);
   const mood = unit(p.mood / 100);
   const jobs = unit(1 - 2 * p.unemployment);
   const services = unit(p.services);
-  const score = food * (ATTRACT.mood * mood + ATTRACT.jobs * jobs + ATTRACT.services * services);
+  // complete museum exhibitions (sim/museum.ts) make the town more attractive by a share
+  const score = Math.min(1, food * (ATTRACT.mood * mood + ATTRACT.jobs * jobs + ATTRACT.services * services) * (1 + (p.museum ?? 0)));
   return { food, mood, jobs, services, score, cap: inflowCap(p.pop) };
 }
 

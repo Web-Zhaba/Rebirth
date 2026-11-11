@@ -1,13 +1,9 @@
-import { BUILDINGS } from "./buildings";
-import { isHeritage, restoreCost, restoredHeight, workTemplate } from "./heritage";
 import { distToEdge } from "./roads";
-import { lockReason } from "./tech";
-import type { Building, FoundFoundation, Finds, RestoreMode, RoadGraph, SimState } from "./types";
+import type { RoadGraph } from "./types";
 import { CELL_SIZE, pointInPolygon } from "./zones";
 import { L } from "../i18n";
 
-// Geometry and checks of restoring an old building (PLAN-research.ru.md section 7). Pure; shared by the worker
-// (which enforces them) and the heritage panel (which shows the reasons).
+// Geometry of old buildings on their foundations: rings, boxes, overlaps, doors. Pure; shared by the worker and the map.
 
 type Pt = [number, number];
 
@@ -133,15 +129,6 @@ export function ringDoor(ring: readonly Pt[], roads: RoadGraph): { door: Pt; dis
   return best;
 }
 
-// Typed foundations that still block building (everything but those lost).
-export const standing = (finds: Pick<Finds, "foundations">): FoundFoundation[] => finds.foundations.filter((f) => isHeritage(f) && f.state !== "lost");
-
-// Does a polygon lie on an old typed foundation that has not been lost? (Placing and growing refuse such ground.)
-export function overlapsHeritage(old: readonly FoundFoundation[], poly: readonly Pt[]): boolean {
-  for (const f of old) if (polysOverlap(poly, f.ring)) return true;
-  return false;
-}
-
 // The square a zone cell covers.
 export function cellSquare(c: { cx: number; cy: number; angle: number }): Pt[] {
   const h = CELL_SIZE / 2;
@@ -150,56 +137,4 @@ export function cellSquare(c: { cx: number; cy: number; angle: number }): Pt[] {
   return ([[-h, -h], [h, -h], [h, h], [-h, h]] as Pt[]).map(([u, v]): Pt => [c.cx + ux * u - uy * v, c.cy + uy * u + ux * v]);
 }
 
-export const HERITAGE_TAKEN = L("Здесь старая постройка: восстановите её или стройте рядом", "An old building stands here: restore it or build next to it");
-
-// Russian reason a site cannot be ordered in this mode now, or null. `mode` absent: only the checks of any mode.
-export function restoreBlocker(s: Pick<SimState, "finds" | "buildings" | "roads" | "progress">, siteId: string, mode?: RestoreMode): string | null {
-  const f = s.finds.foundations.find((x) => x.id === siteId);
-  if (!f || !isHeritage(f)) return L("Это не значимая постройка", "This is not a notable building");
-  if (f.state === "restoring") return L("Уже восстанавливается", "Already being restored");
-  if (f.state === "restored") return L("Уже восстановлена", "Already restored");
-  if (f.state === "lost") return L("Постройка утрачена, восстановить нельзя", "The building is lost and cannot be restored");
-  if (mode === "working") {
-    const tpl = workTemplate(f.cls);
-    if (!tpl) return L("Эту постройку можно только сохранить как памятник", "This building can only be kept as a monument");
-    const t = BUILDINGS[tpl];
-    const locked = lockReason(s, t.zone === "placed" ? tpl : t.zone);
-    if (locked) return L(`Назначение закрыто: ${locked.toLowerCase()}`, `Purpose locked: ${locked.toLowerCase()}`);
-  }
-  const ring = simplifyRing(f.ring);
-  for (const b of Object.values(s.buildings)) if (polysOverlap(ring, b.footprint)) return L("Место занято зданием", "The spot is taken by a building");
-  const door = ringDoor(ring, s.roads);
-  if (!door || door.dist > RESTORE.roadReach) return L("Нужна дорога", "Needs a road");
-  return null;
-}
-
-// The planned building of a restoration; `id` and `now` are the caller's.
-export function restoredBuilding(f: FoundFoundation, mode: RestoreMode, roads: RoadGraph, id: number, now: number): Building | null {
-  const ring = simplifyRing(f.ring);
-  const door = ringDoor(ring, roads);
-  if (!door) return null;
-  const tpl = BUILDINGS[mode === "working" ? (workTemplate(f.cls) ?? "restored") : "restored"];
-  const box = orientedBox(ring);
-  const cost = restoreCost(f.area);
-  return {
-    id,
-    template: tpl.id,
-    zone: tpl.zone,
-    lot: { cx: box.cx, cy: box.cy, angle: box.angle, w: box.w / CELL_SIZE, d: box.d / CELL_SIZE },
-    side: 1,
-    footprint: ring,
-    height: restoredHeight(f.height, tpl.height),
-    state: "planned",
-    labor: cost.labor,
-    done: 0,
-    created: now,
-    paid: false,
-    level: 1,
-    streak: 0,
-    siteId: f.id,
-    restoreMode: mode,
-    door: [Math.round(door.door[0] * 100) / 100, Math.round(door.door[1] * 100) / 100],
-    materials: { logs: cost.logs, planks: cost.planks, stone: cost.stone },
-  };
-}
-
+export const HERITAGE_TAKEN = L("Здесь старая постройка: наведите на неё, чтобы восстановить или строить на ней", "An old building stands here: point at it to restore it or build on it");

@@ -2,7 +2,7 @@ import { computed, type ReadonlySignal } from "@preact/signals";
 import type { FeatureCollection } from "geojson";
 import type { Engine } from "../../engine/engine";
 import { clearingLabels } from "../layers/zones";
-import { ruinPois, ruinStreets, ruinTypedNames } from "../layers/ruins";
+import { restoredStreets, ruinPois, ruinStreets, ruinTypedNames } from "../layers/ruins";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
 import { mppAtZoom } from "../view";
 import { lineLabelAnchor, pickLabels, rotatedExtent, wrapExtent, type LabelBox } from "./labelLayout";
@@ -13,7 +13,7 @@ import { labelSight } from "./labelSight";
 // old city is shown, the names of its notable buildings, named points and streets (from zoom 15).
 // Street names run along their line, one per street. Labels are placed in priority order without overlaps.
 
-type Kind = "clearing" | "name" | "poi" | "street";
+type Kind = "clearing" | "name" | "poi" | "street" | "town";
 
 interface KindStyle {
   px: number; // font size, CSS px (the old text-size)
@@ -30,6 +30,7 @@ const STYLES: Record<Kind, KindStyle> = {
   name: { px: 12, priority: 1, ruins: true, maxMpp: RUIN_MPP, maxWidthEm: 8 },
   poi: { px: 11, priority: 2, ruins: true, maxMpp: RUIN_MPP, maxWidthEm: 8 },
   street: { px: 11, priority: 3, ruins: true, maxMpp: RUIN_MPP, spacing: 0.05 },
+  town: { px: 12, priority: 1, ruins: false, maxMpp: RUIN_MPP, spacing: 0.05 }, // a restored street: its name is the town's again
 };
 const POI_OFFSET_EM = 0.4; // named points hang below their spot (text-anchor top, text-offset 0.4 em)
 const LINE_H = 1.3; // line height in font sizes, for the collision boxes
@@ -70,6 +71,7 @@ export function attachGameLabels(engine: Engine, container: HTMLElement): void {
     computed(() => labelsOf("name", ruinTypedNames.value, "name")),
     computed(() => labelsOf("poi", ruinPois.value, "name")),
     computed(() => labelsOf("street", ruinStreets.value, "name")),
+    computed(() => labelsOf("town", restoredStreets.value, "name")),
   ];
 
   const nodes = new Map<string, HTMLElement>();
@@ -139,7 +141,7 @@ export function attachGameLabels(engine: Engine, container: HTMLElement): void {
         const st = STYLES[l.kind];
         if ((st.ruins && !ruins) || (st.maxMpp !== undefined && mpp > st.maxMpp)) continue;
         const tw = textWidth(l);
-        if (l.kind === "street") {
+        if (l.kind === "street" || l.kind === "town") {
           const line: [number, number][] = [];
           for (let i = 0; i < l.pts.length; i++) {
             const p = screen(l, i);

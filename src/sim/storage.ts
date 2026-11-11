@@ -1,4 +1,5 @@
-import { CAMP_STORE, STORE_GROUPS, groupOf, storeRoom, type StoreGroup, type StoreRoom } from "./buildings";
+import { CAMP_STORE, STORE_GROUPS, STORES, groupOf, storeRoom, type StoreGroup, type StoreRoom } from "./buildings";
+import { makeIdentityCache } from "./memo";
 import { lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot, type Tree } from "./people";
 import { roadNet } from "./roadNetCache";
 import type { Building, RoadGraph, SimState, Stock } from "./types";
@@ -29,17 +30,27 @@ export interface StorePoint {
   room: StoreRoom;
 }
 
-// The camp and every finished store, the camp first.
-export function storePoints(buildings: Record<number, Building>): StorePoint[] {
-  const out: StorePoint[] = [{ id: CAMP_STORE_ID, at: [0, 0], room: CAMP_STORE }];
+// The stores of a town, kept per buildings object (a tick makes several ledgers): the camp and every finished store,
+// the camp first (`points`); the same by distance from the camp (`order`); and by id.
+interface StoreSet {
+  points: readonly StorePoint[];
+  order: readonly StorePoint[];
+  byId: ReadonlyMap<number, StorePoint>;
+}
+const storeSet = makeIdentityCache((buildings: Record<number, Building>): StoreSet => {
+  const points: StorePoint[] = [{ id: CAMP_STORE_ID, at: [0, 0], room: CAMP_STORE }];
   for (const b of Object.values(buildings)) {
     if (b.state !== "active") continue;
     const room = storeRoom(b);
-    if (Object.keys(room).length > 0) out.push({ id: b.id, at: lotFront(b), room });
+    if (Object.keys(room).length > 0) points.push({ id: b.id, at: lotFront(b), room });
   }
-  return out;
-}
-export const isStore = (b: Pick<Building, "template" | "scale">): boolean => Object.keys(storeRoom(b)).length > 0;
+  const order = [...points].sort((a, b) => Math.hypot(a.at[0], a.at[1]) - Math.hypot(b.at[0], b.at[1]) || a.id - b.id);
+  return { points, order, byId: new Map(points.map((p) => [p.id, p])) };
+});
+
+// The camp and every finished store, the camp first.
+export const storePoints = (buildings: Record<number, Building>): readonly StorePoint[] => storeSet(buildings).points;
+export const isStore = (b: Pick<Building, "template">): boolean => b.template in STORES;
 
 // ---------- distances ----------
 
@@ -90,16 +101,16 @@ export interface Near {
 export class Ledger {
   readonly stock: Stock;
   readonly stores: Stores;
-  readonly points: StorePoint[];
+  readonly points: readonly StorePoint[];
   private readonly roads: RoadGraph;
-  private readonly byId = new Map<number, StorePoint>();
+  private readonly set: StoreSet;
 
   constructor(s: Pick<SimState, "stock" | "stores" | "buildings" | "roads">) {
     this.stock = { ...s.stock };
     this.stores = {};
     for (const [id, h] of Object.entries(s.stores ?? {})) this.stores[Number(id)] = { ...h };
-    this.points = storePoints(s.buildings);
-    for (const p of this.points) this.byId.set(p.id, p);
+    this.set = storeSet(s.buildings);
+    this.points = this.set.points;
     this.roads = s.roads;
     this.sync(s.stores === undefined); // a state from before the stores keeps all its stock
   }
@@ -210,8 +221,8 @@ export class Ledger {
   // the others). Gains go to the stores nearest to the camp as far as they have room, the rest is lost; losses come
   // from the fullest stores first. With `overfill`, what finds no room stays at the camp (loading an old save).
   sync(overfill = false): void {
-    for (const id of Object.keys(this.stores).map(Number)) if (!this.byId.has(id)) delete this.stores[id];
-    const order = [...this.points].sort((a, b) => Math.hypot(a.at[0], a.at[1]) - Math.hypot(b.at[0], b.at[1]) || a.id - b.id);
+    for (const id of Object.keys(this.stores).map(Number)) if (!this.set.byId.has(id)) delete this.stores[id];
+    const order = this.set.order;
     for (const g of KINDS) {
       let sum = 0;
       for (const h of Object.values(this.stores)) sum += h[g] ?? 0;
@@ -247,9 +258,23 @@ export class Ledger {
 
 // The stores brought in line with the stock (see Ledger.sync); the state itself when nothing moved.
 export function settleStores<S extends Pick<SimState, "stock" | "stores" | "buildings" | "roads">>(s: S): S {
+  if (settled(s)) return s; // most ticks: nothing for a ledger to move
   const l = new Ledger(s);
   if (sameStores(l.stores, s.stores) && KINDS.every((g) => l.stock[g] === s.stock[g])) return s;
   return { ...s, stock: l.stock, stores: l.stores };
+}
+
+// Do the stores already hold exactly the stock, all of them still standing? Then `Ledger.sync` would move nothing.
+function settled(s: Pick<SimState, "stock" | "stores" | "buildings">): boolean {
+  if (!s.stores) return false;
+  const { byId } = storeSet(s.buildings);
+  const sum: Partial<Stock> = {};
+  for (const id in s.stores) {
+    if (!byId.has(Number(id))) return false;
+    const h = s.stores[id];
+    for (const g in h) sum[g as keyof Stock] = (sum[g as keyof Stock] ?? 0) + h[g as keyof Stock]!;
+  }
+  return KINDS.every((g) => Math.abs(s.stock[g] - (sum[g] ?? 0)) <= EPS);
 }
 
 function sameStores(a: Stores, b: Stores | undefined): boolean {

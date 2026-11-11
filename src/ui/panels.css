@@ -369,6 +369,12 @@
   margin-top: var(--sp-3);
 }
 
+/* The town has six sections: two even rows of three rather than five and a lone one. */
+.town-panel .tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .rs-panel .tab {
   flex: 1 1 auto;
   padding: var(--sp-1) 3px;

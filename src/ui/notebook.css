@@ -289,3 +289,17 @@
   vertical-align: text-bottom;
 }
 
+
+/* What can be done with a find: return it to its place, put it to use. */
+.notebook-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: 2px;
+}
+
+.notebook-actions .link:disabled {
+  color: var(--pencil);
+  cursor: default;
+  text-decoration: none;
+}

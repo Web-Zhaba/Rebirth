@@ -3,7 +3,7 @@ import type { Feature, FeatureCollection, GeoJsonProperties } from "geojson";
 import { isCleared } from "../../sim/clearing";
 import { fieldCentroid } from "../../sim/fields";
 import { occupiedKeys } from "../../sim/growth";
-import type { ZoneCell, ZoneType } from "../../sim/types";
+import type { ClientState, ZoneCell, ZoneType } from "../../sim/types";
 import { cellCorners, pointInPolygon } from "../../sim/zones";
 import { buildingSet, frame, state, zones } from "../../simClient";
 import type { Frame } from "../../world/frame";
@@ -101,9 +101,21 @@ export const fields: ReadonlySignal<FeatureCollection> = computed(() => {
 
 // Clearings (`done`: cleared, drawn as meadow; otherwise an outline) and the percent labels of unfinished ones.
 const clearingList = computed(() => state.value?.clearings ?? []);
+// The same list while no clearing appeared, went or was finished: cutting moves `done` every tick, the shapes stay.
+let drawnClearings: ClientState["clearings"] = [];
+let drawnSig = "";
+const clearingShapes = computed(() => {
+  const list = clearingList.value;
+  const sig = list.map((c) => `${c.id}:${isCleared(c) ? 1 : 0}`).join();
+  if (sig !== drawnSig) {
+    drawnSig = sig;
+    drawnClearings = list;
+  }
+  return drawnClearings;
+});
 export const clearings: ReadonlySignal<FeatureCollection> = computed(() => {
   const f = frame.value;
-  const list = clearingList.value;
+  const list = clearingShapes.value;
   return f && list.length ? collection(list.map((c) => polygon(closed(c.pts, f), { id: c.id, done: isCleared(c) }))) : EMPTY;
 });
 export const clearingLabels: ReadonlySignal<FeatureCollection> = computed(() => {

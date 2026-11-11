@@ -14,11 +14,10 @@ export const cityPoint: ReadonlySignal<FeatureCollection> = computed(() => {
 });
 
 // The camp area is only a guide until the first road is built; after that it is hidden for good.
+const anyRoadBuilt = computed(() => Object.values(roads.value?.edges ?? {}).some((e) => e.done >= e.labor));
 export const campArea: ReadonlySignal<FeatureCollection> = computed(() => {
   const f = frame.value;
-  const g = roads.value;
-  const anyBuilt = g !== null && Object.values(g.edges).some((e) => e.done >= e.labor);
-  if (!f || anyBuilt) return EMPTY;
+  if (!f || anyRoadBuilt.value) return EMPTY;
   const ring: [number, number][] = [];
   for (let i = 0; i <= CAMP_STEPS; i++) {
     const a = (i / CAMP_STEPS) * 2 * Math.PI;
