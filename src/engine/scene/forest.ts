@@ -26,14 +26,14 @@ import { bakeTreeAtlas, IMPOSTOR_STEP, IMPOSTOR_VIEWS, TREE_VERTEX_LAYOUT, uploa
 // Kinds: conifer, broadleaf, birch (trees), bush, reed, boulder (details); a slot per (kind, level of detail).
 export const FOREST_KINDS = 6;
 const SLOTS = FOREST_KINDS * 2;
-const CAPS = [12288, 65536, 12288, 65536, 12288, 65536, 8192, 32768, 8192, 32768, 8192, 32768];
+const CAPS = [24576, 65536, 24576, 65536, 24576, 65536, 12288, 32768, 12288, 32768, 12288, 32768];
 const INSTANCE_BYTES = 32;
 
-const MAX_TREES = 80_000; // expected trees in view (the old layer's cap)
+const MAX_TREES = 120_000; // expected trees in view
 const MAX_DETAILS = 60_000;
 const MAX_CANDIDATES = 3_000_000;
-const TREE_NEAR = 450; // trees nearer than this are models (and never thinned)
-const DETAIL_NEAR = 60;
+const TREE_NEAR = 700; // trees nearer than this are models (and never thinned)
+const DETAIL_NEAR = 120;
 const TREE_FAR_CAP = 12_000;
 const DETAIL_FAR_CAP = 2_000;
 const MIN_PX = 1.5; // drawn up to where a typical one is this many px tall

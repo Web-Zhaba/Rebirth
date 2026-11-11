@@ -13,7 +13,7 @@ import smokeWgsl from "./smoke.wgsl?raw";
 const PUFFS = 12;
 const LIFE = 8; // s a puff lives
 const RISE = 12; // m it rises
-const REACH = 650; // m: chimneys farther from the eye are not drawn
+const REACH = 950; // m: chimneys farther from the eye are not drawn
 const MAX_CHIMNEYS = 400;
 const SELECT_STEP = 30; // m the eye may move before the nearest chimneys are picked again
 export const CHIMNEY_FLOATS = 6; // east, north, up (m), kind (0 home, 1 furnace, 2 tavern), hash, puff size (m)

@@ -85,15 +85,18 @@ describe("shadowRadius / shadowFade", () => {
     expect(shadowRadius(100)).toBe(200);
     expect(shadowRadius(300)).toBe(400);
     expect(shadowRadius(900)).toBe(800);
+    expect(shadowRadius(1500)).toBe(1600);
+    expect(shadowRadius(1500, 1024)).toBe(800); // a small map's texels would be too wide for the last step
   });
 
-  it("fades out between 400 and 1200 m above the ground, smoothly", () => {
+  it("fades out between 900 and 2600 m above the ground, smoothly", () => {
     expect(shadowFade(100, 1)).toBe(1);
-    expect(shadowFade(400, 1)).toBe(1);
-    expect(shadowFade(800, 1)).toBeCloseTo(0.5, 6);
-    expect(shadowFade(1200, 1)).toBe(0);
+    expect(shadowFade(900, 1)).toBe(1);
+    expect(shadowFade(1750, 1)).toBeCloseTo(0.5, 6);
+    expect(shadowFade(2600, 1)).toBe(0);
+    expect(shadowFade(1300, 1, 1024)).toBe(0); // half as far on the small map
     let prev = 1;
-    for (let h = 400; h <= 1200; h += 10) {
+    for (let h = 900; h <= 2600; h += 10) {
       const f = shadowFade(h, 1);
       expect(prev - f).toBeLessThan(0.02); // no pop
       prev = f;

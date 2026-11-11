@@ -56,10 +56,10 @@ export class ShadowMap {
     }
     const size = SHADOW_SIZES[this.quality];
     if (size !== this.size) this.view = this.resize(size);
-    this.fade = shadowFade(view.eyeAboveGround, dot(sun, normalize(view.target)));
+    this.fade = shadowFade(view.eyeAboveGround, dot(sun, normalize(view.target)), size);
     if (this.fade <= 0) return false;
     this.sun = steppedSun(this.sun, sun);
-    const f = (this.frame = shadowFrame(this.sun, view.target, shadowRadius(Math.hypot(view.eye[0] - view.target[0], view.eye[1] - view.target[1], view.eye[2] - view.target[2])), size));
+    const f = (this.frame = shadowFrame(this.sun, view.target, shadowRadius(Math.hypot(view.eye[0] - view.target[0], view.eye[1] - view.target[1], view.eye[2] - view.target[2]), size), size));
     shadowMatrix(f, view.eye, this.proj);
     // The casters are culled for the camera (terrain selection, forest scatter), so the view is part of the key.
     const e = view.eye;
