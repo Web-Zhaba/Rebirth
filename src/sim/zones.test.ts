@@ -201,6 +201,21 @@ describe("zones in the worker", () => {
     await h.handle({ t: "flush" }); // clear the retry timer promptly
     await h.handle({ t: "reset" });
   });
+  it("a road drawn with houses lays them along both sides once its ground is surveyed", async () => {
+    const { h, out, get } = setup(undefined, fake);
+    await h.handle({ t: "found", city, now: NOW });
+    await h.handle({ t: "cmd", id: 1, cmd: { type: "addRoad", kind: "dirt", pts: [[0, 0], [80, 0]], snapTol: 1, labor: [40], houses: { template: "izba" } } });
+    expect(out.find((m) => m.t === "cmdResult")).toMatchObject({ ok: true });
+    expect(Object.keys(get().sim.buildings)).toHaveLength(0); // the cells still wait for their terrain
+    await h.idle();
+    const houses = Object.values(get().sim.buildings);
+    expect(houses.length).toBeGreaterThanOrEqual(8); // 80 m, 16 m a house, both sides
+    expect(houses.every((b) => b.template === "izba" && b.awaitsRoad)).toBe(true); // the road is not built yet
+    expect(new Set(houses.map((b) => b.side))).toEqual(new Set([1, -1]));
+    await add(h, 2, [[0, 0], [0, 80]]); // a road without houses lays none
+    await h.idle();
+    expect(Object.values(get().sim.buildings)).toHaveLength(houses.length);
+  });
   it("cells ride only on snapshots after they changed", async () => {
     const { h, out, get } = setup(undefined, fake);
     await h.handle({ t: "found", city, now: NOW });

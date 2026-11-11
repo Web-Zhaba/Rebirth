@@ -2,7 +2,6 @@ import { play } from "../ui/sound";
 import { effect, signal } from "@preact/signals";
 import { mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId } from "../sim/types";
-import { shouldRepeatTool } from "../ui/inputModel";
 import { storedChoice } from "../ui/preferenceModel";
 import { mppAtZoom, type View } from "../view/view";
 import { L } from "../i18n";
@@ -33,13 +32,34 @@ effect(() => {
   if (current) lastTool.value = current;
 });
 
-export function attachToolRepeat(view: View): void {
-  view.canvas.addEventListener("pointerdown", (e: PointerEvent) => {
-    if (!e.isPrimary || !shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
-    e.preventDefault();
-    tool.value = lastTool.peek();
-  });
-}
+export const isTool = (t: unknown): t is Tool => typeof t === "string" && (isRoadTool(t as Tool) || isLandTool(t as Tool) || isPlaceTool(t as Tool));
+
+// The last tools picked, newest first, on Alt+1–4 (docs/PLAN-build.md section 3.2); kept between sessions.
+export const RECENT_MAX = 4;
+const RECENT_STORE = "rebirth.tools.recent";
+const readRecent = (): Tool[] => {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(RECENT_STORE) ?? "[]");
+    return Array.isArray(v) ? v.filter(isTool).slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+};
+export const recentTools = signal<Tool[]>(readRecent());
+// The list with `t` moved to the front.
+export const withRecent = (list: readonly Tool[], t: Tool): Tool[] => [t, ...list.filter((x) => x !== t)].slice(0, RECENT_MAX);
+effect(() => {
+  const t = tool.value;
+  if (!t) return;
+  const was = recentTools.peek();
+  if (was[0] === t) return;
+  recentTools.value = withRecent(was, t);
+  try {
+    localStorage.setItem(RECENT_STORE, JSON.stringify(recentTools.peek()));
+  } catch {
+    /* ignore */
+  }
+});
 // Road drawing mode, shared by every road kind; kept between tools.
 export const roadMode = signal<RoadMode>("straight");
 export const ROAD_MODES: { id: RoadMode; label: string; title: string }[] = [
@@ -102,6 +122,12 @@ export const placeVariant = signal<Partial<Record<PlaceTool, string>>>({});
 // The template a placement tool puts down: the kind chosen for it, or its first kind, or the tool itself.
 export const placeTemplate = (t: PlaceTool, chosen: Partial<Record<PlaceTool, string>> = placeVariant.value): string => chosen[t] ?? PLACE_VARIANTS[t]?.[0].id ?? t;
 
+// The tool (and its kind) that puts a building of `template` down, or null for one no tool places (a dig site).
+export function toolOfTemplate(template: string): { tool: PlaceTool; variant?: string } | null {
+  for (const [t, kinds] of Object.entries(PLACE_VARIANTS) as [PlaceTool, PlaceVariant[]][]) if (kinds.some((k) => k.id === template)) return { tool: t, variant: template };
+  return (PLACE_TOOLS as string[]).includes(template) ? { tool: template as PlaceTool } : null;
+}
+
 // A stroke takes only old foundations and leaves the gaps empty (G); kept between sessions.
 const ONLY_FOUNDATIONS_STORE = "rebirth.stroke.onlyFoundations";
 const readOnlyFoundations = (): boolean => {
@@ -120,6 +146,30 @@ export function setOnlyFoundations(on: boolean): void {
     /* ignore */
   }
 }
+
+// The road tools lay houses along both sides of a new road (docs/PLAN-build.md «дорога с домами»); kept between sessions.
+const ROAD_HOUSES_STORE = "rebirth.road.houses";
+const readRoadHouses = (): boolean => {
+  try {
+    return localStorage.getItem(ROAD_HOUSES_STORE) === "1";
+  } catch {
+    return false;
+  }
+};
+export const roadHouses = signal(readRoadHouses());
+export function setRoadHouses(on: boolean): void {
+  roadHouses.value = on;
+  try {
+    localStorage.setItem(ROAD_HOUSES_STORE, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+// The tools a road with houses is drawn with: paths, roads and old streets (not bridges).
+export const housesAlong = (t: Tool | null): boolean => t === "path" || t === "dirt" || t === "restore";
+// What an addRoad drawn with `t` asks for its sides: the house tool's kind and its «только фундаменты», or nothing.
+export const roadHousesCmd = (t: Tool | null): { template: string; onlyFoundations: boolean } | undefined =>
+  roadHouses.value && housesAlong(t) ? { template: placeTemplate("house"), onlyFoundations: onlyFoundations.value } : undefined;
 
 // Brief message about a rejected action, shown by the toolbar.
 export const toolMsg = signal<string | null>(null);

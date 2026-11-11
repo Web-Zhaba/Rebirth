@@ -302,7 +302,7 @@ function allocate(buildings: Record<number, Building>, clearings: readonly Clear
     for (const key of Object.keys(buildings)) {
       const b = buildings[Number(key)];
       const rem = remainingLabor(b);
-      if (rem > EPS && (b.zone === "res") === homes) sites.push([Number(key), rem, (crewHours * siteCrew(b)) / CREW]);
+      if (rem > EPS && !b.awaitsRoad && (b.zone === "res") === homes) sites.push([Number(key), rem, (crewHours * siteCrew(b)) / CREW]);
     }
   if (!first) sites.push(...fell);
   const pi = lever?.priority != null ? sites.findIndex(([id]) => id === lever.priority) : -1;

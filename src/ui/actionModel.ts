@@ -1,5 +1,8 @@
-export function duplicateTemplate(template: string, siteId: string | undefined, placeTools: readonly string[]): string | null {
-  return !siteId && placeTools.includes(template) ? template : null;
+import { toolOfTemplate } from "../map/tools";
+
+// «Построить ещё»: the tool and kind that put another of this building down; none for a site restored as it was.
+export function duplicateTool(template: string, siteId: string | undefined): ReturnType<typeof toolOfTemplate> {
+  return siteId ? null : toolOfTemplate(template);
 }
 
 export function needsRoadDemolishConfirm(kind: string, done: number, labor: number): boolean {

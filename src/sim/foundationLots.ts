@@ -267,8 +267,9 @@ function roadOver(ring: readonly Pt[], roads: RoadGraph): boolean {
 
 type LotState = Pick<SimState, "roads" | "buildings" | "zones" | "progress">;
 
-// Why the foundation cannot take a building now (any template, or `t`), with the door it would have otherwise.
-export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate): { ok: true; door: Pt } | { ok: false; reason: string } {
+// Why the foundation cannot take a building now (any template, or `t`), with the door it would have otherwise. With
+// `planned`, a road not built yet will do for the door (the site then waits for it).
+export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate, planned = false): { ok: true; door: Pt } | { ok: false; reason: string } {
   const no = (reason: string) => ({ ok: false as const, reason });
   if (f.area < FOUNDATION_LOT.minArea) return no(L("Фундамент слишком мал для постройки", "The foundation is too small to build on"));
   if (f.ghost) return no(L("Это пока только контур: раскопайте фундамент", "Only an outline so far: dig the foundation first"));
@@ -281,8 +282,8 @@ export function lotCheck(s: LotState, f: FoundFoundation, t?: BuildingTemplate):
   for (const b of Object.values(s.buildings)) if (b.foundationId === f.id || polysOverlap(ring, b.footprint)) return no(L("Место занято зданием", "The spot is taken by a building"));
   for (const fd of s.zones.fields) if (polysOverlap(ring, fd.pts)) return no(L("Здесь поле", "A field is here"));
   if (roadOver(ring, s.roads)) return no(L("Через фундамент проходит дорога", "A road runs over the foundation"));
-  const door = ringDoor(ring, builtRoads(s.roads));
-  if (!door || door.dist > FOUNDATION_LOT.roadReach) return no(L("Нужна построенная дорога рядом", "Needs a built road nearby"));
+  const door = ringDoor(ring, planned ? s.roads : builtRoads(s.roads));
+  if (!door || door.dist > FOUNDATION_LOT.roadReach) return no(planned ? L("Нужна дорога рядом", "Needs a road nearby") : L("Нужна построенная дорога рядом", "Needs a built road nearby"));
   return { ok: true, door: [Math.round(door.door[0] * 100) / 100, Math.round(door.door[1] * 100) / 100] };
 }
 

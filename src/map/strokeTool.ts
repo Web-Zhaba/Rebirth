@@ -89,6 +89,7 @@ export function attachStrokeTool(view: View): void {
     if (holds > 0) lines.push(t.zone === "res" ? `${L("Семей", "Families")}: ${holds}` : `${L("Рабочих мест", "Jobs")}: ${holds}`);
     if (it.kind === "dig" && f) lines.push(L(`Сначала раскопка: ${Math.round(excavationSite(f, 0, 0).labor)} чел.-ч`, `Dug first: ${Math.round(excavationSite(f, 0, 0).labor)} person-h`));
     lines.push(costText(b.labor, materialsOf(b)));
+    if (b.awaitsRoad) lines.push(L("Начнут, когда достроят дорогу", "Started once the road is built"));
     if (dropped) lines.push(L("Убрано из плана: клик — вернуть", "Dropped from the plan: click to return it"));
     else if (held) lines.push(L("Клик — убрать из плана", "Click to drop it from the plan"));
     return lines.join("\n");
@@ -106,6 +107,7 @@ export function attachStrokeTool(view: View): void {
     if (s.homes > 0) lines.push(`${L("Семей", "Families")}: ${s.homes}`);
     if (s.jobs > 0) lines.push(`${L("Рабочих мест", "Jobs")}: ${s.jobs}`);
     if (s.total > 0) lines.push(costText(s.labor, s.materials));
+    if (s.waiting > 0) lines.push(L(`Ждут дорогу: ${s.waiting} — начнут, когда её достроят`, `Waiting for the road: ${s.waiting}, started once it is built`));
     if (st) {
       const short: string[] = [];
       if (s.materials.logs > st.stock.logs) short.push(L(`брёвна ${n1(st.stock.logs)} из ${n1(s.materials.logs)} м³`, `logs ${n1(st.stock.logs)} of ${n1(s.materials.logs)} m³`));
@@ -202,7 +204,7 @@ export function attachStrokeTool(view: View): void {
     draw(p);
     const ok = !!p && p.items.length > 0;
     view.canvas.style.cursor = placementCursor(true, ok ? "ok" : "bad");
-    if (!p || (p.items.length === 0 && p.skipped.length === 0)) setLabel(L("Здесь нет места вдоль построенной дороги", "No room along a built road here"));
+    if (!p || (p.items.length === 0 && p.skipped.length === 0)) setLabel(L("Здесь нет места вдоль дороги", "No room along the road here"));
     else if (path) setLabel(summaryLines(p, new Set()).join("\n"));
     else if (p.items.length === 1 && p.skipped.length === 0) setLabel(itemText(p.items[0], false));
     else if (p.items.length === 0) setLabel(p.skipped[0].reason);
@@ -308,7 +310,7 @@ export function attachStrokeTool(view: View): void {
     if (!id || !done || !local) return;
     const r = plan(placeTemplate(id), done);
     if (!r || r.plan.items.length === 0) {
-      flash(r?.plan.skipped[0]?.reason ?? L("Здесь нет места вдоль построенной дороги", "No room along a built road here"));
+      flash(r?.plan.skipped[0]?.reason ?? L("Здесь нет места вдоль дороги", "No room along the road here"));
       schedule();
       return;
     }

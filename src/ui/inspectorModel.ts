@@ -14,6 +14,7 @@ export interface Chip {
 
 // Which workplace has no workers, no input, and so on, from the data the worker returns.
 export function buildingStatus(b: Building, info: BuildingQuery | null, shortfall: boolean): Chip {
+  if (b.state === "planned" && b.awaitsRoad) return { label: L("ждёт дорогу", "awaiting the road"), tone: "warn" };
   if (b.state === "planned") return shortfall ? { label: L("ждёт материалов", "awaiting materials"), tone: "warn" } : { label: L("в очереди", "queued"), tone: "build" };
   if (b.state === "building") return { label: L("строится", "under construction"), tone: "build" };
   if (b.upgrade) return { label: L("перестраивается", "rebuilding"), tone: "build" };

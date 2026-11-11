@@ -5,7 +5,7 @@ import { allocateLabor, FRONT_SETBACK, levelHeight, startLevel, BUILDINGS, type 
 import { fieldCentroid, FORAGER_FOREST } from "./fields";
 import { createFounders, FOUNDERS, MOOD_START } from "./people";
 import { clearingLogs } from "./clearing";
-import { foundationBuilding, FOUNDATION_TAKEN, lotCheck, onReservedGround, OUTLINE_TAKEN } from "./foundationLots";
+import { FOUNDATION_LOT, foundationBuilding, FOUNDATION_TAKEN, lotCheck, onReservedGround, OUTLINE_TAKEN } from "./foundationLots";
 import { isHeritage } from "./heritage";
 import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
 import { emptyProd, emptyStock, say } from "./production";
@@ -156,7 +156,8 @@ const BLOCK_REASON: Record<string, string> = {
 };
 
 // Can `t` stand on the lot whose depth-0 start cell is (edge, side, i)? The lot is t.w x t.d cells.
-// Shared by the worker (which enforces it) and the placement tool (which previews it).
+// Shared by the worker (which enforces it) and the placement tool (which previews it). With `planned`, the road may be
+// one not built yet (a stroke: the site waits for it).
 export function canPlace(
   s: Pick<SimState, "roads" | "zones" | "buildings"> & { finds?: Finds },
   t: BuildingTemplate,
@@ -164,6 +165,7 @@ export function canPlace(
   side: 1 | -1,
   i: number,
   site: Site,
+  planned = false,
 ): PlaceCheck {
   if (t.id === "restored") return NO_PLACE(L("Памятник ставится только на старый фундамент", "A monument stands only on an old foundation"));
   if (t.id === "museum") return NO_PLACE(L("Музей ставится только на старый фундамент", "A museum stands only on an old foundation"));
@@ -171,7 +173,7 @@ export function canPlace(
   if (hall) return hall;
   const e = s.roads.edges[edge];
   if (!e) return NO_PLACE(L("Нет такой дороги", "No such road"));
-  if (e.done < e.labor) return NO_PLACE(L("Дорога ещё не построена", "The road is not built yet"));
+  if (e.done < e.labor && !planned) return NO_PLACE(L("Дорога ещё не построена", "The road is not built yet"));
   const byKey = new Map<string, LotCell>();
   for (const c of s.zones.cells) if (c.edge === edge && c.side === side) byKey.set(c.key, c);
   const occ = occupancy(s.buildings);
@@ -201,12 +203,12 @@ export function canPlace(
 }
 
 // Can the player put `t` on the old foundation `foundationId`? (Shared by the worker and the placement tool.)
-export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds" | "progress">, t: BuildingTemplate, foundationId: string): PlaceCheck {
+export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds" | "progress">, t: BuildingTemplate, foundationId: string, planned = false): PlaceCheck {
   const hall = secondHall(s, t);
   if (hall) return hall;
   const f = s.finds.foundations.find((x) => x.id === foundationId);
   if (!f) return NO_PLACE(L("Нет такого фундамента", "No such foundation"));
-  const r = lotCheck(s, f, t);
+  const r = lotCheck(s, f, t, planned);
   return r.ok ? { ok: true } : NO_PLACE(r.reason);
 }
 
@@ -214,22 +216,61 @@ export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buil
 // The town a placement reads and writes: the worker's state, or the main thread's copy for a preview.
 export type PlaceState = Pick<SimState, "roads" | "zones" | "buildings" | "finds" | "progress" | "nextBuildingId" | "gameMinutes">;
 
-export function placeOnFoundation<S extends PlaceState>(s: S, t: BuildingTemplate, foundationId: string): S {
+export function placeOnFoundation<S extends PlaceState>(s: S, t: BuildingTemplate, foundationId: string, planned = false): S {
   const f = s.finds.foundations.find((x) => x.id === foundationId)!;
-  const r = lotCheck(s, f, t);
+  const r = lotCheck(s, f, t, planned);
   if (!r.ok) return s;
   const id = s.nextBuildingId;
-  const b = foundationBuilding(t, f, r.door, id, s.gameMinutes, s.progress);
+  const b = waiting(s.roads, foundationBuilding(t, f, r.door, id, s.gameMinutes, s.progress));
   return orderRestoration({ ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: b } }, b);
 }
 
-// Adds a planned building on the lot. Call canPlace first.
-export function placeBuilding<S extends Pick<SimState, "zones" | "buildings" | "nextBuildingId" | "gameMinutes">>(s: S, t: BuildingTemplate, edge: number, side: 1 | -1, i: number, site?: Site): S {
+// Adds a planned building on the lot (waiting for its road while that is not built). Call canPlace first.
+export function placeBuilding<S extends Pick<SimState, "roads" | "zones" | "buildings" | "nextBuildingId" | "gameMinutes">>(s: S, t: BuildingTemplate, edge: number, side: 1 | -1, i: number, site?: Site): S {
   const key = (a: number, d: number) => `${edge}:${side}:${i + a}:${d}`;
   const c0 = s.zones.cells.find((c) => c.key === key(0, 0))!;
   const far = s.zones.cells.find((c) => c.key === key(t.w - 1, t.d - 1))!;
   const id = s.nextBuildingId;
-  return { ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: makeBuilding(t, c0, far, id, s.gameMinutes, site) } };
+  return { ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: waiting(s.roads, makeBuilding(t, c0, far, id, s.gameMinutes, site)) } };
+}
+
+// ---------- sites waiting for their road ----------
+
+// Is the road of a building built: the front of its lot on a built road, or the door of a building on a foundation
+// within reach of one.
+export function roadReady(roads: RoadGraph, b: Building): boolean {
+  let x: number;
+  let y: number;
+  let reach: (e: RoadEdge) => number;
+  if (b.foundationId && b.door) {
+    [x, y] = b.door;
+    reach = () => FOUNDATION_LOT.roadReach;
+  } else {
+    const [vx, vy] = away(b.lot.angle, b.side);
+    const front = (CELL_SIZE * b.lot.d) / 2;
+    x = b.lot.cx - vx * front;
+    y = b.lot.cy - vy * front;
+    reach = (e) => ROAD_KINDS[e.kind].width / 2 + ROAD_SLACK;
+  }
+  for (const e of Object.values(roads.edges)) if (e.done >= e.labor && distToEdge(roads, e, x, y) <= reach(e)) return true;
+  return false;
+}
+
+// A planned building whose road is not built yet waits for it.
+function waiting(roads: RoadGraph, b: Building): Building {
+  return b.state === "planned" && !roadReady(roads, b) ? { ...b, awaitsRoad: true } : b;
+}
+
+// The sites whose road got built stop waiting. Returns the same record when none did.
+export function releaseSites(buildings: Record<number, Building>, roads: RoadGraph): Record<number, Building> {
+  let out = buildings;
+  for (const b of Object.values(buildings)) {
+    if (!b.awaitsRoad || !roadReady(roads, b)) continue;
+    if (out === buildings) out = { ...buildings };
+    const { awaitsRoad: _w, ...rest } = b;
+    out[b.id] = rest;
+  }
+  return out;
 }
 
 // ---------- construction ----------

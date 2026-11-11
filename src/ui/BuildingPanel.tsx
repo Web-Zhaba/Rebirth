@@ -19,7 +19,7 @@ import { familyGenitive } from "../sim/people";
 import type { ComponentChildren } from "preact";
 import type { Building, BuildingQuery, FoundFoundation, Needs, ProductionInfo, Stock } from "../sim/types";
 import { selectedBuilding } from "../view/layers/buildings";
-import { PLACE_TOOLS, tool, type PlaceTool } from "../map/tools";
+import { tool } from "../map/tools";
 import { buildings, digs, gameClock, queryBuilding, sendCmd, state, stock } from "../simClient";
 import { act, InspectorHead, Line, num, plural, Section, siteEta, SiteLevers } from "./InspectorParts";
 import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspectorModel";
@@ -28,7 +28,8 @@ import { Button, Confirm, IconButton, ProgressBar, Segmented } from "./kit";
 import { TRADE, TRADE_GOODS, tradeCapacity, tradeRate, type TradeGood, type TradeOrder } from "../sim/trade";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
-import { duplicateTemplate } from "./actionModel";
+import { duplicateTool } from "./actionModel";
+import { lockOf, pickTool } from "../map/toolPick";
 import { followResident } from "./follow";
 import { NeedsBars } from "./NeedsBars";
 import { SEMANTIC_IDS } from "./semanticIds";
@@ -332,11 +333,11 @@ export function BuildingPanel() {
           ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}`
           : null;
   const occupied = info?.kind === "house" ? info.households.some((h) => h.people.length > 0) : info?.kind === "workplace" && info.workers.length > 0;
-  const duplicate = duplicateTemplate(b.template, b.asItWas ? b.foundationId : undefined, PLACE_TOOLS);
+  const duplicate = duplicateTool(b.template, b.asItWas ? b.foundationId : undefined);
   const onDuplicate = () => {
-    if (!duplicate) return;
-    closePanel();
-    tool.value = duplicate as PlaceTool;
+    if (!duplicate || lockOf(duplicate.tool, duplicate.variant)) return void (duplicate && pickTool(duplicate.tool, duplicate.variant)); // a closed one says why
+    closePanel(); // before the pick: closing the panel drops the tool in hand
+    pickTool(duplicate.tool, duplicate.variant);
   };
   const onDemolish = () => {
     act({ type: "demolish", id: b.id });
@@ -376,7 +377,7 @@ export function BuildingPanel() {
               <Line icon="hourglass" label={L("Осталось", "Left")}>
                 {num(left)} {L("чел.-ч", "person-h")}
               </Line>
-              <Line label={L("Ждать", "Wait")}>{siteEta(left, b.id) || "—"}</Line>
+              <Line label={L("Ждать", "Wait")}>{b.awaitsRoad ? L("пока не достроят дорогу", "until the road is built") : siteEta(left, b.id) || "—"}</Line>
               {queued && <div class="people-note">{queued}</div>}
             </>
           )}

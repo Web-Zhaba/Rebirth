@@ -2,10 +2,10 @@ import { BUILDINGS, type BuildingTemplate } from "./buildings";
 import { orderDig } from "./digging";
 import { centroid } from "./excavation";
 import { foundationBuilding, foundationIndex, foundationKindText, FOUNDATION_LOT, lotCheck } from "./foundationLots";
-import { canPlace, canPlaceOnFoundation, placeBuilding, placeOnFoundation, type PlaceState } from "./growth";
+import { canPlace, canPlaceOnFoundation, placeBuilding, placeOnFoundation, roadReady, type PlaceState } from "./growth";
 import { asItWasTemplate, isHeritage, siteTitle } from "./heritage";
 import { distToEdge, ROAD_KINDS } from "./roads";
-import type { Building, FoundFoundation, Site, SimState } from "./types";
+import type { Building, FoundFoundation, RoadGraph, Site, SimState } from "./types";
 import { L } from "../i18n";
 
 // Building in strokes (docs/PLAN-build.md section 3.3): the player drags along a road and gets a row of buildings of one
@@ -123,7 +123,8 @@ function alongFoundations(s: Pick<SimState, "roads" | "finds" | "buildings">, fr
 const byOrder = (p: { order: [number, number] }, q: { order: [number, number] }) => p.order[0] - q.order[0] || p.order[1] - q.order[1];
 
 // What a stroke of template `t` along the spans would build now. Foundations claim their ground first, then the lots fill
-// the gaps; each is checked against the ones before it, so the plan never overlaps itself.
+// the gaps; each is checked against the ones before it, so the plan never overlaps itself. The road may be one not built
+// yet: a building along it waits for it (`awaitsRoad`).
 export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, spans: readonly StrokeSpan[], onlyFoundations = false): StrokePlan {
   const fr = frames(s, spans);
   const items: (StrokeItem & { order: [number, number] })[] = [];
@@ -141,23 +142,24 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
     const key = `f:${f.id}`;
     if (f.ghost) {
       const { ghost: _g, ...dug } = f; // checked as it will be once dug
-      const r = lotCheck(cur, dug, use);
+      const r = lotCheck(cur, dug, use, true);
       const dig = r.ok ? orderDig(cur, f.id) : null;
       if (!r.ok || !dig || !dig.ok) {
         skipped.push({ foundationId: f.id, reason: !r.ok ? r.reason : dig && !dig.ok ? dig.reason : "", at });
         continue;
       }
       const building = foundationBuilding(use, dug, r.door, PREVIEW_ID, cur.gameMinutes, cur.progress);
+      if (!roadReady(cur.roads, building)) building.awaitsRoad = true;
       cur = dig.sim;
       items.push({ kind: "dig", key, building, foundationId: f.id, order });
       continue;
     }
-    const ok = canPlaceOnFoundation(cur, use, f.id);
+    const ok = canPlaceOnFoundation(cur, use, f.id, true);
     if (!ok.ok) {
       skipped.push({ foundationId: f.id, reason: ok.reason, at });
       continue;
     }
-    cur = placeOnFoundation(cur, use, f.id);
+    cur = placeOnFoundation(cur, use, f.id, true);
     items.push({ kind: "foundation", key, building: { ...newest(), id: PREVIEW_ID }, foundationId: f.id, order });
   }
 
@@ -177,7 +179,7 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
         const start = sp.dir === 1 ? i : i - t.w + 1;
         let inside = true;
         for (let a = 0; a < t.w && inside; a++) inside = row.has(start + a) && !used.has(start + a);
-        if (!inside || !canPlace(cur, t, sp.edge, sp.side, start, NO_SITE).ok) continue;
+        if (!inside || !canPlace(cur, t, sp.edge, sp.side, start, NO_SITE, true).ok) continue;
         cur = placeBuilding(cur, t, sp.edge, sp.side, start);
         for (let a = 0; a < t.w; a++) used.add(start + a);
         const mid = (row.get(start)! + row.get(start + t.w - 1)!) / 2;
@@ -189,6 +191,39 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
   return { items: items.sort(byOrder).map(({ order: _o, ...it }) => it as StrokeItem), skipped };
 }
 
+// ---------- a road with houses ----------
+
+// The edges a new road added to `before`: those new to the graph that do not lie along an old edge (the pieces of an old
+// edge the road split do).
+export function newRoadEdges(before: RoadGraph, after: RoadGraph): number[] {
+  const old = Object.values(before.edges);
+  const out: number[] = [];
+  for (const e of Object.values(after.edges)) {
+    if (Object.hasOwn(before.edges, e.id)) continue;
+    const a = after.nodes[e.a];
+    const b = after.nodes[e.b];
+    if (!a || !b) continue;
+    const x = (a.x + b.x) / 2;
+    const y = (a.y + b.y) / 2;
+    if (!old.some((o) => distToEdge(before, o, x, y) <= 1)) out.push(e.id);
+  }
+  return out.sort((p, q) => p - q);
+}
+
+// Both sides of the edges, end to end: the stroke of a road with houses.
+export function roadSpans(roads: RoadGraph, edges: readonly number[]): StrokeSpan[] {
+  const out: StrokeSpan[] = [];
+  for (const id of edges) {
+    const e = roads.edges[id];
+    const a = e && roads.nodes[e.a];
+    const b = e && roads.nodes[e.b];
+    if (!a || !b) continue;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    for (const side of [1, -1] as const) out.push({ edge: id, side, from: 0, to: len });
+  }
+  return out;
+}
+
 // Places the items in their order, each checked against the town as it is by then (an item no longer possible is left
 // out). A dig is ordered with its building to follow once the outline is dug.
 export function applyStroke<S extends PlaceState>(s: S, items: readonly StrokeItem[]): { sim: S; placed: number } {
@@ -198,11 +233,11 @@ export function applyStroke<S extends PlaceState>(s: S, items: readonly StrokeIt
     const t = BUILDINGS[it.building.template];
     if (!t) continue;
     if (it.kind === "lot") {
-      if (!canPlace(cur, t, it.edge, it.side, it.i, NO_SITE).ok) continue;
+      if (!canPlace(cur, t, it.edge, it.side, it.i, NO_SITE, true).ok) continue;
       cur = placeBuilding(cur, t, it.edge, it.side, it.i);
     } else if (it.kind === "foundation") {
-      if (!canPlaceOnFoundation(cur, t, it.foundationId).ok) continue;
-      cur = placeOnFoundation(cur, t, it.foundationId);
+      if (!canPlaceOnFoundation(cur, t, it.foundationId, true).ok) continue;
+      cur = placeOnFoundation(cur, t, it.foundationId, true);
     } else {
       const id = cur.nextBuildingId;
       const r = orderDig(cur, it.foundationId);

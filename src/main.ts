@@ -7,7 +7,6 @@ import { attachStrokeTool } from "./map/strokeTool";
 import { attachRevealTool } from "./map/revealTool";
 import { attachRoadTool } from "./map/roadTool";
 import { attachLandTool } from "./map/landTool";
-import { attachToolRepeat } from "./map/tools";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeRests, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
@@ -89,7 +88,6 @@ function start(view: View): void {
   attachPlaceTool(view);
   attachStrokeTool(view);
   if (import.meta.env.DEV) attachRevealTool(view); // admin-only; production has no admin panel
-  attachToolRepeat(view);
   let centred = false;
   effect(() => {
     const c = city.value;

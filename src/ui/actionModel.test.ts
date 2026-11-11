@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { duplicateTemplate, needsRoadDemolishConfirm } from "./actionModel";
+import { duplicateTool, needsRoadDemolishConfirm } from "./actionModel";
 
 describe("quick actions", () => {
-  const tools = ["well", "market", "woodcutter"];
-
-  it("duplicates only ordinary player-placed templates", () => {
-    expect(duplicateTemplate("well", undefined, tools)).toBe("well");
-    expect(duplicateTemplate("izba", undefined, tools)).toBeNull();
-    expect(duplicateTemplate("well", "old:1", tools)).toBeNull();
+  it("builds another with the tool and kind of the building, not of a site restored as it was", () => {
+    expect(duplicateTool("well", undefined)).toEqual({ tool: "well" });
+    expect(duplicateTool("izba5", undefined)).toEqual({ tool: "house", variant: "izba5" });
+    expect(duplicateTool("tavern", undefined)).toEqual({ tool: "shop", variant: "tavern" });
+    expect(duplicateTool("logyard", undefined)).toEqual({ tool: "barn", variant: "logyard" });
+    expect(duplicateTool("excavation", undefined)).toBeNull();
+    expect(duplicateTool("well", "old:1")).toBeNull();
   });
 
   it("confirms only demolition of completed expensive roads", () => {

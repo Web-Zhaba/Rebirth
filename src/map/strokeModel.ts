@@ -83,6 +83,7 @@ export interface StrokeSummary {
   dig: number; // outlines dug first
   dropped: number;
   skipped: number;
+  waiting: number; // along a road not built yet: started once it is
   homes: number; // families the houses hold
   jobs: number;
   labor: number; // person-hours, digs included
@@ -91,7 +92,7 @@ export interface StrokeSummary {
 
 // The numbers of the items the player keeps (those not in `dropped`).
 export function strokeSummary(plan: StrokePlan, dropped: ReadonlySet<string>, foundations: readonly FoundFoundation[]): StrokeSummary {
-  const out: StrokeSummary = { total: 0, onFoundations: 0, asItWas: 0, fresh: 0, dig: 0, dropped: 0, skipped: plan.skipped.length, homes: 0, jobs: 0, labor: 0, materials: { logs: 0, planks: 0, stone: 0 } };
+  const out: StrokeSummary = { total: 0, onFoundations: 0, asItWas: 0, fresh: 0, dig: 0, dropped: 0, skipped: plan.skipped.length, waiting: 0, homes: 0, jobs: 0, labor: 0, materials: { logs: 0, planks: 0, stone: 0 } };
   for (const it of plan.items) {
     if (dropped.has(it.key)) {
       out.dropped++;
@@ -104,6 +105,7 @@ export function strokeSummary(plan: StrokePlan, dropped: ReadonlySet<string>, fo
     else if (it.kind === "dig") out.dig++;
     else out.onFoundations++;
     if (b.asItWas) out.asItWas++;
+    if (b.awaitsRoad) out.waiting++;
     if (t.zone === "res") out.homes += homesOf(b);
     else out.jobs += scaledJobs(t.jobs, b);
     out.labor += b.labor;

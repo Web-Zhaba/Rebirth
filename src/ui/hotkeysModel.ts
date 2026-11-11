@@ -25,6 +25,9 @@ export const HOTKEY_SECTIONS: HotkeySection[] = [
       { keys: ["F1 – F6"], desc: L("Категории (Дороги, Город, Еда, Ресурсы, Службы, Прошлое)", "Categories (Roads, Town, Food, Resources, Services, Past)") },
       { keys: ["Q – I"], desc: L("Выбор инструмента в выбранной категории", "Pick a tool in the open category") },
       { keys: ["B"], desc: L("Снос (Бульдозер)", "Demolish (Bulldozer)") },
+      { keys: ["/"], desc: L("Поиск здания или инструмента по названию", "Find a building or a tool by name") },
+      { keys: ["Alt+1 – Alt+4"], desc: L("Недавние инструменты", "Recent tools") },
+      { keys: [L("СКМ по зданию", "MMB on a building")], desc: L("Взять его инструмент (пипетка); по пустому месту — повторить последний", "Take its tool (pipette); on open ground, the last tool again") },
     ],
   },
   {

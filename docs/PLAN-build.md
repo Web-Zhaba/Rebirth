@@ -107,7 +107,7 @@ What the player sees before releasing, and again after release until confirmed:
 | Z1 | Lots without zones | Pure lot cutter over road edges (from `sim/zones.ts`), foundation selection for a template along edges (from `foundationLots`), batch placement command, plans in stroke order. Tests: cutter, foundation priority, skip reasons, dig-first chain. **Done** (see Z1 notes). |
 | Z2 | Stroke tool and preview | House/workshop/shop tools with variants, drag stroke, sides, «Только по фундаментам», preview looks of 3.4, summary card, freeze-and-confirm, undo. Browser check on a town with dug and ghost foundations. **Done** (see Z2 notes). |
 | Z3 | Zones removed | Zone tools, painting, zone layer, `spawnBuildings`, demand growth and advisor go; save migration; goals and unlocks that named zones point to the new tools. **Done** (see Z3 notes). |
-| Z4 | Quick access | Pipette, search line, recent tools on 1–4, «Построить ещё»; road tool «с домами». |
+| Z4 | Quick access | Pipette, search line, recent tools on 1–4, «Построить ещё»; road tool «с домами». **Done** (see Z4 notes). |
 | Z5 | Pace | Harness on strokes, constants re-tuned to `PLAN-pace.md` section 2. |
 
 Z1 notes: `sim/stroke.ts` — `planStroke(state, template, spans, onlyFoundations)` is pure and gives the items in stroke
@@ -160,3 +160,25 @@ lays one building of a class per game hour by a stroke over its stretch of road 
 rule the zones grew by asks for it; against the pre-Z3 run on the same seed: 10 houses day 16 (was 17), population 100
 day 66 (was 70); era II waits on the population crossing exactly 100 at a midnight, which both runs reach only by noise
 on a plateau near 100 (day 356, was 177): a Z5 matter.
+
+Z4 notes: recent tools are on Alt+1–4 (1/2/3 stay the game speed), newest first, kept between sessions
+(`map/tools.ts` recentTools). The pipette is the middle click: over a building or a plan it picks the tool and kind
+that put it down (`toolOfTemplate`: a kind of the house, workshop, shop, store or administration tool, or the tool
+named as the template); over open ground it repeats the last tool, as the middle click did before. «Построить ещё» in
+the building panel is the same pick as a button (not for a site restored as it was). The search line opens with «/» or
+the dock's search button: it matches the names of the tools, of their kinds and of the road materials (start of the
+name first, ё as е, a category's name finds its tools), arrows and Enter pick, Esc closes; empty, it lists the recent
+tools with their Alt keys. `map/toolPick.ts` pickTool is the one way all of these pick (a closed tool says why).
+Strokes now take planned roads too: a building laid along a road not built yet (a lot whose edge is unbuilt, a
+foundation whose door reaches only an unbuilt road) is `awaitsRoad`; the artel leaves it alone (no labor, no
+materials, no "work" for the builder count) until `releaseSites` finds its road built, at the start of each work tick.
+Its panel says «ждёт дорогу», the stroke card counts them. A dig of a stroke puts its building on the ring even if the
+road is still under way. The road tool's switch «Без домов / С домами» (path, road, old streets; kept between
+sessions) sends `houses` with `addRoad`: the worker remembers the new edges (new to the graph and not lying on an old
+edge, so the pieces of a split edge are not taken) and lays the house tool's kind along both sides, with its «только
+фундаменты», once their cells are surveyed (`layRoadHouses`, after the command and after each terrain batch; not
+saved: a reload before the survey loses the request). No key: H already flies to the settlement. No preview of
+those houses while the road is drawn: they appear as plans a moment after it is laid, and Ctrl+Z of the house tool does
+not take them back (demolish or lay them by hand). Browser check on a new town: search «больш» picked the large house,
+a path drawn «с домами» got 26 waiting houses on both sides, the middle click on one picked the house tool, its panel
+showed «ждёт дорогу» and «Построить ещё», Alt+2 picked the path. Pace harness: population 100 on day 64.

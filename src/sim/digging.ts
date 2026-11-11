@@ -134,7 +134,7 @@ export function completeExcavations(s: SimState): SimState {
   // A dig a stroke ordered puts its building on the ring now (sim/stroke.ts); one no longer possible leaves it free.
   for (const b of done) {
     const t = b.then ? BUILDINGS[b.then] : undefined;
-    if (t && b.foundationId && canPlaceOnFoundation(out, t, b.foundationId).ok) out = placeOnFoundation(out, t, b.foundationId);
+    if (t && b.foundationId && canPlaceOnFoundation(out, t, b.foundationId, true).ok) out = placeOnFoundation(out, t, b.foundationId, true); // its road may still be under way
   }
   return reportFinds(s, out, [done[0].lot.cx, done[0].lot.cy]);
 }

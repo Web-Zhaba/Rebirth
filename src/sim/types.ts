@@ -129,6 +129,7 @@ export interface Building {
   restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
   exhibits?: (string | null)[]; // a museum: the theme each hall shows (sim/museum.ts)
   then?: string; // a dig ordered by a stroke (sim/stroke.ts): the template put on the foundation once it is dug
+  awaitsRoad?: true; // laid along a road not built yet: nobody works on it until the road reaches it (growth.ts releaseSites)
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.

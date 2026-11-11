@@ -7,7 +7,7 @@ import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clea
 import { scarcity } from "./heritage";
 import { loseSite } from "./restore";
 import { orderDig, orderStreetDig } from "./digging";
-import { applyStroke, cancelPlans, planStroke, strokeTemplate, type StrokeSpan } from "./stroke";
+import { applyStroke, cancelPlans, newRoadEdges, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
 import { returnFind, useFind } from "./items";
 import { museumDaily, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
@@ -30,9 +30,17 @@ import { dayOf } from "./time";
 import { startWeather, type WeatherState } from "./weather";
 import { fieldProgress } from "./fields";
 import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
-import { emptyZones, nextFieldId, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
+import { emptyZones, nextFieldId, pendingKeys, qkey, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 import { L } from "../i18n";
+
+// A road drawn «с домами»: the template to lay along both sides of its edges once their cells are surveyed.
+interface RoadHouses {
+  city: unknown; // the town it was drawn in
+  edges: number[];
+  template: string;
+  only: boolean; // only foundations
+}
 
 export interface Storage {
   get(): Promise<unknown>;
@@ -113,6 +121,7 @@ export class Handler {
   private queue: ToWorker[] = [];
   private enriching: Promise<void> | null = null;
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
+  private roadHouses: RoadHouses[] = []; // roads drawn «с домами» waiting for their ground to be surveyed
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   // What the main thread's visual life was drawn from: the game day, the families on their way, the residents (their
   // jobs, homes and classes) and the levers (work hours, toloka); a change in any of them draws it anew.
@@ -359,6 +368,7 @@ export class Handler {
           const zones = this.rezone({ ...z, terrain: { ...z.terrain, ...got } }, cur.sim.roads, z.fields);
           const buildings = reconcile(cur.sim.buildings, cur.sim.roads);
           this.save = { ...cur, sim: syncPeople({ ...cur.sim, zones, buildings }) };
+          this.layRoadHouses();
           this.postSnapshot();
           try {
             await this.storage.put(this.save);
@@ -372,6 +382,26 @@ export class Handler {
     }
   }
 
+  // Lays the houses of the roads drawn «с домами» whose ground is surveyed: a stroke along both sides of the new edges.
+  // A request waits while a cell of its edges waits for terrain; it is dropped once laid, or when its town or edges went.
+  private layRoadHouses(): void {
+    if (!this.save || this.roadHouses.length === 0) return;
+    let sim = this.save.sim;
+    const keep: RoadHouses[] = [];
+    for (const r of this.roadHouses) {
+      const edges = r.edges.filter((e) => Object.hasOwn(sim.roads.edges, e));
+      if (r.city !== this.save.city || edges.length === 0) continue;
+      const on = new Set(edges);
+      if (sim.zones.cells.some((c) => on.has(c.edge) && c.block === "pending" && !this.failed.has(qkey(c.cx, c.cy)))) {
+        keep.push({ ...r, edges });
+        continue;
+      }
+      sim = applyStroke(sim, planStroke(sim, BUILDINGS[r.template], roadSpans(sim.roads, edges), r.only).items).sim;
+    }
+    this.roadHouses = keep;
+    if (sim !== this.save.sim) this.save = { ...this.save, sim: refreshServices(syncPeople(sim)) };
+  }
+
   private async command(id: number, cmd: Cmd): Promise<void> {
     const reject = (reason: string) => this.post({ t: "cmdResult", id, ok: false, reason });
     try {
@@ -380,6 +410,7 @@ export class Handler {
       const roads = sim.roads;
       const z = sim.zones;
       let next: RoadGraph = roads;
+      let houses: RoadHouses | null = null;
       let zones: ZoneState;
       if (cmd.type === "addRoad") {
         const bad = validateAddRoad(cmd);
@@ -392,6 +423,11 @@ export class Handler {
         if (!r.ok) return reject(r.reason);
         next = r.graph;
         zones = this.rezone(z, next, z.fields);
+        const t = cmd.houses ? strokeTemplate(cmd.houses.template) : null;
+        // a house template the town cannot build yet leaves the road without them
+        if (t && !(lockReason(sim, t.zone) ?? lockReason(sim, t.id))) {
+          houses = { city: this.save.city, edges: newRoadEdges(roads, next), template: t.id, only: cmd.houses?.onlyFoundations === true };
+        }
       } else if (cmd.type === "upgradeRoad") {
         const bad = validateUpgradeRoad(cmd);
         if (bad) return reject(bad);
@@ -547,6 +583,10 @@ export class Handler {
       }
       const buildings = reconcile(sim.buildings, next);
       this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, roads: next, zones, buildings })) };
+      if (houses) {
+        this.roadHouses.push(houses);
+        this.layRoadHouses();
+      }
       await this.finishCommand(id);
     } catch (e) {
       reject(e instanceof Error ? e.message : String(e));

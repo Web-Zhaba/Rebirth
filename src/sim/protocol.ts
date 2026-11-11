@@ -23,7 +23,9 @@ export interface ArticleInput {
 
 export type Cmd =
   // pts and labor are local meters / person-hours; labor has one entry per segment.
-  | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[]; span?: number } // span: longest water run (m) of the line, for the bridge span limit
+  // span: longest water run (m) of the line, for the bridge span limit; houses: lay them along both sides of the new road
+  // (docs/PLAN-build.md «дорога с домами»), once its ground is surveyed
+  | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[]; span?: number; houses?: { template: string; onlyFoundations?: boolean } }
   | { type: "removeRoad"; edgeId: number }
   | { type: "upgradeRoad"; kind: RoadKind; edges: number[]; labor: number[]; span?: number } // labor: each edge built anew as `kind`; span: longest water run of the bridge
   | { type: "addField"; pts: [number, number][] }

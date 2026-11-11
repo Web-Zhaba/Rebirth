@@ -2,7 +2,7 @@ import { recordChronicle } from "./chronicle";
 import { dailyServices, refreshServices } from "./coverage";
 import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { digDone, keepRevealed } from "./excavation";
-import { advanceBuildings, advanceClearings, reportBuilt } from "./growth";
+import { advanceBuildings, advanceClearings, releaseSites, reportBuilt } from "./growth";
 import { builderCount, dailyStep, immigrationStep, isWorkplace, productionScales, rebalanceJobs, syncPeople } from "./people";
 import { EVENING, eveningStep, isEvening } from "./evening";
 import { eraStep, researchStep } from "./research";
@@ -109,11 +109,12 @@ export function step(s: SimState): SimState {
     const r = toloka ? { roads: s.roads, left: hours, stock: s.stock } : spendOnRoads(s.roads, hours, s.stock, hand);
     const roadStock = r.stock ?? s.stock; // stone the roads took when work on them started
     roads = r.roads;
+    buildings = releaseSites(buildings, roads); // a site whose road got built is worked on from now
     const lever = { priority: s.levers.priority, focus: toloka ? s.levers.toloka!.site : null };
     const crew = CREW * hand; // person-hours of one crew in a tick
     const first = clearingsFirst(s.stock);
     const ledger = new Ledger({ ...s, stock: roadStock }); // sites fetch their materials from the nearest stores
-    const paid = payMaterials(s.buildings, roadStock, r.left, crew, s.clearings, first, lever, ledger);
+    const paid = payMaterials(buildings, roadStock, r.left, crew, s.clearings, first, lever, ledger);
     clearUse = allocateClearings(paid.buildings, s.clearings, r.left, crew, first, lever);
     buildings = advanceBuildings(paid.buildings, r.left, crew, s.clearings, first, lever);
     stock = paid.stock;

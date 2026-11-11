@@ -16,7 +16,7 @@ import { etaText } from "./buildCost";
 import { needsRoadDemolishConfirm } from "../ui/actionModel";
 import { arcPath, snapAngle, type Pt } from "./curve";
 import { restoreMissingPieces } from "./roadRestoreModel";
-import { flash, isRoadTool, roadKindOf, ROAD_MAX_MPP, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
+import { flash, isRoadTool, roadHousesCmd, roadKindOf, ROAD_MAX_MPP, roadMode, setSpacePan, syncPan, tool, type RoadTool } from "./tools";
 import { decimal, L } from "../i18n";
 
 
@@ -399,6 +399,7 @@ export function attachRoadTool(view: View): void {
           snapTol: CURVE_SNAP_M,
           labor: laborByLength(pts, c.labor),
           span: c.span,
+          houses: roadHousesCmd(tool.peek()),
         }).then((res) => {
           if (!res.ok) flash(res.reason ?? L("Не удалось проложить", "Could not lay the road"));
           else if (cutOffEdges(local.graph).size > cutOffEdges(g).size) {
@@ -666,7 +667,7 @@ export function attachRoadTool(view: View): void {
     let built = 0;
     let reason = "";
     for (const l of todo) {
-      const res = await sendCmd({ type: "addRoad", kind: l.kind, pts: l.pts, snapTol: CURVE_SNAP_M, labor: laborByLength(l.pts, l.labor), span: l.span });
+      const res = await sendCmd({ type: "addRoad", kind: l.kind, pts: l.pts, snapTol: CURVE_SNAP_M, labor: laborByLength(l.pts, l.labor), span: l.span, houses: roadHousesCmd("restore") });
       if (res.ok) {
         built++;
         const local = after && addRoad(after, l.pts, l.kind, CURVE_SNAP_M, laborByLength(l.pts, l.labor));

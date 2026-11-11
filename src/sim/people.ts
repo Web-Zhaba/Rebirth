@@ -410,7 +410,7 @@ export function freeHomes(buildings: Record<number, Building>, households: Recor
 }
 
 export function constructionWork(buildings: Record<number, Building>, roads: RoadGraph, clearings: readonly Clearing[] = [], stock?: Pick<Stock, "stone">): boolean {
-  for (const b of Object.values(buildings)) if (b.state !== "active" || b.upgrade) return true;
+  for (const b of Object.values(buildings)) if ((b.state !== "active" && !b.awaitsRoad) || b.upgrade) return true;
   if (clearings.some((c) => !isCleared(c))) return true;
   return workableEdges(roads, stock).length > 0;
 }

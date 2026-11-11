@@ -280,3 +280,75 @@
   font-weight: 700;
   color: var(--warn-text);
 }
+
+/* ---- The search line (ToolSearch.tsx) ---- */
+
+.bb-search {
+  display: flex;
+  flex-direction: column;
+  width: min(420px, calc(100vw - 16px));
+  box-sizing: border-box;
+  border: var(--bw) solid var(--rule);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-panel);
+}
+
+.bb-search-input {
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-bottom: var(--bw) solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-md);
+}
+
+.bb-search-input:focus-visible {
+  outline: 2px solid var(--resin);
+  outline-offset: -2px;
+}
+
+.bb-search-list {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.bb-search-hit {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 32px;
+  padding: 0 var(--sp-3);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.bb-search-hit.on {
+  background: var(--paper);
+  box-shadow: inset 3px 0 0 var(--resin);
+}
+
+.bb-search-hit.locked {
+  color: var(--pencil);
+}
+
+.bb-search-name {
+  flex: 1 1 auto;
+}
+
+.bb-search-sub,
+.bb-search-none {
+  color: var(--pencil);
+  font-size: var(--fs-sm);
+}
+
+.bb-search-none {
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.bb-cat-search {
+  flex: 0 0 auto;
+  padding: 0 var(--sp-3);
+}

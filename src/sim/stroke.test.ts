@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { finishAll } from "./admin";
-import { BUILDINGS } from "./buildings";
-import { canPlace, emptyGrowth, reconcile } from "./growth";
+import { allocateLabor, BUILDINGS } from "./buildings";
+import { canPlace, emptyGrowth, reconcile, releaseSites } from "./growth";
 import { addRoad, emptyRoads } from "./roads";
-import { applyStroke, cancelPlans, planStroke, strokeTemplate, type StrokeSpan } from "./stroke";
+import { applyStroke, cancelPlans, newRoadEdges, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
 import { allResearched } from "./tech";
 import type { FoundFoundation, RoadGraph, SimState } from "./types";
 import { emptyZones, regenerateCells } from "./zones";
@@ -134,11 +134,37 @@ describe("a stroke", () => {
     expect(Object.values(done.buildings).some((b) => b.template === "izba" && b.foundationId === "h")).toBe(true);
   });
 
-  it("plans nothing along a road not built yet", () => {
-    const s = mk();
+  it("along a road not built yet, lays sites that wait for it", () => {
+    const s = mk([fnd("old", rect(-4, 46, 12, 12))]);
     const e = s.roads.edges[edgeOf(s)];
     const raw = { ...s, roads: { ...s.roads, edges: { ...s.roads.edges, [e.id]: { ...e, done: 0 } } } };
-    expect(planStroke(raw, BUILDINGS.izba, [span(s, -100, -20)]).items).toEqual([]);
+    const plan = planStroke(raw, BUILDINGS.izba, [span(s, -40, 40)]);
+    expect(plan.items.length).toBeGreaterThan(1);
+    expect(plan.items.every((it) => it.building.awaitsRoad === true)).toBe(true); // the lots and the foundation alike
+    const laid = applyStroke(raw, plan.items).sim;
+    const sites = Object.values(laid.buildings);
+    expect(sites.every((b) => b.awaitsRoad)).toBe(true);
+    expect([...allocateLabor(laid.buildings, 100, 6)]).toEqual([]); // nobody works on them
+    expect(releaseSites(laid.buildings, laid.roads)).toBe(laid.buildings);
+    const open = releaseSites(laid.buildings, s.roads); // the road is built
+    expect(Object.values(open).some((b) => b.awaitsRoad)).toBe(false);
+    expect([...allocateLabor(open, 100, 6)].length).toBeGreaterThan(0);
+    // along a built road a site does not wait
+    expect(Object.values(applyStroke(s, planStroke(s, BUILDINGS.izba, [span(s, -40, 40)]).items).sim.buildings).some((b) => b.awaitsRoad)).toBe(false);
+  });
+
+  it("a road with houses takes the edges it added, not the pieces of one it split", () => {
+    const s = mk();
+    const cross: [number, number][] = [[0, -60], [0, 120]];
+    const r = addRoad(s.roads, cross, "dirt", 1, [10]);
+    if (!r.ok) throw new Error(r.reason);
+    const fresh = newRoadEdges(s.roads, r.graph);
+    expect(fresh.length).toBe(2); // the crossing road, cut at the old one
+    for (const id of fresh) {
+      const e = r.graph.edges[id];
+      expect(Math.abs(r.graph.nodes[e.a].x) + Math.abs(r.graph.nodes[e.b].x)).toBeLessThan(1e-6);
+    }
+    expect(roadSpans(r.graph, fresh)).toHaveLength(4); // both sides of each
   });
 
   it("is undone while nobody has started on it: a restoration no longer under way, started ones kept", () => {

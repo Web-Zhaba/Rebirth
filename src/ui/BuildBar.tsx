@@ -1,6 +1,6 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, isMaterialTool, isPlaceTool, isRoadTool, isStrokeTool, onlyFoundations, setOnlyFoundations, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
+import { flash, housesAlong, recentTools, roadHouses, setRoadHouses, isMaterialTool, isPlaceTool, isRoadTool, isStrokeTool, onlyFoundations, setOnlyFoundations, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
@@ -15,6 +15,8 @@ import { storedChoice } from "./preferenceModel";
 import { LANDMARK_LABELS } from "./semanticModel";
 import { L } from "../i18n";
 import { touchScreen } from "../map/motion";
+import { pickTool } from "../map/toolPick";
+import { searchOpen, ToolSearch } from "./ToolSearch";
 
 const CATEGORY_STORE = "rebirth.build.category";
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
@@ -135,11 +137,26 @@ const lockOf = (t: Tool): string | null => {
 
 const isTyping = (el: HTMLElement | null) => !!el && (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable || !!el.closest("dialog"));
 
-// F1-F6 pick a category, Q W E R T Y U I an item of it, B demolish. Layout independent (key codes).
+const RECENT_KEYS = ["Digit1", "Digit2", "Digit3", "Digit4"];
+
+// F1-F6 pick a category, Q W E R T Y U I an item of it, B demolish, Alt+1–4 a recent tool, / the search line. Layout
+// independent (key codes).
 function onKey(e: KeyboardEvent): void {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
   const el = e.target as HTMLElement | null;
-  if (isTyping(el)) return;
+  if (e.repeat || isTyping(el)) return;
+  const r = RECENT_KEYS.indexOf(e.code);
+  if (r >= 0 && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    e.preventDefault();
+    const t = recentTools.peek()[r];
+    if (t) pickTool(t);
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+  if (e.code === "Slash") {
+    e.preventDefault();
+    searchOpen.value = true;
+    return;
+  }
   const f = CATEGORY_KEYS.indexOf(e.code as (typeof CATEGORY_KEYS)[number]);
   if (f >= 0) {
     category.value = CATEGORIES[f].id;
@@ -275,6 +292,7 @@ export function BuildBar() {
   const hint = active ? (drawsRoad ? h.road[mode] : h.tool[active]) : null;
   return (
     <section class="build-bar" aria-label={LANDMARK_LABELS.build}>
+      <ToolSearch />
       <div class="bb-lines" aria-live="polite">
         {msg && <div class="road-msg">{msg}</div>}
         {(hint || housing) && (
@@ -284,6 +302,21 @@ export function BuildBar() {
           </div>
         )}
         {drawsRoad && <Segmented label={L("Режим дороги", "Road mode")} value={mode} onChange={(m) => (roadMode.value = m)} options={ROAD_MODES.map((o) => ({ id: o.id, label: o.label, title: o.title }))} />}
+        {housesAlong(active) && (
+          <Segmented
+            label={L("Дома вдоль дороги", "Houses along the road")}
+            value={roadHouses.value ? "on" : "off"}
+            onChange={(k) => setRoadHouses(k === "on")}
+            options={[
+              { id: "off", label: L("Без домов", "No houses"), title: L("Только дорога", "Only the road") },
+              {
+                id: "on",
+                label: L("С домами", "With houses"),
+                title: L("По обе стороны новой дороги встанут дома инструмента «Дом» (его вид и «только фундаменты»), старые фундаменты первыми; их начнут строить, когда дойдёт дорога", "Houses of the House tool (its kind and «foundations only») go along both sides of the new road, old foundations first; they are started once the road reaches them"),
+              },
+            ]}
+          />
+        )}
         {materials && active && isMaterialTool(active) && (
           <Segmented
             label={active === "dirt" ? L("Материал дороги", "Road material") : L("Материал моста", "Bridge material")}
@@ -364,6 +397,9 @@ export function BuildBar() {
               </button>
             );
           })}
+          <button type="button" class="bb-cat bb-cat-search" title={L("Найти здание или инструмент · /", "Find a building or a tool · /")} aria-label={L("Поиск инструмента", "Tool search")} aria-keyshortcuts="/" tabIndex={-1} onClick={() => (searchOpen.value = !searchOpen.peek())}>
+            <Icon name="search" size={18} />
+          </button>
         </div>
       </div>
     </section>
