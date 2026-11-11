@@ -2,8 +2,8 @@
 
 // Object shadows (docs/PLAN-shadows.md): one local depth map around the camera target, rendered from the sun
 // (shadow/shadowMap.ts). A receiver multiplies only its direct-sun term by sunShadow, so shadows keep the sky light and
-// their colour; shadowInk tints the shaded part of the town's flat-lit models towards ink blue, like the cloud
-// self-shadow. Bound in group 0 beside the frame, so every receiver samples the same map.
+// their colour (frame/light.wgsl modelLight for what stands on the ground); shadowInk tints the shaded part of the
+// farm fields' flat ramp towards ink blue. Bound in group 0 beside the frame, so every receiver samples the same map.
 
 @group(0) @binding(6) var shadowMap: texture_depth_2d;
 @group(0) @binding(7) var shadowCompare: sampler_comparison;
@@ -38,8 +38,8 @@ fn sunShadow(rel: vec3f, n: vec3f) -> f32 {
   return mix(1.0, sum / 9.0, fade * (1.0 - smoothstep(0.8, 1.0, edge)));
 }
 
-// The ink-blue cast of a shadow on a model lit by a flat 0.55..1 ramp: `s` from sunShadow, `d` the unshadowed sun term
-// (only what the sun would light turns blue in shadow; faces turned away stay as they were).
+// The ink-blue cast of a shadow on a surface lit by a flat 0.55..1 ramp: `s` from sunShadow, `d` the unshadowed sun
+// term (only what the sun would light turns blue in shadow; faces turned away stay as they were).
 fn shadowInk(s: f32, d: f32) -> vec3f {
   return mix(vec3f(1.0), SHADOW_INK, (1.0 - s) * d);
 }

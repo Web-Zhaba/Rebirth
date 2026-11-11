@@ -2,6 +2,7 @@
 #include "atmosphere"
 #include "weather"
 #include "shadow"
+#include "light"
 
 // The town's models (scene/townMesh.ts): a WGSL port of the three.js model layer's shaders. Vertices
 // are metres in the east/north/up frame of the town origin; `model.rel` is the origin minus the eye (f64 on the CPU), so
@@ -100,8 +101,8 @@ fn figureFs(v: FigureOut) -> @location(0) vec4f {
   let n = normalize(v.n);
   let d = max(dot(n, model.light.xyz), 0.0);
   let s = sunShadow(v.rel, toEcef(n));
-  let k = mix(0.55, 1.0, d * s) * mix(0.88, 1.0, model.light.w);
-  return vec4f(v.c * k * shadowInk(s, d) * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
+  let k = modelLight(n.z, d, s, model.light.w, model.u.xyz);
+  return vec4f(v.c * k * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
 }
 
 // Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
@@ -251,12 +252,17 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   col = mix(col, weather.snowCol.rgb, snow * select(1.0, 0.5, code >= 30));
   let d = max(dot(n, model.light.xyz), 0.0);
   let s = sunShadow(v.rel, toEcef(n));
-  var k = mix(0.55, 1.0, d * s) * mix(0.88, 1.0, model.light.w);
-  if (abs(n.z) < 0.5) {
-    k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z)); // walls darken towards the ground
+  var k = modelLight(n.z, d, s, model.light.w, model.u.xyz);
+  if (abs(n.z) < 0.5 && code < 30) {
+    // What the open sky does not reach: walls darken towards the ground and under the eaves (a facade's f.z is the
+    // height of its top).
+    k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z));
+    if (v.f.z > 0.5) {
+      k *= mix(0.8, 1.0, smoothstep(0.0, 0.6, v.f.z - z));
+    }
   }
   // The old map's dusk-blue night tint, as a dimming by how lit the place is (the ground goes dark the same way).
-  return vec4f(col * k * shadowInk(s, d) * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
+  return vec4f(col * k * mix(NIGHT, vec3f(1.0), model.params.x) * cloudDim(v.shade), 1.0);
 }
 
 // Window light: only the glass of lit buildings, added on top (blending one, one). Each window of a building is lit or

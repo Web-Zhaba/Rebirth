@@ -2,6 +2,7 @@
 #include "atmosphere"
 #include "weather"
 #include "shadow"
+#include "light"
 
 // Globe terrain: one instanced draw, an instance per selected quadtree node. Node i's chunk-table entry carries its
 // origin relative to the eye (f64 subtraction on the CPU, stored f32), its vertex slot, its height page and the page
@@ -343,7 +344,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   let light = sunLightAt(up);
   let sun = frame.sun.w * max(dot(n, frame.sun.xyz), 0.0) * sunShadow(v.rel, n);
   let sky = 0.35 * (0.6 + 0.4 * dot(n, up)) * vec3f(0.55, 0.65, 0.85);
-  var c = albedo * (vec3f(sun) + sky) * light;
+  var c = albedo * (sunTintLinear(up) * sun + sky) * light;
   c += albedo * NIGHT_AMBIENT * (1.0 - light); // moon and starlight: the night side stays readable, not black
   if (water > 0.0) {
     // Keep the original restrained sun glint and sky sheen used by the standard terrain-water renderer.
