@@ -52,8 +52,17 @@ Each one ends with tests, a build and screenshots in the preview, and is committ
 
 ### G5 — buildings
 
-- Geometry the shader cannot paint: eaves and roof overhangs, plinths, porches, chimneys with caps, window
-  frames/shutters as relief on the houses, more props per trade. Same palette, same facade codes.
+- Painted by the shader (`townMesh.wgsl`): panes that darken up into the lintel's shade, two glazing bars, a
+  deeper sill; they go once thinner than a pixel.
+- Geometry: a collar under every chimney's top, the logs' ends as posts at a log house's corners, a step at every
+  door.
+- Left for later: dormers, ridge caps, shutters as relief, more props per trade.
+
+## Status (2026-11-11)
+
+G1–G5 are in, a commit each. Checked in the preview on the debug set of every model (`localStorage
+debug3dModels`) at noon, a low sun and night, from zoom 13.5 to 22. Not measured on an integrated GPU: the tree
+budget (120k) and the 1600 m shadow step are the two things to watch there.
 
 ## Risks
 

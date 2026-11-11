@@ -129,12 +129,13 @@ fn footFs(v: FootOut) -> @location(0) vec4f {
 }
 
 // Grid of windows on a wall: columns centred on the wall, one row per floor below the eaves. aw, az: pixel footprint in
-// metres along s and z; once windows get that small the grid turns into its average coverage. Returns (cover, id).
-fn windows(s: f32, len: f32, z: f32, top: f32, aw: f32, az: f32, floorH: f32, sill: f32, wh: f32, ww: f32, sp: f32) -> vec2f {
+// metres along s and z; once windows get that small the grid turns into its average coverage. Returns (cover, id, the
+// place across the window -0.5..0.5, the place up it 0..1).
+fn windows(s: f32, len: f32, z: f32, top: f32, aw: f32, az: f32, floorH: f32, sill: f32, wh: f32, ww: f32, sp: f32) -> vec4f {
   let n = select(0.0, floor((len - 1.4 - ww) / sp) + 1.0, len >= ww + 1.4);
   let fl = floor(z / floorH);
   if (n < 1.0 || fl * floorH + sill + wh > top - 0.25) {
-    return vec2f(0.0);
+    return vec4f(0.0);
   }
   let start = (len - (n - 1.0) * sp) * 0.5;
   let c = clamp(floor((s - start) / sp + 0.5), 0.0, n - 1.0);
@@ -144,7 +145,7 @@ fn windows(s: f32, len: f32, z: f32, top: f32, aw: f32, az: f32, floorH: f32, si
   let mx = 1.0 - smoothstep(ww * 0.5 - aw, ww * 0.5 + aw, dx);
   let mz = smoothstep(sill - az, sill + az, zl) * (1.0 - smoothstep(sill + wh - az, sill + wh + az, zl));
   let far = smoothstep(0.25, 0.6, max(aw / ww, az / wh));
-  return vec2f(mix(mx * mz, 0.7 * ww * wh / (sp * floorH), far), id);
+  return vec4f(mix(mx * mz, 0.7 * ww * wh / (sp * floorH), far), id, (s - start - c * sp) / ww, (zl - sill) / wh);
 }
 
 // Window grid of a facade: floor height, sill, window height, width (xyzw) and spacing (w of the second, 0: none).
@@ -247,11 +248,18 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     col *= 1.0 - 0.16 * seams(v.f.x, aw, 0.28);
   }
   if (sp > 0.0 && !nearDoor(dk, z, v.f)) {
-    // glass inside a light frame 0.1 m wide
-    let glass = windows(v.f.x, v.f.y, z, v.f.z, aw, az, g[0].x, g[0].y, g[0].z, g[0].w, sp).x;
-    let fr = windows(v.f.x, v.f.y, z, v.f.z, aw, az, g[0].x, g[0].y - 0.1, g[0].z + 0.2, g[0].w + 0.2, sp).x;
-    col = mix(col, mix(col, vec3f(0.95, 0.92, 0.84), 0.6), max(fr - glass, 0.0));
-    col = mix(col, vec3f(0.22, 0.25, 0.28), glass);
+    // glass inside a light frame 0.1 m wide with a deeper sill; the panes darken up into the lintel's shade and are
+    // parted by two glazing bars, which go once they are thinner than a pixel
+    let win = windows(v.f.x, v.f.y, z, v.f.z, aw, az, g[0].x, g[0].y, g[0].z, g[0].w, sp);
+    let glass = win.x;
+    let fr = windows(v.f.x, v.f.y, z, v.f.z, aw, az, g[0].x, g[0].y - 0.17, g[0].z + 0.27, g[0].w + 0.2, sp).x;
+    let upright = 1.0 - smoothstep(0.03, 0.03 + aw, abs(win.z) * g[0].w);
+    let cross = 1.0 - smoothstep(0.03, 0.03 + az, abs(win.w - 0.6) * g[0].z);
+    let bars = max(upright, cross) * (1.0 - smoothstep(0.03, 0.1, max(aw, az)));
+    let trim = vec3f(0.95, 0.92, 0.84);
+    let pane = mix(vec3f(0.30, 0.35, 0.40), vec3f(0.16, 0.19, 0.23), clamp(win.w, 0.0, 1.0));
+    col = mix(col, mix(col, trim, 0.6), max(fr - glass, 0.0));
+    col = mix(col, mix(pane, mix(pane, trim, 0.55), bars), glass);
   }
   if (dk > 0) {
     let dw = select(1.0, 2.6, dk == 2);
@@ -280,7 +288,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
     // What the open sky does not reach: walls darken towards the ground and under the eaves (a facade's f.z is the
     // height of its top).
     k *= mix(0.78, 1.0, smoothstep(0.0, 2.5, z));
-    if (v.f.z > 0.5) {
+    if (p > 0 && p != 7 && v.f.z > 0.5) {
       k *= mix(0.8, 1.0, smoothstep(0.0, 0.6, v.f.z - z));
     }
   }

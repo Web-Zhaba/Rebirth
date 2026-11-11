@@ -157,7 +157,7 @@ interface Body {
   plinth: boolean;
 }
 
-// Walls, plinth and roof (with its overhang and fascia) of a closed building; returns the roof.
+// Walls, plinth and roof (with its overhang and fascia) of a closed building, a step at its door; returns the roof.
 function body(c: Ctx, b: Body): Roof {
   const { mesh, uv } = c;
   const wall = c.tint ?? b.wall, roofC = c.tint ? mix(b.roofC, c.tint, 0.45) : b.roofC;
@@ -165,6 +165,7 @@ function body(c: Ctx, b: Body): Roof {
   band(mesh, uv, b.eaves, roof, 0, null, wall, b.pat, b.eaves, c.door, b.doorPat);
   const plinth = b.plinth ? offsetRing(uv, 0.08) : null;
   if (plinth) band(mesh, plinth, 0, planeRoof([]), 0.4, null, shade(wall, 0.75), PATTERN.plain, 0);
+  if (c.door >= 0 && b.doorPat === b.pat + DOOR && edgeFrame(uv, c.door).len >= 2) prism(mesh, edgeBox(uv, c.door, -0.65, 0.65, 0, 0.42), 0, 0.16, shade(wall, 0.7), shade(wall, 0.85));
   eavesRoof(c, roof, b.eaves, b.overhang, roofC);
   return roof;
 }
@@ -184,7 +185,9 @@ function chimney(c: Ctx, roof: Roof, eaves: number, top: number, cu: number, cv:
   if (!sq.every(([a, b]) => inside(c, a, b))) return;
   const base = eaves + Math.min(...sq.map(([a, b]) => roof.rise(a, b))) - 0.2;
   const z = Math.max(base + 1, top);
-  prism(c.mesh, sq, base, z, col, shade(col, 0.55));
+  prism(c.mesh, sq, base, z, col, shade(col, 0.4));
+  // a collar a little under the top, so the stack ends in a cap and not in a cut
+  prism(c.mesh, square(cu, cv, side + 0.18), z - 0.34, z - 0.14, shade(col, 0.88), shade(col, 0.95));
   c.mesh.emit(cu, cv, z);
 }
 
@@ -314,6 +317,9 @@ function cabin(c: Ctx): void {
   const wall = pick(c, plastered ? TOWN_COLORS.plaster : TOWN_COLORS.logs);
   const pat = plastered ? PATTERN.hall : PATTERN.cabin;
   const r = body(c, { eaves, roof, rise, overhang: range(c, 0.35, 0.6), wall, roofC: pick(c, roofPalette(c, wid < 6)), pat, doorPat: pat + DOOR, plinth: true });
+  // the logs' ends stand out of the corners as posts
+  const corners = plastered ? null : offsetRing(c.uv, 0.13);
+  if (corners) cornerPosts(c.mesh, corners, eaves, shade(c.tint ?? wall, 0.8), 0.3);
   const brick = pick(c, TOWN_COLORS.stone);
   const fu = range(c, -0.3, 0.3) * c.hl, fv = (c.r() < 0.5 ? 0.2 : -0.2) * c.hw;
   if (tavern) {
