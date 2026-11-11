@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.1](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.5.0...rebirth-v0.5.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **ui:** keep the game clock stepping smoothly between snapshots ([112d6db](https://github.com/Web-Zhaba/Rebirth/commit/112d6dbb981e6f77879ecc691620faec878e1f16))
+
+
+### Performance
+
+* **sim:** drop the offline catch-up ([1224a82](https://github.com/Web-Zhaba/Rebirth/commit/1224a828fd88bbe4ca8eb1d15326defcfe579030))
+
 ## [0.5.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.4.1...rebirth-v0.5.0) (2026-11-11)
 
 
