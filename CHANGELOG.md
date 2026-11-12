@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.5.1...rebirth-v0.6.0) (2026-11-12)
+
+
+### Features
+
+* **build:** drop zones, every building is laid by the player ([423ab67](https://github.com/Web-Zhaba/Rebirth/commit/423ab678fbc07563f940dfe4e14b0e6068b4a951))
+* **build:** lay houses, workshops and shops in strokes along roads ([e7aae30](https://github.com/Web-Zhaba/Rebirth/commit/e7aae3059ba577d34c7437d2b4828e8a01544b07))
+* **build:** quick access to tools and roads laid with houses ([6ac1503](https://github.com/Web-Zhaba/Rebirth/commit/6ac1503fee25822cccc579cdcae30799c24b86e3))
+* **graphics:** contact shadows under residents, evener shadow edges ([f03fee7](https://github.com/Web-Zhaba/Rebirth/commit/f03fee71e84e19ffaf4677f3936bf8ae28503e62))
+* **graphics:** glazing bars, chimney caps, corner posts and door steps ([f338191](https://github.com/Web-Zhaba/Rebirth/commit/f3381919cea22fdf6b14b46b073bb6b3f67ac37e))
+* **graphics:** levels of detail step down later ([2853c7e](https://github.com/Web-Zhaba/Rebirth/commit/2853c7ede250fee9c0fd89b39dc120ba09b0d6e8))
+* **graphics:** residents with legs, sleeves, a neck and hats ([5b9df9f](https://github.com/Web-Zhaba/Rebirth/commit/5b9df9fecefe1f411ab9f433780eb530ee5ec34a))
+* **graphics:** sky and ground fills, a sun that warms at the horizon ([96bfb6c](https://github.com/Web-Zhaba/Rebirth/commit/96bfb6c84e746b992712cc1626f601fe1481bfe3))
+* **museum:** museum panel and arranging every hall at once ([867c9ba](https://github.com/Web-Zhaba/Rebirth/commit/867c9ba0e0fcf2dd0e5373a8b4bcb780dd35866e))
+* **platform:** CrazyGames build and publishing every portal from one release ([00d243d](https://github.com/Web-Zhaba/Rebirth/commit/00d243dc3ae3f24ac92e4813d2651165f8f29a9d))
+* **platform:** Poki, VK Games, GameDistribution and GamePix builds ([c30fa3e](https://github.com/Web-Zhaba/Rebirth/commit/c30fa3eefa6a64fab369d4e9f27d108b48e7251c))
+
+
+### Performance
+
+* **engine:** no layout reads in the frame, tighter terrain culling ([76ae2b1](https://github.com/Web-Zhaba/Rebirth/commit/76ae2b11ec91d5333ced75ecbc858f2d9b3c05f9))
+
 ## [0.5.1](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.5.0...rebirth-v0.5.1) (2026-11-11)
 
 
