@@ -499,6 +499,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   research: ResearchView;
   fieldProgress: Record<number, { sown: number; harv: number }>; // field id -> share of its area sown / harvested this year (steps of 0.02), for the 3D fields
   heritageMul: number; // scarcity multiplier of the next restoration, 1..3
+  museumStaff: Record<number, number>; // finished museum id -> share of its jobs filled: the strength of its halls (sim/museum.ts)
   callBlock: string | null; // why a call for settlers cannot be made now, or null
   inflow: { free: number; perDay: number }; // free homes and the families a day the town draws now (sim/attraction.ts)
 };

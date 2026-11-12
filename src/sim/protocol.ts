@@ -46,6 +46,7 @@ export type Cmd =
   | { type: "returnFind"; id: string }
   | { type: "useFind"; id: string }
   | { type: "setExhibition"; building: number; hall: number; theme: string | null }
+  | { type: "arrangeExhibitions" } // the best themes in every hall of the town
   | { type: "demolish"; id: number }
   // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
   | { type: "setPriority"; key: number | null }

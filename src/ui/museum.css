@@ -1,0 +1,803 @@
+/* The museum window: the museum's own floor plan on bark, the opened hall as a card of museum labels, and under them
+   the storeroom — a tar shelf of crates, the themes not on show. A complete exhibition gets the resin seal; a find not
+   found yet keeps its place on the shelf as a dashed, empty label. */
+
+.mu-screen {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: radial-gradient(120% 100% at 50% 40%, rgba(20, 26, 17, 0.86), var(--moss-deep) 90%);
+  pointer-events: auto;
+}
+
+.mu-sheet {
+  width: min(1320px, 100%);
+  height: 100%;
+  max-height: calc(100vh - 44px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  color: var(--ink);
+  background:
+    repeating-linear-gradient(0deg, rgba(31, 26, 19, 0.04) 0 1px, transparent 1px 22px),
+    linear-gradient(178deg, var(--paper-raised), var(--paper) 70%, var(--paper-shade));
+  border: var(--bw) solid var(--rule);
+  box-shadow: var(--shadow-panel);
+}
+
+.mu-cap {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.mu-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.mu-warn {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--bw-hair) dashed var(--warn);
+  background: var(--warn-fill);
+  color: var(--warn-text);
+  font-size: var(--fs-sm);
+}
+
+/* ---- head ---- */
+
+.mu-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-6) var(--sp-3);
+  border-bottom: 2px solid var(--rule);
+}
+
+.mu-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mu-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.mu-sub {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  color: var(--pencil);
+}
+
+.mu-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.mu-head > .icon-btn {
+  margin-left: auto;
+}
+
+/* ---- the floor: the plan and the opened hall ---- */
+
+.mu-main {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 460px;
+}
+
+.mu-floor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+  padding: var(--sp-5) var(--sp-6);
+  overflow: auto;
+}
+
+.mu-plan {
+  position: relative;
+  width: 100%;
+  max-height: 100%;
+  margin: auto 0;
+}
+
+.mu-plan-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mu-room-fill {
+  fill: var(--paper-raised);
+}
+
+.mu-room-fill[class*="dom-"] {
+  fill: color-mix(in srgb, var(--dom) 22%, var(--paper-raised));
+}
+
+.mu-hatch {
+  stroke: var(--rule-dotted);
+}
+
+.mu-wall {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.mu-outline {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 4px;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+
+.mu-room {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* Hover and a crate dragged over a room tint it inside the footprint only (drawn in the plan's clipped SVG). */
+.mu-room-hot {
+  fill: rgba(31, 26, 19, 0.1);
+  pointer-events: none;
+}
+
+.mu-room-drop {
+  fill: rgba(31, 26, 19, 0.2);
+  pointer-events: none;
+}
+
+.mu-room.sel {
+  outline: 3px solid var(--ink);
+  outline-offset: -5px;
+}
+
+.mu-room:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: -5px;
+}
+
+.mu-room-no {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.mu-room-theme {
+  max-width: 100%;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.mu-room.is-empty .mu-room-theme {
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.mu-room-count {
+  margin-top: auto;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.mu-room .mu-seal {
+  margin-top: auto;
+}
+
+/* ---- the seal: a complete exhibition ---- */
+
+.mu-seal {
+  position: relative;
+  flex: none;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--resin-deep);
+  border-radius: 50%;
+  color: var(--resin-deep);
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  transform: rotate(-8deg);
+}
+
+.mu-seal::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--resin-deep);
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+.mu-seal.is-small {
+  width: 40px;
+  height: 40px;
+  font-size: 6.5px;
+}
+
+/* ---- the opened hall ---- */
+
+.mu-hall-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+  padding: var(--sp-5);
+  border-left: var(--bw) solid var(--rule);
+  background: var(--paper-raised);
+  overflow-y: auto;
+  scrollbar-color: var(--ink) var(--paper-shade);
+}
+
+.mu-hall-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px var(--sp-3);
+}
+
+.mu-hall-head .mu-cap {
+  grid-column: 1;
+}
+
+.mu-hall-head .mu-seal {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.mu-hall-name {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.mu-hall-name.is-empty {
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.mu-hall-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.mu-hall-acts .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+/* ---- museum labels ---- */
+
+.mu-labels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px 8px;
+  border: var(--bw) solid var(--ink);
+  background: var(--paper);
+  font-size: var(--fs-sm);
+}
+
+.mu-label-no {
+  padding-bottom: 4px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  color: var(--pencil);
+  background-image: var(--lenticel);
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: 100% 1.5px;
+}
+
+.mu-label-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.mu-label-meta {
+  font-size: var(--fs-xs);
+  color: var(--pencil);
+}
+
+.mu-label-why {
+  font-size: var(--fs-xs);
+  color: var(--warn-text);
+}
+
+.mu-label-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-3);
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: var(--fs-xs);
+}
+
+.mu-label.is-returned,
+.mu-label.is-used {
+  border-color: var(--rule);
+  background: var(--paper-shade);
+}
+
+.mu-label.is-unfound {
+  border-style: dashed;
+  border-color: var(--pencil);
+  background: transparent;
+}
+
+.mu-label.is-unfound .mu-label-name {
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.mu-more {
+  align-self: flex-start;
+  font-size: var(--fs-sm);
+}
+
+/* ---- the theme map ---- */
+
+.mu-map {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.mu-map svg {
+  width: 100%;
+  height: auto;
+  border: var(--bw) solid var(--ink);
+}
+
+.mu-map-ground {
+  fill: var(--moss);
+}
+
+.mu-map-road {
+  stroke: var(--road-path);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.mu-map-ring {
+  fill: rgba(226, 210, 176, 0.18);
+  stroke: rgba(226, 210, 176, 0.6);
+  stroke-width: 2;
+}
+
+.mu-map-museum {
+  fill: var(--resin);
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+
+.mu-map-find {
+  cursor: pointer;
+}
+
+.mu-map-find rect {
+  fill: var(--paper-raised);
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+
+.mu-map-find.is-returned rect,
+.mu-map-find.is-used rect {
+  fill: transparent;
+  stroke: var(--paper-raised);
+}
+
+.mu-map-find circle {
+  fill: none;
+  stroke: var(--paper-raised);
+  stroke-width: 3;
+  stroke-dasharray: 6 5;
+}
+
+.mu-map-find:hover rect,
+.mu-map-find:hover circle,
+.mu-map-find:focus-visible rect,
+.mu-map-find:focus-visible circle {
+  stroke: var(--paper-raised);
+  stroke-width: 7;
+}
+
+.mu-map-find:focus {
+  outline: none;
+}
+
+.mu-map-scale line {
+  stroke: var(--paper-raised);
+  stroke-width: 4;
+}
+
+.mu-map-scale text {
+  fill: var(--paper-raised);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.mu-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--sp-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.mu-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mu-map-legend i {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--ink);
+}
+
+.mu-map-legend .lg-museum {
+  background: var(--resin);
+}
+
+.mu-map-legend .lg-shown {
+  background: var(--paper-raised);
+}
+
+.mu-map-legend .lg-out {
+  background: var(--paper-shade);
+  border-color: var(--pencil);
+}
+
+.mu-map-legend .lg-unfound {
+  border-style: dashed;
+  border-radius: 50%;
+}
+
+/* ---- the storeroom: a tar shelf of crates ---- */
+
+.mu-store {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-6);
+  background: linear-gradient(180deg, var(--frame), var(--frame-deep));
+  color: var(--frame-text);
+  border-top: 2px solid var(--ink);
+}
+
+.mu-store.is-over {
+  outline: 3px dashed var(--paper-raised);
+  outline-offset: -6px;
+}
+
+.mu-store-cap {
+  flex: none;
+  align-self: center;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--frame-dim);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.mu-store-cap span {
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mu-store-empty {
+  align-self: center;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--frame-dim);
+}
+
+.mu-crates {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 2px 0 6px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-color: var(--paper) var(--frame-deep);
+}
+
+.mu-crate {
+  position: relative;
+  width: 196px;
+  height: 100%;
+  min-height: 74px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+  border: var(--bw) solid var(--ink);
+  background:
+    repeating-linear-gradient(0deg, rgba(31, 26, 19, 0.07) 0 1px, transparent 1px 12px),
+    var(--paper-shade);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  box-shadow: inset 0 -4px 0 color-mix(in srgb, var(--dom) 70%, var(--ink));
+}
+
+.mu-crate:hover {
+  background-color: var(--paper);
+}
+
+.mu-crate.sel {
+  background: var(--paper-raised);
+  outline: 3px solid var(--paper-raised);
+  outline-offset: 2px;
+}
+
+.mu-crate.is-thin {
+  opacity: 0.82;
+}
+
+.mu-crate:active {
+  cursor: grabbing;
+}
+
+.mu-crate-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 34px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.mu-crate-meta {
+  margin-top: auto;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.mu-crate .mu-seal {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+/* ---- what the exhibitions give ---- */
+
+.mu-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  padding: var(--sp-3) var(--sp-6);
+  border-top: 2px solid var(--rule);
+  font-size: var(--fs-sm);
+}
+
+.mu-fx {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.mu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: var(--bw) solid var(--rule);
+  font-family: var(--font-display);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mu-chip.is-none {
+  border-style: dashed;
+  color: var(--pencil);
+}
+
+.mu-pull .bar {
+  width: 150px;
+  flex: none;
+}
+
+.mu-pull b {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.mu-arrange {
+  margin-left: auto;
+}
+
+/* Narrow: the opened hall goes under the plan. */
+@media (max-width: 1099px) {
+  .mu-screen {
+    padding: 8px;
+  }
+
+  .mu-sheet {
+    max-height: calc(100vh - 16px);
+  }
+
+  .mu-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .mu-floor {
+    padding: var(--sp-3) var(--sp-4);
+    overflow: visible;
+  }
+
+  .mu-hall-card {
+    border-left: 0;
+    border-top: var(--bw) solid var(--rule);
+    overflow: visible;
+  }
+
+  .mu-head,
+  .mu-store,
+  .mu-foot {
+    padding-left: var(--sp-4);
+    padding-right: var(--sp-4);
+  }
+
+  .mu-room {
+    padding: 4px 6px;
+  }
+
+  .mu-room-theme {
+    font-size: var(--fs-sm);
+  }
+
+  .mu-crate {
+    width: 160px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mu-sheet {
+    animation: mu-settle 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes mu-settle {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* ---- the summary in the museum's inspector ---- */
+
+.mu-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--sp-1) 0 var(--sp-2);
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.mu-sum li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 0;
+  border-bottom: var(--bw-hair) dotted var(--rule);
+}
+
+.mu-sum-n {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  background: var(--dom, transparent);
+  border: var(--bw-hair) solid var(--rule);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.mu-sum li.is-empty .mu-sum-n {
+  border-style: dashed;
+}
+
+.mu-sum-t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mu-sum li.is-empty .mu-sum-t {
+  color: var(--pencil);
+}
+
+.mu-sum-v {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

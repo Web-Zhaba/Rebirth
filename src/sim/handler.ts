@@ -9,7 +9,7 @@ import { loseSite } from "./restore";
 import { orderDig, orderStreetDig } from "./digging";
 import { applyStroke, cancelPlans, newRoadEdges, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
 import { returnFind, useFind } from "./items";
-import { museumDaily, setExhibition } from "./museum";
+import { arrangeExhibitions, museumDaily, museumStaff, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
 import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
@@ -75,7 +75,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   const ps = peopleStats(sim);
   const free = freeHomes(sim.buildings, sim.households, sim.incoming).length;
   const underway = Object.values(sim.buildings).filter((b) => b.zone === "res" && b.state !== "active").length;
-  return { ...rest, people: { ...ps, housing: { tents: ps.tents, free, underway }, jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+  return { ...rest, people: { ...ps, housing: { tents: ps.tents, free, underway }, jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim), museumStaff: museumStaff(sim) };
 }
 
 // The inflow the town draws right now: its free homes and the families a day they bring (attraction.ts).
@@ -505,10 +505,10 @@ export class Handler {
         if (r.removed === 0) return reject(L("Отменять нечего: стройка уже началась", "Nothing to undo: work has already started"));
         this.save = { ...this.save, sim: refreshServices(syncPeople(r.sim)) };
         return await this.finishCommand(id);
-      } else if (cmd.type === "returnFind" || cmd.type === "useFind" || cmd.type === "setExhibition") {
-        const r = cmd.type === "returnFind" ? returnFind(sim, cmd.id) : cmd.type === "useFind" ? useFind(sim, cmd.id) : setExhibition(sim, cmd.building, cmd.hall, cmd.theme);
+      } else if (cmd.type === "returnFind" || cmd.type === "useFind" || cmd.type === "setExhibition" || cmd.type === "arrangeExhibitions") {
+        const r = cmd.type === "returnFind" ? returnFind(sim, cmd.id) : cmd.type === "useFind" ? useFind(sim, cmd.id) : cmd.type === "setExhibition" ? setExhibition(sim, cmd.building, cmd.hall, cmd.theme) : arrangeExhibitions(sim);
         if (!r.ok) return reject(r.reason);
-        this.save = { ...this.save, sim: r.ok && cmd.type === "setExhibition" ? museumDaily(r.sim) : r.sim };
+        this.save = { ...this.save, sim: museumDaily(r.sim) }; // the halls show what changed at once
         return await this.finishCommand(id);
       } else if (cmd.type === "digFoundation" || cmd.type === "digStreet") {
         const r = cmd.type === "digFoundation" ? orderDig(sim, cmd.foundationId) : orderStreetDig(sim, cmd.streetId);

@@ -8,7 +8,9 @@ import { SPEED } from "../sim/research";
 import { upgradeBlockers } from "../sim/coverage";
 import { foundationKindText } from "../sim/foundationLots";
 import { realName } from "../sim/items";
-import { halls, MUSEUM, themes } from "../sim/museum";
+import { MUSEUM } from "../sim/museum";
+import { museumView, pullPct, researchPct } from "./museumModel";
+import { openMuseum } from "./MuseumPanel";
 import { flash } from "../map/tools";
 import { queuedLabel } from "../sim/clock";
 import { handHours } from "../sim/production";
@@ -90,45 +92,44 @@ function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined 
   );
 }
 
-// The halls of a finished museum: what each shows, and the choice of theme (docs/PLAN-restoration.md section 6.3).
-function MuseumHalls({ b }: { b: Building }) {
+// A finished museum at a glance: each hall with its theme and how full it is, what the halls give, and the way into the
+// museum window, where themes are chosen (MuseumPanel.tsx).
+function MuseumSummary({ b }: { b: Building }) {
   const st = state.value!;
-  const list = themes(st);
-  const mine = halls(st).filter((h) => h.museum === b.id);
-  const taken = new Map(halls(st).flatMap((h) => (h.theme ? [[h.theme.key, h] as const] : [])));
-  const pick = async (hall: number, theme: string) => {
-    const r = await sendCmd({ type: "setExhibition", building: b.id, hall, theme: theme || null });
-    if (!r.ok) flash(r.reason ?? L("Не вышло", "That didn't work"));
-  };
+  const v = museumView({ finds: st.finds, buildings: st.buildings, articles: st.articles, museumStaff: st.museumStaff ?? {} });
+  const m = v.museums.find((x) => x.id === b.id);
+  if (!m) return null;
+  const value = m.halls.reduce((n, h) => n + h.value, 0);
+  const empty = m.halls.find((h) => !h.theme)?.index ?? null;
   return (
-    <Section title={L("Залы", "Halls")}>
-      {list.length === 0 && <div class="people-note">{L("Находок для выставок пока нет: раскапывайте фундаменты.", "No finds to exhibit yet: dig foundations.")}</div>}
-      {mine.map((h) => (
-        <div class="demand-card" key={h.index}>
-          <label class="insp-line">
-            <span class="insp-label">{L(`Зал ${h.index + 1}`, `Hall ${h.index + 1}`)}</span>
-            <select class="insp-value" value={h.theme?.key ?? ""} onChange={(e) => void pick(h.index, (e.currentTarget as HTMLSelectElement).value)}>
-              <option value="">{L("пусто", "empty")}</option>
-              {list.map((t) => {
-                const other = taken.get(t.key);
-                const busy = !!other && !(other.museum === b.id && other.index === h.index);
-                return (
-                  <option key={t.key} value={t.key} disabled={busy}>
-                    {t.name} ({t.shown.length}){busy ? L(" — в другом зале", " — in another hall") : ""}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-          {h.theme && (
-            <div class="people-note">
-              {h.theme.complete
-                ? L(`Выставка полная: знания (${domainName(h.theme.domain).toLowerCase()}) и привлекательность города`, `The exhibition is complete: knowledge (${domainName(h.theme.domain).toLowerCase()}) and the town's appeal`)
-                : L(`Показано ${h.theme.shown.length} из ${h.theme.items.length}: полной выставке нужны все находки темы, не меньше ${MUSEUM.min}`, `${h.theme.shown.length} of ${h.theme.items.length} shown: a complete one needs every find of the theme, at least ${MUSEUM.min}`)}
-            </div>
-          )}
-        </div>
-      ))}
+    <Section title={L("Экспозиция", "Exhibitions")}>
+      <div class="insp-line">
+        <span class="insp-label">{L("Залов занято", "Halls in use")}</span>
+        <span class="insp-value">
+          {m.halls.filter((h) => h.theme).length} {L("из", "of")} {m.halls.length}
+        </span>
+      </div>
+      <ul class="mu-sum">
+        {m.halls.map((h) => (
+          <li key={h.index} class={h.theme ? `dom-${h.domain}` : "is-empty"}>
+            <span class="mu-sum-n">{h.index + 1}</span>
+            <span class="mu-sum-t">{h.themeName ?? L("пусто", "empty")}</span>
+            {h.theme && <span class="mu-sum-v">{h.shown === h.showable && h.shown >= MUSEUM.min ? L("полная", "complete") : `${h.shown}/${h.showable}`}</span>}
+          </li>
+        ))}
+      </ul>
+      <div class="people-note">
+        {value > 0
+          ? L(`Наука +${num(researchPct(value))} %, город +${num(pullPct(value))} %`, `Research +${num(researchPct(value))}%, town +${num(pullPct(value))}%`)
+          : v.themes.length === 0
+            ? L("Находок для выставок пока нет: раскапывайте фундаменты.", "No finds to exhibit yet: dig foundations.")
+            : L("Залы пока ничего не дают.", "The halls give nothing yet.")}
+        {m.staff < 1 && L(` Работников ${Math.round(m.staff * 100)} %: залы работают в той же доле.`, ` Staff at ${Math.round(m.staff * 100)}%: the halls work at that share.`)}
+      </div>
+      {v.idleReady > 0 && <div class="prod-warn">{L(`Полных тем без зала: ${v.idleReady}`, `Complete themes without a hall: ${v.idleReady}`)}</div>}
+      <Button variant="primary" onClick={() => openMuseum(b.id, empty)}>
+        {L("Открыть экспозицию", "Open the exhibitions")}
+      </Button>
     </Section>
   );
 }
@@ -362,7 +363,7 @@ export function BuildingPanel() {
           {!b.asItWas && site?.cls && <div class="people-note">{foundationKindText(site, t)}</div>}
         </Section>
       )}
-      {b.template === "museum" && b.state === "active" && snap && <MuseumHalls b={b} />}
+      {b.template === "museum" && b.state === "active" && snap && <MuseumSummary b={b} />}
       {(left > 0 || b.state !== "active") && (
         <Section title={upgrading ? L("Перестройка", "Rebuild") : L("Стройка", "Construction")}>
           {left > 0 && (
