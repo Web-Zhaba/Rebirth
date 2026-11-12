@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Бретонский орнамент — первый экран</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800&family=Golos+Text:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--slate:#5a6570;--slate-d:#3f4852;--oat:#e8e0ce;--oat-d:#dbd1ba;--madder:#8f2f2a;--key:#2b3038}
+*{box-sizing:border-box;margin:0}
+html,body{height:900px;overflow:hidden;background:var(--oat);font-family:"Golos Text",sans-serif;color:var(--key)}
+.stage{position:relative;width:1440px;height:900px;overflow:hidden;background:var(--oat)}
+.sheet-edge{position:absolute;inset:0;background:
+  repeating-linear-gradient(90deg,rgba(43,48,56,.05) 0 1px,transparent 1px 4px)}
+/* left: the numbered plate book */
+.plates{position:absolute;left:0;top:0;width:250px;height:900px;background:var(--oat-d);
+  border-right:1.5px solid var(--key);padding:26px 22px}
+.plates .cap{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#6d7681;font-weight:700}
+.plates h3{font-family:"Bitter",serif;font-size:19px;font-weight:800;margin-top:6px;line-height:1.2}
+.unit{display:flex;align-items:center;gap:12px;margin-top:12px;padding:9px 10px;border:1.5px solid var(--key);
+  background:var(--oat)}
+.unit .n{font-family:"Bitter",serif;font-size:12px;font-weight:700;color:#6d7681;width:16px}
+.unit .sw{width:34px;height:34px;border:1.5px solid var(--key);position:relative;flex:0 0 auto}
+.unit .nm{font-size:12.5px;font-weight:500;line-height:1.25}
+.unit[aria-pressed="true"]{border-color:var(--madder);box-shadow:4px 4px 0 rgba(143,47,42,.22)}
+.unit[aria-pressed="true"] .n{color:var(--madder)}
+.foot-rule{position:absolute;left:22px;right:22px;bottom:26px;font-size:10.5px;line-height:1.5;color:#6d7681}
+
+/* the map, bounded by an assembled unit border */
+.frame{position:absolute;left:292px;top:44px;width:700px;height:640px;border:2px solid var(--key);
+  background:radial-gradient(circle at 42% 38%,#6a7a5c,#49563e 72%)}
+.frame .forest{position:absolute;inset:0;opacity:.5;background:
+  radial-gradient(circle at 26% 32%,#2f3a2c 0 6px,transparent 7px),
+  radial-gradient(circle at 58% 24%,#2f3a2c 0 5px,transparent 6px),
+  radial-gradient(circle at 74% 62%,#2f3a2c 0 7px,transparent 8px);background-size:220px 200px}
+.frame svg{position:absolute;inset:0}
+.border-units{position:absolute;inset:-14px;border:0;pointer-events:none}
+.pin{position:absolute;left:48%;top:46%;width:22px;height:22px;border:3px solid var(--madder);border-radius:50%}
+.pin::after{content:"";position:absolute;inset:6px;background:var(--madder);border-radius:50%}
+.legend{position:absolute;left:292px;top:700px;display:flex;gap:26px;font-size:11.5px;color:#5f6873}
+.legend b{font-family:"Bitter",serif;color:var(--key)}
+
+/* the founding plate, captions ruled at the foot */
+.plate{position:absolute;right:44px;top:44px;width:372px;background:var(--oat);border:1.5px solid var(--key);
+  box-shadow:6px 6px 0 rgba(43,48,56,.16)}
+.plate-top{padding:20px 22px 0}
+.num-row{display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px;
+  letter-spacing:.2em;text-transform:uppercase;color:#6d7681;font-weight:700}
+h2{font-family:"Bitter",serif;font-size:25px;font-weight:800;margin-top:10px;line-height:1.14}
+.coords{margin-top:7px;font-family:"Bitter",serif;font-size:12.5px;letter-spacing:.08em;color:#5f6873}
+.facts{display:grid;grid-template-columns:1fr auto;margin:16px 0 0;font-size:13px}
+.facts dt{color:#5f6873;padding:6px 0;border-bottom:1px solid rgba(43,48,56,.22)}
+.facts dd{text-align:right;font-weight:700;padding:6px 0;border-bottom:1px solid rgba(43,48,56,.22);
+  font-variant-numeric:tabular-nums}
+.note{margin:14px 0 0;font-size:12.5px;line-height:1.5;color:#414751}
+.search{display:flex;align-items:center;margin:16px 0 0;height:44px;border:1.5px solid var(--key);padding:0 12px}
+.search .q{font-size:14px;color:#6d7681}
+.search .gl{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--madder)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tag{padding:5px 9px;border:1.5px solid var(--key);font-family:"Bitter",serif;font-size:12.5px;font-weight:600}
+.tag[aria-pressed="true"]{background:var(--key);color:var(--oat)}
+.name{margin-top:11px;height:42px;display:flex;align-items:center;padding:0 12px;border:1.5px solid var(--key);
+  font-size:14px;color:#6d7681}
+.go{margin-top:12px;width:100%;height:48px;display:grid;place-items:center;background:var(--madder);
+  color:#f4ecdb;font-family:"Bitter",serif;font-size:18px;font-weight:800;letter-spacing:.04em}
+.caption{border-top:1.5px solid var(--key);margin-top:16px;padding:9px 22px;font-size:11px;
+  color:#5f6873;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="sheet-edge"></div>
+
+  <aside class="plates">
+    <div class="cap">Лист IV</div>
+    <h3>Единицы застройки</h3>
+    <div class="unit" aria-pressed="true">
+      <span class="n">01</span><span class="sw" style="background:
+        repeating-linear-gradient(45deg,var(--madder) 0 3px,transparent 3px 7px)"></span>
+      <span class="nm">Двор,<br>в одну линию</span>
+    </div>
+    <div class="unit">
+      <span class="n">02</span><span class="sw" style="background:
+        repeating-linear-gradient(0deg,var(--key) 0 2px,transparent 2px 8px)"></span>
+      <span class="nm">Ряд<br>вдоль дороги</span>
+    </div>
+    <div class="unit">
+      <span class="n">03</span><span class="sw" style="background:
+        repeating-linear-gradient(90deg,var(--key) 0 2px,transparent 2px 9px)"></span>
+      <span class="nm">Плетень<br>и огород</span>
+    </div>
+    <div class="unit">
+      <span class="n">04</span><span class="sw" style="background:
+        repeating-conic-gradient(var(--key) 0 25%,transparent 0 50%) 0/8px 8px"></span>
+      <span class="nm">Гумно<br>с током</span>
+    </div>
+    <div class="unit">
+      <span class="n">05</span><span class="sw" style="background:
+        repeating-linear-gradient(135deg,var(--slate) 0 3px,transparent 3px 8px)"></span>
+      <span class="nm">Площадь<br>у воды</span>
+    </div>
+    <div class="foot-rule">Единица щёлкает в кайму и повторяется целыми звеньями.<br>Ничего не рисуется от руки.</div>
+  </aside>
+
+  <div class="frame">
+    <div class="forest"></div>
+    <svg viewBox="0 0 700 640" aria-hidden="true">
+      <path d="M-10 430 C 130 400,240 470,360 430 S 560 330,720 360" fill="none" stroke="#7d94a0" stroke-width="10" opacity=".55"/>
+    </svg>
+    <div class="pin"></div>
+  </div>
+  <svg class="border-units" style="position:absolute;left:278px;top:30px" width="728" height="668" aria-hidden="true">
+    <g fill="none" stroke="#2b3038" stroke-width="2">
+      <rect x="1" y="1" width="726" height="22"/><rect x="1" y="645" width="726" height="22"/>
+      <rect x="1" y="1" width="22" height="666"/><rect x="705" y="1" width="22" height="666"/>
+      <path d="M24 12 L34 12 M44 12 L54 12 M64 12 L74 12 M84 12 L94 12" stroke="#8f2f2a"/>
+    </g>
+  </svg>
+  <div class="legend"><span><b>01</b> выбран</span><span><b>05</b> единиц на листе</span><span>Масштаб 1:2000</span></div>
+
+  <section class="plate">
+    <div class="plate-top">
+      <div class="num-row"><span>Лист основания</span><span>54.7261, 38.1660</span></div>
+      <h2>Основать поселение</h2>
+      <div class="coords">лес · 148 м · уклон 4°</div>
+      <dl class="facts">
+        <dt>Лес вокруг</dt><dd>63%</dd>
+        <dt>Вода вокруг</dt><dd>8%</dd>
+        <dt>Камень, песок</dt><dd>3%</dd>
+      </dl>
+      <p class="note">Густой лес: брёвна рядом, но поля придётся расчищать</p>
+      <div class="search"><span class="q">Найти город или село</span><span class="gl">ГДЕ Я</span></div>
+      <div class="tags">
+        <span class="tag" aria-pressed="true">Лесной</span>
+        <span class="tag">Речной</span>
+        <span class="tag">Луговой</span>
+        <span class="tag">Холмистый</span>
+      </div>
+      <div class="name">Лесной</div>
+      <button class="go">Основать</button>
+    </div>
+    <div class="caption"><span>Застройка собирается из единиц</span><span>IV / 05</span></div>
+  </section>
+</div>
+</body>
+</html>

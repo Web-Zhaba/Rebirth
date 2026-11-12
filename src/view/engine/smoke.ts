@@ -15,8 +15,8 @@ import { mppAtZoom } from "../view";
 // Smoke from the chimneys of lived-in houses and working shops on the engine (scene/smoke.ts), with the old layer's
 // rules (map/smokeMath.ts: which chimneys smoke and how hard by kind, cold, hour and rain) and its look and gates.
 
-const SMOKE_MPP = mppAtZoom(15.5); // the old layer's SMOKE_FROM_ZOOM
-const FAR = 600; // m
+const SMOKE_MPP = mppAtZoom(15);
+const FAR = 900; // m
 const KIND: Record<SmokeKind, number> = { home: 0, furnace: 1, tavern: 2 };
 const SIZE: Record<SmokeKind, number> = { home: 1, furnace: 1.35, tavern: 1.15 }; // puff size, m
 

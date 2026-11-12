@@ -1,7 +1,7 @@
 import { C } from "./biome";
 import { decodePng } from "./pngDecoder";
 
-// Biomes of the rewilded Earth (docs/PLAN-biomes.md): which one covers a place, and the colour the drape bake paints
+// Biomes of the rewilded Earth: which one covers a place, and the colour the drape bake paints
 // as the land's base under the landcover polygons (engine/bake/drape.ts). The map is RESOLVE Ecoregions 2017
 // rasterised by scripts/bake-biomes.mjs: an equirectangular grid of class ids (BIOMES[id - 1]), the sea filled with
 // the nearest land's class, since the drape decides water.

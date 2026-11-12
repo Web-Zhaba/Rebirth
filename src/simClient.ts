@@ -33,7 +33,7 @@ export const articles = computed(() => state.value?.articles ?? []);
 // The save (or its absence) has come back from the worker: the game can be played from here on.
 export const loaded = signal(false);
 
-// Visual life of the current game day (cosmetic, from the worker; see PLAN.md section 10).
+// Visual life of the current game day (cosmetic, from the worker).
 export const lifeTrips = signal<Trip[]>([]);
 export const lifeRests = signal<Rest[]>([]);
 export const lifeTraffic = signal<Record<number, number>>({});
@@ -124,7 +124,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
     case "cmdResult": {
       const done = pending.get(m.id);
       pending.delete(m.id);
-      done?.({ ok: m.ok, reason: m.reason });
+      done?.({ ok: m.ok, reason: m.reason, ids: m.ids });
       break;
     }
     case "queryResult": {

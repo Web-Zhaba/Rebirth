@@ -86,9 +86,12 @@ export const MAP_ONLY = {
   badDeep: "#5e2314",
 } as const;
 
-// Building colors by category: houses/workshops/shops by zone, and the player-placed templates. Map only.
+// Building colors by category: houses/workshops/shops by class, and the other templates. Map only.
 export const BUILDING_ZONE_COLORS = { res: "#a9865c", craft: "#857b6c", trade: "#b07d4c" } as const;
 export const PLACED_BUILDING_COLORS = {
+  house: BUILDING_ZONE_COLORS.res,
+  workshop: BUILDING_ZONE_COLORS.craft,
+  shop: BUILDING_ZONE_COLORS.trade,
   gumno: "#b8963f",
   woodcutter: "#5c7342",
   sawpit: "#a97d4d",

@@ -4,7 +4,7 @@ import { createShader } from "../gpu/wgsl";
 import { buildLayer, CIRCLE_FLOATS, EQUATOR, FILL_FLOATS, levelSquare, LINE_FLOATS, mercX, mercY, type OverlayStyle } from "./geometry";
 import overlayWgsl from "./overlay.wgsl?raw";
 
-// The game's 2D drawings on the ground (docs/PLAN-engine.md section 4: tool previews, zones, road lines, lots...),
+// The game's 2D drawings on the ground (tool previews, zones, road lines, lots...),
 // rasterised on the GPU into squares of web mercator around the camera target: levels 1.5, 6 and 24 camera distances
 // wide, 2048 texels each (the near one about a screen pixel per texel at the target). The terrain samples them by its own mercator uv, so
 // the drawings follow every slope exactly and never fight the ground for depth. A level is redrawn only when its

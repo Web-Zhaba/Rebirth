@@ -23,7 +23,7 @@ const close = (ring: [number, number][]): [number, number][] => [...ring, ring[0
 const fc = (features: Feature[]): FeatureCollection => ({ type: "FeatureCollection", features });
 const EMPTY = fc([]);
 
-// Foundations dug out (docs/PLAN-restoration.md section 5): recorded and no longer a surveyed outline. A string, so what
+// Foundations dug out: recorded and no longer a surveyed outline. A string, so what
 // depends on it is rebuilt only when it changes. Everything else of the old world is a ghost outline until it is dug.
 const dugKey = computed(() =>
   (finds.value?.foundations ?? [])

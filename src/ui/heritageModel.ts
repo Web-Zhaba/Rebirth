@@ -11,7 +11,7 @@ import { INSIGHT_BY_ID, lockReason, TECH_BY_ID } from "../sim/tech";
 import type { FoundFoundation, FoundState, SimState, StoredArticle } from "../sim/types";
 import { decimal, L, plural } from "../i18n";
 
-// Pure view model of the heritage panel (docs/PLAN-restoration.md section 2): what a typed old building is, and what
+// Pure view model of the heritage panel: what a typed old building is, and what
 // bringing it back "as it was" costs and gives. That is ordinary construction of the purpose that matches its old kind;
 // any other purpose is put on the foundation from the build bar, without the restoration's bonus.
 
@@ -35,7 +35,6 @@ export interface HeritageView {
   tier: Tier;
   tierText: string; // what the tier means for this building
   template: string; // the purpose "as it was"
-  byZone: boolean; // that purpose grows in a zone: the player paints the zone, no order
   purpose: string; // its name
   effects: string[]; // what the finished building does
   research: string; // «+5 % к скорости: Знание»
@@ -72,7 +71,6 @@ export function speedGain(restored: number, w: number): number {
   return (Math.min(SPEED.restoredCap, restored + w) - Math.min(SPEED.restoredCap, restored)) * SPEED.restored * 100;
 }
 
-const ZONE_WORD: Record<string, string> = { res: L("жилая", "residential"), craft: L("ремесленная", "craft"), trade: L("торговая", "trade") };
 
 function purposeEffects(id: string): string[] {
   const t = BUILDINGS[id];
@@ -111,9 +109,8 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   else if (state === "restoring") note = L(`Строится как было: «${t.name}»`, `Being built as it was: ${t.name}`);
   else if (state === "restored") note = L(`Восстановлена как было: «${t.name}»`, `Restored as it was: ${t.name}`);
   else if (!recorded) note = L("Находка ещё не занесена в записи", "The find is not recorded yet");
-  else if (t.zone !== "placed") note = L(`Восстановится как было сам, когда здесь будет ${ZONE_WORD[t.zone]} зона`, `It comes back as it was by itself once a ${ZONE_WORD[t.zone]} zone covers it`);
   else {
-    const locked = lockReason(sim, template);
+    const locked = lockReason(sim, t.zone) ?? lockReason(sim, template);
     if (locked) note = L(`Назначение закрыто: ${locked.toLowerCase()}`, `Purpose locked: ${locked.toLowerCase()}`);
     else {
       const ok = canPlaceOnFoundation(sim, t, site.id);
@@ -136,7 +133,6 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
       ? L("Единственная в своём роде: идея, глава летописи, действует как памятник", "One of a kind: an idea, a chronicle chapter, works as a monument")
       : L("Типовая постройка: малый вклад в науку, без идеи", "A typical building: a small research contribution, no idea"),
     template,
-    byZone: t.zone !== "placed",
     purpose: t.name,
     effects:
       unique && template !== "restored"
@@ -155,7 +151,7 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   };
 }
 
-// ---------- an outline or an ordinary foundation (docs/PLAN-restoration.md section 5) ----------
+// ---------- an outline or an ordinary foundation ----------
 
 export interface OutlineView {
   id: string;

@@ -1,6 +1,7 @@
 import type { CameraView } from "../camera/camera";
 import type { Vec3 } from "../geo/ellipsoid";
 import frameWgsl from "./frame.wgsl?raw";
+import lightWgsl from "./light.wgsl?raw";
 import shadowWgsl from "../shadow/shadow.wgsl?raw";
 import type { ShadowMap } from "../shadow/shadowMap";
 import { registerWgsl } from "../gpu/wgsl";
@@ -8,6 +9,7 @@ import { WeatherGpu } from "../sky/weather";
 
 registerWgsl("frame", frameWgsl);
 registerWgsl("shadow", shadowWgsl);
+registerWgsl("light", lightWgsl);
 
 // Bind group 0 for every pass: the Frame uniform of frame.wgsl, the weather of sky/weather.wgsl (its textures are
 // replaced when the weather cubes change size or swap, so the group is rebuilt then) and the sun's shadow map of

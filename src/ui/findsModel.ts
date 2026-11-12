@@ -3,7 +3,7 @@ import { halls, themes } from "../sim/museum";
 import type { SimState } from "../sim/types";
 import { L } from "../i18n";
 
-// Pure view model of the notebook's finds (docs/PLAN-restoration.md section 6): the finds found so far, by theme, with
+// Pure view model of the notebook's finds: the finds found so far, by theme, with
 // what can be done with each, and where a theme is shown.
 
 export interface FindRow {

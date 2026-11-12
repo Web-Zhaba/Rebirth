@@ -3,13 +3,14 @@ import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
 import { allocateLabor, BUILDINGS, CREW, homesOf } from "./buildings";
-import { advanceBuildings, DEMAND, demand, emptyGrowth, growthAdvice, nextRandom, reconcile, seedOf, townStats } from "./growth";
-import { builderCount, peopleStats } from "./people";
+import { advanceBuildings, emptyGrowth, nextRandom, reconcile, seedOf } from "./growth";
+import { builderCount } from "./people";
 import { addRoad, emptyRoads, removeEdge, roadCrew } from "./roads";
 import { payMaterials, reportShortages } from "./production";
 import { parseSave } from "./save";
-import type { Building, City, RoadGraph, SimState, TerrainInfo, ZoneCell, ZoneType } from "./types";
-import { emptyZones, paintCells, qkey, regenerateCells, signedArea } from "./zones";
+import { applyStroke, planStroke } from "./stroke";
+import type { Building, City, RoadGraph, SimState, TerrainInfo } from "./types";
+import { emptyZones, qkey, regenerateCells, signedArea } from "./zones";
 
 const NOW = 1_800_000_000_000;
 const meadow: TerrainInfo = { land: "meadow", slope: 0 };
@@ -22,20 +23,22 @@ const road = (g: RoadGraph, pts: [number, number][], labor = 0): RoadGraph => {
 
 function landFor(g: RoadGraph): Record<string, TerrainInfo> {
   const t: Record<string, TerrainInfo> = {};
-  for (const c of regenerateCells(g, [], [], {})) t[qkey(c.cx, c.cy)] = meadow;
+  for (const c of regenerateCells(g, [], {})) t[qkey(c.cx, c.cy)] = meadow;
   return t;
 }
 
-type ZoneFn = ZoneType | ((c: ZoneCell) => ZoneType | "none");
-
-// A state whose cells are generated and zoned; gameMinutes 0 is 06:00 (nobody works yet).
-function world(g: RoadGraph, zone: ZoneFn, gameMinutes = 0): SimState {
+// A state whose cells are generated over sampled meadow; gameMinutes 0 is 06:00 (nobody works yet).
+function world(g: RoadGraph, gameMinutes = 0): SimState {
   const terrain = landFor(g);
-  const cells = regenerateCells(g, [], [], terrain).map((c) => {
-    const z = typeof zone === "function" ? zone(c) : zone;
-    return !c.block && z !== "none" ? { ...c, zone: z } : c;
-  });
+  const cells = regenerateCells(g, [], terrain);
   return { realTime: NOW, gameMinutes, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(42), progress: allUnlocked() };
+}
+
+// The town with buildings of `template` laid by a stroke along the first `to` metres of every edge on `side`; `n`
+// keeps only the first ones.
+function laid(s: SimState, template = "izba", side: 1 | -1 = 1, to = 1000, n = 1): SimState {
+  const spans = Object.keys(s.roads.edges).map((e) => ({ edge: Number(e), side, from: 0, to }));
+  return applyStroke(s, planStroke(s, BUILDINGS[template], spans).items.slice(0, n)).sim;
 }
 
 const ticks = (s: SimState, n: number) => {
@@ -43,8 +46,6 @@ const ticks = (s: SimState, n: number) => {
   return s;
 };
 const list = (s: SimState) => Object.values(s.buildings);
-const allZones = (s: SimState, zone: "none" | ZoneType) =>
-  paintCells(s.zones.cells, s.zones.cells.map((c) => c.key), zone);
 
 const straight = () => road(emptyRoads(), [[0, 0], [160, 0]]);
 
@@ -64,54 +65,12 @@ describe("rng", () => {
   });
 });
 
-describe("demand", () => {
-  it("founders in tents: houses wanted, no other buildings", () => {
-    const s = world(emptyRoads(), () => "none");
-    expect(peopleStats(s)).toMatchObject({ pop: 14, tents: 4, households: 4 });
-    const d = demand(s);
-    expect(d.res).toBeCloseTo(1.5 + 4);
-    // nobody is busy building anything, so the founders count as unemployed
-    expect(d.craft).toBeCloseTo((0.2 * 14) / DEMAND.craftJobs + peopleStats(s).unemployed / 6);
-    expect(d.trade).toBeLessThan(1);
-  });
-  it("vacant and unfinished houses cut res demand, vacancies raise it", () => {
-    const s = ticks(world(straight(), "res"), 1);
-    const b = list(s)[0];
-    const planned = demand(s);
-    expect(planned.res).toBeCloseTo(1.5 + 4 - 1); // a planned house counts in full
-    const started = { ...s, buildings: { 1: { ...b, state: "building" as const } } };
-    expect(demand(started).res).toBeCloseTo(1.5 + 4 - 0.5); // a house under construction counts half
-    const active = { ...s, buildings: { 1: { ...b, state: "active" as const } } };
-    const homes = homesOf(b);
-    expect(demand(active).res).toBeCloseTo(1.5 + 4 - homes); // one vacant house, a home per family it holds
-    const shop = { ...b, id: 2, zone: "trade" as const, template: "shop", state: "active" as const };
-    expect(demand({ ...active, buildings: { ...active.buildings, 2: shop } }).res).toBeCloseTo(1.5 + 4 - homes + BUILDINGS.shop.jobs / 2); // vacancies / 2
-    expect(townStats(active.buildings)).toMatchObject({ houseCap: BUILDINGS[b.template].residents, unfinishedHouses: 0 });
-  });
-  it("a house promised to a family on its way counts as occupied", () => {
-    const s = ticks(world(straight(), "res"), 1);
-    const active = { ...s, buildings: { 1: { ...s.buildings[1], state: "active" as const } } };
-    const promised = { ...active, incoming: [{ house: 1, arrive: active.gameMinutes + 400 }] };
-    expect(demand(promised).res).toBeCloseTo(demand(active).res + 1);
-  });
-});
-
-describe("spawning", () => {
-  it("no spawn without demand", () => {
-    const s = ticks({ ...world(straight(), "craft"), residents: {}, households: {} }, 20);
-    expect(list(s)).toHaveLength(0);
-    expect(s.rng).toBe(emptyGrowth(42).rng); // no random draw either
-  });
-  it("no spawn on unbuilt roads", () => {
-    const s = ticks(world(road(emptyRoads(), [[0, 0], [160, 0]], 500), "res"), 20);
-    expect(list(s)).toHaveLength(0);
-  });
-  it("picks a fitting lot facing the road with a 2 m front setback", () => {
-    const s = ticks(world(straight(), "res"), 1);
+describe("lots", () => {
+  it("a house laid by a road faces it with a 2 m front setback", () => {
+    const s = laid(world(straight()));
     const [b] = list(s);
     expect(b).toMatchObject({ zone: "res", state: "planned", done: 0 });
     const t = BUILDINGS[b.template];
-    expect(t.zone).toBe("res");
     expect(b.lot).toMatchObject({ w: t.w, d: t.d });
     expect(b.footprint).toHaveLength(4);
     expect(signedArea(b.footprint)).toBeGreaterThan(0);
@@ -121,15 +80,13 @@ describe("spawning", () => {
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(t.deep);
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(t.along);
     expect(Math.sign(b.footprint[0][1])).toBe(b.side);
-    // the lot lies inside the zoned strip
     const front = Math.abs(b.lot.cy) - (8 * t.d) / 2;
     expect(front).toBeCloseTo(2.5);
   });
   it("handles roads in any direction and on both sides", () => {
     const g = road(emptyRoads(), [[0, 0], [100, 100]]);
-    for (const side of [1, -1]) {
-      const s = ticks(world(g, (c) => (c.side === side ? "res" : "none")), 1);
-      const [b] = list(s);
+    for (const side of [1, -1] as const) {
+      const [b] = list(laid(world(g), "izba", side));
       expect(b.side).toBe(side);
       expect(signedArea(b.footprint)).toBeGreaterThan(0);
       // distance of every footprint corner from the road line y = x
@@ -137,22 +94,8 @@ describe("spawning", () => {
       expect(Math.min(...d)).toBeCloseTo(4.5);
     }
   });
-  it("one new building per zone type per game hour", () => {
-    let s = world(straight(), (c) => (c.side === 1 ? "res" : "craft"));
-    s = step(s);
-    expect(list(s)).toHaveLength(1);
-    // a finished house makes craft demand reach 1
-    s = { ...s, buildings: { 1: { ...s.buildings[1], state: "active" } } };
-    s = step(s);
-    expect(list(s).map((b) => b.zone)).toEqual(["res", "craft"]);
-    s = ticks(s, 4); // game minute 60: the res hour started at minute 10
-    expect(list(s).filter((b) => b.zone === "res")).toHaveLength(1);
-    s = step(s); // minute 70
-    expect(list(s).filter((b) => b.zone === "res")).toHaveLength(2);
-    expect(list(s).filter((b) => b.zone === "craft")).toHaveLength(1); // craft: not before minute 80
-  });
-  it("never reuses occupied cells", () => {
-    const s = ticks(world(road(emptyRoads(), [[0, 0], [80, 0]]), "res"), 300);
+  it("never puts two buildings on one cell", () => {
+    const s = laid(laid(world(road(emptyRoads(), [[0, 0], [80, 0]])), "izba", 1, 1000, 99), "izba5", 1, 1000, 99);
     const bs = list(s);
     expect(bs.length).toBeGreaterThan(1);
     const centresIn = (b: Building) =>
@@ -178,10 +121,10 @@ describe("spawning", () => {
 describe("construction", () => {
   const at7 = 60; // game minutes since 06:00 -> 07:00, work starts
   it("a road takes its crew first, the other hands go to the buildings", () => {
-    let s = ticks(world(straight(), "res"), 1);
+    let s = laid(world(straight()), "izba", 1, 1000, 3);
     const g = road(s.roads, [[0, 0], [0, -40]], 10); // unbuilt, starts at the founding point
     const idB = Math.max(...Object.keys(g.edges).map(Number));
-    s = { ...s, roads: g, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 } };
+    s = { ...s, roads: g, gameMinutes: at7 };
     const per = (builderCount(s) * BASE_TICK) / 60;
     const onRoad = (roadCrew(g.edges[idB]) * BASE_TICK) / 60; // 40 m: a crew of 4
     expect(builderCount(s)).toBe(8); // the adults of the founding households
@@ -195,7 +138,7 @@ describe("construction", () => {
     expect(s.buildings[1].state).toBe("building");
   });
   it("buildings are served lowest id first and become active when done", () => {
-    const base = ticks(world(straight(), "res"), 1).buildings[1];
+    const base = laid(world(straight())).buildings[1];
     const two = { 1: { ...base, labor: 10 }, 2: { ...base, id: 2, labor: 10 } };
     const a = advanceBuildings(two, 15);
     expect(a[1]).toMatchObject({ state: "active", done: 10 });
@@ -204,7 +147,7 @@ describe("construction", () => {
     expect(advanceBuildings({ 1: { ...base, state: "active", done: base.labor } }, 5)).toEqual({ 1: { ...base, state: "active", done: base.labor } });
   });
   it("a site takes one crew, the other hands go to the next site, the rest stay idle", () => {
-    const base = ticks(world(straight(), "res"), 1).buildings[1];
+    const base = laid(world(straight())).buildings[1];
     const site = (id: number, labor = 100) => ({ ...base, id, labor });
     const two = { 1: site(1), 2: site(2) };
     expect([...allocateLabor(two, 8, CREW)]).toEqual([[1, 6], [2, 2]]);
@@ -215,7 +158,7 @@ describe("construction", () => {
     expect([...allocateLabor({ 1: upgrading, 2: site(2) }, 8, CREW)]).toEqual([[1, 6], [2, 2]]); // an upgrade is a site too
   });
   it("payMaterials and advanceBuildings serve the same sites", () => {
-    const base = ticks(world(straight(), "res"), 1).buildings[1];
+    const base = laid(world(straight())).buildings[1];
     const three = Object.fromEntries([1, 2, 3].map((id) => [id, { ...base, id, labor: 100, done: 0, paid: false, state: "planned" as const }]));
     const stock = { food: 0, logs: 100, planks: 10, stone: 10, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
     const crew = (CREW * BASE_TICK) / 60;
@@ -228,9 +171,9 @@ describe("construction", () => {
     expect(out[2].done).toBeCloseTo(hours - crew);
   });
   it("construction speed follows the number of jobless adults", () => {
-    let s = ticks(world(straight(), "res"), 1);
+    let s = laid(world(straight()));
     const b = s.buildings[1];
-    s = { ...s, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 }, buildings: { 1: b, 2: { ...b, id: 2 } } };
+    s = { ...s, gameMinutes: at7, buildings: { 1: b, 2: { ...b, id: 2 } } };
     const done = (x: typeof s) => Object.values(step(x).buildings).reduce((sum, v) => sum + v.done, 0);
     expect(builderCount(s)).toBe(8);
     expect(done(s)).toBeCloseTo((8 * BASE_TICK) / 60);
@@ -249,9 +192,9 @@ const hand = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, fur
 describe("notices", () => {
   const at7 = 60;
   it("a finished building is announced once, with its position", () => {
-    const s0 = ticks(world(straight(), "res"), 1);
+    const s0 = laid(world(straight()));
     const b = s0.buildings[1];
-    const s = { ...s0, gameMinutes: at7, lastSpawn: { res: at7, craft: at7, trade: at7 }, buildings: { 1: { ...b, labor: 1, paid: true } } };
+    const s = { ...s0, gameMinutes: at7, buildings: { 1: { ...b, labor: 1, paid: true } } };
     const built = (x: SimState) => x.events.filter((e) => e.kind === "built");
     const a = step(s);
     expect(a.buildings[1].state).toBe("active");
@@ -259,7 +202,7 @@ describe("notices", () => {
     expect(built(step(a))).toHaveLength(1);
   });
   it("a shortage of hand-made materials is told once per material per game day", () => {
-    const base = ticks(world(straight(), "res"), 1).buildings[1];
+    const base = laid(world(straight())).buildings[1];
     const before = { 1: { ...base, paid: false } };
     const after = { 1: { ...base, paid: true, hand: 5 } };
     const first = reportShortages(before, after, hand, [], 100);
@@ -273,68 +216,29 @@ describe("notices", () => {
   });
 });
 
-describe("growth advice", () => {
-  const advise = (s: SimState, builders = 8) => growthAdvice(s, demand(s), builders);
-  it("tells why a zone does not grow", () => {
-    expect(advise(world(emptyRoads(), () => "none"))).toEqual({ res: "nozone", craft: "nozone", trade: "nozone" });
-    expect(advise(world(straight(), "res"))).toMatchObject({ res: "ok", craft: "nozone" });
-    expect(advise({ ...world(straight(), "craft"), residents: {}, households: {} }).craft).toBe("demand");
-    expect(advise(world(road(emptyRoads(), [[0, 0], [160, 0]], 500), "res")).res).toBe("lots"); // the road is not built
-  });
-  it("a house waiting for hands or for materials", () => {
-    const s = ticks(world(straight(), "res"), 1);
-    expect(advise(s).res).toBe("ok"); // under way
-    expect(advise(s, 0).res).toBe("hands");
-    expect(advise({ ...s, stock: hand }).res).toBe("materials");
-  });
-});
-
 describe("reconcile", () => {
-  // Zone only the first 40 m of the left side, so the lot is far from a crossing road at x = 120.
-  const left = (c: ZoneCell) => (c.side === 1 && c.i < 5 ? "res" : "none");
-  const grown = () => ticks(world(straight(), left), 1);
+  // A house in the first 40 m of the left side, far from a crossing road at x = 120.
+  const grown = () => laid(world(straight()), "izba", 1, 40);
 
-  it("keeps a building whose surroundings are intact", () => {
+  it("keeps a building whose road stands", () => {
     const s = grown();
-    expect(reconcile(s.buildings, s.roads, s.zones.cells)).toBe(s.buildings);
+    expect(reconcile(s.buildings, s.roads)).toBe(s.buildings);
   });
   it("removes it when its road is removed", () => {
     const s = grown();
-    const g = removeEdge(s.roads, 3);
-    const cells = regenerateCells(g, s.zones.cells, [], s.zones.terrain);
-    expect(reconcile(s.buildings, g, cells)).toEqual({});
-  });
-  it("removes it when its zone is cleared, keeps it when only a little is", () => {
-    const s = grown();
-    const b = s.buildings[1];
-    const lotCells = s.zones.cells.filter((c) => Math.hypot(c.cx - b.lot.cx, c.cy - b.lot.cy) < 14 && c.zone === "res");
-    expect(lotCells.length).toBeGreaterThan(0);
-    expect(reconcile(s.buildings, s.roads, allZones(s, "none"))).toEqual({});
-    const one = paintCells(s.zones.cells, [lotCells[0].key], "none");
-    expect(reconcile(s.buildings, s.roads, one)).toBe(s.buildings);
+    expect(reconcile(s.buildings, removeEdge(s.roads, 3))).toEqual({});
   });
   it("keeps it when an unrelated crossing road splits its edge", () => {
     const s = grown();
     const g = road(s.roads, [[120, -100], [120, 100]]);
     expect(Object.keys(g.edges).length).toBeGreaterThan(1);
-    const cells = regenerateCells(g, s.zones.cells, [], landFor(g));
-    expect(reconcile(s.buildings, g, cells)).toBe(s.buildings);
-  });
-  // The handler regenerates cells with the terrain it has; cells that moved wait for their sample.
-  it("keeps it and its zone while the moved cells wait for terrain", () => {
-    const s = grown();
-    const g = road(s.roads, [[61, -100], [61, 100]]); // off the 8 m grid: the cells of the zoned half move
-    const cells = regenerateCells(g, s.zones.cells, [], s.zones.terrain);
-    expect(reconcile(s.buildings, g, cells)).toBe(s.buildings);
-    const sampled = regenerateCells(g, cells, [], landFor(g)); // the samples arrive
-    expect(sampled.filter((c) => c.zone === "res").length).toBe(s.zones.cells.filter((c) => c.zone === "res").length);
-    expect(reconcile(s.buildings, g, sampled)).toBe(s.buildings);
+    expect(reconcile(s.buildings, g)).toBe(s.buildings);
   });
 });
 
 describe("determinism", () => {
   it("one advanceTo call equals many random-sized ones, with growth happening", () => {
-    const start = world(road(emptyRoads(), [[0, 0], [160, 0]]), (c) => (c.side === 1 ? (c.i < 10 ? "res" : "craft") : "trade"));
+    const start = laid(laid(laid(world(road(emptyRoads(), [[0, 0], [160, 0]])), "izba", 1, 80, 99), "weaver", 1, 160, 99), "shop", -1, 160, 99);
     const end = NOW + 5 * 24 * 60 * 1000; // five game days: births, deaths, migration all get a chance
     let t = NOW;
     let s = start;
@@ -369,17 +273,16 @@ describe("save", () => {
     expect(s.sim.zones).toEqual(emptyZones());
   });
   it("round-trips buildings and the generator", () => {
-    const sim = ticks(world(straight(), "res"), 8);
+    const sim = ticks(laid(world(straight())), 8);
     expect(list(sim).length).toBeGreaterThan(0);
     const raw = JSON.parse(JSON.stringify(sim)) as Record<string, unknown>;
     const s = parseSave(withSim({ ...raw, roads: sim.roads, realTime: NOW, gameMinutes: 5 }), NOW)!;
     expect(s.sim.buildings).toEqual(sim.buildings);
     expect(s.sim.nextBuildingId).toBe(sim.nextBuildingId);
     expect(s.sim.rng).toBe(sim.rng);
-    expect(s.sim.lastSpawn).toEqual(sim.lastSpawn);
   });
   it("broken buildings reset the buildings, not the town", () => {
-    const sim = ticks(world(straight(), "res"), 1);
+    const sim = laid(world(straight()));
     const b = sim.buildings[1];
     const roads = sim.roads;
     const bad: unknown[] = [
@@ -396,7 +299,7 @@ describe("save", () => {
       "x",
     ];
     for (const buildings of bad) {
-      const s = parseSave(withSim({ roads, buildings, nextBuildingId: 2, rng: 5, lastSpawn: { res: 0, craft: 0, trade: 0 } }), NOW)!;
+      const s = parseSave(withSim({ roads, buildings, nextBuildingId: 2, rng: 5 }), NOW)!;
       expect(s).not.toBeNull();
       expect(s.sim.buildings).toEqual({});
       expect(s.sim.nextBuildingId).toBe(1);
@@ -404,7 +307,7 @@ describe("save", () => {
     }
     const noNext = parseSave(withSim({ roads, buildings: { 1: b } }), NOW)!;
     expect(noNext.sim.buildings).toEqual({});
-    const badRng = parseSave(withSim({ rng: -3, lastSpawn: { res: "x" } }), NOW)!;
+    const badRng = parseSave(withSim({ rng: -3, lastSpawn: { res: "x" } }), NOW)!; // an old save's lastSpawn is left out
     expect(badRng.sim).toMatchObject(emptyGrowth(seedOf(city.foundedAt), 5));
   });
 });

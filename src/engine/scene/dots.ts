@@ -105,9 +105,13 @@ export class Dots implements Drawable {
 
   // A point (lat, lng, height) in the origin's east/north/up metres.
   local(lat: number, lng: number, h: number): Vec3 {
+    return this.toLocal(geodeticToEcef(lat, lng, h));
+  }
+
+  // A point of the planet (ECEF, m) in the origin's east/north/up metres.
+  toLocal(p: Readonly<Vec3>): Vec3 {
     const o = this.origin!;
     const a = this.axes!;
-    const p = geodeticToEcef(lat, lng, h);
     const d: Vec3 = [p[0] - o[0], p[1] - o[1], p[2] - o[2]];
     return [d[0] * a.east[0] + d[1] * a.east[1] + d[2] * a.east[2], d[0] * a.north[0] + d[1] * a.north[1] + d[2] * a.north[2], d[0] * a.up[0] + d[1] * a.up[1] + d[2] * a.up[2]];
   }
@@ -120,8 +124,8 @@ export class Dots implements Drawable {
     if (!this.origin || !this.axes) return;
     const o = this.origin;
     const { east, north, up } = this.axes;
-    const h = Math.max(1, engine.canvas.clientHeight);
-    this.data.set([o[0] - view.eye[0], o[1] - view.eye[1], o[2] - view.eye[2], h / 2, ...east, 0, ...north, 0, ...up, 0, engine.canvas.clientWidth / h, 0, 0, 0]);
+    const h = engine.height;
+    this.data.set([o[0] - view.eye[0], o[1] - view.eye[1], o[2] - view.eye[2], h / 2, ...east, 0, ...north, 0, ...up, 0, engine.width / h, 0, 0, 0]);
     this.device.queue.writeBuffer(this.uniform, 0, this.data);
   }
 

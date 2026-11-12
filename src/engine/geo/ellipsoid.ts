@@ -1,4 +1,4 @@
-// WGS84 in float64 (docs/PLAN-engine.md section 3.4). Everything the engine places on the planet goes through here; the GPU
+// WGS84 in float64. Everything the engine places on the planet goes through here; the GPU
 // never sees an absolute ECEF coordinate, only differences against the eye (frame/chunkTable.ts).
 
 export type Vec3 = [number, number, number];

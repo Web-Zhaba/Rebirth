@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { finishAll } from "./admin";
-import { canPlace, canPlaceOnFoundation, emptyGrowth, placeBuilding, placeOnFoundation, reconcile, spawnBuildings } from "./growth";
+import { canPlace, canPlaceOnFoundation, emptyGrowth, placeBuilding, placeOnFoundation, reconcile } from "./growth";
 import { BUILDINGS, floorsOf } from "./buildings";
 import { computeCoverage, computeLandValue } from "./coverage";
 import { asItWasTemplate, distinctTyped, earlierOfKind, heritageDomain, isHeritage, nextInsight, restoreWeightOf, scarcity, siteDomain, workTemplate } from "./heritage";
@@ -11,12 +11,13 @@ import { parseSave } from "./save";
 import { loseSite } from "./restore";
 import { addRoad, emptyRoads } from "./roads";
 import { covers } from "./services";
+import { planStroke } from "./stroke";
 import { allResearched, initialProgress } from "./tech";
 import type { Building, City, FoundFoundation, ProgressState, RoadGraph, SaveV4, SimState } from "./types";
 import { emptyZones, regenerateCells } from "./zones";
 import type { FromWorker } from "./protocol";
 
-// Restoring "as it was" (docs/PLAN-restoration.md section 2): ordinary construction of the purpose that matches a
+// Restoring "as it was": ordinary construction of the purpose that matches a
 // foundation's known old kind, with its consequences kept in sim/restore.ts.
 
 const NOW = 1_800_000_000_000;
@@ -185,7 +186,7 @@ describe("loss", () => {
 
 describe("building over a typed foundation", () => {
   const withCells = (s: SimState): SimState => {
-    const cells = regenerateCells(s.roads, [], [], {});
+    const cells = regenerateCells(s.roads, [], {});
     return { ...s, zones: { ...s.zones, cells: cells.map((c) => ({ ...c, block: null })) } };
   };
   it("a regular lot avoids it; lost sites are free again", () => {
@@ -198,11 +199,12 @@ describe("building over a typed foundation", () => {
     const lost: SimState = { ...base, finds: { ...base.finds, foundations: base.finds.foundations.map((f) => ({ ...f, state: "lost" as const })) } };
     expect(placeBuilding(lost, t, over.edge, over.side, over.i, { forest: 0, water: 0, rock: 0 }).buildings[1]).toBeDefined();
   });
-  it("keeps zone growth off a notable foundation", () => {
-    let s = withCells(mk([found("r", "castle", rect(-200, 0, 400, 400))]));
-    s = { ...s, zones: { ...s.zones, cells: s.zones.cells.map((c) => ({ ...c, zone: "res" as const })) }, lastSpawn: { res: -1000, craft: -1000, trade: -1000 } };
-    const grown = spawnBuildings({ ...s, residents: {}, households: {} });
-    expect(Object.keys(grown.buildings).length).toBe(0);
+  it("keeps a stroke of houses off a notable foundation", () => {
+    const s = withCells(mk([found("r", "castle", rect(-20, 46, 40, 30))]));
+    const spans = Object.keys(s.roads.edges).flatMap((e) => [1, -1].map((side) => ({ edge: Number(e), side: side as 1 | -1, from: 0, to: 1000 })));
+    const plan = planStroke(s, BUILDINGS.izba, spans, true);
+    expect(plan.items).toEqual([]);
+    expect(plan.skipped).toEqual([expect.objectContaining({ foundationId: "r", reason: "Объект r: восстанавливается из карточки места" })]);
   });
 });
 
@@ -225,7 +227,7 @@ describe("purposes reach the houses", () => {
   it("a monument stands only on an old foundation", () => {
     const s = (() => {
       const base = mk([]);
-      const cells = regenerateCells(base.roads, [], [], {});
+      const cells = regenerateCells(base.roads, [], {});
       return { ...base, zones: { ...base.zones, cells: cells.map((c) => ({ ...c, block: null })) } };
     })();
     const c = s.zones.cells.find((x) => x.depth === 0)!;
@@ -271,6 +273,6 @@ describe("save", () => {
   });
   it("keeps a building on a foundation when the roads change", () => {
     const s = asItWas(mk([church]), "a");
-    expect(reconcile(s.buildings, emptyRoads(), [])[1]).toBeDefined();
+    expect(reconcile(s.buildings, emptyRoads())[1]).toBeDefined();
   });
 });

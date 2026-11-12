@@ -7,7 +7,7 @@ import { eraName, eraTwoMet, INSIGHT_BY_ID, initialProgress, MAX_ERA, MAX_QUEUE,
 import type { ProgressState, ResearchView, SimState } from "./types";
 import { L } from "../i18n";
 
-// Research (PLAN-research.ru.md section 5): one tech under way and a queue of up to three. Progress is the work done in
+// Research: one tech under way and a queue of up to three. Progress is the work done in
 // game days, so a speed that changes midway (a school, a restored building) and a long offline catch-up need no special
 // handling: every tick adds `speed * dt`.
 

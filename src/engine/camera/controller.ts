@@ -86,7 +86,7 @@ export function createCameraControl(engine: Engine): CameraControl {
   const prevTouchAction = canvas.style.touchAction;
   canvas.style.touchAction = "none";
 
-  const size = (): [number, number] => [Math.max(1, canvas.clientWidth), Math.max(1, canvas.clientHeight)];
+  const size = (): [number, number] => [engine.width, engine.height];
   const local = (e: { clientX: number; clientY: number }): [number, number] => {
     const r = canvas.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top];

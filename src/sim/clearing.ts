@@ -4,7 +4,7 @@ import type { Clearing, Field, RoadGraph, TerrainInfo } from "./types";
 import { pointInPolygon, polygonsOverlap, selfIntersects, signedArea } from "./zones";
 import { L } from "../i18n";
 
-// Forest clearing («Вырубка», PLAN-pace.md section 6). Rates are per 100 m2.
+// Forest clearing («Вырубка»). Rates are per 100 m2.
 export const CLEARING = {
   forestHours: 6.25, // person-hours of felling and stubbing
   otherHours: 0.5, // person-hours of clearing brush on open ground

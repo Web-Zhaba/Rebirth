@@ -5,15 +5,20 @@ import { CATEGORIES, categoryOf, ITEM_KEYS, toolForKey, toolInfo, toolLabel } fr
 describe("build menu", () => {
   const all = CATEGORIES.flatMap((c) => c.tools);
   it("lists every tool exactly once, at most eight per category", () => {
-    const want: Tool[] = ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore", "res", "craft", "trade", "field", "clearing", "clear", ...PLACE_TOOLS];
+    const want: Tool[] = ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore", "field", "clearing", ...PLACE_TOOLS];
     expect([...all].sort()).toEqual([...want].sort());
     for (const c of CATEGORIES) expect(c.tools.length).toBeLessThanOrEqual(ITEM_KEYS.length);
     expect(CATEGORIES.length).toBe(6);
   });
   it("maps keys to items of the active category, B to demolish", () => {
-    expect(toolForKey("KeyQ", "food")).toBe("gumno");
-    expect(toolForKey("KeyQ", "farm")).toBe("woodcutter");
-    expect(toolForKey("KeyR", "farm")).toBe("barn");
+    expect(toolForKey("KeyQ", "food")).toBe("field");
+    expect(toolForKey("KeyW", "food")).toBe("gumno");
+    expect(toolForKey("KeyI", "food")).toBe("apiary");
+    expect(toolForKey("KeyQ", "farm")).toBe("clearing");
+    expect(toolForKey("KeyW", "farm")).toBe("woodcutter");
+    expect(toolForKey("KeyT", "farm")).toBeNull();
+    expect(toolForKey("KeyQ", "town")).toBe("house");
+    expect(toolForKey("KeyR", "town")).toBe("barn");
     expect(toolForKey("KeyY", "roads")).toBe("restore");
     expect(toolForKey("KeyU", "roads")).toBeNull();
     expect(toolForKey("KeyI", "roads")).toBeNull();

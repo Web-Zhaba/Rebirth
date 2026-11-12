@@ -17,7 +17,7 @@ import forestWgsl from "./forest.wgsl?raw";
 import scatterWgsl from "./forestScatter.wgsl?raw";
 import { bakeTreeAtlas, IMPOSTOR_STEP, IMPOSTOR_VIEWS, TREE_VERTEX_LAYOUT, uploadTreeMeshes, type TreeAtlas, type TreeMeshes, type TreeModelData } from "./treeAtlas";
 
-// The forest on the GPU (docs/PLAN-engine.md N5): trees, bushes, reeds and boulders grown every frame by a compute
+// The forest on the GPU: trees, bushes, reeds and boulders grown every frame by a compute
 // pass (forestScatter.wgsl) from the cover pages (bake/drape.ts rasterCover), the height pages and the game's mask,
 // over the tiles around the eye that lie in view (scene/forestTiles.ts), culled per candidate against the frustum and
 // the reach of their kind, then drawn with indirect draws: models near, impostors far. Nothing about a tree lives on
@@ -26,14 +26,14 @@ import { bakeTreeAtlas, IMPOSTOR_STEP, IMPOSTOR_VIEWS, TREE_VERTEX_LAYOUT, uploa
 // Kinds: conifer, broadleaf, birch (trees), bush, reed, boulder (details); a slot per (kind, level of detail).
 export const FOREST_KINDS = 6;
 const SLOTS = FOREST_KINDS * 2;
-const CAPS = [12288, 65536, 12288, 65536, 12288, 65536, 8192, 32768, 8192, 32768, 8192, 32768];
+const CAPS = [24576, 65536, 24576, 65536, 24576, 65536, 12288, 32768, 12288, 32768, 12288, 32768];
 const INSTANCE_BYTES = 32;
 
-const MAX_TREES = 80_000; // expected trees in view (the old layer's cap)
+const MAX_TREES = 120_000; // expected trees in view
 const MAX_DETAILS = 60_000;
 const MAX_CANDIDATES = 3_000_000;
-const TREE_NEAR = 450; // trees nearer than this are models (and never thinned)
-const DETAIL_NEAR = 60;
+const TREE_NEAR = 700; // trees nearer than this are models (and never thinned)
+const DETAIL_NEAR = 120;
 const TREE_FAR_CAP = 12_000;
 const DETAIL_FAR_CAP = 2_000;
 const MIN_PX = 1.5; // drawn up to where a typical one is this many px tall
@@ -389,6 +389,11 @@ export class Forest implements Drawable {
     if (k !== UNIFORM_FLOATS) throw new Error(`forest uniform out of step with forestScatter.wgsl: ${k}`);
     this.device.queue.writeBuffer(this.uniform, 0, d);
     this.writeLook(up);
+  }
+
+  // The scatter tests its candidates against the occluders' depth while there is anything to scatter.
+  wantsHiZ(): boolean {
+    return this.jobCount > 0 && this.occlusion;
   }
 
   compute(encoder: GPUCommandEncoder): void {

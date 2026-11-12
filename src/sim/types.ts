@@ -51,8 +51,8 @@ export interface RoadGraph {
 export type ZoneType = "res" | "craft" | "trade";
 export type ZoneBlock = "road" | "overlap" | "field" | "water" | "steep" | "pending";
 
-// One 8 x 8 m lot beside a road edge (see sim/zones.ts for the geometry).
-export interface ZoneCell {
+// An 8 x 8 m cell beside a road: the ground lots are cut from (sim/zones.ts); a lot is t.w x t.d of them.
+export interface LotCell {
   key: string; // `${edge}:${side}:${i}:${depth}`
   edge: number;
   side: 1 | -1; // +1 left of a -> b, -1 right
@@ -61,7 +61,6 @@ export interface ZoneCell {
   cx: number;
   cy: number;
   angle: number; // direction of the road, radians
-  zone: "none" | ZoneType;
   block: ZoneBlock | null;
 }
 
@@ -87,7 +86,7 @@ export interface TerrainInfo {
 }
 
 export interface ZoneState {
-  cells: ZoneCell[];
+  cells: LotCell[];
   fields: Field[];
   terrain: Record<string, TerrainInfo>; // keyed by qkey (4 m grid)
   rev: number; // bumped on every change of cells, fields or terrain
@@ -98,10 +97,10 @@ export type BuildingState = "planned" | "building" | "active";
 export interface Building {
   id: number;
   template: string; // key of BUILDINGS
-  zone: ZoneType | "placed"; // "placed": put down by the player, not grown on a zone
+  zone: ZoneType | "placed"; // the class: house, workshop, shop, or "placed" for every other building
   // Local meters; centre of the lot rectangle, angle = road direction.
   lot: { cx: number; cy: number; angle: number; w: number; d: number };
-  side: 1 | -1; // side of the road, as in ZoneCell
+  side: 1 | -1; // side of the road, as in LotCell
   footprint: [number, number][]; // 4 corners, counter-clockwise
   height: number; // m
   state: BuildingState;
@@ -113,14 +112,14 @@ export interface Building {
   level: number; // a house's families (its level); on an old foundation the floors built
   streak: number; // days in a row a house met the upgrade conditions
   upgrade?: Upgrade; // the next level (or floor) in progress; the building stays active meanwhile
-  radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
+  radius?: number; // dig site: revealed radius in m
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
   haul?: number; // person-hours of carting its materials from the stores, added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
   door?: [number, number]; // point of the ring nearest to the road: where services, jobs and walks reach the building
   materials?: Materials; // cost by area, instead of the template's
-  // A building on an old foundation (sim/foundationLots.ts, docs/PLAN-restoration.md section 2): the footprint is the
+  // A building on an old foundation (sim/foundationLots.ts): the footprint is the
   // simplified ring (3..64 points), the lot its oriented box.
   foundationId?: string;
   scale?: number; // the ring's area against the template's footprint; times the floors built it is the floor area
@@ -129,6 +128,8 @@ export interface Building {
   landmark?: true; // a unique old building restored as it was: it works as a monument too
   restoreWeight?: number; // what it added to progress.restored when it was finished; taken back on demolition
   exhibits?: (string | null)[]; // a museum: the theme each hall shows (sim/museum.ts)
+  then?: string; // a dig ordered by a stroke (sim/stroke.ts): the template put on the foundation once it is dug
+  awaitsRoad?: true; // laid along a road not built yet: nobody works on it until the road reaches it (growth.ts releaseSites)
 }
 
 // Work on a finished house: labor and materials are taken like those of a new building.
@@ -192,14 +193,14 @@ export interface TownEvent {
   site?: string; // a discovery: the foundation whose panel opens
 }
 
-// Notable moments kept forever (PLAN.md section 11); `kind` is a machine key, `text` the Russian line.
+// Notable moments kept forever; `kind` is a machine key, `text` the Russian line.
 export interface ChronicleEntry {
   at: number; // gameMinutes
   kind: string;
   text: string;
 }
 
-// Excavation finds (PLAN.md section 12); coordinates are local meters.
+// Excavation finds; coordinates are local meters.
 export interface FoundFoundation {
   id: string;
   ring: [number, number][];
@@ -229,7 +230,7 @@ export interface FoundPlace {
   restored?: number; // a street: gameMinutes when it was restored in full and got its name back (sim/streets.ts)
 }
 
-// A Wikipedia article unlocked by a dig (PLAN.md section 13). Text is CC BY-SA 4.0.
+// A Wikipedia article unlocked by a dig. Text is CC BY-SA 4.0.
 export interface StoredArticle {
   id: string; // "<lang>:<pageid>"
   title: string;
@@ -260,7 +261,7 @@ export interface Finds {
   fates: Record<string, FindFate>; // find id -> what the player did with it
 }
 
-// A real feature of the tile data that gives one find (docs/PLAN-restoration.md section 6): a garden (seeds), an
+// A real feature of the tile data that gives one find: a garden (seeds), an
 // industrial ground (machine parts), a railway (rails), a well (bucket), a house number (counted per street, no item), or
 // a named place beyond the revealed discs (a sign that points to it).
 export type FeatureKind = "seeds" | "parts" | "rails" | "bucket" | "number" | "sign";
@@ -335,7 +336,7 @@ export interface ProdState {
   haul?: Record<number, number>; // producer id -> share of its work hours that went to carting at the last work tick (sim/storage.ts)
 }
 
-// Research and eras (PLAN-research.ru.md section 4; sim/tech.ts holds the tree, sim/research.ts the rules).
+// Research and eras (sim/tech.ts holds the tree, sim/research.ts the rules).
 export interface ProgressState {
   era: number; // 1..2
   techs: string[]; // researched, in the order they finished
@@ -378,16 +379,15 @@ export interface SimState extends PeopleState {
   clearings: Clearing[]; // finished ones stay as cleared land
   nextBuildingId: number;
   rng: number; // uint32 state of the growth generator
-  lastSpawn: Record<ZoneType, number>; // gameMinutes of the last new building per zone
   incoming: Incoming[]; // families on their way, by arrival time
   attraction: Attraction; // how attractive the town is to newcomers and why (sim/attraction.ts); set at 00:00
   // Derived once per game day (and on load): bit i of coverage[house] is set when service i covers it.
   coverage: Record<number, number>;
   landValue: Record<number, number>; // house id -> 0..100
   summary: DaySummary | null; // «Итоги дня» of the last 22:00
-  levers: Levers; // player levers (P5)
+  levers: Levers; // player levers
   progress: ProgressState; // researched techs, the research under way, eras
-  weather: WeatherState; // climate at the town (PLAN-weather.md)
+  weather: WeatherState; // climate at the town
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
@@ -479,21 +479,18 @@ export interface JobReport {
   drafted: number; // of them, taken from jobs
 }
 
-export interface Demand {
-  res: number;
-  craft: number;
-  trade: number;
+// Homes at a glance, for the house tool's hint.
+export interface Housing {
+  tents: number; // households still in tents
+  free: number; // homes no household holds or is promised
+  underway: number; // houses planned or being built
 }
-
-// Why a zone type is (not) growing, see growthAdvice in growth.ts.
-export type GrowthWhy = "ok" | "nozone" | "demand" | "lots" | "hands" | "materials";
-export type GrowthAdvice = Record<ZoneType, GrowthWhy>;
 
 // What the worker streams every tick: no individual residents, only aggregates.
 // Zones, the chronicle, finds and articles travel separately, only when they changed.
 export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "households" | "nextPersonId" | "nextHouseholdId" | "prod" | "finds" | "articles"> & {
   digs: DigInfo[]; // finished dig sites with their discs and find counts
-  people: PeopleStats & { demand: Demand; growth: GrowthAdvice; jobs: JobReport };
+  people: PeopleStats & { housing: Housing; jobs: JobReport };
   economy: EconomyStats;
   services: ServiceStats;
   houseMood: Record<number, number>; // house id -> mood of its household, for the overlay
@@ -502,6 +499,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   research: ResearchView;
   fieldProgress: Record<number, { sown: number; harv: number }>; // field id -> share of its area sown / harvested this year (steps of 0.02), for the 3D fields
   heritageMul: number; // scarcity multiplier of the next restoration, 1..3
+  museumStaff: Record<number, number>; // finished museum id -> share of its jobs filled: the strength of its halls (sim/museum.ts)
   callBlock: string | null; // why a call for settlers cannot be made now, or null
   inflow: { free: number; perDay: number }; // free homes and the families a day the town draws now (sim/attraction.ts)
 };

@@ -20,7 +20,7 @@ import { ruinsShown } from "../ruinsShown";
 import { mppAtZoom } from "../view";
 
 // The forest on the engine (engine/scene/forest.ts): the old tree layer's models, look and rules, grown on the GPU
-// from the land cover. The game's side is the mask of what keeps the forest away (lots, roads, zones and fields, a
+// from the land cover. The game's side is the mask of what keeps the forest away (lots, roads, fields, a
 // clearing as far as it is cut; ruins add bushes and stones), rasterised over the town into a square of web mercator
 // whenever those change, and the look of each frame (sun, night, season, snow, wind).
 
@@ -154,13 +154,12 @@ function buildMask(tf: Frame, ruins: readonly { ring: [number, number][] }[] | n
       if (a && b) lines.push({ a: [a.x, a.y], b: [b.x, b.y], w: (ROAD_KINDS[e.kind]?.width ?? 3) + 4 });
     }
   const z = zones.peek();
-  const cells = (z?.cells ?? []).filter((c) => c.zone !== "none").map((c) => ({ x: c.cx, y: c.cy, r: 6 }));
   const polys = [
     ...(z?.fields ?? []).map((f) => ({ pts: f.pts, share: 1 })),
     ...(state.peek()?.clearings ?? []).map((c) => ({ pts: c.pts, share: Math.floor((c.done / Math.max(c.labor, 1e-9)) * PROGRESS_STEPS) / PROGRESS_STEPS })),
   ].filter((p) => p.share > 0 && p.pts.length > 2);
   const rings = (ruins ?? []).map((f) => f.ring).filter((r) => r.length > 2);
-  for (const c of [...lots, ...cells]) grow(c.x, c.y, c.r);
+  for (const c of lots) grow(c.x, c.y, c.r);
   for (const l of lines) (grow(l.a[0], l.a[1], l.w / 2), grow(l.b[0], l.b[1], l.w / 2));
   for (const p of [...polys.map((q) => q.pts), ...rings]) for (const [x, y] of p) grow(x, y, 0);
   if (!(box[0] <= box[2])) return null;
@@ -180,7 +179,7 @@ function buildMask(tf: Frame, ruins: readonly { ring: [number, number][] }[] | n
   const py = (y: number) => (box[3] - y) * k;
   const red = (share: number) => `rgb(${Math.round(share * 255)},0,0)`;
   ctx.fillStyle = red(1);
-  for (const c of [...lots, ...cells]) {
+  for (const c of lots) {
     ctx.beginPath();
     ctx.arc(px(c.x), py(c.y), c.r * k, 0, Math.PI * 2);
     ctx.fill();

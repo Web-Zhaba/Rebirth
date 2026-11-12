@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildView, defaultCamera, type CameraState } from "../camera/camera";
 import { ecefToGeodetic } from "../geo/ellipsoid";
 import { lngLatToTile, tileAt } from "../geo/mercator";
-import { DEFAULT_TAU, MAX_ZOOM, NodeCache, screenSpaceError, selectNodes, type HeightRanges, type SelectView } from "./quadtree";
+import { buildNodeVertices, GRID_VERTS, NODE_FLOATS, nodeOrigin } from "./nodeMesh";
+import { DEFAULT_TAU, MAX_ZOOM, NodeCache, nodeDistance, outOfView, screenSpaceError, selectNodes, type HeightRanges, type SelectView } from "./quadtree";
 
 const flat: HeightRanges = { range: () => ({ min: 0, max: 0, z: 11 }) };
 const opts = { tau: DEFAULT_TAU, maxZoom: MAX_ZOOM, maxNodes: 4000 };
@@ -30,7 +31,8 @@ describe("quadtree selection", () => {
   });
 
   it("goes to the deepest level under a street-level camera, across the antimeridian", () => {
-    const sel = selectNodes(selectView({ lat: 60, lng: 179.99, distance: 20, pitch: 60, heading: 90 }), new NodeCache(), flat, new Set(), opts);
+    // Pitched to the horizon: the view runs on east past the antimeridian, half a kilometre away.
+    const sel = selectNodes(selectView({ lat: 60, lng: 179.99, distance: 20, pitch: 80, heading: 90 }), new NodeCache(), flat, new Set(), opts);
     const t = tileAt(179.99, 60, MAX_ZOOM);
     expect(sel.nodes.some((n) => n.z === MAX_ZOOM && n.x === t.x && n.y === t.y)).toBe(true);
     // Looking east, the other side of the antimeridian (x near 0) is drawn too.
@@ -74,5 +76,75 @@ describe("quadtree selection", () => {
     const e1 = screenSpaceError(node, selectView({ lat: 47.27, lng: 11.4, distance: 5000 }));
     const e2 = screenSpaceError(node, selectView({ lat: 47.27, lng: 11.4, distance: 50_000 }));
     expect(e1 / e2).toBeGreaterThan(5);
+  });
+});
+
+describe("hull culling", () => {
+  // Every grid vertex of the node at the heights it may be drawn at, eye-relative.
+  function inView(z: number, x: number, y: number, v: SelectView, heights: number[]): boolean {
+    const origin = nodeOrigin(z, x, y);
+    const verts = new Float32Array(NODE_FLOATS);
+    buildNodeVertices(z, x, y, origin, verts);
+    const tx = v.tanHalfY * v.aspect;
+    const ty = v.tanHalfY;
+    for (let k = 0; k < GRID_VERTS; k++)
+      for (const h of heights) {
+        const p = [0, 1, 2].map((a) => origin[a] + verts[k * 8 + a] + verts[k * 8 + 4 + a] * h - v.eye[a]);
+        const dot = (q: readonly number[]) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+        const zz = dot(v.forward);
+        if (zz >= v.near && Math.abs(dot(v.right)) <= zz * tx && Math.abs(dot(v.up)) <= zz * ty) return true;
+      }
+    return false;
+  }
+
+  const views: Partial<CameraState>[] = [
+    { lat: 56.26, lng: 41.87, distance: 120, pitch: 65, heading: 30 },
+    { lat: 56.26, lng: 41.87, distance: 600, pitch: 75, heading: 200 },
+    { lat: 47.2692, lng: 11.4041, distance: 9000, pitch: 75, heading: 40 },
+    { lat: -33.9, lng: 18.4, distance: 2200, pitch: 0 },
+    { lat: 60, lng: 179.99, distance: 400, pitch: 80, heading: 90 },
+  ];
+
+  it("drops only nodes with no vertex in view", () => {
+    const hills: HeightRanges = { range: () => ({ min: 0, max: 900, z: 11 }) };
+    let dropped = 0;
+    for (const s of views) {
+      const v = selectView(s);
+      const cache = new NodeCache();
+      selectNodes(v, cache, hills, new Set(), opts); // bounds of the nodes the walk reached
+      const c = lngLatToTile(s.lng!, s.lat!, 17);
+      for (let z = 4; z <= 17; z++)
+        for (let dy = -3; dy <= 3; dy++)
+          for (let dx = -3; dx <= 3; dx++) {
+            const n = 2 ** z;
+            const x = (((Math.floor(c.x / 2 ** (17 - z)) + dx) % n) + n) % n;
+            const y = Math.floor(c.y / 2 ** (17 - z)) + dy;
+            if (y <= 0 || y >= n - 1) continue;
+            const node = cache.get(z, x, y);
+            if (!outOfView(node, v)) continue;
+            dropped++;
+            expect(inView(z, x, y, v, [node.hmin, node.hmax, (node.hmin + node.hmax) / 2])).toBe(false);
+          }
+    }
+    expect(dropped).toBeGreaterThan(200);
+  });
+
+  it("leaves a low camera with few nodes, none of them out of view", () => {
+    const v = selectView(views[0]);
+    const sel = selectNodes(v, new NodeCache(), flat, new Set(), opts);
+    expect(sel.nodes.length).toBeLessThan(90);
+    for (const n of sel.nodes) expect(outOfView(n, v)).toBe(false);
+  });
+
+  it("keeps nodes out of view around the shadow casters' point", () => {
+    const s = views[0];
+    const v = selectView(s);
+    const target = buildView({ ...defaultCamera(), ...s }, 1280, 720, () => 0).target;
+    const g = ecefToGeodetic(target);
+    const at = { eye: target, eyeLat: g.lat, eyeLng: g.lng, eyeAlt: g.h };
+    const plain = selectNodes(v, new NodeCache(), flat, new Set(), opts);
+    const kept = selectNodes(v, new NodeCache(), flat, new Set(), { ...opts, casters: { at, radius: 20_000 } });
+    expect(kept.nodes.length).toBeGreaterThan(plain.nodes.length);
+    for (const n of kept.nodes) if (outOfView(n, v)) expect(nodeDistance(n, at)).toBeLessThanOrEqual(20_000);
   });
 });

@@ -1,4 +1,4 @@
-// The game's window onto the world (docs/PLAN-engine.md, N1). UI and tools talk to this, never to the renderer, so
+// The game's window onto the world. UI and tools talk to this, never to the renderer, so
 // the backend under src/view/ can be swapped for the own engine without touching them.
 //
 // No zoom levels: the camera is a target, an eye distance, heading and pitch; scale questions are answered in metres
@@ -57,6 +57,8 @@ export type OverlayId =
   | "road-hover"
   | "road-snap"
   | "place-lot"
+  | "stroke-plan"
+  | "stroke-skip"
   | "place-radius"
   | "reveal-disc"
   | "follow-target";
@@ -67,6 +69,7 @@ export interface Overlay {
 
 export interface View {
   readonly canvas: HTMLCanvasElement;
+  size(): [number, number]; // the canvas in CSS px, without asking the page for its layout
   readonly container: HTMLElement; // for DOM the tools pin over the map
 
   camera(): Camera;

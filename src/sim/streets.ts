@@ -6,7 +6,7 @@ import { distToEdge } from "./roads";
 import type { FoundFoundation, FoundPlace, RoadGraph, SimState } from "./types";
 import { L } from "../i18n";
 
-// A street restored in full (docs/PLAN-restoration.md section 4): its houses stand on their old foundations again and a
+// A street restored in full: its houses stand on their old foundations again and a
 // road runs on its old line. It then gets its real name back: shown on the map with the town, and a chronicle line.
 
 export const STREET = {

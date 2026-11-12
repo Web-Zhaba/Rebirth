@@ -1,6 +1,6 @@
 import { GRID } from "./nodeMesh";
 
-// CDLOD-style geomorphing (docs/PLAN-engine.md section 4, terrain/). Every vertex of a node knows where it would sit on
+// CDLOD-style geomorphing (terrain/). Every vertex of a node knows where it would sit on
 // its parent's coarser grid: even/even vertices are parent vertices, the others lie on a parent triangle edge, halfway
 // between two parent vertices (the parent's quads are split along the (i+1, j) - (i, j+1) diagonal, buildIndices).
 // The morph factor slides each vertex from its own position (0) to that parent position (1) by its own screen-space

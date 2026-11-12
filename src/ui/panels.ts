@@ -2,12 +2,12 @@ import { batch, effect, signal } from "@preact/signals";
 import { selectedBuilding } from "../view/layers/buildings";
 import { selectedSite } from "../map/heritageSpots";
 import { tool } from "../map/tools";
-import { selectedClearing } from "../view/layers/zones";
+import { selectedClearing } from "../view/layers/land";
 import { cancelUiState } from "./inputModel";
 
-// The right-hand slot (PLAN-ui.md section 5) holds one panel at a time: the inspector of the selected
-// building or clearing, the town panel, the notebook, the science panel or an old building to restore.
-export type RightPanel = "inspector" | "town" | "notebook" | "tech" | "heritage";
+// The right-hand slot holds one panel at a time: the inspector of the selected
+// building or clearing, the town panel, the notebook, the science panel, the museum or an old building to restore.
+export type RightPanel = "inspector" | "town" | "notebook" | "tech" | "museum" | "heritage";
 
 export const rightPanel = signal<RightPanel | null>(null);
 

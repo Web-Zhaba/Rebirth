@@ -1,4 +1,4 @@
-// Immigration by attractiveness (docs/PLAN-balance.md B6). Families come at a town-wide rate, not one per vacant house:
+// Immigration by attractiveness. Families come at a town-wide rate, not one per vacant house:
 // the score (food outlook, mood, jobs, services) times the families a town of its size draws at best a day, which
 // grows with the town and saturates, so a big town grows by births and a steady inflow. Each family takes a free home;
 // the fewer free homes, the slower they come. The score is set at 00:00 (people.ts dailyStep); the free homes are

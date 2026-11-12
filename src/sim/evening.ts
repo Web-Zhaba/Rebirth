@@ -5,7 +5,7 @@ import { workHours, type Levers } from "./levers";
 import { calendar } from "./time";
 import type { SimState } from "./types";
 
-// Evenings (PLAN-pace.md section 7): home crafts and gatherings between the end of work and the night.
+// Evenings: home crafts and gatherings between the end of work and the night.
 export const EVENING = {
   from: 19, // hour: the normal workday is over (see workHours for the «Долгий день»)
   to: 22, // hour: the night begins and the day summary is made

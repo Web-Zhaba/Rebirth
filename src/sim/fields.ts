@@ -26,7 +26,7 @@ export const foodKgHour = (template: string, season: number): number => {
   return r ? r.kgHour * r.season[season] : 0;
 };
 
-// Field work tuning (design: PLAN.md section 8).
+// Field work tuning.
 export const FIELD = {
   yieldKgHa: 400 * YEAR_SCALE, // per year, net of seed
   sowHoursHa: 50 * YEAR_SCALE,

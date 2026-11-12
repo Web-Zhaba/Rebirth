@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { BUILDINGS, familyCapacity, FLOOR, floorArea, floorsOf, homesOf, houseCapacity, maxLevel, scaledJobs, storageOf, upgradable, upgradeLabor } from "./buildings";
 import { dailyServices } from "./coverage";
-import { floorBlocker, FOUNDATION_TAKEN, foundationBuilding, foundationLots, lotCheck, lotRing, sizeLimit } from "./foundationLots";
+import { floorBlocker, FOUNDATION_TAKEN, foundationBuilding, lotCheck, lotRing, sizeLimit } from "./foundationLots";
 import { simplifyRing } from "./heritageGeo";
-import { advanceBuildings, canPlace, canPlaceOnFoundation, emptyGrowth, placeOnFoundation, spawnBuildings } from "./growth";
+import { advanceBuildings, canPlace, canPlaceOnFoundation, emptyGrowth, placeOnFoundation } from "./growth";
 import { heatShares, HEAT_AREA } from "./production";
 import { parseSave } from "./save";
 import { addRoad, emptyRoads } from "./roads";
+import { applyStroke, planStroke } from "./stroke";
 import { allResearched, initialProgress } from "./tech";
-import type { City, FoundFoundation, ProgressState, RoadGraph, SimState, ZoneType } from "./types";
+import type { City, FoundFoundation, ProgressState, RoadGraph, SimState } from "./types";
 import { firewoodDaily } from "./weatherEffects";
 import { emptyZones, regenerateCells } from "./zones";
 
-// Old foundations set the building (docs/PLAN-restoration.md section 2): the ring at full size, the floors of the old
+// Old foundations set the building: the ring at full size, the floors of the old
 // building, limits by purpose and technology, capacity and heating by the floor area.
 
 const NOW = 1_800_000_000_000;
@@ -30,9 +31,9 @@ const builtRoad = (): RoadGraph => {
   return r.graph;
 };
 
-const mk = (foundations: FoundFoundation[], zone: ZoneType | "none" = "none", progress: ProgressState = allResearched()): SimState => {
+const mk = (foundations: FoundFoundation[], progress: ProgressState = allResearched()): SimState => {
   const roads = builtRoad();
-  const cells = regenerateCells(roads, [], [], {}).map((c) => ({ ...c, block: null, zone }));
+  const cells = regenerateCells(roads, [], {}).map((c) => ({ ...c, block: null }));
   return {
     realTime: NOW,
     gameMinutes: 1000,
@@ -41,22 +42,23 @@ const mk = (foundations: FoundFoundation[], zone: ZoneType | "none" = "none", pr
     ...emptyGrowth(1),
     residents: {},
     households: {},
-    lastSpawn: { res: -1000, craft: -1000, trade: -1000 },
     progress,
     finds: { foundations, pois: [], streets: [], revealed: [{ digId: 1, x: 0, y: 0, r: 120 }], features: [], fates: {} },
   } as SimState;
 };
 const bare = (): ProgressState => ({ ...initialProgress(), techs: [] });
+// A stroke of `template` along the whole north side of the road, foundations only, and the town with it laid.
+const plan = (s: SimState, template = "izba") => planStroke(s, BUILDINGS[template], [{ edge: Number(Object.keys(s.roads.edges)[0]), side: 1, from: 0, to: 400 }], true);
+const grow = (s: SimState): SimState => applyStroke(s, plan(s).items).sim;
 
 const NO_SITE = { forest: 0, water: 0, rock: 0 };
 const house = found("h", rect(0, 46, 8, 10)); // 80 m², 6 m from the road
 
 describe("foundations as lots", () => {
-  it("a zone builds on its foundation first, in the foundation's shape, at full size", () => {
-    const s = mk([house], "res");
-    expect(foundationLots(s, "res").map((l) => l.f.id)).toEqual(["h"]);
-    expect(foundationLots(s, "craft")).toEqual([]);
-    const grown = spawnBuildings(s);
+  it("a stroke of houses builds on the foundation along it, in the foundation's shape, at full size", () => {
+    const s = mk([house]);
+    expect(plan(s).items.map((it) => it.key)).toEqual(["f:h"]);
+    const grown = grow(s);
     const b = Object.values(grown.buildings)[0];
     expect(b.foundationId).toBe("h");
     expect(b.footprint).toEqual(lotRing(house));
@@ -70,7 +72,7 @@ describe("foundations as lots", () => {
     expect(houseCapacity(b)).toBe(2 * familyCapacity(b));
     expect(maxLevel(b)).toBe(1); // the old building had one floor
     expect(b.door![1]).toBeCloseTo(46, 5); // the wall facing the road
-    expect(foundationLots(grown, "res")).toEqual([]); // built on, it is no longer free
+    expect(plan(grown).items).toEqual([]); // built on, it is no longer free
   });
 
   it("regular lots keep off a free foundation", () => {
@@ -124,12 +126,12 @@ describe("foundations as lots", () => {
     expect(sizeLimit({ techs: ["trusses"] }, BUILDINGS.izba)).toEqual({ area: Infinity, floors: 5 });
     expect(sizeLimit(bare(), BUILDINGS.barn)).toEqual({ area: Infinity, floors: 1 }); // unheated stores: any size, wooden
     expect(sizeLimit({ techs: ["stonework"] }, BUILDINGS.school)).toEqual({ area: 1000, floors: 1 }); // a hall in stone
-    const s = mk([hall], "none", bare());
+    const s = mk([hall], bare());
     expect(canPlaceOnFoundation(s, BUILDINGS.healer, "x")).toMatchObject({ ok: false, reason: "Фундамент велик для этого (400 м²): нужна «Просторное жильё»" });
     expect(canPlaceOnFoundation(s, BUILDINGS.barn, "x").ok).toBe(true);
-    // zone growth leaves it alone until the technology allows it; regular lots still keep off it
-    expect(foundationLots(mk([hall], "res", bare()), "res")).toEqual([]);
-    expect(foundationLots(mk([hall], "res", { ...bare(), techs: ["housing"] }), "res").map((l) => l.f.id)).toEqual(["x"]);
+    // a stroke of houses leaves it alone until the technology allows it; regular lots still keep off it
+    expect(plan(mk([hall], bare())).items).toEqual([]);
+    expect(plan(mk([hall], { ...bare(), techs: ["housing"] })).items.map((it) => it.key)).toEqual(["f:x"]);
   });
 
   it("floors come from the old height; those the technology does not allow yet are added later", () => {
@@ -157,7 +159,7 @@ describe("foundations as lots", () => {
 
   it("a workplace on a foundation regains its floors as soon as the technology allows", () => {
     const shop = found("w", rect(0, 46, 10, 10), { height: 8 }); // two floors
-    const placed = placeOnFoundation(mk([shop], "none", bare()), BUILDINGS.healer, "w");
+    const placed = placeOnFoundation(mk([shop], bare()), BUILDINGS.healer, "w");
     const b = { ...placed.buildings[1], state: "active" as const, done: placed.buildings[1].labor, paid: true };
     expect(b.level).toBe(1);
     expect(dailyServices({ ...placed, buildings: { 1: b } }).buildings[1].upgrade).toBeUndefined();
@@ -166,7 +168,7 @@ describe("foundations as lots", () => {
   });
 
   it("heats a house by its floor area, only while somebody lives in it", () => {
-    const s = spawnBuildings(mk([found("b", rect(0, 46, 20, 12))], "res")); // 240 m²
+    const s = grow(mk([found("b", rect(0, 46, 20, 12))])); // 240 m²
     const b = { ...s.buildings[1], state: "active" as const, done: s.buildings[1].labor };
     const [h1, h2] = Object.values(emptyGrowth(1).households);
     const weather = { ...s.weather, site: s.weather.site ?? ({ lat: 59 } as SimState["weather"]["site"]), yesterday: { ...s.weather.yesterday, min: -20, max: -10 } } as SimState["weather"];
@@ -201,14 +203,14 @@ describe("foundations as lots", () => {
     }
   });
 
-  it("a notable old building is no lot of a zone", () => {
-    const s = mk([found("c", rect(0, 46, 8, 10), { cls: "castle" })], "res");
-    expect(foundationLots(s, "res")).toEqual([]);
+  it("a notable old building is left out of a stroke", () => {
+    const s = mk([found("c", rect(0, 46, 8, 10), { cls: "castle" })]);
+    expect(plan(s).items).toEqual([]);
     expect(canPlaceOnFoundation(s, BUILDINGS.healer, "c").ok).toBe(true); // the player may still give it another purpose
   });
 
   it("a save from before floors keeps every family: a second floor where they no longer fit", () => {
-    const s = spawnBuildings(mk([found("t", rect(0, 46, 6, 6))], "res")); // 36 m²: one family on one floor
+    const s = grow(mk([found("t", rect(0, 46, 6, 6))])); // 36 m²: one family on one floor
     const b: Record<string, unknown> = { ...s.buildings[1], state: "active", done: s.buildings[1].labor, level: 2 };
     delete b.floors;
     const folk = emptyGrowth(1); // the founders
@@ -222,7 +224,7 @@ describe("foundations as lots", () => {
   });
 
   it("round-trips a building on a foundation", () => {
-    const s = spawnBuildings(mk([house], "res"));
+    const s = grow(mk([house]));
     const back = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: s })), NOW + 1)!;
     const b = back.sim.buildings[1];
     expect(b).toMatchObject({ foundationId: "h", scale: s.buildings[1].scale, door: s.buildings[1].door, level: s.buildings[1].level, floors: s.buildings[1].floors, lot: s.buildings[1].lot });

@@ -2,11 +2,12 @@ import type { Speed } from "./clock";
 import type { Light, Rest, Trip } from "../map/life";
 import type { AdminOp } from "./admin";
 import type { SimDelta } from "./delta";
+import type { StrokeSpan } from "./stroke";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { TradeOrder } from "./trade";
 import type { FeatureKind } from "./types";
-import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState, ZoneType } from "./types";
+import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState } from "./types";
 
 export interface ArticleInput {
   id: string;
@@ -22,10 +23,11 @@ export interface ArticleInput {
 
 export type Cmd =
   // pts and labor are local meters / person-hours; labor has one entry per segment.
-  | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[]; span?: number } // span: longest water run (m) of the line, for the bridge span limit
+  // span: longest water run (m) of the line, for the bridge span limit; houses: lay them along both sides of the new road
+  //, once its ground is surveyed
+  | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[]; span?: number; houses?: { template: string; onlyFoundations?: boolean } }
   | { type: "removeRoad"; edgeId: number }
   | { type: "upgradeRoad"; kind: RoadKind; edges: number[]; labor: number[]; span?: number } // labor: each edge built anew as `kind`; span: longest water run of the bridge
-  | { type: "paintZones"; keys: string[]; zone: "none" | ZoneType }
   | { type: "addField"; pts: [number, number][] }
   | { type: "removeField"; id: number }
   // Forest to clear; `forest` is the share 0..1 of the polygon that is forest, measured on the main thread.
@@ -34,6 +36,9 @@ export type Cmd =
   // A player-placed building on the lot starting at depth-0 cell (edge, side, i); `site` is measured on the main thread.
   | { type: "placeBuilding"; template: string; edge: number; side: 1 | -1; i: number; site: Site }
   | { type: "placeOnFoundation"; template: string; foundationId: string }
+  // A row of houses, workshops or shops along roads (sim/stroke.ts); `drop` holds the keys of planned items left out.
+  | { type: "placeStroke"; template: string; spans: StrokeSpan[]; onlyFoundations?: boolean; drop?: string[] }
+  | { type: "cancelStroke"; ids: number[] } // undo of a stroke: its buildings nobody has started on
   // Dig a surveyed outline, or every outline of an old street (sim/digging.ts).
   | { type: "digFoundation"; foundationId: string }
   | { type: "digStreet"; streetId: string }
@@ -41,8 +46,9 @@ export type Cmd =
   | { type: "returnFind"; id: string }
   | { type: "useFind"; id: string }
   | { type: "setExhibition"; building: number; hall: number; theme: string | null }
+  | { type: "arrangeExhibitions" } // the best themes in every hall of the town
   | { type: "demolish"; id: number }
-  // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
+  // Player levers. A site key is a building id, or -id of a clearing; null clears the priority.
   | { type: "setPriority"; key: number | null }
   | { type: "callToloka"; key: number }
   | { type: "setSchedule"; strada: boolean }
@@ -87,6 +93,7 @@ export type ToWorker =
 export interface CmdResult {
   ok: boolean;
   reason?: string;
+  ids?: number[]; // the buildings a placeStroke laid, for its undo
 }
 
 export type FromWorker =

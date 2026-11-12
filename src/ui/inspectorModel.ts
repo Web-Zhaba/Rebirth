@@ -14,6 +14,7 @@ export interface Chip {
 
 // Which workplace has no workers, no input, and so on, from the data the worker returns.
 export function buildingStatus(b: Building, info: BuildingQuery | null, shortfall: boolean): Chip {
+  if (b.state === "planned" && b.awaitsRoad) return { label: L("ждёт дорогу", "awaiting the road"), tone: "warn" };
   if (b.state === "planned") return shortfall ? { label: L("ждёт материалов", "awaiting materials"), tone: "warn" } : { label: L("в очереди", "queued"), tone: "build" };
   if (b.state === "building") return { label: L("строится", "under construction"), tone: "build" };
   if (b.upgrade) return { label: L("перестраивается", "rebuilding"), tone: "build" };
@@ -31,7 +32,7 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
 const CRAFT = new Set(["smithy", "carpentry", "pottery", "weaver"]);
 const TRADE = new Set(["shop", "tavern"]);
 
-// Icon of a building template: houses and zone buildings share their zone's icon, placed ones have their own.
+// Icon of a building template: houses, workshops and shops share their class's icon, other ones have their own.
 export function templateIcon(template: string): IconName {
   if (BUILDINGS[template]?.zone === "res") return "res";
   if (template === "restored") return "foundations";

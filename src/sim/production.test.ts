@@ -18,7 +18,7 @@ import { parseSave } from "./save";
 import { haulHours, haulMetres, Ledger, settleStores, spreadStores, withStock } from "./storage";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, City, Field, Household, Resident, RoadGraph, SaveV4, SimState, Site, TerrainInfo } from "./types";
-import { emptyZones, paintCells, qkey, regenerateCells } from "./zones";
+import { emptyZones, qkey, regenerateCells } from "./zones";
 
 const NOW = 1_800_000_000_000;
 const meadow: TerrainInfo = { land: "meadow", slope: 0 };
@@ -74,8 +74,8 @@ function town(bs: Building[], opts: { gm?: number; fields?: Field[]; roads?: Roa
   const roads = opts.roads ?? roadAlong();
   const fields = opts.fields ?? [];
   const terrain: Record<string, TerrainInfo> = {};
-  for (const c of regenerateCells(roads, [], fields, {})) terrain[qkey(c.cx, c.cy)] = opts.terrain ? opts.terrain(qkey(c.cx, c.cy)) : meadow;
-  const cells = regenerateCells(roads, [], fields, terrain);
+  for (const c of regenerateCells(roads, fields, {})) terrain[qkey(c.cx, c.cy)] = opts.terrain ? opts.terrain(qkey(c.cx, c.cy)) : meadow;
+  const cells = regenerateCells(roads, fields, terrain);
   const buildings: Record<number, Building> = {};
   for (const b of bs) buildings[b.id] = b;
   return {
@@ -611,12 +611,12 @@ describe("placement", () => {
     expect(canPlace(s, t("barn"), edgeId(s), 1, 3, NO_SITE)).toEqual({ ok: true });
     expect(canPlace(s, t("gumno"), edgeId(s), -1, 3, NO_SITE)).toEqual({ ok: true }); // 1 x 2 cells
   });
-  it("rejects bad edges, unbuilt roads, lots running off the road and non-placed templates", () => {
+  it("rejects bad edges, unbuilt roads and lots running off the road; a house fits a lot (strokes lay houses)", () => {
     const s = base();
     const e = edgeId(s);
     expect(canPlace(s, t("barn"), 999, 1, 0, NO_SITE)).toMatchObject({ ok: false, reason: "Нет такой дороги" });
     expect(canPlace(s, t("barn"), e, 1, 99, NO_SITE)).toMatchObject({ ok: false, reason: "Не хватает места вдоль дороги" });
-    expect(canPlace(s, t("izba"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
+    expect(canPlace(s, t("izba"), e, 1, 3, NO_SITE)).toEqual({ ok: true });
     const slow = town([], { roads: road([[0, 0], [160, 0]], 50) });
     expect(canPlace(slow, t("barn"), edgeId(slow), 1, 3, NO_SITE)).toMatchObject({ ok: false, reason: "Дорога ещё не построена" });
   });
@@ -626,9 +626,9 @@ describe("placement", () => {
     const water = (c: { cx: number; cy: number }) => ({ ...s.zones, terrain: { ...s.zones.terrain, [qkey(c.cx, c.cy)]: { land: "water", slope: 0 } as TerrainInfo } });
     const cell = s.zones.cells.find((c) => c.edge === e && c.side === 1 && c.i === 3 && c.depth === 0)!;
     const zones = water(cell);
-    const wet = { ...s, zones: { ...zones, cells: regenerateCells(s.roads, s.zones.cells, [], zones.terrain) } };
+    const wet = { ...s, zones: { ...zones, cells: regenerateCells(s.roads, [], zones.terrain) } };
     expect(canPlace(wet, t("barn"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false, reason: "Здесь вода" });
-    const unknown = { ...s, zones: { ...s.zones, cells: regenerateCells(s.roads, [], [], {}) } };
+    const unknown = { ...s, zones: { ...s.zones, cells: regenerateCells(s.roads, [], {}) } };
     expect(canPlace(unknown, t("barn"), e, 1, 3, NO_SITE)).toMatchObject({ ok: false, reason: "Местность ещё изучается" });
   });
   it("rejects lots under another building and accepts the neighbouring one", () => {
@@ -665,52 +665,23 @@ describe("placement", () => {
       expect(canPlace(wet, t(id), e, 1, 3, NO_SITE)).toMatchObject({ ok: false });
     }
   });
-  it("placing adds a planned building and clears the painted zone under it", () => {
-    let s = base();
+  it("placing adds a planned building on its lot", () => {
+    const s = base();
     const e = edgeId(s);
-    s = { ...s, zones: { ...s.zones, cells: paintCells(s.zones.cells, s.zones.cells.map((c) => c.key), "res") } };
     const placed = placeBuilding(s, t("gumno"), e, 1, 3, { forest: 0.2, water: 0.1, rock: 0 });
     const b = placed.buildings[1];
     expect(b).toMatchObject({ template: "gumno", zone: "placed", state: "planned", paid: false, done: 0, labor: BUILDINGS.gumno.labor, site: { forest: 0.2, water: 0.1, rock: 0 } });
     expect(b.lot).toMatchObject({ w: 2, d: 2 });
     expect(placed.nextBuildingId).toBe(2);
-    expect(placed.zones.rev).toBe(s.zones.rev + 1);
-    const under = placed.zones.cells.filter((c) => c.edge === e && c.side === 1 && (c.i === 3 || c.i === 4) && c.depth < 2);
-    expect(under).toHaveLength(4);
-    expect(under.every((c) => c.zone === "none")).toBe(true);
-    expect(placed.zones.cells.find((c) => c.edge === e && c.side === 1 && c.i === 5 && c.depth === 0)!.zone).toBe("res");
-  });
-  it("growth never builds under a placed building", () => {
-    let s = base();
-    const e = edgeId(s);
-    s = placeBuilding(s, t("gumno"), e, 1, 3, NO_SITE);
-    // paint everything (the barn lot included) so only the occupancy rule keeps the lot free
-    s = { ...s, gameMinutes: at(12, 12), zones: { ...s.zones, cells: paintCells(s.zones.cells, s.zones.cells.map((c) => c.key), "res") } };
-    s = { ...s, lastSpawn: { res: -1e9, craft: -1e9, trade: -1e9 } };
-    for (let k = 0; k < 400; k++) s = step(s);
-    const grown = Object.values(s.buildings).filter((b) => b.id !== 1);
-    expect(grown.length).toBeGreaterThan(2);
-    const g = s.buildings[1];
-    const inLot = (b: Building, x: number, y: number) => {
-      const dx = x - b.lot.cx;
-      const dy = y - b.lot.cy;
-      return Math.abs(dx * Math.cos(b.lot.angle) + dy * Math.sin(b.lot.angle)) <= 4 * b.lot.w + 1e-6 && Math.abs(-dx * Math.sin(b.lot.angle) + dy * Math.cos(b.lot.angle)) <= 4 * b.lot.d + 1e-6;
-    };
-    for (const b of grown) {
-      for (const c of s.zones.cells) {
-        if (c.edge === e && c.side === 1 && c.i === 3 && c.depth < 2) expect(inLot(b, c.cx, c.cy)).toBe(false);
-      }
-      expect(Math.hypot(b.lot.cx - g.lot.cx, b.lot.cy - g.lot.cy)).toBeGreaterThan(7);
-    }
+    expect(placed.zones).toBe(s.zones); // the cells are ground, not paint: placing leaves them as they are
+    expect(canPlace(placed, t("well"), e, 1, 4, NO_SITE)).toMatchObject({ ok: false }); // the lot is taken
   });
   it("reconcile keeps placed buildings unless their road goes", () => {
     let s = base();
     const e = edgeId(s);
     s = placeBuilding(s, t("barn"), e, 1, 3, NO_SITE);
-    // zone data changes under it: still kept
-    const none = s.zones.cells.map((c) => ({ ...c, zone: "none" as const }));
-    expect(reconcile(s.buildings, s.roads, none)).toBe(s.buildings);
-    expect(reconcile(s.buildings, { ...s.roads, edges: {} }, none)).toEqual({});
+    expect(reconcile(s.buildings, s.roads)).toBe(s.buildings);
+    expect(reconcile(s.buildings, { ...s.roads, edges: {} })).toEqual({});
   });
 });
 
@@ -754,7 +725,6 @@ describe("handler: placeBuilding and demolish", () => {
   });
   it("demolish removes any building; workers lose the job and households their house", async () => {
     let s = town([bld(1, "woodcutter", 50), bld(2, "izba", 90)], { roads: road([[0, 0], [160, 0]]), gm: 0 });
-    s = { ...s, zones: { ...s.zones, cells: paintCells(s.zones.cells, s.zones.cells.map((c) => c.key), "res") } };
     s = folk(s, [{ home: 2, adults: 1, job: 1 }]);
     const { h, out, get } = await boot(s);
     expect(Object.values(get().sim.residents)[0].job).toBe(1);
@@ -921,7 +891,7 @@ describe("determinism with production", () => {
   });
 });
 
-describe("logistics (docs/PLAN-balance.md B4)", () => {
+describe("logistics", () => {
   const woods = (extra: Building[] = []) => folk(town([bld(1, "woodcutter", 1500, "active", { forest: 1, water: 0, rock: 0 }), ...extra]), [{ home: null, adults: 2, job: 1 }]);
   it("a producer far from the stores loses hours to carting; a store beside it brings the rate back", () => {
     const far = work(woods());
@@ -971,7 +941,7 @@ describe("logistics (docs/PLAN-balance.md B4)", () => {
   });
 });
 
-describe("administration (docs/PLAN-balance.md B7)", () => {
+describe("administration", () => {
   const crowd = (n: number, extra: Building[] = []) => folk(town([bld(1, "quarry", 50), ...extra]), [{ home: null, adults: 2, job: 1 }, { home: null, adults: n - 2 }]);
   it("past what the offices manage every work rate drops gently, never below the floor", () => {
     expect(overload(ADMIN.elders, ADMIN.elders)).toBe(1);

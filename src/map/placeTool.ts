@@ -10,14 +10,14 @@ import { canPlace, makeBuilding } from "../sim/growth";
 import { previewServiceCoverage } from "../sim/coverage";
 import { lotFront } from "../sim/people";
 import { isService, SERVICES } from "../sim/services";
-import type { Site, ZoneCell } from "../sim/types";
+import type { Site, LotCell } from "../sim/types";
 import { cellCorners } from "../sim/zones";
 import { buildingSet, frame, sendCmd, state, zones } from "../simClient";
 import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, ZONE_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, isStrokeTool, BUILD_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -80,13 +80,13 @@ export function attachPlaceTool(view: View): void {
 
   const active = (): PlaceTool | null => {
     const t = tool.value;
-    return t && isPlaceTool(t) ? t : null;
+    return t && isPlaceTool(t) && !isStrokeTool(t) ? t : null; // houses, workshops and shops go in strokes (strokeTool.ts)
   };
 
-  // ----- cell lookup (rebuilt when the zone state changes) -----
+  // ----- cell lookup (rebuilt when the lot cells change) -----
   let indexFor: unknown = null;
-  let byKey = new Map<string, ZoneCell>();
-  let starts = new Map<number, ZoneCell[]>(); // depth-0 cells, any block state
+  let byKey = new Map<string, LotCell>();
+  let starts = new Map<number, LotCell[]>(); // depth-0 cells, any block state
   const lookup = () => {
     const z = zones.value;
     if (indexFor !== z) {
@@ -103,9 +103,9 @@ export function attachPlaceTool(view: View): void {
       }
     }
   };
-  const nearestStart = (x: number, y: number): ZoneCell | null => {
+  const nearestStart = (x: number, y: number): LotCell | null => {
     lookup();
-    let best: ZoneCell | null = null;
+    let best: LotCell | null = null;
     let bestD = MAX_SNAP_M;
     for (let bx = Math.floor((x - bestD) / BUCKET); bx <= Math.floor((x + bestD) / BUCKET); bx++) {
       for (let by = Math.floor((y - bestD) / BUCKET); by <= Math.floor((y + bestD) / BUCKET); by++) {
@@ -261,7 +261,7 @@ export function attachPlaceTool(view: View): void {
   function refresh(): void {
     const id = active();
     if (!id || !local) return;
-    if (view.metersPerPixel() > ZONE_MAX_MPP) {
+    if (view.metersPerPixel() > BUILD_MAX_MPP) {
       draw(id, null);
       setLabel(L("Приблизьте карту", "Zoom in on the map"));
       return;
@@ -286,7 +286,7 @@ export function attachPlaceTool(view: View): void {
     const id = active();
     const f = frame.value;
     if (!id || !f || busy || spaceDown) return;
-    if (view.metersPerPixel() > ZONE_MAX_MPP) {
+    if (view.metersPerPixel() > BUILD_MAX_MPP) {
       flash(L("Приблизьте карту", "Zoom in on the map"));
       return;
     }
@@ -402,7 +402,7 @@ export function attachPlaceTool(view: View): void {
     tapped = null;
   });
 
-  // Tool switched, or the zones and buildings changed under the cursor: redo the preview.
+  // Tool switched, or the cells and buildings changed under the cursor: redo the preview.
   effect(() => {
     void tool.value;
     void zones.value;

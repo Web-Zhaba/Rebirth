@@ -1,7 +1,7 @@
 import type { XY } from "./modelGeometry";
 
 export const CHUNK = 200;
-export const TREES_FROM_ZOOM = 13.6;
+export const TREES_FROM_ZOOM = 13;
 export const TREE_STRIDE = 6;
 export const TREE_KINDS = ["conifer", "broadleaf", "birch", "bush", "reed", "boulder"] as const;
 export const DETAIL_KINDS = ["bush", "reed", "boulder"] as const;

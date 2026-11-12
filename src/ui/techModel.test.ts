@@ -78,7 +78,7 @@ describe("tech model", () => {
 
   it("lists what a tech opens, with modifiers", () => {
     const v = buildTechView(input());
-    expect(v.nodes.get("trade")!.opens).toEqual(["торговая зона", "рынок"]);
+    expect(v.nodes.get("trade")!.opens).toEqual(["лавки", "рынок"]);
     expect(v.nodes.get("threefield")!.opens).toEqual(["урожай полей +10 %"]);
     expect(modifierLines(TECHS.find((t) => t.id === "trusses")!.modifiers)).toEqual(["свайный мост: пролёт +15 м", "каменный мост: пролёт +40 м"]);
   });

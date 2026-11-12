@@ -3,10 +3,10 @@ import { computed, effect } from "@preact/signals";
 import { attachArticles } from "./map/articles";
 import { attachExcavation } from "./map/excavation";
 import { attachPlaceTool } from "./map/placeTool";
+import { attachStrokeTool } from "./map/strokeTool";
 import { attachRevealTool } from "./map/revealTool";
 import { attachRoadTool } from "./map/roadTool";
-import { attachZoneTool } from "./map/zoneTool";
-import { attachToolRepeat } from "./map/tools";
+import { attachLandTool } from "./map/landTool";
 import { previewClock, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, lifeLights, lifeRests, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
@@ -21,7 +21,7 @@ import { attachBadges } from "./view/layers/badges";
 import { attachBuildingPick } from "./view/layers/buildings";
 import { attachServiceReach } from "./view/layers/reach";
 import { attachSitePick } from "./view/layers/ruins";
-import { attachClearingPick } from "./view/layers/zones";
+import { attachClearingPick } from "./view/layers/land";
 import { App } from "./ui/App";
 import { followResidentById } from "./ui/follow";
 import { lang } from "./i18n";
@@ -84,10 +84,10 @@ function start(view: View): void {
   attachArticleMarkers(view); // the notebook's Wikipedia entries where they belong
   attachServiceReach(); // what a service reaches, and its coverage overlay while one is selected
   attachRoadTool(view);
-  attachZoneTool(view);
+  attachLandTool(view);
   attachPlaceTool(view);
+  attachStrokeTool(view);
   if (import.meta.env.DEV) attachRevealTool(view); // admin-only; production has no admin panel
-  attachToolRepeat(view);
   let centred = false;
   effect(() => {
     const c = city.value;

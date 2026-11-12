@@ -21,6 +21,8 @@ jobs:
   test-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VITE_GD_GAME_ID: ${{ vars.GD_GAME_ID }}
 
     steps:
       - name: Checkout
@@ -41,15 +43,15 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The Yandex Games build: checked against the archive rules, uploaded as an artifact whose zip is ready for
-      # the developer console (index.html at its root).
-      - name: Build for Yandex Games
-        run: npx vite build --mode yandex --outDir dist-yandex && node scripts/pack-yandex.mjs dist-yandex
+      # Every portal build, checked against its portal's archive rules and for other portals' SDKs (publish.yml
+      # makes the release zips). The Yandex one is uploaded as an artifact ready for the developer console.
+      - name: Build for the portals
+        run: npm run build:portals
 
       - name: Upload Yandex Games archive
         uses: actions/upload-artifact@v4
         with:
           name: rebirth-yandex-${{ github.sha }}
-          path: dist-yandex/
+          path: release/yandex/
           if-no-files-found: error
           retention-days: 14

@@ -1,4 +1,4 @@
-﻿/* Layout and access (PLAN-ui.md U8). Loaded after the component stylesheets, so it wins at equal specificity.
+﻿/* Layout and access. Loaded after the component stylesheets, so it wins at equal specificity.
 
    The frame is a set of tar plates on the field: the town plate top-left, the ledger in the middle, the actions
    top-right, the build dock at the foot, the builders' tag bottom-left. The right column belongs to the right slot

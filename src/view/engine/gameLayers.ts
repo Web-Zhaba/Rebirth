@@ -3,7 +3,7 @@ import type { FeatureCollection } from "geojson";
 import type { Engine } from "../../engine/engine";
 import { OVERLAY_PATTERN } from "../../engine/overlay/geometry";
 import type { OverlayLayer } from "../../engine/overlay/overlayRaster";
-import { TRAFFIC_STOPS, ZONE_COLORS } from "../../map/tools";
+import { TRAFFIC_STOPS } from "../../map/tools";
 import { C } from "../../world/biome";
 import { mixHex, PALETTE } from "../../ui/palette";
 import { buildingShapes } from "../layers/buildings";
@@ -13,17 +13,16 @@ import { ruinFloors, ruinGhosts, ruinHints, ruinStreets, ruinTyped, ruinWalls } 
 import { roadTraffic } from "../layers/traffic";
 import { roadLines } from "../layers/roads";
 import { ruinsAutoShown, ruinsShown } from "../ruinsShown";
-import { clearings, fieldDraftPoints, fieldDraftShape, fields, zoneCells, zoneGrid, zoneHover } from "../layers/zones";
+import { clearings, fieldDraftPoints, fieldDraftShape, fields } from "../layers/land";
 import { mppAtZoom } from "../view";
 import { TOOL_OVERLAYS } from "./overlayStyles";
 
-// The game's 2D map on the engine: zones, fields, clearings, roads and lots drawn into the overlay raster from the same
+// The game's 2D map on the engine: fields, clearings, roads and lots drawn into the overlay raster from the same
 // data the old MapLibre layers showed (view/layers/*), in their look and order (bottom first), the tool overlays on top.
 // Their text (clearing percents, names of the old city) is DOM over the canvas: gameLabels.ts.
 
 type P = Record<string, unknown>;
 
-const ZONE_MPP = mppAtZoom(15); // the old zone layers' minzoom
 
 const roadColour = (p: P) =>
   ({ dirt: PALETTE.roadDirt, footbridge: PALETTE.roadBridge, bridge: PALETTE.roadBridge, stone: PALETTE.roadStone, stonebridge: PALETTE.roadStone })[p.kind as string] ?? PALETTE.roadPath;
@@ -46,7 +45,6 @@ const z = mppAtZoom;
 // The hatches of the old fill-pattern images (map/patterns.ts): ink at 55 %, residential dots, craft diagonals, trade
 // cross-hatch (the fallback, as in the old match expression), field furrows.
 const PATTERN_INK = 0.55;
-const ZONE_PATTERN: Record<string, number> = { res: OVERLAY_PATTERN.res, craft: OVERLAY_PATTERN.craft, trade: OVERLAY_PATTERN.trade };
 const ruinState = (p: P) => String(p.s ?? "");
 
 export const GAME_LAYERS: OverlayLayer[] = [
@@ -79,11 +77,6 @@ export const GAME_LAYERS: OverlayLayer[] = [
   { source: "fields", style: { kind: "fill", color: PALETTE.warnFill, opacity: 0.7 } },
   { source: "fields", style: { kind: "fill", color: PALETTE.ink, opacity: PATTERN_INK, pattern: OVERLAY_PATTERN.field } },
   { source: "fields", style: { kind: "line", color: PALETTE.warn, widthPx: 1.5 } },
-  { source: "zone-cells", maxMpp: ZONE_MPP, style: { kind: "fill", color: (p) => ZONE_COLORS[p.zone as keyof typeof ZONE_COLORS] ?? ZONE_COLORS.trade, opacity: (p) => (p.occ ? 0.14 : 0.34) } },
-  { source: "zone-cells", maxMpp: ZONE_MPP, style: { kind: "fill", color: PALETTE.ink, opacity: (p) => PATTERN_INK * (p.occ ? 0.5 : 1), pattern: (p) => ZONE_PATTERN[p.zone as string] ?? OVERLAY_PATTERN.trade } },
-  { source: "zone-grid", maxMpp: ZONE_MPP, style: { kind: "line", color: PALETTE.ink, widthPx: 0.8, opacity: 0.22 } },
-  { source: "zone-hover", maxMpp: ZONE_MPP, style: { kind: "fill", color: PALETTE.paperRaised, opacity: 0.55 } },
-  { source: "zone-hover", maxMpp: ZONE_MPP, style: { kind: "line", color: PALETTE.ink, widthPx: 1 } },
   { source: "field-draft", style: { kind: "fill", color: (p) => (p.ok ? PALETTE.warnFill : PALETTE.badFill), opacity: 0.6 } },
   { source: "field-draft", style: { kind: "line", color: (p) => (p.ok ? PALETTE.warn : PALETTE.bad), widthPx: 2, dash: [2, 1.5] } },
   { source: "field-draft-pts", style: { kind: "circle", radiusPx: 4, color: PALETTE.paperRaised, strokeColor: PALETTE.ink, strokeWidthPx: 2 } },
@@ -117,9 +110,6 @@ const SOURCES: [string, ReadonlySignal<FeatureCollection>][] = [
   ["ruins-hints", shownRuins(ruinHints)],
   ["clearings", clearings],
   ["fields", fields],
-  ["zone-cells", zoneCells],
-  ["zone-grid", zoneGrid],
-  ["zone-hover", zoneHover],
   ["field-draft", fieldDraftShape],
   ["field-draft-pts", fieldDraftPoints],
   ["roads", roadLines],

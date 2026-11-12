@@ -5,11 +5,11 @@ import { COVER_TABLE, coverIdOf } from "../../world/forestMix";
 import { isNatureWater, isNatureWaterway } from "../../world/nature";
 
 // Drape pages: the land's colour and water coverage over one quadtree tile, rasterised from the OpenMapTiles tile of
-// the same place (docs/PLAN-engine.md section 4, "Far world" and "Water") over the biome of the place (world/biomes.ts).
+// the same place ("Far world" and "Water") over the biome of the place (world/biomes.ts).
 // RGB is the atlas colour (sRGB, the palette of world/biome.ts), alpha is water coverage. The terrain shader lights the colour and
 // shades water where alpha is high, so one texture replaces the fill, line, shore and hillshade layers of the old map.
 //
-// The same page carries the vegetation cover for the GPU tree scatter (N5, `rasterCover`): an 8-bit class id per texel
+// The same page carries the vegetation cover for the GPU tree scatter (`rasterCover`): an 8-bit class id per texel
 // (world/forestMix.ts COVER_TABLE, 0 = nothing grows), rasterised without antialiasing so every texel is one class, the
 // first feature of the tile winning like the old scatter's point-in-polygon tests.
 //
@@ -99,8 +99,7 @@ function pageWindow(src: DrapeSource, z: number, x: number, y: number): { ox: nu
 
 // The land's base colour under page (z, x, y), RGBA row by row: the biome field (world/biomes.ts) sampled on a
 // (BASE_GRID + 1)^2 grid of points from edge to edge, so neighbouring pages share their edge samples, and bilinearly
-// spread over the texels. Far pages show the biome as seen from orbit, near ones its open ground
-// (docs/PLAN-biomes.md step 3).
+// spread over the texels. Far pages show the biome as seen from orbit, near ones its open ground.
 const BASE_GRID = 64;
 export function biomeBase(map: BiomeMap, z: number, x: number, y: number): Uint8ClampedArray<ArrayBuffer> {
   const G = BASE_GRID;

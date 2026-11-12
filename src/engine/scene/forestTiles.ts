@@ -1,7 +1,7 @@
 import { enuAt, geodeticToEcef, type Vec3 } from "../geo/ellipsoid";
 import { tileToLngLat } from "../geo/mercator";
 
-// Which tiles the GPU tree scatter (scene/forest.ts) runs over this frame and how thinly (docs/PLAN-engine.md N5).
+// Which tiles the GPU tree scatter (scene/forest.ts) runs over this frame and how thinly.
 // Candidates sit on a jittered grid in web-mercator tiles of SCATTER_ZOOM, so a tree keeps its place wherever the camera
 // goes; far tiles run only every 2nd or 4th row and column (nested subsets: thinning drops trees, never moves them) and
 // the shader keeps each candidate with the distance's share, like the old layer's `keepAt`. A budget fixes the reach of

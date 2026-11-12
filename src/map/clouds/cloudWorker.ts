@@ -1,7 +1,7 @@
 import { buildBaseNoise, buildDetailNoise } from "./noise3d";
 import { buildCubeFace, FACES, stormCells } from "./weatherCube";
 
-// Worker that builds the weather cube and the noise volumes (PLAN-clouds.md section 4). No three.js, plain buffers.
+// Worker that builds the weather cube and the noise volumes. No three.js, plain buffers.
 
 export type ToCloudWorker =
   | { t: "cube"; id: number; t0: number; seed: number; phase: number; size: number }

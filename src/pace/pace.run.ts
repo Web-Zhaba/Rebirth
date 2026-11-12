@@ -11,11 +11,12 @@ import { isFinishedHouse } from "../sim/people";
 import type { Cmd, FromWorker } from "../sim/protocol";
 import { segmentCost, type TerrainProfile } from "../sim/roads";
 import { dayOf } from "../sim/time";
+import { planStroke, type StrokeSpan } from "../sim/stroke";
 import { isUnlocked, TECHS } from "../sim/tech";
-import type { ClientState, Site, ZoneCell } from "../sim/types";
+import type { ClientState, Site, ZoneType } from "../sim/types";
 import { emptyWeather } from "../sim/weather";
 
-// Pacing harness (PLAN-pace.md P0): plays a fixed build order through the real Handler on a flat synthetic
+// Pacing harness: plays a fixed build order through the real Handler on a flat synthetic
 // site, driving it with a fake wall clock, and reports the real time (at speed 1x) of each pacing milestone.
 
 declare const process: { stdout: { write(s: string): void }; stderr: { write(s: string): void }; env: Record<string, string | undefined> }; // no @types/node in the project
@@ -33,7 +34,7 @@ it("pacing harness", async () => {
   const results = new Map<number, { ok: boolean; reason?: string }>();
   const post = (m: FromWorker) => {
     if (m.t === "loaded" && m.save) st = m.save.sim;
-    else if (m.t === "snapshot") st = { ...applyDelta(st, m.sim), zones: m.zones ?? st.zones, chronicle: m.chronicle ?? st.chronicle };
+    else if (m.t === "snapshot") st = { ...applyDelta(st, m.sim), zones: m.zones ?? st.zones, chronicle: m.chronicle ?? st.chronicle, finds: m.finds ?? st.finds };
     else if (m.t === "cmdResult") results.set(m.id, m);
     else if (m.t === "error") throw new Error(m.message);
   };
@@ -43,8 +44,8 @@ it("pacing harness", async () => {
   const h = new Handler(mem, post, async () => ({ land: "meadow", slope: 0 }), async () => 200);
   await h.handle({ t: "found", city: { name: "Тест", lat: weather ? 50 : 59.12, lng: 37.9, foundedAt: T0 }, now: T0 });
   if (!weather) h["save"]!.sim.weather = emptyWeather();
-  // PACE_FOUNDATION=1: two old foundations of 240 m² by the first houses (docs/PLAN-restoration.md RB1): one of a
-  // five-storey building (19 m), one of unknown height. The zone builds on them first; their floors follow the techs.
+  // PACE_FOUNDATION=1: two old foundations of 240 m² by the first houses: one of a
+  // five-storey building (19 m), one of unknown height. The house strokes take them first; their floors follow the techs.
   const foundations = process.env.PACE_FOUNDATION === "1";
   if (foundations) {
     const sim = h["save"]!.sim;
@@ -81,9 +82,36 @@ it("pacing harness", async () => {
     roadEnd = to;
     return send(`path to ${to} m`, { type: "addRoad", kind: "path", pts, snapTol: 6, labor });
   };
-  const paint = (what: string, zone: "res" | "craft" | "trade", keep: (c: ZoneCell) => boolean) => {
-    const keys = st.zones.cells.filter(keep).map((c) => c.key);
-    return send(`${what} (${keys.length} cells)`, { type: "paintZones", keys, zone });
+  // Where the player lays each class: stretches of the road (x from, to), as the zones were painted before
+  // strokes replaced them; a stretch of new road is added when the class runs out of ground.
+  const stretches: Record<ZoneType, [number, number][]> = { res: [], craft: [], trade: [] };
+  const allow = (cls: ZoneType, from: number, to: number, what: string) => {
+    stretches[cls].push([from, to]);
+    log.push(`${stamp()}  ok    ${what} ${Math.round(from)}-${Math.round(to)} m`);
+  };
+  const spansAll = (): StrokeSpan[] => {
+    const out: StrokeSpan[] = [];
+    for (const e of Object.values(st.roads.edges)) {
+      const a = st.roads.nodes[e.a];
+      const b = st.roads.nodes[e.b];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      for (const side of [1, -1] as const) out.push({ edge: e.id, side, from: 0, to: len });
+    }
+    return out;
+  };
+  // One building of `template` laid by a stroke over the whole road with every other planned item dropped: a
+  // foundation in its class's stretches first, else the westmost free lot there.
+  const lay = async (template: string): Promise<boolean> => {
+    const t = BUILDINGS[template];
+    const cls = t.zone as ZoneType;
+    const spans = spansAll();
+    const plan = planStroke(st, t, spans);
+    const inside = (x: number) => stretches[cls].some(([a, b]) => x >= a && x <= b);
+    const ok = plan.items.filter((it) => inside(it.building.lot.cx));
+    const pick = ok.find((it) => it.kind !== "lot") ?? [...ok].sort((p, q) => p.building.lot.cx - q.building.lot.cx)[0];
+    if (!pick) return false;
+    const drop = plan.items.filter((it) => it !== pick).map((it) => it.key);
+    return send(`${pick.building.template} (${pick.kind}) at x=${Math.round(pick.building.lot.cx)}`, { type: "placeStroke", template, spans, drop });
   };
   // First lot of `template` at or east of x on the given side of the road (side 1 = north), if one can be built now.
   const lotFor = (template: string, side: 1 | -1, x: number, site: Site = NONE) => {
@@ -107,16 +135,44 @@ it("pacing harness", async () => {
   const houses = () => Object.values(st.buildings).filter(isFinishedHouse).length;
   const unlocked = (key: string) => isUnlocked(st.progress, key);
   const ready = (n: number) => houses() >= n && roadBuilt(200);
-  // Out of lots: residential demand has asked for a house for a whole game day and none has appeared.
-  let resCount = 0;
-  let resSince = 0;
-  const outOfLots = () => {
-    const n = Object.values(st.buildings).filter((b) => b.zone === "res").length;
-    if (n !== resCount || st.people.demand.res < 1) {
-      resCount = n;
-      resSince = st.gameMinutes;
+  // How many more buildings of a class the town could use, by the demand rules the zones grew by before
+  // strokes replaced them: a house while families wait for one, workshops and shops by the population.
+  const jobsOf = (cls: ZoneType) => Object.values(st.buildings).reduce((n, b) => n + (b.zone === cls ? BUILDINGS[b.template].jobs : 0), 0);
+  const wanted = (cls: ZoneType) => {
+    const p = st.people;
+    if (cls === "res") {
+      // a planned house counts in full, one being built half; open jobs draw families, so houses for them
+      let planned = 0;
+      let started = 0;
+      for (const b of Object.values(st.buildings)) if (b.zone === "res") b.state === "planned" ? planned++ : b.state === "building" && started++;
+      const open = p.jobs.groups.reduce((n, g) => n + g.open, 0);
+      return 1.5 + 0.5 * open + p.housing.tents - p.housing.free - planned - 0.5 * started;
     }
-    return st.gameMinutes - resSince >= 1440;
+    if (cls === "craft") return (0.2 * p.pop - jobsOf("craft")) / 7 + p.unemployed / 6;
+    return (0.07 * p.pop - jobsOf("trade")) / 4;
+  };
+  // A sensible player lays one building of a class at most every game hour while the town wants it.
+  const CLASS_TEMPLATES: Record<ZoneType, string[]> = { res: ["izba", "izba5"], craft: ["weaver", "pottery", "carpentry", "smithy"], trade: ["shop", "tavern"] };
+  const lastLay: Record<ZoneType, number> = { res: -60, craft: -60, trade: -60 };
+  const turn: Record<ZoneType, number> = { res: 0, craft: 0, trade: 0 };
+  let resSince = 0;
+  let outOfLots = false; // houses wanted for a whole game day and no ground for one
+  const build = async () => {
+    for (const cls of ["res", "craft", "trade"] as const) {
+      if (stretches[cls].length === 0 || st.gameMinutes - lastLay[cls] < 60 || wanted(cls) < 1) {
+        if (cls === "res") resSince = st.gameMinutes;
+        continue;
+      }
+      const list = CLASS_TEMPLATES[cls];
+      let laid = false;
+      for (let k = 0; k < list.length && !laid; k++) laid = await lay(list[(turn[cls] + k) % list.length]);
+      if (laid) {
+        turn[cls]++;
+        lastLay[cls] = st.gameMinutes;
+        if (cls === "res") resSince = st.gameMinutes;
+      }
+    }
+    outOfLots = st.gameMinutes - resSince >= 1440;
   };
 
   // Fields of 2 ha (100 x 200 m, 4 m apart) north of the road, in slots 0, +1, -1, +2, ... east and west of the first one.
@@ -149,13 +205,13 @@ it("pacing harness", async () => {
     // a sensible player puts construction first while the town is being raised
     { when: () => true, run: () => send("job priority: construction high", { type: "setJobPriority", group: "build", priority: 3 }) },
     { when: () => true, run: () => extendRoad(200) },
-    { when: () => true, run: () => paint("residential zone 0-120 m", "res", (c) => c.cx <= 120 && c.zone === "none") },
+    { when: () => true, run: async () => allow("res", 0, 120, "houses along") },
     { when: () => ready(3), run: () => place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 }) },
-    // a sensible player waits for the research: the sawpit comes with carpentry, the craft zone with crafts
+    // a sensible player waits for the research: the sawpit comes with carpentry, the workshops with crafts
     { when: () => unlocked("sawpit") && roadBuilt(200), run: () => placeFirst("sawpit", -1, 140) },
     { when: () => ready(5), run: () => place("well", -1, 170) },
-    { when: () => ready(3) && unlocked("zone:craft"), run: () => paint("craft zone 130-170 m", "craft", (c) => c.cx >= 130 && c.cx <= 170 && c.zone === "none" && !c.block) },
-    { when: () => ready(5) && unlocked("zone:trade"), run: () => paint("trade zone 120-200 m", "trade", (c) => c.cx > 120 && c.cx <= 200 && c.zone === "none" && !c.block) },
+    { when: () => ready(3) && unlocked("workshop"), run: async () => allow("craft", 130, 170, "workshops along") },
+    { when: () => ready(5) && unlocked("shop"), run: async () => allow("trade", 120, 200, "shops along") },
     { when: () => ready(5), run: () => place("dig", -1, 190) },
     // 0.5 ha south of the road, forest 0.8 as measured on a real site (the synthetic land itself is meadow); after the
     // gumno, which must stand before the end of spring to sow.
@@ -171,7 +227,7 @@ it("pacing harness", async () => {
   const marks: { label: string; hit: () => boolean; at?: { ms: number; day: number; pop: number } }[] = [
     { label: "First house finished", hit: () => houses() >= 1 },
     { label: "First tech", hit: () => st.progress.techs.length >= 1 },
-    { label: "Craft zone open (crafts)", hit: () => unlocked("zone:craft") },
+    { label: "Workshops open (crafts)", hit: () => unlocked("workshop") },
     { label: "Half of era I techs", hit: () => st.progress.techs.length >= 8 },
     { label: "Era II", hit: () => st.progress.era >= 2 },
     { label: "Sawpit finished", hit: () => Object.values(st.buildings).some((b) => b.template === "sawpit" && b.state === "active") },
@@ -231,18 +287,20 @@ it("pacing harness", async () => {
       break;
     }
     await tillMore();
-    // The zone ran out of lots: lengthen the road and zone the new stretch.
-    if (done.size === steps.length && outOfLots()) {
+    await build();
+    // The houses ran out of ground: lengthen the road and lay houses along the new stretch.
+    if (done.size === steps.length && outOfLots) {
       const from = roadEnd;
       await extendRoad(roadEnd + 50);
-      await paint(`residential zone ${from}-${roadEnd} m`, "res", (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
+      allow("res", from - 8, roadEnd, "houses along");
+      resSince = st.gameMinutes;
     }
     // Logs run short while sites wait: one more woodcutter per five houses (a sensible player feeds the building sites).
     const cutters = Object.values(st.buildings).filter((b) => b.template === "woodcutter").length;
     if (done.size === steps.length && st.stock.logs < BUILDINGS.izba.materials.logs && cutters > 0 && cutters < 1 + Math.floor(houses() / 5)) {
       await place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 });
     }
-    // A store group nearly full: a sensible player puts a store of that kind by the producers (docs/PLAN-balance.md B4).
+    // A store group nearly full: a sensible player puts a store of that kind by the producers.
     if (unlocked("barn"))
       for (const [group, tpl] of [["food", "barn"], ["wood", "logyard"], ["stone", "stoneyard"], ["goods", "warehouse"]] as const) {
         const used = STORE_GROUPS[group].reduce((n, k) => n + st.stock[k], 0);
@@ -250,7 +308,7 @@ it("pacing harness", async () => {
         const low = group === "food" ? houses() >= 10 && capacityOf(st.buildings, group) - used < 0.5 * CAMP_STORE.food : capacityOf(st.buildings, group) - used < 0.1 * CAMP_STORE[group]; // a barn once the first houses stand
         if (!pending && low) await place(tpl, -1, 130);
       }
-    // The administration nears its limit: a sensible player puts up the town hall, then district offices (docs/PLAN-balance.md B7).
+    // The administration nears its limit: a sensible player puts up the town hall, then district offices.
     {
       const adm = st.economy.admin;
       const offices = Object.values(st.buildings).filter((b) => b.template === "townhall" || b.template === "office");
@@ -269,18 +327,18 @@ it("pacing harness", async () => {
         await send("call settlers", { type: "callSettlers" });
       }
     }
-    // Jobless adults: zone a stretch of new road for workshops, then shops (a sensible player makes jobs for the people).
-    if (done.size === steps.length && st.people.unemployed >= 6 && unlocked("zone:craft") && dayOf(st.gameMinutes) >= lastJobsDay + 2) {
+    // Jobless adults: a stretch of new road for workshops, then shops (a sensible player makes jobs for the people).
+    if (done.size === steps.length && st.people.unemployed >= 6 && unlocked("workshop") && dayOf(st.gameMinutes) >= lastJobsDay + 2) {
       lastJobsDay = dayOf(st.gameMinutes);
       const from = roadEnd;
-      const zone = unlocked("zone:trade") && jobsStretches++ % 2 === 1 ? "trade" : "craft";
+      const cls = unlocked("shop") && jobsStretches++ % 2 === 1 ? "trade" : "craft";
       await extendRoad(roadEnd + 50);
-      await paint(`${zone} zone ${from}-${roadEnd} m`, zone, (c) => c.cx > from - 8 && c.zone === "none" && !c.block);
+      allow(cls, from - 8, roadEnd, cls === "craft" ? "workshops along" : "shops along");
     }
     if (process.env.PACE_DEBUG && dayOf(st.gameMinutes) !== lastDebugDay) {
       lastDebugDay = dayOf(st.gameMinutes);
       const a = st.attraction;
-      process.stderr.write(`d${lastDebugDay + 1} pop ${st.people.pop} houses ${houses()} free ${st.inflow.free} score ${a.score.toFixed(2)} food ${a.food.toFixed(2)} mood ${a.mood.toFixed(2)} jobs ${a.jobs.toFixed(2)} serv ${a.services.toFixed(2)} perDay ${st.inflow.perDay.toFixed(2)} admin ${st.economy.admin.capacity.toFixed(0)} x${st.economy.admin.factor.toFixed(2)} demand ${st.people.demand.res.toFixed(1)}
+      process.stderr.write(`d${lastDebugDay + 1} pop ${st.people.pop} houses ${houses()} free ${st.inflow.free} score ${a.score.toFixed(2)} food ${a.food.toFixed(2)} mood ${a.mood.toFixed(2)} jobs ${a.jobs.toFixed(2)} serv ${a.services.toFixed(2)} perDay ${st.inflow.perDay.toFixed(2)} admin ${st.economy.admin.capacity.toFixed(0)} x${st.economy.admin.factor.toFixed(2)} houses wanted ${wanted("res").toFixed(1)}
 `);
     }
     if (foundations) {

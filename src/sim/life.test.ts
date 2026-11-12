@@ -366,8 +366,8 @@ describe("families on their way", () => {
     const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
     const base = town([building(1, "izba", 500)], []);
     const terrain: Record<string, TerrainInfo> = {};
-    for (const c of regenerateCells(base.roads, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
-    const cells = regenerateCells(base.roads, [], [], terrain).map((c) => (c.block ? c : { ...c, zone: "res" as const }));
+    for (const c of regenerateCells(base.roads, [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
+    const cells = regenerateCells(base.roads, [], terrain);
     const s = { ...base, zones: { ...emptyZones(), cells, terrain, rev: 1 }, realTime: NOW, gameMinutes: 300, attraction: { food: 1, mood: 1, jobs: 1, services: 1, score: 1, cap: 1e6 } }; // mid-day, no daily step in sight
     const mem: Storage = { get: async () => ({ version: 4, city, sim: JSON.parse(JSON.stringify(s)) }), put: async () => {}, clear: async () => {} };
     const h = new Handler(mem, (m) => out.push(m));

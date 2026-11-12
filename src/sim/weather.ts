@@ -1,7 +1,7 @@
 import { DAYS_PER_SEASON, DAY_MIN, START_MINUTE_OF_DAY, YEAR_MIN, YEAR_SCALE, dayOf } from "./time";
 import type { SimState } from "./types";
 
-// Deterministic climate model (design: PLAN-weather.md). Pure: the same inputs give the same outputs.
+// Deterministic climate model. Pure: the same inputs give the same outputs.
 
 export interface Weather {
   temp: number; // °C at the site

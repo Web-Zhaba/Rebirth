@@ -4,7 +4,7 @@ import { pointInRing } from "../sim/excavation";
 import { heritageDomain, heritageKind, isCurated } from "../sim/heritage";
 import { HINT_BAND, ringCentroid, type Disc, type Foundation, type OldWorld, type Spot, type XY } from "../world/oldworld";
 
-// Notable old buildings (PLAN-research.ru.md sections 3 and 7): a curated POI inside a foundation ring types it.
+// Notable old buildings: a curated POI inside a foundation ring types it.
 // Pure helpers plus the two signals the ruins layer draws from.
 
 export const TYPED_PER_DISC = 60;

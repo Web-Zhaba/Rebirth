@@ -1,12 +1,13 @@
 import { cross, dot, normalize, type Vec3 } from "../geo/ellipsoid";
 import type { Mat4 } from "../camera/projection";
 
-// The sun's orthographic shadow camera (docs/PLAN-shadows.md section 3): one local map around the camera target,
+// The sun's orthographic shadow camera: one local map around the camera target,
 // texel-snapped in absolute ECEF so it does not shimmer while the camera moves. The map's content depends only on the
 // snapped frame below; the matrix the GPU uses is rebuilt from it every frame against the eye, so positions stay
 // camera-relative (f64 here, f32 on the GPU) like everything else in the engine.
 
-export const SHADOW_FADE = { near: 400, far: 1200 }; // m above the ground: full shadows below, none above
+export const SHADOW_FADE = { near: 900, far: 2600 }; // m above the ground on a 2048 map: full shadows below, none above
+const FULL_SIZE = 2048; // a smaller map carries its texels half as far
 export const SUN_STEP = 0.002; // rad the sun may wander before the map is re-rendered (a 10 m wall's shadow: < 10 cm)
 
 export interface ShadowFrame {
@@ -20,15 +21,17 @@ export interface ShadowFrame {
 }
 
 // The map's half-extent by the eye's distance to the target (a tilted view sees ground well beyond its height): steps,
-// not a smooth curve, so texels keep their size (and the snapping its grid) while the camera zooms.
-export function shadowRadius(distance: number): number {
-  return distance < 180 ? 200 : distance < 450 ? 400 : 800;
+// not a smooth curve, so texels keep their size (and the snapping its grid) while the camera zooms. The widest step
+// is only for a full-size map: on a smaller one its texels would be wider than a house's shadow.
+export function shadowRadius(distance: number, size = FULL_SIZE): number {
+  return distance < 180 ? 200 : distance < 450 ? 400 : distance < 1000 || size < FULL_SIZE ? 800 : 1600;
 }
 
 // Shadows dissolve as the camera rises, handing over to the cloud shading, and as the sun reaches the horizon (where
 // they would stretch across the whole map). `sunUp` is the sine of the sun's elevation at the target.
-export function shadowFade(eyeAboveGround: number, sunUp: number): number {
-  const height = 1 - smoothstep(SHADOW_FADE.near, SHADOW_FADE.far, eyeAboveGround);
+export function shadowFade(eyeAboveGround: number, sunUp: number, size = FULL_SIZE): number {
+  const k = Math.min(1, size / FULL_SIZE);
+  const height = 1 - smoothstep(SHADOW_FADE.near * k, SHADOW_FADE.far * k, eyeAboveGround);
   return height * smoothstep(0.02, 0.08, sunUp);
 }
 
@@ -86,7 +89,7 @@ export function shadowCovers(f: ShadowFrame, center: Vec3, radius: number): bool
   return Math.abs(dot(d, f.right)) <= f.radius + radius && Math.abs(dot(d, f.up)) <= f.radius + radius && Math.abs(dot(d, f.fwd)) <= f.depth / 2 + radius;
 }
 
-// The map's version (docs/PLAN-shadows.md section 4.2): it is re-rendered only when what it was baked from changed —
+// The map's version: it is re-rendered only when what it was baked from changed —
 // the stepped sun, the snapped frame, the casters' versions or the view the casters were culled for. A still camera
 // costs nothing.
 export class ShadowCache {

@@ -73,7 +73,7 @@ export function attachPlaceLabels(engine: Engine, container: HTMLElement): void 
   // the zoom changes.
   const want = (): string[] => {
     const s = engine.state;
-    const mpp = (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, engine.canvas.clientHeight);
+    const mpp = engine.metersPerPixel();
     const z = labelTileZoom(mpp, s.lat);
     const n = 2 ** z;
     const c = lngLatToTile(s.lng, s.lat, z);
@@ -129,8 +129,8 @@ export function attachPlaceLabels(engine: Engine, container: HTMLElement): void 
     if (!placeLabelsOn.peek() || !engine.view) return;
     const keys = want();
     if (keys.every((k) => Array.isArray(tiles.get(k)))) shown = keys;
-    const w = engine.canvas.clientWidth;
-    const h = engine.canvas.clientHeight;
+    const w = engine.width;
+    const h = engine.height;
     const eye = engine.view.eye;
     const far = FAR * engine.state.distance + 2000;
     const places: Place[] = [];

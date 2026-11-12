@@ -1,6 +1,6 @@
 import { signal } from "@preact/signals";
 
-// Player choices for the clouds (PLAN-clouds.md section 7), kept in localStorage.
+// Player choices for the clouds, kept in localStorage.
 
 export type CloudQuality = "low" | "medium" | "high";
 export const CLOUD_QUALITIES: CloudQuality[] = ["low", "medium", "high"];

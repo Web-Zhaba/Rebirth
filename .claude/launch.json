@@ -16,7 +16,7 @@
     {
       "name": "yandex-preview",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "preview", "--outDir", "dist-yandex", "--port", "5190", "--strictPort", "--host", "127.0.0.1"],
+      "runtimeArgs": ["vite", "preview", "--outDir", "release/yandex", "--port", "5190", "--strictPort", "--host", "127.0.0.1"],
       "port": 5190
     }
   ]

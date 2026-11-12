@@ -3,7 +3,7 @@ import { STREET, streetFoundations, streetProgress } from "../sim/streets";
 import type { FoundPlace, SimState } from "../sim/types";
 import { pointInRing } from "../sim/excavation";
 
-// Pure view model of the town panel's places tab (docs/PLAN-restoration.md section 4): how recognisable each dig's place
+// Pure view model of the town panel's places tab: how recognisable each dig's place
 // is again, and how far each old street is from getting its name back.
 
 // The street whose line is nearest to a point, within the reach of its houses.

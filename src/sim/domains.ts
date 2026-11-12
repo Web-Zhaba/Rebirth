@@ -1,5 +1,5 @@
 import { L } from "../i18n";
-// Knowledge domains (PLAN-research.ru.md): every technology belongs to one, and a restored old building feeds the
+// Knowledge domains: every technology belongs to one, and a restored old building feeds the
 // domain of its type. Shared by the tech tree and the heritage finds.
 export type DomainId = "build" | "farm" | "craft" | "trade" | "learn" | "care";
 

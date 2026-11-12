@@ -7,8 +7,9 @@ import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clea
 import { scarcity } from "./heritage";
 import { loseSite } from "./restore";
 import { orderDig, orderStreetDig } from "./digging";
+import { applyStroke, cancelPlans, newRoadEdges, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
 import { returnFind, useFind } from "./items";
-import { museumDaily, setExhibition } from "./museum";
+import { arrangeExhibitions, museumDaily, museumStaff, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
 import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
@@ -17,7 +18,7 @@ import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
 import { snapshotDelta, type Posted } from "./delta";
 import { refreshServices, serviceStats } from "./coverage";
-import { canPlace, canPlaceOnFoundation, placeOnFoundation, demand, emptyGrowth, growthAdvice, placeBuilding, reconcile, seedOf } from "./growth";
+import { canPlace, canPlaceOnFoundation, placeOnFoundation, emptyGrowth, placeBuilding, reconcile, seedOf } from "./growth";
 import { freeHomes, peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
 import { inflowPerDay } from "./attraction";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
@@ -29,9 +30,17 @@ import { dayOf } from "./time";
 import { startWeather, type WeatherState } from "./weather";
 import { fieldProgress } from "./fields";
 import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
-import { emptyZones, nextFieldId, paintCells, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
+import { emptyZones, nextFieldId, pendingKeys, qkey, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 import { L } from "../i18n";
+
+// A road drawn «с домами»: the template to lay along both sides of its edges once their cells are surveyed.
+interface RoadHouses {
+  city: unknown; // the town it was drawn in
+  edges: number[];
+  template: string;
+  only: boolean; // only foundations
+}
 
 export interface Storage {
   get(): Promise<unknown>;
@@ -64,8 +73,9 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   for (const id in houseMood) houseMood[id] = Math.round(houseMood[id]);
   const houseGoodsShare = Object.fromEntries(houseGoods(sim.households));
   const ps = peopleStats(sim);
-  const dem = demand(sim);
-  return { ...rest, people: { ...ps, demand: dem, growth: growthAdvice(sim, dem, ps.builders), jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim) };
+  const free = freeHomes(sim.buildings, sim.households, sim.incoming).length;
+  const underway = Object.values(sim.buildings).filter((b) => b.zone === "res" && b.state !== "active").length;
+  return { ...rest, people: { ...ps, housing: { tents: ps.tents, free, underway }, jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim), museumStaff: museumStaff(sim) };
 }
 
 // The inflow the town draws right now: its free homes and the families a day they bring (attraction.ts).
@@ -111,6 +121,7 @@ export class Handler {
   private queue: ToWorker[] = [];
   private enriching: Promise<void> | null = null;
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
+  private roadHouses: RoadHouses[] = []; // roads drawn «с домами» waiting for their ground to be surveyed
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   // What the main thread's visual life was drawn from: the game day, the families on their way, the residents (their
   // jobs, homes and classes) and the levers (work hours, toloka); a change in any of them draws it anew.
@@ -210,11 +221,11 @@ export class Handler {
     while (this.queue.length > 0 && !this.busy) await this.handle(this.queue.shift()!);
   }
 
-  // Cells are derived data: rebuild them so saves without zones (or with stale ones) are consistent.
+  // Cells are derived data: rebuild them so saves without them (or with stale ones) are consistent.
   private settle(sim: SimState): SimState {
     const z = sim.zones;
-    const cells = regenerateCells(sim.roads, z.cells, z.fields, z.terrain);
-    return refreshServices(syncPeople({ ...sim, zones: { ...z, cells, rev: z.rev + 1 }, buildings: reconcile(sim.buildings, sim.roads, cells) }));
+    const cells = regenerateCells(sim.roads, z.fields, z.terrain);
+    return refreshServices(syncPeople({ ...sim, zones: { ...z, cells, rev: z.rev + 1 }, buildings: reconcile(sim.buildings, sim.roads) }));
   }
 
   private async load(legacy: string | null, now: number): Promise<void> {
@@ -309,7 +320,7 @@ export class Handler {
   }
 
   private rezone(z: ZoneState, roads: RoadGraph, fields: Field[]): ZoneState {
-    return { ...z, fields, cells: regenerateCells(roads, z.cells, fields, z.terrain), rev: z.rev + 1 };
+    return { ...z, fields, cells: regenerateCells(roads, fields, z.terrain), rev: z.rev + 1 };
   }
 
   // Samples terrain for cells still pending; results are merged and cells regenerated per batch.
@@ -355,8 +366,9 @@ export class Handler {
           if (Object.keys(got).length === 0) continue;
           const z = cur.sim.zones;
           const zones = this.rezone({ ...z, terrain: { ...z.terrain, ...got } }, cur.sim.roads, z.fields);
-          const buildings = reconcile(cur.sim.buildings, cur.sim.roads, zones.cells);
+          const buildings = reconcile(cur.sim.buildings, cur.sim.roads);
           this.save = { ...cur, sim: syncPeople({ ...cur.sim, zones, buildings }) };
+          this.layRoadHouses();
           this.postSnapshot();
           try {
             await this.storage.put(this.save);
@@ -370,6 +382,26 @@ export class Handler {
     }
   }
 
+  // Lays the houses of the roads drawn «с домами» whose ground is surveyed: a stroke along both sides of the new edges.
+  // A request waits while a cell of its edges waits for terrain; it is dropped once laid, or when its town or edges went.
+  private layRoadHouses(): void {
+    if (!this.save || this.roadHouses.length === 0) return;
+    let sim = this.save.sim;
+    const keep: RoadHouses[] = [];
+    for (const r of this.roadHouses) {
+      const edges = r.edges.filter((e) => Object.hasOwn(sim.roads.edges, e));
+      if (r.city !== this.save.city || edges.length === 0) continue;
+      const on = new Set(edges);
+      if (sim.zones.cells.some((c) => on.has(c.edge) && c.block === "pending" && !this.failed.has(qkey(c.cx, c.cy)))) {
+        keep.push({ ...r, edges });
+        continue;
+      }
+      sim = applyStroke(sim, planStroke(sim, BUILDINGS[r.template], roadSpans(sim.roads, edges), r.only).items).sim;
+    }
+    this.roadHouses = keep;
+    if (sim !== this.save.sim) this.save = { ...this.save, sim: refreshServices(syncPeople(sim)) };
+  }
+
   private async command(id: number, cmd: Cmd): Promise<void> {
     const reject = (reason: string) => this.post({ t: "cmdResult", id, ok: false, reason });
     try {
@@ -378,6 +410,7 @@ export class Handler {
       const roads = sim.roads;
       const z = sim.zones;
       let next: RoadGraph = roads;
+      let houses: RoadHouses | null = null;
       let zones: ZoneState;
       if (cmd.type === "addRoad") {
         const bad = validateAddRoad(cmd);
@@ -390,6 +423,11 @@ export class Handler {
         if (!r.ok) return reject(r.reason);
         next = r.graph;
         zones = this.rezone(z, next, z.fields);
+        const t = cmd.houses ? strokeTemplate(cmd.houses.template) : null;
+        // a house template the town cannot build yet leaves the road without them
+        if (t && !(lockReason(sim, t.zone) ?? lockReason(sim, t.id))) {
+          houses = { city: this.save.city, edges: newRoadEdges(roads, next), template: t.id, only: cmd.houses?.onlyFoundations === true };
+        }
       } else if (cmd.type === "upgradeRoad") {
         const bad = validateUpgradeRoad(cmd);
         if (bad) return reject(bad);
@@ -405,16 +443,8 @@ export class Handler {
         if (!Object.hasOwn(roads.edges, cmd.edgeId)) return reject(L("Участок уже убран", "The section is already removed"));
         next = removeEdge(roads, cmd.edgeId);
         zones = this.rezone(z, next, z.fields);
-      } else if (cmd.type === "paintZones") {
-        if (!Array.isArray(cmd.keys) || cmd.keys.length > 50_000 || !cmd.keys.every((k) => typeof k === "string")) {
-          return reject(L("Некорректные клетки", "Invalid cells"));
-        }
-        if (cmd.zone !== "none" && cmd.zone !== "res" && cmd.zone !== "craft" && cmd.zone !== "trade") return reject(L("Неизвестная зона", "Unknown zone"));
-        const locked = cmd.zone === "none" ? null : lockReason(sim, cmd.zone);
-        if (locked) return reject(locked);
-        zones = { ...z, cells: paintCells(z.cells, cmd.keys, cmd.zone), rev: z.rev + 1 };
       } else if (cmd.type === "addField") {
-        const v = validateField(cmd.pts, roads, z.fields);
+        const v = validateField(cmd.pts, roads, z.fields, Object.values(sim.buildings).map((b) => b.footprint));
         if (!v.ok) return reject(v.reason);
         zones = this.rezone(z, roads, [...z.fields, { id: nextFieldId(z.fields), pts: v.pts, area: v.area }]);
       } else if (cmd.type === "removeField") {
@@ -434,8 +464,8 @@ export class Handler {
         return await this.finishCommand(id);
       } else if (cmd.type === "placeBuilding") {
         const t = typeof cmd.template === "string" && Object.hasOwn(BUILDINGS, cmd.template) ? BUILDINGS[cmd.template] : null;
-        if (!t || t.zone !== "placed") return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
-        const locked = lockReason(sim, t.id);
+        if (!t) return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
+        const locked = lockReason(sim, t.zone) ?? lockReason(sim, t.id);
         if (locked) return reject(locked);
         if (!Number.isInteger(cmd.edge) || !Number.isInteger(cmd.i) || (cmd.side !== 1 && cmd.side !== -1) || !validSite(cmd.site)) {
           return reject(L("Некорректное место", "Invalid place"));
@@ -447,18 +477,38 @@ export class Handler {
         return await this.finishCommand(id);
       } else if (cmd.type === "placeOnFoundation") {
         const t = typeof cmd.template === "string" && Object.hasOwn(BUILDINGS, cmd.template) ? BUILDINGS[cmd.template] : null;
-        if (!t || t.zone !== "placed") return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
-        const locked = lockReason(sim, t.id);
+        if (!t) return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
+        const locked = lockReason(sim, t.zone) ?? lockReason(sim, t.id);
         if (locked) return reject(locked);
         if (typeof cmd.foundationId !== "string") return reject(L("Некорректное место", "Invalid place"));
         const ok = canPlaceOnFoundation(sim, t, cmd.foundationId);
         if (!ok.ok) return reject(ok.reason);
         this.save = { ...this.save, sim: placeOnFoundation(sim, t, cmd.foundationId) };
         return await this.finishCommand(id);
-      } else if (cmd.type === "returnFind" || cmd.type === "useFind" || cmd.type === "setExhibition") {
-        const r = cmd.type === "returnFind" ? returnFind(sim, cmd.id) : cmd.type === "useFind" ? useFind(sim, cmd.id) : setExhibition(sim, cmd.building, cmd.hall, cmd.theme);
+      } else if (cmd.type === "placeStroke") {
+        const t = strokeTemplate(cmd.template);
+        if (!t) return reject(L("Это здание нельзя поставить", "This building can’t be placed"));
+        const locked = lockReason(sim, t.zone) ?? lockReason(sim, t.id);
+        if (locked) return reject(locked);
+        if (!validSpans(cmd.spans) || (cmd.drop !== undefined && !validKeys(cmd.drop))) return reject(L("Некорректное место", "Invalid place"));
+        const plan = planStroke(sim, t, cmd.spans, cmd.onlyFoundations === true);
+        const drop = new Set(cmd.drop ?? []);
+        const r = applyStroke(sim, plan.items.filter((it) => !drop.has(it.key)));
+        if (r.placed === 0) return reject(plan.skipped[0]?.reason ?? L("Вдоль дороги здесь нет места", "No room along the road here"));
+        this.save = { ...this.save, sim: r.sim };
+        const ids: number[] = [];
+        for (let b = sim.nextBuildingId; b < r.sim.nextBuildingId; b++) ids.push(b);
+        return await this.finishCommand(id, ids);
+      } else if (cmd.type === "cancelStroke") {
+        if (!Array.isArray(cmd.ids) || cmd.ids.length > 10_000 || !cmd.ids.every((x) => Number.isInteger(x))) return reject(L("Некорректные здания", "Invalid buildings"));
+        const r = cancelPlans(sim, cmd.ids);
+        if (r.removed === 0) return reject(L("Отменять нечего: стройка уже началась", "Nothing to undo: work has already started"));
+        this.save = { ...this.save, sim: refreshServices(syncPeople(r.sim)) };
+        return await this.finishCommand(id);
+      } else if (cmd.type === "returnFind" || cmd.type === "useFind" || cmd.type === "setExhibition" || cmd.type === "arrangeExhibitions") {
+        const r = cmd.type === "returnFind" ? returnFind(sim, cmd.id) : cmd.type === "useFind" ? useFind(sim, cmd.id) : cmd.type === "setExhibition" ? setExhibition(sim, cmd.building, cmd.hall, cmd.theme) : arrangeExhibitions(sim);
         if (!r.ok) return reject(r.reason);
-        this.save = { ...this.save, sim: r.ok && cmd.type === "setExhibition" ? museumDaily(r.sim) : r.sim };
+        this.save = { ...this.save, sim: museumDaily(r.sim) }; // the halls show what changed at once
         return await this.finishCommand(id);
       } else if (cmd.type === "digFoundation" || cmd.type === "digStreet") {
         const r = cmd.type === "digFoundation" ? orderDig(sim, cmd.foundationId) : orderStreetDig(sim, cmd.streetId);
@@ -531,8 +581,12 @@ export class Handler {
       } else {
         return reject(L("Неизвестная команда", "Unknown command"));
       }
-      const buildings = reconcile(sim.buildings, next, zones.cells);
+      const buildings = reconcile(sim.buildings, next);
       this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, roads: next, zones, buildings })) };
+      if (houses) {
+        this.roadHouses.push(houses);
+        this.layRoadHouses();
+      }
       await this.finishCommand(id);
     } catch (e) {
       reject(e instanceof Error ? e.message : String(e));
@@ -540,7 +594,7 @@ export class Handler {
   }
 
   // Posts, persists and acknowledges a command that already changed this.save.
-  private async finishCommand(id: number): Promise<void> {
+  private async finishCommand(id: number, ids?: number[]): Promise<void> {
     if (this.free) this.save = { ...this.save!, sim: finishAll(this.save!.sim) };
     this.postSnapshot();
     try {
@@ -548,7 +602,7 @@ export class Handler {
     } catch (e) {
       this.post({ t: "error", message: String(e) });
     }
-    this.post({ t: "cmdResult", id, ok: true });
+    this.post(ids ? { t: "cmdResult", id, ok: true, ids } : { t: "cmdResult", id, ok: true });
     this.enrich();
   }
 
@@ -585,6 +639,14 @@ export class Handler {
 
 const validSpeed = (v: unknown): v is Speed => v === 0 || v === 1 || v === 2 || v === 4;
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const MAX_SPANS = 256;
+const validSpans = (v: unknown): v is StrokeSpan[] =>
+  Array.isArray(v) &&
+  v.length >= 1 &&
+  v.length <= MAX_SPANS &&
+  v.every((x) => typeof x === "object" && x !== null && Number.isInteger(x.edge) && (x.side === 1 || x.side === -1) && [x.from, x.to].every((m) => Number.isFinite(m) && Math.abs(m) < 1e6));
+const validKeys = (v: unknown): v is string[] => Array.isArray(v) && v.length <= 10_000 && v.every((k) => typeof k === "string" && k.length <= 300);
+
 const validSite = (v: unknown): v is Site =>
   typeof v === "object" && v !== null && ["forest", "water", "rock"].every((k) => finite((v as Record<string, unknown>)[k]) && (v as Record<string, number>)[k] >= 0 && (v as Record<string, number>)[k] <= 1);
 

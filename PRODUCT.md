@@ -78,15 +78,14 @@ through IndexedDB, with a chronicle of what happened.
 
 ## Capabilities and Constraints
 
-Built and playable (see `docs/PLAN.md` and `docs/PLAN-research.ru.md` for the authoritative
-records):
+Built and playable (open work is in `docs/ROADMAP.md`):
 
 - Founding from real coordinates: Photon place search, "where am I" geolocation, and faint old
   place names.
-- Rewilded Earth rendering (MapLibre GL JS + hybrid Three.js layers): terrain, forest, water,
-  weather, seasons; deliberately no satellite imagery.
-- Real-scale simulation in a Web Worker: free-form roads with snapping, zones, buildings from
-  templates, households and individual residents, jobs and commuting, production chains, services
+- Rewilded Earth rendering on the game's own WebGPU engine: terrain, forest, water, weather,
+  seasons; deliberately no satellite imagery.
+- Real-scale simulation in a Web Worker: free-form roads with snapping, buildings laid in strokes
+  along roads and on old foundations, households and individual residents, jobs and commuting, production chains, services
   with network-distance coverage, construction by a work party.
 - Archaeology: dig sites reveal real OSM footprints and streets; typed finds classified from POIs;
   restore "as it was" as a monument or a working building.
@@ -106,8 +105,8 @@ Constraints and confirmed facts:
 - **Release state (confirmed 2026-10-31): public alpha, in development.** The Vercel build is live
   and is the only public artifact. Saves and balance may break between versions.
 - **Open source** under Apache License 2.0.
-- Stack is fixed by the existing codebase: TypeScript, Preact + `@preact/signals`, MapLibre GL JS,
-  Three.js, Vite, Vitest, Web Worker + IndexedDB. See `## Stack` note below.
+- Stack is fixed by the existing codebase: TypeScript, Preact + `@preact/signals`, WebGPU
+  (own engine), Vite, Vitest, Web Worker + IndexedDB. See `## Stack` note below.
 - Deliberately out of scope for now: later eras beyond Era II, bridges and water transport,
   multiple towns, the shared world archive, accounts and server saves, sound design beyond the
   synthesized UI sounds, mobile polish.
@@ -117,7 +116,7 @@ Constraints and confirmed facts:
 ## Stack
 
 Existing codebase (not a greenfield choice, confirmed 2026-10-31): TypeScript · Preact +
-@preact/signals · MapLibre GL JS · Three.js · Vite · Vitest · Web Worker + IndexedDB. Open data:
+@preact/signals · WebGPU (own engine) · Vite · Vitest · Web Worker + IndexedDB. Open data:
 OpenFreeMap/OpenStreetMap, Terrarium DEM (AWS Open Data), Photon (komoot), Wikipedia/MediaWiki.
 Deployment: Vercel, production from `main`; licensed Apache-2.0.
 
@@ -126,8 +125,7 @@ Deployment: Vercel, production from `main`; licensed Apache-2.0.
 - **Name:** Rebirth. Russian player-facing text is Russian; README and public metadata English.
 - **Tagline / voice:** "Civilization is gone. The coordinates survived." — restrained, factual,
   historical; no invented lore and no explanation of why the world is empty. The README voice is
-  declarative and short-sentenced; player text uses universal terms (see the glossary in
-  `docs/PLAN-ui.md`), not jargon.
+  declarative and short-sentenced; player text uses universal terms, not jargon.
 - **Visual world: replaced, in progress (revoked by the user 2026-10-31).** Direction A «Полевой
   атлас» (surveyor's field book and printed atlas: opaque paper surfaces, ink rules, hard offset
   shadows, PT Serif + PT Sans, game-icons.net + Phosphor) was the U0 choice of 2026-10-25 and is no
@@ -147,8 +145,7 @@ Deployment: Vercel, production from `main`; licensed Apache-2.0.
 
 - **Live deployment:** https://rebirth-ashy.vercel.app/ — the public artifact.
 - **Authors' own play sessions on localhost:** real gameplay observations, saves and verification
-  data (e.g. the save with 12 buildings and 41 residents used for the U-milestone verification in
-  `docs/PLAN-ui.md`).
+  data (e.g. the save with 12 buildings and 41 residents used to verify the UI rework).
 - **Headless pacing harness output** (`npm run pace`): recorded milestones (first house, first
   planks, N houses, first harvest, population growth, Era II) — the project's balance evidence.
 - **Open, test-covered codebase:** 600+ tests including contrast, focus, no-pictograph and

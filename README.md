@@ -235,7 +235,7 @@ npm run build     # typecheck + production build
 npm run preview   # preview production build
 npm test          # test suite
 npm run pace      # headless pacing simulation
-npm run build:yandex  # Yandex Games archive: rebirth-yandex.zip
+npm run build:portals  # every portal build and its archive in release/
 ```
 
 ## Controls

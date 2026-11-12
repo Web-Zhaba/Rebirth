@@ -3,7 +3,7 @@ import { decodeToPage, DEM_SIZE, terrariumUrl } from "./terrarium";
 
 // DEM bake job: fetch a terrarium tile, decode it into a bordered f32 page and hand the buffer back (transferred, no
 // copy). The main thread only uploads. Requests can be cancelled (the fetch is aborted); a cancelled job answers with
-// status -1. N2 grows this into the worker pool of docs/PLAN-engine.md section 3.3.
+// status -1.
 
 export type DemRequest = { type: "load"; id: number; z: number; x: number; y: number } | { type: "cancel"; id: number };
 

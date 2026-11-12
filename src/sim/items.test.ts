@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { finishAll } from "./admin";
 import { attractionOf } from "./attraction";
-import { BUILDINGS } from "./buildings";
+import { BUILDINGS, scaledJobs } from "./buildings";
 import { orderDig } from "./digging";
 import { recordFinds } from "./excavation";
 import { canPlaceOnFoundation, emptyGrowth, placeOnFoundation } from "./growth";
 import { catalogue, FIND, foundIds, realName, returnFind, useFind } from "./items";
-import { exhibitionEffects, halls, hallsOf, MUSEUM, museumDaily, setExhibition, themes } from "./museum";
+import { arrangeExhibitions, exhibitionEffects, halls, hallsOf, MUSEUM, museumDaily, museumStaff, quality, setExhibition, themes } from "./museum";
 import { researchSpeed } from "./research";
 import { addRoad, emptyRoads } from "./roads";
 import { allResearched, fieldYieldMul } from "./tech";
@@ -14,8 +14,9 @@ import type { FoundFeature, FoundFoundation, FoundPlace, RoadGraph, SimState } f
 import { emptyZones } from "./zones";
 import { placesView } from "../ui/placesModel";
 import { findsView } from "../ui/findsModel";
+import { museumView } from "../ui/museumModel";
 
-// Finds and the museum (docs/PLAN-restoration.md section 6).
+// Finds and the museum.
 
 type Pt = [number, number];
 const rect = (x: number, y: number, w: number, h: number): Pt[] => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
@@ -146,6 +147,9 @@ describe("the museum", () => {
     expect(hallsOf(b)).toBe(3);
     expect(halls(s)).toHaveLength(3);
   });
+  // the museum's jobs filled by residents working there
+  const staffed = (s: SimState, n: number): SimState => ({ ...s, residents: Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, { id: i + 1, job: 1 }])) as unknown as SimState["residents"] });
+  const jobs = (s: SimState) => scaledJobs(BUILDINGS.museum.jobs, s.buildings[1]);
   it("shows one theme a hall; a complete exhibition gives research and attraction", () => {
     let s = town();
     expect(themes(s).map((t) => [t.key, t.shown.length, t.complete])).toEqual([
@@ -157,8 +161,9 @@ describe("the museum", () => {
     expect(setExhibition(s, 1, 1, "gardens")).toEqual({ ok: false, reason: "Эта тема уже в другом зале" });
     expect(setExhibition(s, 1, 9, "crafts")).toEqual({ ok: false, reason: "Нет такого зала" });
     expect(setExhibition(s, 1, 1, "nope")).toEqual({ ok: false, reason: "Для этой темы нет находок" });
-    s = ok(setExhibition(s, 1, 1, "crafts")).sim;
-    expect(exhibitionEffects(s)).toEqual({ exhibits: { farm: MUSEUM.research }, pull: MUSEUM.pull });
+    s = staffed(ok(setExhibition(s, 1, 1, "crafts")).sim, jobs(s));
+    expect(museumStaff(s)).toEqual({ 1: 1 });
+    expect(exhibitionEffects(s, museumStaff(s))).toEqual({ exhibits: { farm: MUSEUM.research }, pull: MUSEUM.pull });
     const d = museumDaily(s);
     expect(d.progress.exhibits).toEqual({ farm: MUSEUM.research });
     expect(researchSpeed(d, "farm")).toBeGreaterThan(researchSpeed(s, "farm"));
@@ -168,6 +173,35 @@ describe("the museum", () => {
     const used = museumDaily(ok(useFind(d, "feat:g1")).sim);
     expect(used.progress.exhibits).toBeUndefined(); // two seeds left: fewer than MUSEUM.min
     expect(ok(setExhibition(d, 1, 0, null)).sim.buildings[1].exhibits).toEqual([null, "crafts", null]);
+  });
+  it("works by the share of its staff; an exhibition short of a few finds gives a part", () => {
+    let s = ok(setExhibition(town(), 1, 0, "gardens")).sim;
+    expect(exhibitionEffects(s, museumStaff(s)).pull).toBe(0); // nobody at work
+    const n = jobs(s);
+    s = staffed(s, Math.ceil(n / 2));
+    expect(exhibitionEffects(s, museumStaff(s)).exhibits.farm).toBeCloseTo(MUSEUM.research * museumStaff(s)[1], 1);
+    expect(quality({ shown: [{}, {}, {}] as never, showable: 4, complete: false })).toBe(Math.round(MUSEUM.partial * 0.75 * 100) / 100);
+    expect(quality({ shown: [{}, {}] as never, showable: 4, complete: false })).toBe(0);
+  });
+  it("the window: halls, themes by group, a showcase with the empty places, what it gives", () => {
+    const far = finishAll(put(mk([big], [], [feat("g1", "seeds", 10, 70), feat("g2", "seeds", 12, 72), feat("g3", "seeds", 14, 74), feat("g4", "seeds", 150, 60), feat("i", "parts", 16, 70)]), "m", "museum"));
+    let s = staffed(ok(setExhibition(far, 1, 0, "gardens")).sim, jobs(far));
+    const v = museumView({ ...s, museumStaff: museumStaff(s) });
+    expect(v.museums[0].halls.map((h) => h.theme)).toEqual(["gardens", null, null]);
+    const g = v.themes.find((t) => t.key === "gardens")!;
+    expect([g.group, g.shown, g.showable, g.unfound, g.complete]).toEqual(["hall", 3, 4, 1, false]);
+    expect(g.items.map((i) => i.state)).toEqual(["shown", "shown", "shown", "unfound"]);
+    expect(g.items[3].name).toBeNull();
+    expect(g.items[0]).toMatchObject({ canUse: true, breaks: true }); // two left: under the minimum
+    expect(v.themes.find((t) => t.key === "crafts")!.group).toBe("few");
+    expect(v.effects.research).toEqual([{ domain: "farm", name: expect.any(String), pct: expect.any(Number) }]);
+    expect(v.effects.pullPct).toBeGreaterThan(0);
+    s = ok(setExhibition(s, 1, 0, null)).sim;
+    expect(museumView({ ...s, museumStaff: museumStaff(s) }).themes.find((t) => t.key === "gardens")!.group).toBe("partial");
+  });
+  it("arranges the themes worth most into the halls", () => {
+    const s = ok(arrangeExhibitions(town())).sim;
+    expect(s.buildings[1].exhibits).toEqual(["gardens", "crafts", "street:Садовая"]);
   });
 });
 

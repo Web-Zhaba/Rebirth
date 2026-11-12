@@ -1,7 +1,7 @@
 import { MODEL_COLORS, type ModelFamily } from "../ui/palette";
 import { band, clamp, domed, framed, Mesh, ledge, merlons, MIN_SIDE, NOFAC, offsetRing, PATTERN, planeRoof, pointInRing, prism, rgb, rng, ROOF_FAC, roofOf, roofSurface, shade, square, tower, triangulate, type DomeShape, type Model, type RGB, type RoofShape, type TowerCap, type XY } from "./modelGeometry";
 
-// Models of restored old buildings (PLAN-research.ru.md section 8): real ring + eaves height + OSM kind -> mesh, on the
+// Models of restored old buildings: real ring + eaves height + OSM kind -> mesh, on the
 // shared geometry of modelGeometry.ts. Each building draws its roof shape, pitch, overhang, colours, chimneys, domes and
 // tower caps from a seed (the ring by default), so neighbours differ and a building keeps its look.
 

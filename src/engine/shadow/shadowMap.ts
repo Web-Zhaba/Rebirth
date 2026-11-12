@@ -2,7 +2,7 @@ import type { CameraView } from "../camera/camera";
 import { dot, normalize, type Vec3 } from "../geo/ellipsoid";
 import { ShadowCache, shadowCovers, shadowFade, shadowFrame, shadowMatrix, shadowRadius, steppedSun, type ShadowFrame } from "./shadowMath";
 
-// The sun's local shadow map (docs/PLAN-shadows.md section 3): one depth texture around the camera target, rendered
+// The sun's local shadow map: one depth texture around the camera target, rendered
 // from the sun by the casters' own depth-only pipelines (SHADOW_DEPTH) and sampled by the receivers through
 // shadow.wgsl. It is re-rendered only when what it was baked from changed (shadowMath.ts ShadowCache); a still camera
 // costs no shadow pass.
@@ -56,16 +56,24 @@ export class ShadowMap {
     }
     const size = SHADOW_SIZES[this.quality];
     if (size !== this.size) this.view = this.resize(size);
-    this.fade = shadowFade(view.eyeAboveGround, dot(sun, normalize(view.target)));
+    this.fade = shadowFade(view.eyeAboveGround, dot(sun, normalize(view.target)), size);
     if (this.fade <= 0) return false;
     this.sun = steppedSun(this.sun, sun);
-    const f = (this.frame = shadowFrame(this.sun, view.target, shadowRadius(Math.hypot(view.eye[0] - view.target[0], view.eye[1] - view.target[1], view.eye[2] - view.target[2])), size));
+    const f = (this.frame = shadowFrame(this.sun, view.target, shadowRadius(Math.hypot(view.eye[0] - view.target[0], view.eye[1] - view.target[1], view.eye[2] - view.target[2]), size), size));
     shadowMatrix(f, view.eye, this.proj);
     // The casters are culled for the camera (terrain selection, forest scatter), so the view is part of the key.
     const e = view.eye;
     const fw = view.forward;
     const r = (v: number, q: number) => Math.round(v / q);
     return this.cache.stale([...f.origin, ...this.sun, f.radius, size, r(e[0], 0.01), r(e[1], 0.01), r(e[2], 0.01), r(fw[0], 1e-5), r(fw[1], 1e-5), r(fw[2], 1e-5), ...casters]);
+  }
+
+  // How far from the camera target (m) something can stand and still cast into the map of this view: the reach of the
+  // map's box (its half-extent across, twice that along the sun). 0 with the shadows off.
+  reach(view: CameraView): number {
+    if (this.quality === "off") return 0;
+    const d = Math.hypot(view.eye[0] - view.target[0], view.eye[1] - view.target[1], view.eye[2] - view.target[2]);
+    return Math.sqrt(6) * shadowRadius(d, SHADOW_SIZES[this.quality]);
   }
 
   // Whether a caster's bounding sphere (absolute ECEF) reaches into this frame's map.

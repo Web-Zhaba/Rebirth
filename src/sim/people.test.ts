@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ATTRACT, INFLOW, inflowCap, inflowPerDay, NO_ATTRACTION } from "./attraction";
 import { advanceTo, BASE_TICK, step } from "./clock";
 import { BUILDINGS, startLevel } from "./buildings";
-import { demand, emptyGrowth, seedOf } from "./growth";
+import { emptyGrowth, seedOf } from "./growth";
+import { applyStroke, planStroke } from "./stroke";
 import { Handler, type Storage } from "./handler";
 import {
   rebalanceJobs,
@@ -498,15 +499,6 @@ describe("builders and unemployment", () => {
     expect(peopleStats(planned)).toMatchObject({ pop: 14, adults: 8, children: 6, builders: 8, unemployed: 0, tents: 4, households: 4 });
     expect(peopleStats(town(houses(2)))).toMatchObject({ builders: 0, unemployed: 8 });
   });
-  it("demand counts vacancies, vacant and unfinished houses and tents", () => {
-    const s = town([building(1, "izba", 100), building(2, "izba", 200), building(3, "smithy", 300)]);
-    // 4 tents, 2 vacant houses, 6 open jobs: 1.5 + 6 / 2 - 2 + 4
-    expect(demand(s).res).toBeCloseTo(6.5);
-    const t = day(s);
-    // two families moved in, two are still in tents, and the smithy has staff
-    const employed = peopleStats(t).employed;
-    expect(demand(t).res).toBeCloseTo(1.5 + (BUILDINGS.smithy.jobs - employed) / 2 + 2);
-  });
 });
 
 describe("emigration", () => {
@@ -556,11 +548,12 @@ describe("determinism", () => {
   it("one advanceTo equals many random-sized calls, people included", () => {
     const g = road([[0, 0], [160, 0]]);
     const terrain: Record<string, TerrainInfo> = {};
-    for (const c of regenerateCells(g, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
-    const cells = regenerateCells(g, [], [], terrain).map((c) =>
-      c.block ? c : { ...c, zone: c.side === 1 ? (c.i < 10 ? ("res" as const) : ("craft" as const)) : ("trade" as const) },
-    );
-    const start: SimState = { realTime: NOW, gameMinutes: 0, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(42) };
+    for (const c of regenerateCells(g, [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
+    const cells = regenerateCells(g, [], terrain);
+    const edge = Number(Object.keys(g.edges)[0]);
+    const lay = (x: SimState, template: string, side: 1 | -1, from: number, to: number) => applyStroke(x, planStroke(x, BUILDINGS[template], [{ edge, side, from, to }]).items).sim;
+    const town0: SimState = { realTime: NOW, gameMinutes: 0, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(42) };
+    const start = lay(lay(lay(town0, "izba", 1, 0, 80), "weaver", 1, 80, 160), "shop", -1, 0, 160);
     const end = NOW + 40 * 24 * 60 * 1000; // 40 game days
     let t = NOW;
     let s = start;
@@ -770,10 +763,10 @@ describe("handler: persistence and query channel", () => {
   it("answers building queries", async () => {
     const g = roadAlong(160);
     const terrain: Record<string, TerrainInfo> = {};
-    for (const c of regenerateCells(g, [], [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
-    const cells = regenerateCells(g, [], [], terrain).map((c) => (c.block ? c : { ...c, zone: "res" as const }));
+    for (const c of regenerateCells(g, [], {})) terrain[qkey(c.cx, c.cy)] = { land: "meadow", slope: 0 };
+    const cells = regenerateCells(g, [], terrain);
     let s: SimState = { realTime: NOW, gameMinutes: 0, roads: g, zones: { ...emptyZones(), cells, terrain, rev: 1 }, ...emptyGrowth(seedOf(city.foundedAt)) };
-    s = step(s); // spawns a house
+    s = applyStroke(s, planStroke(s, BUILDINGS.izba, [{ edge: Number(Object.keys(g.edges)[0]), side: 1, from: 0, to: 16 }]).items).sim; // a house
     const b = Object.values(s.buildings)[0];
     expect(b).toBeDefined();
     s = { ...s, buildings: { [b.id]: { ...b, state: "active", done: b.labor } } };

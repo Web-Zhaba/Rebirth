@@ -3,7 +3,7 @@ import { dayStart } from "./time";
 import type { TradeOrder } from "./trade";
 import { L } from "../i18n";
 
-// Player levers (PLAN-pace.md section 8). All of them are off by default, so a town that never uses them behaves as before.
+// Player levers. All of them are off by default, so a town that never uses them behaves as before.
 
 export type Rations = "reduced" | "normal" | "generous";
 

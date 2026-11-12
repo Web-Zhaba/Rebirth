@@ -1,8 +1,7 @@
 import { play } from "../ui/sound";
 import { effect, signal } from "@preact/signals";
-import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
-import type { RoadKind, ServiceId, ZoneType } from "../sim/types";
-import { shouldRepeatTool } from "../ui/inputModel";
+import { mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
+import type { RoadKind, ServiceId } from "../sim/types";
 import { storedChoice } from "../ui/preferenceModel";
 import { mppAtZoom, type View } from "../view/view";
 import { L } from "../i18n";
@@ -11,15 +10,18 @@ import { L } from "../i18n";
 export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | "restore";
 // How a road segment is drawn: dragged straight between two points, or an arc through a bend point.
 export type RoadMode = "straight" | "arc";
-export type BrushTool = ZoneType | "clear"; // paints a zone, or clears it
-export type ZoneTool = BrushTool | "field" | "clearing";
-export type PlaceTool = "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "museum" | "townhall" | ServiceId;
-export type Tool = RoadTool | ZoneTool | PlaceTool;
+// Outlines drawn on the land (map/landTool.ts).
+export type LandTool = "field" | "clearing";
+// Laid in strokes along roads (map/strokeTool.ts, sim/stroke.ts): houses, workshops and shops, as variants of three tools.
+export type StrokeTool = "house" | "workshop" | "shop";
+export type PlaceTool = StrokeTool | "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "museum" | "townhall" | ServiceId;
+export type Tool = RoadTool | LandTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
-export const isBrushTool = (t: Tool): t is BrushTool => t === "res" || t === "craft" || t === "trade" || t === "clear";
-export const isZoneTool = (t: Tool): t is ZoneTool => isBrushTool(t) || t === "field" || t === "clearing";
-export const PLACE_TOOLS: PlaceTool[] = ["gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "restored", "museum", "well", "market", "chapel", "school", "healer", "townhall"];
+export const isLandTool = (t: Tool): t is LandTool => t === "field" || t === "clearing";
+export const STROKE_TOOLS: StrokeTool[] = ["house", "workshop", "shop"];
+export const isStrokeTool = (t: Tool | null): t is StrokeTool => t === "house" || t === "workshop" || t === "shop";
+export const PLACE_TOOLS: PlaceTool[] = [...STROKE_TOOLS, "gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "restored", "museum", "well", "market", "chapel", "school", "healer", "townhall"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
 // One tool at a time across the toolbar; null = none (the map pans normally).
@@ -30,13 +32,34 @@ effect(() => {
   if (current) lastTool.value = current;
 });
 
-export function attachToolRepeat(view: View): void {
-  view.canvas.addEventListener("pointerdown", (e: PointerEvent) => {
-    if (!e.isPrimary || !shouldRepeatTool(e.button, tool.peek(), lastTool.peek())) return;
-    e.preventDefault();
-    tool.value = lastTool.peek();
-  });
-}
+export const isTool = (t: unknown): t is Tool => typeof t === "string" && (isRoadTool(t as Tool) || isLandTool(t as Tool) || isPlaceTool(t as Tool));
+
+// The last tools picked, newest first, on Alt+1–4; kept between sessions.
+export const RECENT_MAX = 4;
+const RECENT_STORE = "rebirth.tools.recent";
+const readRecent = (): Tool[] => {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(RECENT_STORE) ?? "[]");
+    return Array.isArray(v) ? v.filter(isTool).slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+};
+export const recentTools = signal<Tool[]>(readRecent());
+// The list with `t` moved to the front.
+export const withRecent = (list: readonly Tool[], t: Tool): Tool[] => [t, ...list.filter((x) => x !== t)].slice(0, RECENT_MAX);
+effect(() => {
+  const t = tool.value;
+  if (!t) return;
+  const was = recentTools.peek();
+  if (was[0] === t) return;
+  recentTools.value = withRecent(was, t);
+  try {
+    localStorage.setItem(RECENT_STORE, JSON.stringify(recentTools.peek()));
+  } catch {
+    /* ignore */
+  }
+});
 // Road drawing mode, shared by every road kind; kept between tools.
 export const roadMode = signal<RoadMode>("straight");
 export const ROAD_MODES: { id: RoadMode; label: string; title: string }[] = [
@@ -63,13 +86,27 @@ export function roadKindOf(t: Tool | null, material: Record<MaterialTool, RoadKi
   return t && isMaterialTool(t) ? material[t] : null;
 }
 // Kinds of building one placement tool puts down, picked with a switch (new buildings come as variants of a tool, not
-// as tools of their own): the storehouse (docs/PLAN-balance.md B4) and the administration (B7). The first is the default.
+// as tools of their own): the storehouse and the administration. The first is the default.
 export interface PlaceVariant {
   id: string; // template
   label: string;
   title: string;
 }
 export const PLACE_VARIANTS: Partial<Record<PlaceTool, PlaceVariant[]>> = {
+  house: [
+    { id: "izba", label: L("Дом", "House"), title: L("Дом на одну семью", "A house for one family") },
+    { id: "izba5", label: L("Большой", "Large"), title: L("Большой дом на две семьи", "A large house for two families") },
+  ],
+  workshop: [
+    { id: "weaver", label: L("Ткацкая", "Weaving"), title: L("Ткацкая мастерская: одежда", "Weaving workshop: clothing") },
+    { id: "pottery", label: L("Гончарня", "Pottery"), title: L("Гончарня: посуда", "Pottery: dishes") },
+    { id: "carpentry", label: L("Столярная", "Carpentry"), title: L("Столярная мастерская: утварь из досок", "Carpentry workshop: furnishings from planks") },
+    { id: "smithy", label: L("Кузница", "Smithy"), title: L("Кузница: инструменты", "Smithy: tools") },
+  ],
+  shop: [
+    { id: "shop", label: L("Магазин", "Shop"), title: L("Магазин: раздаёт товары по домам", "Shop: hands goods out to the houses") },
+    { id: "tavern", label: L("Таверна", "Tavern"), title: L("Таверна: вечерний отдых", "Tavern: evening rest") },
+  ],
   barn: [
     { id: "barn", label: L("Еда", "Food"), title: L("Амбар: зерно и припасы", "Barn: grain and provisions") },
     { id: "logyard", label: L("Лес", "Timber"), title: L("Склад леса: брёвна и доски", "Timber yard: logs and planks") },
@@ -85,6 +122,55 @@ export const placeVariant = signal<Partial<Record<PlaceTool, string>>>({});
 // The template a placement tool puts down: the kind chosen for it, or its first kind, or the tool itself.
 export const placeTemplate = (t: PlaceTool, chosen: Partial<Record<PlaceTool, string>> = placeVariant.value): string => chosen[t] ?? PLACE_VARIANTS[t]?.[0].id ?? t;
 
+// The tool (and its kind) that puts a building of `template` down, or null for one no tool places (a dig site).
+export function toolOfTemplate(template: string): { tool: PlaceTool; variant?: string } | null {
+  for (const [t, kinds] of Object.entries(PLACE_VARIANTS) as [PlaceTool, PlaceVariant[]][]) if (kinds.some((k) => k.id === template)) return { tool: t, variant: template };
+  return (PLACE_TOOLS as string[]).includes(template) ? { tool: template as PlaceTool } : null;
+}
+
+// A stroke takes only old foundations and leaves the gaps empty (G); kept between sessions.
+const ONLY_FOUNDATIONS_STORE = "rebirth.stroke.onlyFoundations";
+const readOnlyFoundations = (): boolean => {
+  try {
+    return localStorage.getItem(ONLY_FOUNDATIONS_STORE) === "1";
+  } catch {
+    return false;
+  }
+};
+export const onlyFoundations = signal(readOnlyFoundations());
+export function setOnlyFoundations(on: boolean): void {
+  onlyFoundations.value = on;
+  try {
+    localStorage.setItem(ONLY_FOUNDATIONS_STORE, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+// The road tools lay houses along both sides of a new road; kept between sessions.
+const ROAD_HOUSES_STORE = "rebirth.road.houses";
+const readRoadHouses = (): boolean => {
+  try {
+    return localStorage.getItem(ROAD_HOUSES_STORE) === "1";
+  } catch {
+    return false;
+  }
+};
+export const roadHouses = signal(readRoadHouses());
+export function setRoadHouses(on: boolean): void {
+  roadHouses.value = on;
+  try {
+    localStorage.setItem(ROAD_HOUSES_STORE, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+// The tools a road with houses is drawn with: paths, roads and old streets (not bridges).
+export const housesAlong = (t: Tool | null): boolean => t === "path" || t === "dirt" || t === "restore";
+// What an addRoad drawn with `t` asks for its sides: the house tool's kind and its «только фундаменты», or nothing.
+export const roadHousesCmd = (t: Tool | null): { template: string; onlyFoundations: boolean } | undefined =>
+  roadHouses.value && housesAlong(t) ? { template: placeTemplate("house"), onlyFoundations: onlyFoundations.value } : undefined;
+
 // Brief message about a rejected action, shown by the toolbar.
 export const toolMsg = signal<string | null>(null);
 
@@ -97,7 +183,7 @@ export function flash(text: string): void {
 }
 
 // Drawing is allowed only when the map is closer than these (metres per pixel; the zoom they were set at is noted).
-export const ZONE_MAX_MPP = mppAtZoom(15); // old MIN_ZONE_ZOOM 15
+export const BUILD_MAX_MPP = mppAtZoom(15); // old MIN_ZONE_ZOOM 15
 export const ROAD_MAX_MPP = mppAtZoom(14); // old MIN_ROAD_ZOOM 14
 
 // Drawing and placement tools own map input; Space temporarily gives panning back to the camera.
@@ -109,7 +195,7 @@ export const setSpacePan = (on: boolean): void => {
 export function panLockedForTool(t: Tool | null, mpp: number, temporaryPan = false): boolean {
   if (!t || temporaryPan) return false;
   if (isRoadTool(t)) return mpp <= ROAD_MAX_MPP;
-  return (isZoneTool(t) || isPlaceTool(t)) && mpp <= ZONE_MAX_MPP;
+  return (isLandTool(t) || isPlaceTool(t)) && mpp <= BUILD_MAX_MPP;
 }
 
 export function syncPan(view: View): void {
@@ -118,10 +204,6 @@ export function syncPan(view: View): void {
   panOff = want;
   view.setPanEnabled(!want);
 }
-
-export const ZONE_COLORS: Record<ZoneType, string> = { res: PALETTE.ok, craft: PALETTE.warn, trade: PALETTE.info };
-
-export const BUILDING_COLORS: Record<ZoneType, string> = BUILDING_ZONE_COLORS;
 
 // Colours of player-placed buildings, per template.
 export const PLACED_COLORS: Record<PlaceTool, string> = PLACED_BUILDING_COLORS;
@@ -161,47 +243,19 @@ export function setManualOverlay(id: Overlay): void {
   }
 }
 
-// Zoning is a separate map layer: hidden during normal play, available manually from the layer menu,
-// and temporarily enabled while a zoning brush is active.
-const ZONES_STORE = "rebirth.layers.zones";
-const readZonesShown = (): boolean => {
-  try {
-    return localStorage.getItem(ZONES_STORE) === "1";
-  } catch {
-    return false;
-  }
-};
-export const manualZonesShown = signal(readZonesShown());
-export const zonesShown = signal(manualZonesShown.peek());
-
-export function setManualZonesShown(on: boolean): void {
-  manualZonesShown.value = on;
-  zonesShown.value = on;
-  try {
-    localStorage.setItem(ZONES_STORE, on ? "1" : "0");
-  } catch {
-    /* ignore */
-  }
-}
-
 const SERVICE_OVERLAY_TOOLS: readonly ServiceId[] = ["well", "market", "chapel", "school", "healer"];
 export const serviceOverlayForTool = (t: Tool | null): ServiceId | null =>
   t && (SERVICE_OVERLAY_TOOLS as readonly string[]).includes(t) ? (t as ServiceId) : null;
 
-// Tools may temporarily own a map layer. Only layers enabled by a tool are reset when that mode ends;
-// manually selected layers otherwise stay exactly as the player left them.
+// A service tool shows its coverage overlay while it is active; the overlay the player chose comes back after it.
 let hadAutomaticLayer = false;
 effect(() => {
-  const t = tool.value;
-  const service = serviceOverlayForTool(t);
-  const zoning = !!t && isBrushTool(t);
-  if (service || zoning) {
+  const service = serviceOverlayForTool(tool.value);
+  if (service) {
     hadAutomaticLayer = true;
-    zonesShown.value = zoning;
-    overlay.value = service ?? "none";
+    overlay.value = service;
   } else if (hadAutomaticLayer) {
     hadAutomaticLayer = false;
-    zonesShown.value = manualZonesShown.peek();
     overlay.value = manualOverlay.peek();
   }
 });

@@ -1,0 +1,162 @@
+{
+  "title": "Choose the visual world",
+  "question": "Бросок назначил «Береста и грамота». Оставляем, берём альтернативу или перебрасываем?",
+  "options": [
+    {
+      "id": "assigned",
+      "kind": "assigned",
+      "label": "Береста и грамота",
+      "kicker": "THE ROLL",
+      "lineage": "новгородские берестяные грамоты: письмо, найденное в слое земли",
+      "thesis": "Поселение — это запись, процарапанная на бересте поверх леса, который её пережил.",
+      "palette": ["#2f3a2c", "#e0cfae", "#1c1a16", "#c07a22"],
+      "materials": ["береста", "дёготь", "процарапанный штифт"],
+      "viewport": "Глубокое мшистое поле; карта — просека в нём; карточка основания — берестяной лист с процарапанными координатами в шапке.",
+      "risk": "Кремовые корки бересты сползают к прежней бумажной эстетике, если дёготь и мох не держат страницу.",
+      "raised": [
+        {
+          "from": "clay-ceramics-fracture-coiled-earth-tower",
+          "raise": "Стройка показывает приращение материала: каждый венец — реальная трата, а не полоска прогресса."
+        },
+        {
+          "from": "textiles-weave-drape-fashion-sneaker-box-stacks",
+          "raise": "Записная книжка — индексированная стопа: у каждой находки читаемый торец до того, как её откроют."
+        },
+        {
+          "from": "posters-covers-sleeves-wuxia-painted-hoarding",
+          "raise": "Момент основания — удержанный кадр: игра режет к нему, а не подъезжает."
+        },
+        {
+          "from": "operate-c-cracktro-scroller-queue",
+          "raise": "Приоритет читается глубиной и яркостью, а не ещё одной рамкой."
+        }
+      ],
+      "html": ".impeccable/mocks/decision/assigned.html"
+    },
+    {
+      "id": "model-pick",
+      "kind": "pick",
+      "label": "Годичные кольца",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "дендрохронология: спил, керн и доска для счёта колец",
+      "thesis": "У каждой точки на Земле есть срез; город читается как кольца, добавленные по одному году.",
+      "palette": ["#3a2f24", "#c8b48d", "#9e3b2a", "#7d8f6a"],
+      "materials": ["свежий спил", "ореховые чернила", "восковой маркер"],
+      "viewport": "Огромный срез заполняет первый экран; карта лежит внутри самого молодого кольца.",
+      "risk": "Кольцевая геометрия спорит с прямоугольным текстом — и это самый знакомый из этих миров.",
+      "html": ".impeccable/mocks/decision/model-pick.html"
+    },
+    {
+      "id": "challenger-breton",
+      "kind": "challenger",
+      "catalogId": "design-canon-breton-ornament-program",
+      "label": "Бретонский орнамент",
+      "verdict": "competitive",
+      "lineage": "бретонские альбомы орнамента: нумерованные листы повторяемых единиц",
+      "thesis": "Город собирается из нумерованных единиц орнамента, а не рисуется от руки.",
+      "palette": ["#5a6570", "#e8e0ce", "#8f2f2a"],
+      "materials": ["плотная бумага", "тонкий ключевой контур"],
+      "viewport": "Слева нумерованный лист единиц; выбранная единица защёлкивается в кайму вокруг карты.",
+      "risk": "Читается как каталог деталей, а не как живой лес.",
+      "case": "Срастается хорошо: зоны и участки становятся единицами, встающими в кайму; проигрывает чуть по узнаваемости лесной темы.",
+      "hero": "https://impeccable.style/worlds/cards/design-canon-breton-ornament-program-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/design-canon-breton-ornament-program.webp",
+      "html": ".impeccable/mocks/decision/challenger-breton.html"
+    },
+    {
+      "id": "challenger-vu",
+      "kind": "challenger",
+      "catalogId": "signals-instruments-vu-meter-bridge",
+      "label": "Мост индикаторов",
+      "verdict": "competitive",
+      "lineage": "стрелочные VU-индикаторы на студийной консоли",
+      "thesis": "Жизненные показатели города читаются одной линейкой баллистических стрелок, а не мгновенными цифрами.",
+      "palette": ["#efe6cf", "#15130f", "#b23a2a", "#5b4429"],
+      "materials": ["слоновая кость шкал", "стекло", "ореховый корпус"],
+      "viewport": "Мост индикаторов во всю ширину сверху; карта внизу — комната, которую слушают.",
+      "risk": "Ряд приборов — ровно то, что эта категория уже выпускает.",
+      "case": "Срастается точно: каждый ресурс — канал с настоящей баллистикой; проигрывает чуть потому, что приборная панель и есть привычная рамка жанра.",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-vu-meter-bridge-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/signals-instruments-vu-meter-bridge.webp",
+      "html": ".impeccable/mocks/decision/challenger-vu.html"
+    },
+    {
+      "id": "challenger-clay",
+      "kind": "challenger",
+      "catalogId": "clay-ceramics-fracture-coiled-earth-tower",
+      "label": "Глиняная башня",
+      "verdict": "declined",
+      "lineage": "ручная лепка из глиняных жгутов",
+      "thesis": "Постройка растёт витками, и каждый виток оставляет след руки.",
+      "palette": ["#a5563a", "#d9c7a8", "#6d3a24"],
+      "materials": ["жгуты глины", "ангоб", "сушка"],
+      "viewport": "Башня поднимается витками над головой мастера.",
+      "risk": "Гончарный мир далёк от леса и карты.",
+      "case": "Срастается слабо: игрок в градостроитель не узнаёт себя в гончаре.",
+      "kept": "Материальная честность приращения — каждый виток видимая трата.",
+      "hero": "https://impeccable.style/worlds/cards/clay-ceramics-fracture-coiled-earth-tower-hero.webp"
+    },
+    {
+      "id": "challenger-sneaker",
+      "kind": "challenger",
+      "catalogId": "textiles-weave-drape-fashion-sneaker-box-stacks",
+      "label": "Стена коробок",
+      "verdict": "declined",
+      "lineage": "архив кроссовок и стопки коробок",
+      "thesis": "Каталог как стена коробок с читаемыми торцами.",
+      "palette": ["#c2571f", "#111111", "#f4f1ea"],
+      "materials": ["картон", "шелест папиросной бумаги"],
+      "viewport": "Стена стопок, каждая коробка индексирована торцом.",
+      "risk": "Уличная мода не имеет отношения к поселению.",
+      "case": "Срастается слабо: узнаваемость нулевая для этой аудитории.",
+      "kept": "Индекс как читаемая стопа — торец говорит раньше, чем открывают.",
+      "hero": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-sneaker-box-stacks-hero.webp"
+    },
+    {
+      "id": "challenger-wuxia",
+      "kind": "challenger",
+      "catalogId": "posters-covers-sleeves-wuxia-painted-hoarding",
+      "label": "Живописная афиша",
+      "verdict": "declined",
+      "lineage": "живописные афиши уся-фильмов",
+      "thesis": "Один удержанный кадр вместо прокрутки.",
+      "palette": ["#b5301f", "#1b1b1b", "#e8e2d4", "#c9a227"],
+      "materials": ["тушь и тушёвка", "кисть"],
+      "viewport": "Фигура в прыжке на фоне мытой туши, вертикальный заголовок справа.",
+      "risk": "Картина мира, а не работающая страница.",
+      "case": "Срастается плохо: изобразительность подменяет интерфейс.",
+      "kept": "Удержанный кадр: смена состояния режет, а не подъезжает.",
+      "hero": "https://impeccable.style/worlds/cards/posters-covers-sleeves-wuxia-painted-hoarding-hero.webp"
+    },
+    {
+      "id": "challenger-cracktro",
+      "kind": "challenger",
+      "catalogId": "operate-c-cracktro-scroller-queue",
+      "label": "Cracktro-очередь",
+      "verdict": "declined",
+      "lineage": "заставки cracktro из демосцены",
+      "thesis": "Ранг читается глубиной в чёрной пустоте, без единой рамки.",
+      "palette": ["#000000", "#8a8a8a", "#e8e8e8", "#ffb000"],
+      "materials": ["битмап-шрифт", "эмиссия на чёрном"],
+      "viewport": "Одна строка битмап-текста в неподвижности, три поля пыли плывут за ней.",
+      "risk": "Чёрная пустота вступает в конфликт с зелёным спокойствием и с картой в центре.",
+      "case": "Срастается слабо: аудитория демосцены здесь не живёт.",
+      "kept": "Глубина как язык состояния — приоритет без рамок.",
+      "hero": "https://impeccable.style/worlds/cards/operate-c-cracktro-scroller-queue-hero.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code" },
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "Отраслевой стандарт",
+    "thesis": "Тёмная приборная панель со светящимися чипами ресурсов поверх карты, выполненная безупречно.",
+    "palette": ["#12161a", "#e8e6df", "#4da3ff"],
+    "materials": ["тёмное стекло", "свечение"],
+    "viewport": "Верхняя полоса ресурсов, левый рельс постройки, правый инспектор, карта везде.",
+    "risk": "Неотличимо от любого другого градостроителя — по замыслу.",
+    "lineage": "то, что выпускает эта категория"
+  },
+  "steer": true
+}

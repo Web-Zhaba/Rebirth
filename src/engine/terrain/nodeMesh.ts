@@ -101,10 +101,11 @@ export function skirtSource(k: number): number {
   return t * GRID;
 }
 
-export function buildIndices(): Uint32Array<ArrayBuffer> {
+// 16-bit: a node has 1221 vertices, and a view draws some millions of indices a frame.
+export function buildIndices(): Uint16Array<ArrayBuffer> {
   const quads = (GRID - 1) * (GRID - 1);
   const skirtQuads = 4 * (GRID - 1);
-  const idx = new Uint32Array((quads + skirtQuads) * 6);
+  const idx = new Uint16Array((quads + skirtQuads) * 6);
   let o = 0;
   for (let j = 0; j < GRID - 1; j++)
     for (let i = 0; i < GRID - 1; i++) {

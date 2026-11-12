@@ -14,7 +14,7 @@ import { pointInPolygon } from "./zones";
 import { START_MINUTE_OF_DAY } from "./time";
 import type { Building, Resident, SimState, Stock } from "./types";
 
-// Visual life (PLAN.md section 10): derived from the state once per game day and never stored in it.
+// Visual life: derived from the state once per game day and never stored in it.
 export interface LifeData {
   day: number;
   trips: Trip[];

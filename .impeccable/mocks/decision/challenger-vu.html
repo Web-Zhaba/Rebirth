@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Мост индикаторов — первый экран</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800&family=Golos+Text:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ivory:#efe6cf;--ink:#15130f;--red:#b23a2a;--walnut:#5b4429;--walnut-d:#3d2d1a;--steel:#7b7d76;--cream:#e9e0c8}
+*{box-sizing:border-box;margin:0}
+html,body{height:900px;overflow:hidden;background:#2a2218;font-family:"Golos Text",sans-serif;color:var(--cream)}
+.stage{position:relative;width:1440px;height:900px;overflow:hidden;background:#2a2218}
+
+/* the bridge */
+.bridge{position:absolute;left:0;top:0;width:1440px;height:168px;display:flex;
+  background:linear-gradient(180deg,#3d2d1a,#2f2213);border-bottom:5px solid #17110a;
+  box-shadow:0 14px 30px rgba(0,0,0,.55);padding:14px 16px;gap:10px}
+.meter{flex:1;position:relative;background:linear-gradient(180deg,#f4ecd8,#e2d7bb);border:2px solid #17110a;
+  border-radius:3px 3px 6px 6px;overflow:hidden;box-shadow:inset 0 0 0 3px rgba(255,255,255,.45)}
+.meter .face{position:absolute;inset:0}
+.meter .arc{position:absolute;left:8%;right:8%;top:14%;height:62%;border:2.5px solid var(--ink);
+  border-bottom:0;border-radius:120px 120px 0 0;opacity:.8}
+.meter .arc.red{left:70%;right:8%;border-color:var(--red);border-left:2.5px solid var(--red);opacity:1}
+.meter .needle{position:absolute;left:50%;bottom:22px;width:2.5px;height:52%;background:var(--ink);
+  transform-origin:bottom center;box-shadow:0 0 0 1px rgba(21,19,15,.2)}
+.meter .pivot{position:absolute;left:calc(50% - 5px);bottom:17px;width:10px;height:10px;background:var(--ink);
+  border-radius:50%}
+.meter .lab{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-family:"Bitter",serif;
+  font-size:8.5px;font-weight:700;letter-spacing:.12em;color:var(--ink);opacity:.72}
+.meter .val{position:absolute;left:8px;top:6px;font-family:"Bitter",serif;font-size:12px;font-weight:800;color:var(--ink)}
+.meter .ch{position:absolute;right:8px;top:6px;font-family:"Bitter",serif;font-size:9px;font-weight:700;color:#8a7a58}
+.bridge .plate{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:132px;height:26px;
+  background:#8a7a58;border:2px solid #17110a;display:grid;place-items:center;
+  font-family:"Bitter",serif;font-size:10px;font-weight:800;letter-spacing:.24em;color:#241a0e;z-index:4}
+
+/* the room being listened to */
+.map{position:absolute;left:0;top:173px;width:1440px;height:727px;
+  background:radial-gradient(900px 620px at 62% 40%,#5c6c50 0%,#4a573e 46%,#3b4633 78%,#313b2b 100%)}
+.map .forest{position:absolute;inset:0;opacity:.45;background:
+  radial-gradient(circle at 22% 32%,#2f3a2c 0 6px,transparent 7px),
+  radial-gradient(circle at 54% 22%,#2f3a2c 0 5px,transparent 6px),
+  radial-gradient(circle at 78% 58%,#2f3a2c 0 7px,transparent 8px),
+  radial-gradient(circle at 40% 76%,#2f3a2c 0 4px,transparent 5px);background-size:300px 260px}
+.map svg{position:absolute;inset:0}
+.map .vig{position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 40%,transparent 42%,rgba(20,16,10,.5))}
+.pin{position:absolute;left:56%;top:34%;width:24px;height:24px;border:3px solid var(--red);border-radius:50%;
+  box-shadow:0 0 0 9px rgba(178,58,42,.16)}
+.pin::after{content:"";position:absolute;inset:7px;background:var(--red);border-radius:50%}
+
+/* the founding strip: a channel ledger */
+.strip{position:absolute;left:56px;top:236px;width:398px;background:linear-gradient(178deg,#efe6cf,#ddd1b4);
+  color:var(--ink);border:2px solid #17110a;box-shadow:0 20px 42px rgba(0,0,0,.5)}
+.strip .topbar{display:flex;justify-content:space-between;align-items:center;padding:11px 15px;
+  background:#3d2d1a;color:#e9dcc0;font-family:"Bitter",serif;font-size:10px;font-weight:800;letter-spacing:.2em}
+.strip .body{padding:18px 18px 16px}
+h2{font-family:"Bitter",serif;font-size:25px;font-weight:800;line-height:1.12}
+.sub{margin-top:6px;font-size:12.5px;color:#6b5c3f;letter-spacing:.04em}
+.readout{display:grid;grid-template-columns:1fr 58px 74px;align-items:center;margin-top:14px;font-size:12.5px}
+.readout .k{color:#5b4a2c}
+.readout .bar{height:9px;background:#cfc2a2;border:1.5px solid var(--ink);position:relative;overflow:hidden}
+.readout .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink);display:block}
+.readout .bar i.red{background:var(--red)}
+.readout .v{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;font-family:"Bitter",serif}
+.note{margin-top:14px;padding:9px 12px;border-left:3px solid var(--red);background:rgba(178,58,42,.08);
+  font-size:12.5px;line-height:1.45}
+.search{display:flex;align-items:center;margin-top:14px;height:40px;border:2px solid var(--ink);padding:0 11px;
+  background:#f4ecd8}
+.search .q{font-size:13.5px;color:#7a6a4a}
+.search .gl{margin-left:auto;font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--red)}
+.tags{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+.tag{padding:5px 9px;border:1.5px solid var(--ink);font-family:"Bitter",serif;font-size:12.5px;font-weight:700}
+.tag[aria-pressed="true"]{background:var(--ink);color:var(--ivory)}
+.name{margin-top:10px;height:40px;display:flex;align-items:center;padding:0 11px;border:1.5px solid var(--ink);
+  background:#f6efdc;font-size:13.5px;color:#7a6a4a}
+.go{margin-top:11px;width:100%;height:46px;display:grid;place-items:center;background:var(--ink);
+  color:#f2e8d0;font-family:"Bitter",serif;font-size:18px;font-weight:800;letter-spacing:.05em}
+.credit{position:absolute;right:56px;bottom:26px;font-size:11px;color:rgba(233,224,200,.45)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="bridge">
+    <div class="plate">РЕСУРСЫ ГОРОДА</div>
+    <div class="meter"><div class="face"><div class="arc"></div><div class="arc red"></div>
+      <div class="val">1.8т</div><div class="ch">01</div>
+      <div class="needle" style="transform:rotate(-16deg)"></div><div class="pivot"></div>
+      <div class="lab">ЕДА</div></div></div>
+    <div class="meter"><div class="face"><div class="arc"></div><div class="arc red"></div>
+      <div class="val">340</div><div class="ch">02</div>
+      <div class="needle" style="transform:rotate(-42deg)"></div><div class="pivot"></div>
+      <div class="lab">НАСЕЛЕНИЕ</div></div></div>
+    <div class="meter"><div class="face"><div class="arc"></div><div class="arc red"></div>
+      <div class="val">126</div><div class="ch">03</div>
+      <div class="needle" style="transform:rotate(-6deg)"></div><div class="pivot"></div>
+      <div class="lab">БРЁВНА</div></div></div>
+    <div class="meter"><div class="face"><div class="arc"></div><div class="arc red"></div>
+      <div class="val">18</div><div class="ch">04</div>
+      <div class="needle" style="transform:rotate(-58deg)"></div><div class="pivot"></div>
+      <div class="lab">ДОСКИ</div></div></div>
+    <div class="meter"><div class="face"><div class="arc"></div><div class="arc red"></div>
+      <div class="val">9</div><div class="ch">05</div>
+      <div class="needle" style="transform:rotate(-64deg)"></div><div class="pivot"></div>
+      <div class="lab">КАМЕНЬ</div></div></div>
+    <div class="meter"><div class="face"><div class="arc"></div><div class="arc red"></div>
+      <div class="val">64</div><div class="ch">06</div>
+      <div class="needle" style="transform:rotate(14deg)"></div><div class="pivot"></div>
+      <div class="lab">НАСТРОЕНИЕ</div></div></div>
+    <div class="meter"><div class="face"><div class="arc"></div><div class="arc red"></div>
+      <div class="val">0.7</div><div class="ch">07</div>
+      <div class="needle" style="transform:rotate(-22deg)"></div><div class="pivot"></div>
+      <div class="lab">ГОД</div></div></div>
+  </div>
+
+  <div class="map">
+    <div class="forest"></div>
+    <svg viewBox="0 0 1440 727" aria-hidden="true">
+      <path d="M-20 470 C 220 430,380 520,600 470 S 980 330,1220 380 S 1400 450,1460 420"
+        fill="none" stroke="#7d94a0" stroke-width="12" opacity=".55"/>
+    </svg>
+    <div class="vig"></div>
+    <div class="pin"></div>
+  </div>
+
+  <section class="strip">
+    <div class="topbar"><span>КАНАЛ ОСНОВАНИЯ</span><span>54.7261 · 38.1660</span></div>
+    <div class="body">
+      <h2>Основать поселение</h2>
+      <div class="sub">лес · 148 м · уклон 4°</div>
+      <div class="readout">
+        <span class="k">Лес вокруг</span><span class="bar"><i style="width:63%"></i></span><span class="v">63%</span>
+      </div>
+      <div class="readout">
+        <span class="k">Вода вокруг</span><span class="bar"><i style="width:8%"></i></span><span class="v">8%</span>
+      </div>
+      <div class="readout">
+        <span class="k">Камень, песок</span><span class="bar"><i style="width:3%"></i></span><span class="v">3%</span>
+      </div>
+      <p class="note">Густой лес: брёвна рядом, но поля придётся расчищать</p>
+      <div class="search"><span class="q">Найти город или село</span><span class="gl">ГДЕ Я</span></div>
+      <div class="tags">
+        <span class="tag" aria-pressed="true">Лесной</span>
+        <span class="tag">Речной</span>
+        <span class="tag">Луговой</span>
+        <span class="tag">Холмистый</span>
+      </div>
+      <div class="name">Лесной</div>
+      <button class="go">Основать</button>
+    </div>
+  </section>
+  <div class="credit">Поиск: Photon, © OpenStreetMap</div>
+</div>
+</body>
+</html>

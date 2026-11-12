@@ -1,0 +1,175 @@
+name: Publish
+
+# One release, every portal. Called by release-please.yml once a release is cut, or run by hand for a tag:
+# builds each portal's archive, attaches the zips to the GitHub release and pushes the portals that have an upload
+# API: itch.io (butler), Poki (its CLI), VK (its hosting CLI). Each push runs only once its variables are set. Yandex
+# Games, CrazyGames, GameDistribution and GamePix have none: their zips go up in the developer consoles (the run
+# summary links them). The site on Vercel deploys itself from main. Setup: docs/DEVELOPMENT.md, "Publishing".
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. rebirth-v0.5.1
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      VITE_GD_GAME_ID: ${{ vars.GD_GAME_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build portal archives
+        run: npm run build:portals
+
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Attach archives to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" release/rebirth-*.zip --clobber
+
+      - name: Keep the builds the next jobs push
+        uses: actions/upload-artifact@v4
+        with:
+          name: push-builds
+          path: |
+            release/itch/
+            release/poki/
+            release/vk/
+          # Stored without the release/ prefix (the common folder); the push jobs download it back into release/.
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Manual steps
+        env:
+          ASSETS: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ inputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Rebirth $VERSION
+
+          Pushed by the jobs below once their variables are set: **itch.io**, **Poki** (then request a review in Poki for Developers), **VK**. **Vercel** deploys itself from main.
+
+          By hand, in each portal's console:
+
+          - **Yandex Games**: [rebirth-yandex.zip]($ASSETS/rebirth-yandex.zip) → [console](https://games.yandex.ru/console/) → the game → new version $VERSION → upload → send for moderation.
+          - **CrazyGames**: [rebirth-crazygames.zip]($ASSETS/rebirth-crazygames.zip) → [developer portal](https://developer.crazygames.com/) → the game → new build.
+          - **GamePix**: [rebirth-gamepix.zip]($ASSETS/rebirth-gamepix.zip) → [partners portal](https://partners.gamepix.com/) → the game → new build.
+          EOF
+          if [ -f release/rebirth-gamedistribution.zip ]; then
+            echo "- **GameDistribution**: [rebirth-gamedistribution.zip]($ASSETS/rebirth-gamedistribution.zip) → [developer portal](https://developer.gamedistribution.com/) → the game → upload." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- **GameDistribution**: not built, the \`GD_GAME_ID\` variable is not set." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # Add a required reviewer to an environment (repository settings) to approve its pushes by hand.
+  itch:
+    needs: build
+    if: vars.ITCH_GAME != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: itch
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@v4
+        with:
+          name: push-builds
+          path: release
+
+      - name: Install butler
+        run: |
+          curl -fsSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler
+          chmod +x butler/butler
+
+      - name: Push to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: butler/butler push release/itch "${{ vars.ITCH_GAME }}:html5" --userversion "${{ needs.build.outputs.version }}"
+
+  poki:
+    needs: build
+    if: vars.POKI_GAME != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: poki
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@v4
+        with:
+          name: push-builds
+          path: release
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # A new version in Poki for Developers; the review is requested there by hand.
+      - name: Upload to Poki
+        env:
+          POKI_UPLOAD_TOKEN: ${{ secrets.POKI_UPLOAD_TOKEN }}
+        run: npx --yes @poki/cli@0.1.19 upload --game "${{ vars.POKI_GAME }}" --build-dir release/poki --name "${{ needs.build.outputs.version }}" --notes "${{ inputs.tag }}"
+
+  vk:
+    needs: build
+    if: vars.VK_APP_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: vk
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@v4
+        with:
+          name: push-builds
+          path: release
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Deploy to VK hosting
+        env:
+          MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_DEPLOY_TOKEN }}
+          MINI_APPS_ENVIRONMENT: production
+        run: |
+          cat > vk-hosting-config.json <<EOF
+          { "static_path": "release/vk", "app_id": ${{ vars.VK_APP_ID }}, "endpoints": { "mobile": "index.html", "mvk": "index.html", "web": "index.html" } }
+          EOF
+          npx --yes @vkontakte/vk-miniapps-deploy@1.0.3

@@ -1,7 +1,7 @@
 import { FADE_FROM, FADE_TO } from "./constants";
 import type { CloudQuality } from "./settings";
 
-// Pure decisions of the cloud layer (PLAN-clouds.md sections 5 and 7): presets, target size, zoom fade and the
+// Pure decisions of the cloud layer: presets, target size, zoom fade and the
 // "must the ray-march run again" rule.
 
 export interface CloudPreset {

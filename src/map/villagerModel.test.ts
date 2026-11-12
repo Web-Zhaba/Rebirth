@@ -52,10 +52,10 @@ describe("villagerLook", () => {
 describe("buildRig", () => {
   const rig = buildRig(villagerLook(3, 25));
 
-  it("packs six parts of finite vertices with unit normals", () => {
-    expect(rig.parts).toHaveLength(6);
+  it("packs eight parts of finite vertices with unit normals", () => {
+    expect(rig.parts).toHaveLength(8);
     expect(rig.parts[0].start).toBe(0);
-    expect(rig.parts[5].start + rig.parts[5].count).toBe(rig.vertices);
+    expect(rig.parts[7].start + rig.parts[7].count).toBe(rig.vertices);
     expect(rig.data).toHaveLength(rig.vertices * 9);
     for (let i = 0; i < rig.data.length; i += 9) {
       expect(Number.isFinite(rig.data[i])).toBe(true);
@@ -65,19 +65,29 @@ describe("buildRig", () => {
   });
 
   it("winds the closed parts outward", () => {
-    // The arms and feet are single balls: every face's normal points away from the centre.
-    const centres = { armL: [-0.26, 1.03, 0], feet: [-0.12, 0.05, 0.03] };
-    for (const [part, c] of [
-      [PART.armL, centres.armL],
-      [PART.footL, centres.feet],
+    // An arm is a sleeve over a ball hand, a leg a peg, a foot a ball: every face's normal points away from the part's
+    // axis, a segment from `lo` up to `hi` (a point for the ball).
+    for (const [part, x, z, lo, hi] of [
+      [PART.armL, -0.25, 0, 0.94, 1.33],
+      [PART.legL, -0.1, 0, 0.07, 0.74],
+      [PART.footL, -0.1, 0.03, 0.05, 0.05],
     ] as const) {
       const { start, count } = rig.parts[part];
+      expect(count).toBeGreaterThan(0);
       for (let v = start; v < start + count; v++) {
         const i = v * 9;
-        const away = (rig.data[i] - c[0]) * rig.data[i + 3] + (rig.data[i + 1] - c[1]) * rig.data[i + 4] + (rig.data[i + 2] - c[2]) * rig.data[i + 5];
+        const y = Math.min(hi, Math.max(lo, rig.data[i + 1]));
+        const away = (rig.data[i] - x) * rig.data[i + 3] + (rig.data[i + 1] - y) * rig.data[i + 4] + (rig.data[i + 2] - z) * rig.data[i + 5];
         expect(away).toBeGreaterThan(-1e-6);
       }
     }
+  });
+
+  it("cuts the far figure coarser, with the same parts and height", () => {
+    const far = buildRig(rig.look, 0);
+    expect(far.parts).toHaveLength(8);
+    expect(far.vertices).toBeLessThan(rig.vertices * 0.6);
+    expect(far.top).toBeCloseTo(rig.top, 2);
   });
 
   it("cuts the torso at a straight waist: a ring of vertices lies on one height", () => {
@@ -137,13 +147,31 @@ describe("poseOf", () => {
     for (const action of ACTIONS)
       for (const t of [0, 0.37, 1.9]) {
         const pose = poseOf(rig, action, t);
-        expect(pose).toHaveLength(6);
+        expect(pose).toHaveLength(8);
         const out = new Float32Array(rig.vertices * 9);
         writeVillager(rig, pose, [0, 0, 0], out, 0);
         let lowest = Infinity;
         for (let i = 0; i < out.length; i += 9) lowest = Math.min(lowest, out[i + 1]);
         expect(Math.abs(lowest)).toBeLessThan(1e-4);
       }
+  });
+
+  it("turns a walking leg to where its foot stands", () => {
+    const pose = poseOf(rig, "walk", 0.25);
+    const out = new Float32Array(rig.vertices * 9);
+    writeVillager(rig, pose, [0, 0, 0], out, 0);
+    for (const [leg, foot] of [
+      [PART.legL, PART.footL],
+      [PART.legR, PART.footR],
+    ] as const) {
+      // the leg's lowest vertices lie over the foot, ahead or behind with it
+      const l = rig.parts[leg];
+      let low = Infinity;
+      let z = 0;
+      for (let v = l.start; v < l.start + l.count; v++) if (out[v * 9 + 1] < low) (low = out[v * 9 + 1]), (z = out[v * 9 + 2]);
+      expect(Math.sign(z)).toBe(Math.sign(pose[foot].t[2]));
+      expect(Math.abs(z - pose[foot].t[2])).toBeLessThan(0.08 * rig.look.scale + 0.02);
+    }
   });
 
   it("moves the feet when walking and the hands when working", () => {

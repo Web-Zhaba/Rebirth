@@ -8,9 +8,8 @@ import { JOB_GROUPS, JOB_NAMES, type JobKey, type Priority } from "../sim/buildi
 import { CALL, RATIONS, workHours, type Rations } from "../sim/levers";
 import { SERVICE_LIST } from "../sim/services";
 import { INFLOW } from "../sim/attraction";
-import type { City, GrowthWhy, ZoneType } from "../sim/types";
+import type { City } from "../sim/types";
 import { massText } from "../sim/units";
-import { ZONE_COLORS } from "../map/tools";
 import { economy, events, frame, incomingCount, people, reset, roads, services, state, zones } from "../simClient";
 import { Icon } from "./Icon";
 import { act, Line, plural } from "./InspectorParts";
@@ -83,25 +82,10 @@ function JobsBlock() {
 
 const RATION_IDS: Rations[] = ["reduced", "normal", "generous"];
 
-// Why a zone type is (not) growing, in words.
-const ADVICE: Record<GrowthWhy, string> = {
-  ok: L("Растёт", "Growing"),
-  nozone: L("Не растёт: нет размеченных участков", "Not growing: no zoned plots"),
-  demand: L("Не растёт: нет спроса", "Not growing: no demand"),
-  lots: L("Не растёт: нет свободных участков у построенной дороги", "Not growing: no free plots along a built road"),
-  hands: L("Не растёт: некому строить", "Not growing: no one to build"),
-  materials: L("Растёт медленно: не хватает материалов, часть работы делают вручную", "Growing slowly: short of materials, part of the work is done by hand"),
-};
-
-const ZONES: { id: ZoneType; label: string }[] = [
-  { id: "res", label: L("Жильё", "Housing") },
-  { id: "craft", label: L("Ремесло", "Crafts") },
-  { id: "trade", label: L("Торговля", "Trade") },
-];
 
 const pct = (v: number) => `${Math.round(v * 100)}${L(" %", "%")}`;
 
-// Why families come, or do not (docs/PLAN-balance.md B6): the score, its parts and the inflow it brings now.
+// Why families come, or do not: the score, its parts and the inflow it brings now.
 function AttractionBlock() {
   const s = state.value;
   if (!s?.attraction || !s.inflow) return null;
@@ -208,18 +192,13 @@ function WeatherBlock() {
 
 function WorkTab({ city, view }: { city: City; view: View }) {
   const p = people.value;
-  const dem = p?.demand ?? { res: 0, craft: 0, trade: 0 };
   const eco = economy.value;
   const z = zones.value;
   const lv = state.value?.levers;
   const { cut, queue, remaining } = roadQueue(roads.value);
   const hours = workHours(lv);
-  const cnt = { res: 0, craft: 0, trade: 0 };
   let fieldArea = 0;
-  if (z) {
-    for (const c of z.cells) if (!c.block && c.zone !== "none") cnt[c.zone]++;
-    for (const f of z.fields) fieldArea += f.area;
-  }
+  for (const f of z?.fields ?? []) fieldArea += f.area;
   let fieldLine: string | null = null;
   if (eco && eco.fields.assignedHa > 0) {
     if (eco.fields.window === "sowing") fieldLine = L(`Сев: ${Math.round(eco.fields.sown * 100)} %`, `Sowing: ${Math.round(eco.fields.sown * 100)}%`);
@@ -260,18 +239,6 @@ function WorkTab({ city, view }: { city: City; view: View }) {
           </button>
         </div>
       )}
-      <h3 class="rs-sub">{L("Спрос на новые здания", "Demand for new buildings")}</h3>
-      {ZONES.map((zn) => (
-        <div class="demand-card" key={zn.id}>
-          <div class="demand-head">
-            <span class="demand-sw" style={{ background: ZONE_COLORS[zn.id] }} />
-            <span>{zn.label}</span>
-            <span class="demand-count">{cnt[zn.id]} {L("яч.", "cells")}</span>
-          </div>
-          <ProgressBar value={Math.min(5, Math.max(0, dem[zn.id])) / 5} label={`${L("Спрос", "Demand")}: ${zn.label.toLowerCase()}`} />
-          <div class={p.growth?.[zn.id] && p.growth[zn.id] !== "ok" ? "prod-warn" : "people-note"}>{ADVICE[p.growth?.[zn.id] ?? "ok"]}</div>
-        </div>
-      ))}
       <div class="people-note">{L("Поля:", "Fields:")} {decimal((fieldArea / 10000).toFixed(1))} {L("га", "ha")}</div>
     </div>
   );

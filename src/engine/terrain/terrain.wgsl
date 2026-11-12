@@ -2,6 +2,7 @@
 #include "atmosphere"
 #include "weather"
 #include "shadow"
+#include "light"
 
 // Globe terrain: one instanced draw, an instance per selected quadtree node. Node i's chunk-table entry carries its
 // origin relative to the eye (f64 subtraction on the CPU, stored f32), its vertex slot, its height page and the page
@@ -108,25 +109,23 @@ fn parentPoint(node: Node, ij: vec2u) -> vec3f {
   return verts[base].xyz + verts[base + 1u].xyz * (drawnHeight(node.info.w, gridUv(node.puv, ij)) - node.morph.x);
 }
 
+// What differs per vertex only. The page uvs are affine in `nl` and the layers are the node's own, so the fragment
+// stage takes them from the chunk table (pageUv): a vertex carries 12 floats to it instead of 28.
 struct VsOut {
   @builtin(position) pos: vec4f,
   @location(0) rel: vec3f,
-  @location(1) uv: vec2f,
-  @location(2) up: vec3f,
-  @location(3) @interpolate(flat) layer: u32,
-  @location(4) @interpolate(flat) texM: f32,
-  @location(5) @interpolate(flat) zoom: u32,
-  @location(6) puv: vec2f,
-  @location(7) @interpolate(flat) player: u32,
-  @location(8) @interpolate(flat) ptexM: f32,
-  @location(9) morph: f32,
-  @location(10) cap: f32, // 0 on the edge row, 1 at the pole
-  @location(11) capH: f32, // drawn height of the vertex, for the cap's albedo
-  @location(12) duv: vec2f,
-  @location(13) @interpolate(flat) dlayer: u32,
-  @location(14) nl: vec2f, // across the node 0..1: overlay level uv is affine in it, like mercator
-  @location(15) @interpolate(flat) node: u32,
+  @location(1) up: vec3f,
+  @location(2) nl: vec2f, // across the node 0..1: page and overlay uv are affine in it, like mercator
+  @location(3) morph: f32,
+  @location(4) cap: f32, // 0 on the edge row, 1 at the pole
+  @location(5) capH: f32, // drawn height of the vertex, for the cap's albedo
+  @location(6) @interpolate(flat) node: u32,
 };
+
+// uv in a page of the point `nl` across a node: `r` is the page's rectangle in the chunk table (gridUv per pixel).
+fn pageUv(r: vec4f, nl: vec2f) -> vec2f {
+  return r.xy + nl * r.z;
+}
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut {
@@ -198,17 +197,8 @@ fn vertex(vi: u32, ii: u32) -> VsOut {
   var o: VsOut;
   o.pos = frame.viewProj * vec4f(rel, 1.0);
   o.rel = rel;
-  o.uv = uv;
   o.up = up;
-  o.layer = node.info.x;
-  o.texM = node.uv.w;
-  o.zoom = node.info.z;
-  o.puv = gridUv(node.puv, ij);
-  o.player = node.info.w;
-  o.ptexM = node.puv.w;
   o.morph = m;
-  o.duv = gridUv(node.drape, ij);
-  o.dlayer = bitcast<u32>(node.drape.w);
   o.nl = vec2f(ij) / f32(GRID - 1u);
   o.node = ii;
   o.cap = 0.0;
@@ -226,19 +216,47 @@ fn lodTint(z: u32) -> vec3f {
   return 0.5 + 0.5 * cos(6.2831 * (k + vec3f(0.0, 0.33, 0.67)));
 }
 
-// Raw height (m) and its east/north gradient from a page at uv.
+fn heightTexel(l: i32, x: i32, y: i32) -> f32 {
+  return textureLoad(heights, vec2i(x, y), l, 0).r;
+}
+
+// Raw height (m) and its east/north gradient from a page at uv: pageHeight there and one texel to each side. The five
+// bilinear samples share texels (a 4 x 4 block without its corners), so they are read once: 12 loads, not 20. A sample
+// a texel off the page's edge clamps to the border texel, as pageHeight's own clamps make it.
 fn surface(layer: u32, uv: vec2f, texM: f32, cosLat: f32) -> vec3f {
-  let h = pageHeight(layer, uv);
-  let d = 1.0 / DEM;
-  let hw = max(pageHeight(layer, uv - vec2f(d, 0.0)), 0.0);
-  let he = max(pageHeight(layer, uv + vec2f(d, 0.0)), 0.0);
-  let hn = max(pageHeight(layer, uv - vec2f(0.0, d)), 0.0);
-  let hs = max(pageHeight(layer, uv + vec2f(0.0, d)), 0.0);
+  let p = uv * DEM + 0.5;
+  let i0 = clamp(vec2i(floor(p)), vec2i(0), vec2i(256));
+  let f = clamp(p - vec2f(i0), vec2f(0.0), vec2f(1.0));
+  let l = i32(layer);
+  let xw = max(i0.x - 1, 0);
+  let x1 = i0.x + 1;
+  let xe = min(i0.x + 2, 257);
+  let yn = max(i0.y - 1, 0);
+  let y1 = i0.y + 1;
+  let ys = min(i0.y + 2, 257);
+  // the two rows of the point across four columns, then the rows above and below across the middle two
+  let a0 = heightTexel(l, xw, i0.y);
+  let a1 = heightTexel(l, i0.x, i0.y);
+  let a2 = heightTexel(l, x1, i0.y);
+  let a3 = heightTexel(l, xe, i0.y);
+  let b0 = heightTexel(l, xw, y1);
+  let b1 = heightTexel(l, i0.x, y1);
+  let b2 = heightTexel(l, x1, y1);
+  let b3 = heightTexel(l, xe, y1);
+  let rowA = mix(a1, a2, f.x);
+  let rowB = mix(b1, b2, f.x);
+  let rowN = mix(heightTexel(l, i0.x, yn), heightTexel(l, x1, yn), f.x);
+  let rowS = mix(heightTexel(l, i0.x, ys), heightTexel(l, x1, ys), f.x);
+  let h = mix(rowA, rowB, f.y);
+  let hw = max(mix(mix(a0, a1, f.x), mix(b0, b1, f.x), f.y), 0.0);
+  let he = max(mix(mix(a2, a3, f.x), mix(b2, b3, f.x), f.y), 0.0);
+  let hn = max(mix(rowN, rowA, f.y), 0.0);
+  let hs = max(mix(rowB, rowS, f.y), 0.0);
   let span = 2.0 * texM * cosLat;
   return vec3f(h, (he - hw) / span, (hn - hs) / span); // page v grows south
 }
 
-// Mountains (docs/PLAN-biomes.md step 4), from the real height (m), the slope (deg) and |latitude| (deg): above the
+// Mountains, from the real height (m), the slope (deg) and |latitude| (deg): above the
 // treeline the land turns to alpine meadow, above the snowline to lasting snow (off the steepest faces); steep slopes
 // are bare rock at any height. The drape's biome colour holds below.
 fn treeline(lat: f32) -> f32 {
@@ -264,15 +282,20 @@ fn heightBelts(albedo: vec3f, h: f32, slope: f32, lat: f32, land: f32) -> vec3f 
 fn fs(v: VsOut) -> @location(0) vec4f {
   let foot = length(fwidth(v.rel)); // ground width of the pixel (m); derivatives need uniform control flow
   let up = normalize(v.up);
+  // The node's pages (VsOut): height, the parent's, the drape.
+  let layer = nodes[v.node].info.x;
+  let player = nodes[v.node].info.w;
+  let dlayer = bitcast<u32>(nodes[v.node].drape.w);
+  let duv = pageUv(nodes[v.node].drape, v.nl);
   var n = up;
   var h = 0.0;
   var slope = 0.0;
-  if (v.layer != NO_PAGE) {
+  if (layer != NO_PAGE) {
     let cosLat = max(length(up.xy), 0.01);
-    var s = surface(v.layer, v.uv, v.texM, cosLat);
+    var s = surface(layer, pageUv(nodes[v.node].uv, v.nl), nodes[v.node].uv.w, cosLat);
     // Morphing nodes shade towards the parent's page too, so a merge does not pop the lighting either.
-    if (v.morph > 0.0 && v.player != v.layer && v.player != NO_PAGE) {
-      s = mix(s, surface(v.player, v.puv, v.ptexM, cosLat), v.morph);
+    if (v.morph > 0.0 && player != layer && player != NO_PAGE) {
+      s = mix(s, surface(player, pageUv(nodes[v.node].puv, v.nl), nodes[v.node].puv.w, cosLat), v.morph);
     }
     let capK = smoothstep(0.0, 0.05, v.cap);
     s = vec3f(mix(s.x, v.capH / frame.params.x, capK), s.yz * (1.0 - capK));
@@ -288,25 +311,25 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   var albedo = vec3f(0.16, 0.27, 0.10);
   var water = 0.0;
   var lit = 0.0; // how much of the ground the tool's highlight covers (frame.params.w, frame/frameUniforms.ts HIGHLIGHT)
-  if (v.dlayer != NO_PAGE) {
-    let d = textureSampleLevel(drapes, drapeSampler, v.duv, i32(v.dlayer), 0.0);
+  if (dlayer != NO_PAGE) {
+    let d = textureSampleLevel(drapes, drapeSampler, duv, i32(dlayer), 0.0);
     albedo = d.rgb * DRAPE_GAIN;
     water = d.a;
     let mode = u32(frame.params.w + 0.5);
     if (mode != 0u) {
-      let id = textureLoad(cover, clamp(vec2i(v.duv * f32(DRAPE_SIZE)), vec2i(0), vec2i(DRAPE_SIZE - 1)), i32(v.dlayer), 0).r;
+      let id = textureLoad(cover, clamp(vec2i(duv * f32(DRAPE_SIZE)), vec2i(0), vec2i(DRAPE_SIZE - 1)), i32(dlayer), 0).r;
       let wet = select(0.0, 1.0, id >= WET_LO && id <= WET_HI);
       lit = select(select(max(wet, water), water, mode == 2u), select(0.0, 1.0, id == WOOD), mode == 1u);
     }
-  } else if (v.layer != NO_PAGE && h <= 0.0) {
+  } else if (layer != NO_PAGE && h <= 0.0) {
     water = 1.0;
     albedo = vec3f(0.015, 0.05, 0.11);
   }
   albedo = heightBelts(albedo, h, slope, abs(degrees(asin(clamp(up.z, -1.0, 1.0)))), 1.0 - water);
 
   // Keep screen-space UV derivatives for a small shoreline-mask filter below; the source mask is only 256 texels wide.
-  let maskDx = dpdx(v.duv);
-  let maskDy = dpdy(v.duv);
+  let maskDx = dpdx(duv);
+  let maskDy = dpdy(duv);
   let shoreCoverage = water;
   n = normalize(mix(n, up, water)); // water lies flat whatever the DEM says under it
 
@@ -336,14 +359,15 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   water *= 1.0 - ov.a;
   if (frame.params.y > 0.5) {
     // Blends towards the parent level's tint as the vertex morphs: smooth colours mean no pops.
-    let tint = mix(lodTint(v.zoom), lodTint(v.zoom + 5u), clamp(v.morph, 0.0, 1.0));
+    let zoom = nodes[v.node].info.z;
+    let tint = mix(lodTint(zoom), lodTint(zoom + 5u), clamp(v.morph, 0.0, 1.0));
     albedo = mix(albedo, tint * 0.5, 0.6);
   }
 
   let light = sunLightAt(up);
   let sun = frame.sun.w * max(dot(n, frame.sun.xyz), 0.0) * sunShadow(v.rel, n);
   let sky = 0.35 * (0.6 + 0.4 * dot(n, up)) * vec3f(0.55, 0.65, 0.85);
-  var c = albedo * (vec3f(sun) + sky) * light;
+  var c = albedo * (sunTintLinear(up) * sun + sky) * light;
   c += albedo * NIGHT_AMBIENT * (1.0 - light); // moon and starlight: the night side stays readable, not black
   if (water > 0.0) {
     // Keep the original restrained sun glint and sky sheen used by the standard terrain-water renderer.
@@ -361,14 +385,14 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   // Shore foam: the drape mask is a 256px raster, so filter it across one screen pixel before measuring distance.
   // The four explicit-LOD taps smooth the polygon edge without blurring the water body or adding another texture.
   var foamCoverage = shoreCoverage;
-  if (v.dlayer != NO_PAGE) {
-    let layer = i32(v.dlayer);
+  if (dlayer != NO_PAGE) {
+    let dl = i32(dlayer);
     let ox = maskDx * 0.75;
     let oy = maskDy * 0.75;
-    let c0 = textureSampleLevel(drapes, drapeSampler, v.duv - ox - oy, layer, 0.0).a;
-    let c1 = textureSampleLevel(drapes, drapeSampler, v.duv + ox - oy, layer, 0.0).a;
-    let c2 = textureSampleLevel(drapes, drapeSampler, v.duv - ox + oy, layer, 0.0).a;
-    let c3 = textureSampleLevel(drapes, drapeSampler, v.duv + ox + oy, layer, 0.0).a;
+    let c0 = textureSampleLevel(drapes, drapeSampler, duv - ox - oy, dl, 0.0).a;
+    let c1 = textureSampleLevel(drapes, drapeSampler, duv + ox - oy, dl, 0.0).a;
+    let c2 = textureSampleLevel(drapes, drapeSampler, duv - ox + oy, dl, 0.0).a;
+    let c3 = textureSampleLevel(drapes, drapeSampler, duv + ox + oy, dl, 0.0).a;
     foamCoverage = (c0 + c1 + c2 + c3) * 0.25;
   }
   let foamGradient = vec2f(dpdx(foamCoverage), dpdy(foamCoverage));

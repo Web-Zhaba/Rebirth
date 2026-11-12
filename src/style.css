@@ -202,6 +202,32 @@ button.link:focus-visible {
   font-size: 14px;
 }
 
+.stroke-card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: var(--z-label);
+  display: grid;
+  gap: 8px;
+  max-width: 340px;
+  padding: 8px 10px;
+  border: var(--bw-hair) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  box-shadow: var(--shadow-hard-sm);
+  font-size: 12px;
+}
+.stroke-card[hidden] {
+  display: none;
+}
+.stroke-card-text {
+  white-space: pre-wrap;
+}
+.stroke-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .road-label {
   position: absolute;
   left: 0;

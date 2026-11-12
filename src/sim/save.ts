@@ -3,8 +3,9 @@ import { LANDS } from "../world/landcover";
 import { BUILDINGS, FLOOR, homesOf, isPriority, JOB_KEYS, levelHeight, maxLevel, startLevel } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
+import { EXCAVATION } from "./digging";
 import { DIG, parseFinds } from "./excavation";
-import { emptyGrowth, NO_SPAWN, seedOf } from "./growth";
+import { emptyGrowth, seedOf } from "./growth";
 import { parseProgress } from "./research";
 import { migrateProgress } from "./tech";
 import { emptyLevers, type Levers } from "./levers";
@@ -44,7 +45,7 @@ import type {
   TownEvent,
   Upgrade,
   ZoneBlock,
-  ZoneCell,
+  LotCell,
   ZoneState,
   ZoneType,
 } from "./types";
@@ -117,24 +118,22 @@ function parseRoadUpgrade(v: unknown): RoadEdge["upgrade"] | null {
   return { kind: v.kind as RoadEdge["kind"], labor: v.labor, done: v.done, ...(v.stone !== undefined ? { stone: v.stone } : {}) };
 }
 
-const ZONES = ["none", "res", "craft", "trade"];
 const BLOCKS = ["road", "overlap", "field", "water", "steep", "pending"];
 
 const isPoint = (p: unknown): p is [number, number] => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]);
 
-// Saves from before zoning have no `zones`: that is an empty state, not an error.
+// Saves from before the lot cells have no `zones`: that is an empty state, not an error.
 function parseZones(v: unknown): ZoneState | null {
   if (v === undefined) return emptyZones();
   if (!isRecord(v) || !Array.isArray(v.cells) || !Array.isArray(v.fields) || !isRecord(v.terrain)) return null;
   if (!Number.isInteger(v.rev) || (v.rev as number) < 0) return null;
-  const cells: ZoneCell[] = [];
+  const cells: LotCell[] = [];
   for (const raw of v.cells) {
     if (!isRecord(raw) || typeof raw.key !== "string") return null;
     if (!Number.isInteger(raw.edge) || !Number.isInteger(raw.i) || (raw.i as number) < 0) return null;
     if (raw.side !== 1 && raw.side !== -1) return null;
     if (!Number.isInteger(raw.depth) || (raw.depth as number) < 0 || (raw.depth as number) > 3) return null;
     if (!isNum(raw.cx) || !isNum(raw.cy) || !isNum(raw.angle)) return null;
-    if (typeof raw.zone !== "string" || !ZONES.includes(raw.zone)) return null;
     if (raw.block !== null && (typeof raw.block !== "string" || !BLOCKS.includes(raw.block))) return null;
     cells.push({
       key: raw.key,
@@ -145,7 +144,6 @@ function parseZones(v: unknown): ZoneState | null {
       cx: raw.cx,
       cy: raw.cy,
       angle: raw.angle,
-      zone: raw.zone as ZoneCell["zone"],
       block: raw.block as ZoneBlock | null,
     });
   }
@@ -179,7 +177,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     const lot = raw.lot;
     if (!isRecord(lot) || !isNum(lot.cx) || !isNum(lot.cy) || !isNum(lot.angle)) return null;
     // A building on an old foundation (sim/foundationLots.ts) has the real ring as its footprint and a lot that is a
-    // free-sized box. Saves from before docs/PLAN-restoration.md held a restoration ordered apart as `siteId`.
+    // free-sized box. Saves from before foundations set the building held a restoration ordered apart as `siteId`.
     const idOk = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
     const isSite = idOk(raw.siteId);
     const ringShaped = isSite || idOk(raw.foundationId);
@@ -224,6 +222,8 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       if (isSite || raw.asItWas === true) out[id].asItWas = true;
       if ((isSite || raw.asItWas === true) && isNum(raw.restoreWeight) && raw.restoreWeight > 0) out[id].restoreWeight = Math.min(1000, raw.restoreWeight);
       if (raw.asItWas === true && raw.landmark === true) out[id].landmark = true;
+      if (raw.template === EXCAVATION && typeof raw.then === "string" && Object.hasOwn(BUILDINGS, raw.then)) out[id].then = raw.then;
+      if (raw.awaitsRoad === true && out[id].state === "planned") out[id].awaitsRoad = true;
       if (Array.isArray(raw.exhibits) && raw.exhibits.length <= 8 && raw.exhibits.every((x) => x === null || (typeof x === "string" && x.length <= 300))) out[id].exhibits = raw.exhibits as (string | null)[];
       // The ring's area against the template's footprint: saved, or measured on the ring (a restoration had none).
       const ringArea = Math.abs(out[id].footprint.reduce((a, p, i, r) => a + p[0] * r[(i + 1) % r.length][1] - r[(i + 1) % r.length][0] * p[1], 0) / 2);
@@ -233,7 +233,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       const m = raw.materials;
       if (isRecord(m) && isNum(m.logs) && isNum(m.planks) && isNum(m.stone) && m.logs >= 0 && m.planks >= 0 && m.stone >= 0) out[id].materials = { logs: m.logs, planks: m.planks, stone: m.stone };
     }
-    // Saves from before services have no level (1), no streak. Saves from before house levels (docs/PLAN-balance.md B2)
+    // Saves from before services have no level (1), no streak. Saves from before house levels
     // had level 2 only for the house and a large house of level 1 holding two families: a house is at least at the
     // level its template starts at, at most at the highest its area allows.
     const level = Number.isInteger(raw.level) ? (raw.level as number) : 1;
@@ -385,14 +385,14 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
   return { residents, households, nextPersonId: nextPerson, nextHouseholdId: nextHouse, events: events.slice(-MAX_EVENTS) };
 }
 
-// Saves from before goods groups (B3) trade "wares": they trade clothing now.
+// Saves from before goods groups trade "wares": they trade clothing now.
 function oldTrade(v: unknown): unknown {
   if (!isRecord(v)) return v;
   const fix = (g: unknown) => (g === "wares" ? "clothes" : g);
   return { ...v, give: fix(v.give), get: fix(v.get) };
 }
 
-// A stock with any broken figure gives back the founding stock. Saves from before goods groups (docs/PLAN-balance.md B3)
+// A stock with any broken figure gives back the founding stock. Saves from before goods groups
 // carry one `wares` figure: it is split by WARES_SPLIT.
 function parseStock(v: unknown): Stock {
   const ok = (k: string) => isRecord(v) && isNum(v[k]) && (v[k] as number) >= 0;
@@ -404,7 +404,7 @@ function parseStock(v: unknown): Stock {
   return { ...base, clothes: w * WARES_SPLIT.clothes, dishes: w * WARES_SPLIT.dishes, furniture: w * WARES_SPLIT.furniture, tools: w * WARES_SPLIT.tools };
 }
 
-// Saves from before B6 (docs/PLAN-balance.md) have none: the founding party's (`fallback`) until the next midnight sets it.
+// Saves from before immigration by attractiveness have none: the founding party's (`fallback`) until the next midnight sets it.
 function parseAttraction(v: unknown, fallback: Attraction): Attraction {
   if (!isRecord(v)) return fallback;
   const out = { ...NO_ATTRACTION };
@@ -412,7 +412,7 @@ function parseAttraction(v: unknown, fallback: Attraction): Attraction {
   return out;
 }
 
-// What each store holds; saves from before the stores (docs/PLAN-balance.md B4) spread their stock over the stores they
+// What each store holds; saves from before the stores spread their stock over the stores they
 // have. A record that does not add up to the stock is set right by the next tick (storage.ts Ledger.sync).
 function parseStores(v: unknown, stock: Stock, buildings: Record<number, Building>): Stores {
   if (!isRecord(v)) return spreadStores({ stock, buildings, roads: emptyRoads() });
@@ -609,10 +609,6 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   g.weather = parseWeather(sim.weather);
-  const ls = sim.lastSpawn;
-  if (isRecord(ls) && isNum(ls.res) && isNum(ls.craft) && isNum(ls.trade)) {
-    g.lastSpawn = { res: ls.res, craft: ls.craft, trade: ls.trade };
-  } else g.lastSpawn = { res: NO_SPAWN, craft: NO_SPAWN, trade: NO_SPAWN };
   return g;
 }
 
@@ -649,12 +645,13 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   if (!isNum(sim.gameMinutes) || sim.gameMinutes < 0) return null;
   const roads = parseRoads(sim.roads);
   if (!roads) return null;
-  // Cells are rebuilt from roads on load, so broken zone data only costs the paint,
-  // never the whole town (a rejected save would send the player back to founding).
+  // Cells are rebuilt from roads on load, so broken cell data never costs the whole town (a rejected save would send
+  // the player back to founding). Saves from before strokes replaced the zones carry painted zones and a lastSpawn record:
+  // both are left out, and the buildings the zones grew stay where they stand.
   const zones = parseZones(sim.zones) ?? emptyZones();
   const growth = parseGrowth(sim, city, sim.gameMinutes);
   // A save without progress is an existing town: it gets the techs its old goals and buildings prove, silently.
-  growth.progress = parseProgress(sim.progress) ?? migrateProgress({ ...growth, zones }, sim.goals);
+  growth.progress = parseProgress(sim.progress) ?? migrateProgress(growth, sim.goals);
   return { version: 4, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...growth } };
 }
 

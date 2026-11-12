@@ -3,7 +3,7 @@ import { addChronicle } from "./chronicle";
 import type { Building, DigInfo, FeatureKind, FoundFeature, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
 import { decimal, L, plural } from "../i18n";
 
-// Excavation (PLAN.md section 12, docs/PLAN-restoration.md section 5) in two stages. A dig site is the survey: wide, fast
+// Excavation in two stages. A dig site is the survey: wide, fast
 // and cheap, it reveals a growing disc of the buried old city's plan, its streets and the ghost outlines of its buildings.
 // Each outline is then dug on its own (sim/digging.ts): only a dug foundation can be built on and gives its stone.
 export const DIG = {

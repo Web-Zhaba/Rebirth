@@ -13,9 +13,9 @@ import { Sky } from "./sky/sky";
 import type { WeatherGpu } from "./sky/weather";
 import { EXAGGERATION, Terrain } from "./terrain/terrain";
 
-// The engine on one canvas (docs/PLAN-engine.md section 4): device, the main pass with MSAA and one reversed-Z depth
+// The engine on one canvas: device, the main pass with MSAA and one reversed-Z depth
 // buffer, terrain, sky and whatever else registers to draw, plus the camera questions the game asks (pick, project).
-// Content kinds (N3+) add themselves as Drawables.
+// Content kinds add themselves as Drawables.
 
 export interface Drawable {
   occluder?: boolean; // drawn before the Hi-Z build (terrain-like solid geometry that hides what lies behind it)
@@ -26,6 +26,7 @@ export interface Drawable {
   drawShadow?(pass: GPURenderPassEncoder, shadow: ShadowMap): void; // casts into the sun's shadow map (depth only)
   shadowVersion?: number; // changes whenever what drawShadow draws changed (the map is re-rendered then)
   afterSubmit?(): void; // the frame's commands are on the queue (timer read-backs)
+  wantsHiZ?(): boolean; // its compute tests against the occluders' depth pyramid this frame (asked after update)
 }
 
 export interface FrameSample {
@@ -64,6 +65,11 @@ export class Engine {
   readonly shadow: ShadowMap;
   light: (s: CameraState) => Light = defaultLight;
   lodTint = false;
+  // The canvas's size in CSS px, kept by a ResizeObserver. Asking the canvas for it (clientWidth) forces the page's
+  // style and layout to be worked out on the spot, and a frame asked a dozen times: after any change of the interface
+  // (the clock, a label that moved) the first asker paid for a whole layout, in the middle of the frame.
+  width = 1;
+  height = 1;
   highlight: Highlight | null = null; // a class of ground tinted for a tool (frame/frameUniforms.ts HIGHLIGHT)
   private readonly sky: Sky;
   private readonly frameListeners = new Set<(s: FrameSample) => void>();
@@ -93,6 +99,19 @@ export class Engine {
     this.hiz = new HiZ(device);
     this.timer = gpu.timestamps ? new GpuTimer(device) : null;
     if (this.timer) this.timer.onSample = (ms) => this.gpuListeners.forEach((f) => f(ms));
+    this.width = Math.max(1, canvas.clientWidth);
+    this.height = Math.max(1, canvas.clientHeight);
+    // A resize is seen after the frame's layout, before it is painted: drawn again at once, the canvas never shows a
+    // frame stretched to its new size.
+    new ResizeObserver((entries) => {
+      const box = entries[entries.length - 1].contentRect;
+      const w = Math.max(1, Math.round(box.width));
+      const h = Math.max(1, Math.round(box.height));
+      if (w === this.width && h === this.height) return;
+      this.width = w;
+      this.height = h;
+      if (this.running) this.frame(performance.now());
+    }).observe(canvas);
   }
 
   get device(): GPUDevice {
@@ -148,7 +167,7 @@ export class Engine {
   // Ground metres per CSS px at the camera target (the scale a web map's zoom implies: view/view.ts mppAtZoom).
   metersPerPixel(): number {
     const s = this.state;
-    return (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, this.canvas.clientHeight);
+    return (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / this.height;
   }
 
   // Whether the drawn ground hides a point (h as drawn) from the eye: the ray towards it meets the ground first. The last
@@ -170,8 +189,8 @@ export class Engine {
   pick(x: number, y: number): Geodetic | null {
     const v = this.view;
     if (!v) return null;
-    const nx = (x / Math.max(1, this.canvas.clientWidth)) * 2 - 1;
-    const ny = 1 - (y / Math.max(1, this.canvas.clientHeight)) * 2;
+    const nx = (x / this.width) * 2 - 1;
+    const ny = 1 - (y / this.height) * 2;
     return pickGround(v.eye, rayDir(v, nx, ny), this.groundAt);
   }
 
@@ -181,7 +200,7 @@ export class Engine {
     if (!v) return null;
     const [x, y, , w] = transformPoint(v.viewProj, sub(geodeticToEcef(lat, lng, h), v.eye));
     if (w <= 0) return null;
-    return [((x / w + 1) / 2) * this.canvas.clientWidth, ((1 - y / w) / 2) * this.canvas.clientHeight];
+    return [((x / w + 1) / 2) * this.width, ((1 - y / w) / 2) * this.height];
   }
 
   private frame(now: number): void {
@@ -189,7 +208,7 @@ export class Engine {
     for (const f of [...this.beforeFrameListeners]) f(now);
     const { device, context } = this.gpu;
     const canvas = this.canvas;
-    if (fitCanvas(canvas) || !this.depth) {
+    if (fitCanvas(canvas, this.width, this.height) || !this.depth) {
       this.color?.destroy();
       this.depth?.destroy();
       const size = [canvas.width, canvas.height];
@@ -206,9 +225,10 @@ export class Engine {
     }
     clampState(s);
     liftEyeAboveGround(s, this.groundAt);
-    const view = buildView(s, canvas.clientWidth, canvas.clientHeight, this.groundAt);
+    const view = buildView(s, this.width, this.height, this.groundAt);
     this.view = view;
     this.overlay.update(s, this.metersPerPixel());
+    this.terrain.casterReach = this.shadow.reach(view);
     this.terrain.update(view);
     for (const d of this.drawables) d.update?.(view, this);
     const light = this.light(s);
@@ -221,7 +241,7 @@ export class Engine {
     // The timer spans the shadow pass (when it runs), the occluders and the main pass.
     const times = this.timer?.passWrites();
     const begin = times && { querySet: times.querySet, beginningOfPassWriteIndex: times.beginningOfPassWriteIndex };
-    // The sun's shadow map first, when what it is baked from changed (docs/PLAN-shadows.md): every receiver below
+    // The sun's shadow map first, when what it is baked from changed: every receiver below
     // samples it. The forest casts the instances its scatter made last frame (scene/forest.ts drawShadow).
     if (castShadows) {
       const shadowPass = this.shadow.beginPass(encoder, begin);
@@ -231,7 +251,7 @@ export class Engine {
       shadowPass.end();
     }
     // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else
-    // on top of the same colour and depth (docs/PLAN-engine.md N6).
+    // on top of the same colour and depth.
     const colorView = this.color!.createView();
     const depthView = this.depth.createView();
     const occluders = encoder.beginRenderPass({
@@ -244,7 +264,8 @@ export class Engine {
     this.terrain.draw(occluders);
     for (const d of this.drawables) if (d.occluder) d.draw(occluders);
     occluders.end();
-    this.hiz.build(encoder, this.depth);
+    // The pyramid is a compute pass over every level of the depth: built only for a frame something culls against it.
+    if (this.drawables.some((d) => d.wantsHiZ?.())) this.hiz.build(encoder, this.depth);
     for (const d of this.drawables) d.compute?.(encoder);
     const pass = encoder.beginRenderPass({
       label: "main",

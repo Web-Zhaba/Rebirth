@@ -22,7 +22,7 @@ import { MAP_ONLY, PALETTE, TREE_COLORS } from "../../ui/palette";
 import { zoomAtMpp } from "../view";
 import { climateGround, townShare, townWeather, wetness, type CubeWeather, type TownWeather, type WeatherOverride } from "./townWeather";
 
-// The sky and weather of the game on the engine (docs/PLAN-engine.md N7): the weather cube pair and the noise volumes
+// The sky and weather of the game on the engine: the weather cube pair and the noise volumes
 // from the cloud worker (map/clouds/cloudData.ts) into the engine's weather textures, the per-frame weather uniform
 // (drift of the shadow noise, the town's snow, wet ground and ice), and the cloud volume of the globe views with its
 // zoom fade, march cache and lightning (the old cloud layer's decisions, map/clouds/cloudQuality.ts), and the rain or

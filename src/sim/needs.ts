@@ -2,7 +2,7 @@ import { YEAR_MIN } from "./time";
 import type { Building, Household, Needs, NeedsStats, Resident } from "./types";
 import { L } from "../i18n";
 
-// Personal needs (design: docs/PLAN-needs.md). Every resident carries four 0..100 values; a satisfied need is 100.
+// Personal needs. Every resident carries four 0..100 values; a satisfied need is 100.
 // Unmet needs cost work, walking speed, mood and, at the bottom, health; a low mood costs work, births, learning
 // and keeps newcomers away, and it is the loudest reason a family leaves.
 //

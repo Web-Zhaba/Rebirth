@@ -39,7 +39,7 @@ const SPEEDS: { v: Speed; label: string; key: string }[] = [
 ];
 const KEY_SPEED: Record<string, Speed> = { "1": 1, "2": 2, "3": 4 };
 
-// 1/2/3 pick a speed, P pauses; Space too, unless a map tool is active (the zone brush pans with Space).
+// 1/2/3 pick a speed, P pauses; Space too, unless a map tool is active (drawing tools pan with Space).
 function onSpeedKey(e: KeyboardEvent): void {
   if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
   const el = e.target as HTMLElement | null;

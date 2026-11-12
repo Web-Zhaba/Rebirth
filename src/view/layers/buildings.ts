@@ -7,7 +7,9 @@ import { buildings, buildingSet, frame, lifeLights, state } from "../../simClien
 import type { Frame } from "../../world/frame";
 import { mixHex } from "../../ui/palette";
 import type { ModelItem } from "../../map/modelItems";
-import { overlay, OVERLAY_COLORS, tool, type Overlay } from "../../map/tools";
+import { lastTool, overlay, OVERLAY_COLORS, tool, toolOfTemplate, type Overlay } from "../../map/tools";
+import { pickTool } from "../../map/toolPick";
+import { shouldRepeatTool } from "../../ui/inputModel";
 import { buildBuildingSpatialIndex, buildingSpatialCandidates, type BuildingSpatialIndex } from "../../map/buildingHitIndex";
 import type { View } from "../view";
 
@@ -153,6 +155,21 @@ export function attachBuildingPick(view: View): void {
     if (tool.value || e.original.defaultPrevented) return; // a resident took the click (view/engine/life.ts)
     const slop = e.pointerType === "touch" ? Math.min(MAX_SLOP_M, TOUCH_SLOP_PX * view.metersPerPixel()) : 0;
     selectedBuilding.value = buildingAt(e.lngLat[0], e.lngLat[1], slop);
+  });
+  // Middle click: the pipette, the tool and kind of the building or plan under the pointer; over open ground, the last
+  // tool again.
+  view.on("pointerdown", (e) => {
+    if (e.original.button !== 1 || !e.isPrimary) return;
+    const id = buildingAt(e.lngLat[0], e.lngLat[1]);
+    const b = id === null ? undefined : buildings.peek()?.[id];
+    const pick = b ? toolOfTemplate(b.template) : null;
+    if (pick) {
+      e.original.preventDefault();
+      pickTool(pick.tool, pick.variant);
+    } else if (shouldRepeatTool(1, tool.peek(), lastTool.peek())) {
+      e.original.preventDefault();
+      tool.value = lastTool.peek();
+    }
   });
   let pointer = false;
   view.on("pointermove", (e) => {

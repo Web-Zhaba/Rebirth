@@ -1,6 +1,7 @@
 #include "frame"
 #include "weather"
 #include "shadow"
+#include "light"
 
 // The forest's trees and small details (scene/forest.ts), drawn from the scatter's instances (forestScatter.wgsl):
 // near ones as their models, far ones as impostors facing the camera (scene/treeAtlas.ts), both lit, recoloured with the
@@ -63,8 +64,7 @@ fn shade(colIn: vec3f, n: vec3f, crown: f32, h: f32, spot: f32, kind: u32, hash:
     col = mix(col, forest.snow.rgb, kp.z * smoothstep(0.12, 0.45, n.z) * mix(0.35, 0.95, spot));
   }
   let d = max(dot(n, forest.light.xyz), 0.0);
-  let k = mix(0.55, 1.0, d * lit) * mix(0.88, 1.0, forest.light.w);
-  return col * k * shadowInk(lit, d) * mix(NIGHT, vec3f(1.0), forest.params.x);
+  return col * modelLight(n.z, d, lit, forest.light.w, forest.u.xyz) * mix(NIGHT, vec3f(1.0), forest.params.x);
 }
 
 struct Inst {

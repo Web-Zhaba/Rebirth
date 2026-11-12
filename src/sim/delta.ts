@@ -16,7 +16,7 @@ export type SimDelta = Partial<SimSnapshot> & Pick<SimSnapshot, "gameMinutes" | 
 
 // The parts of a snapshot made anew for every one (the rest are parts of the state, the same object until they change):
 // these are compared by content.
-const DERIVED: ReadonlySet<string> = new Set<keyof SimSnapshot>(["digs", "people", "economy", "services", "houseMood", "houseGoods", "houseResidents", "research", "fieldProgress", "heritageMul", "callBlock", "inflow"]);
+const DERIVED: ReadonlySet<string> = new Set<keyof SimSnapshot>(["digs", "people", "economy", "services", "houseMood", "houseGoods", "houseResidents", "research", "fieldProgress", "heritageMul", "callBlock", "inflow", "museumStaff"]);
 
 // What the main thread already has of the town: the snapshot it was last brought up to, with the text of its derived parts.
 export interface Posted {

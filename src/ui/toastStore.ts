@@ -7,7 +7,7 @@ import { diffEvents, isImportant, pushToast, soundFor, type Toast } from "./toas
 // is only a baseline: history is never replayed.
 export const toasts = signal<Toast[]>([]);
 
-// The last unique old building uncovered since the page loaded (docs/PLAN-restoration.md section 5): the map flies to it
+// The last unique old building uncovered since the page loaded: the map flies to it
 // and its card opens (Toasts.tsx). Not on a baseline snapshot: history is never replayed.
 export const discovered = signal<{ site: string; pos: [number, number]; n: number } | null>(null);
 let discoveries = 0;
