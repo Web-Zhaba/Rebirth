@@ -50,11 +50,12 @@ export async function initGpu(canvas: HTMLCanvasElement, wantLayers = 512): Prom
   return { adapter, device, context, format, timestamps, info: [i.vendor, i.architecture, i.description].filter(Boolean).join(" ") };
 }
 
-// Keep the drawing buffer at CSS size x devicePixelRatio. Returns true when it changed.
-export function fitCanvas(canvas: HTMLCanvasElement): boolean {
+// Keep the drawing buffer at CSS size x devicePixelRatio. Returns true when it changed. The CSS size is the caller's
+// (the engine keeps it from a ResizeObserver): reading it off the canvas here would force a layout every frame.
+export function fitCanvas(canvas: HTMLCanvasElement, cssWidth = canvas.clientWidth, cssHeight = canvas.clientHeight): boolean {
   const dpr = window.devicePixelRatio || 1;
-  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
-  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  const w = Math.max(1, Math.round(cssWidth * dpr));
+  const h = Math.max(1, Math.round(cssHeight * dpr));
   if (canvas.width === w && canvas.height === h) return false;
   canvas.width = w;
   canvas.height = h;

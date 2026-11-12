@@ -128,8 +128,8 @@ export function attachGameLabels(engine: Engine, container: HTMLElement): void {
   engine.onFrame(() => {
     if (!engine.view) return;
     const s = engine.state;
-    const w = engine.canvas.clientWidth;
-    const h = engine.canvas.clientHeight;
+    const w = engine.width;
+    const h = engine.height;
     const mpp = (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, h);
     const ruins = ruinsShown.peek() || ruinsAutoShown.peek();
     const onScreen = (p: [number, number] | null): p is [number, number] => !!p && p[0] >= -MARGIN && p[1] >= -MARGIN && p[0] <= w + MARGIN && p[1] <= h + MARGIN;

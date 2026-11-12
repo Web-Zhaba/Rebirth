@@ -107,6 +107,7 @@ export class Terrain {
   private drawCount = 0;
   private frameNo = 0;
   tau = DEFAULT_TAU;
+  casterReach = 0; // m around the camera target where nodes out of view are still drawn: they cast into the sun's shadow map (the engine sets it)
   morphing = true; // false: no geomorphing (A/B in devtools: __engine.terrain.morphing = false)
   maxZoom = MAX_ZOOM;
   stats: TerrainStats = { nodes: 0, visited: 0, maxZoom: 0, pages: 0, pageLayers: 0, pending: 0, inFlight: 0, missing: 0, vertexBuilds: 0, selectionHash: 0, morph: { lo: 0, hi: 0 }, deferredUploads: 0, drapePages: 0, drapePending: 0 };
@@ -228,7 +229,13 @@ export class Terrain {
       aspect: v.aspect,
       viewportH: v.viewportH,
     };
-    const opts = { tau: this.tau, maxZoom: this.maxZoom, maxNodes: Math.min(MAX_NODES, SLOTS) - 4 };
+    const targetGeo = this.casterReach > 0 ? ecefToGeodetic(v.target) : null;
+    const opts = {
+      tau: this.tau,
+      maxZoom: this.maxZoom,
+      maxNodes: Math.min(MAX_NODES, SLOTS) - 4,
+      casters: targetGeo ? { at: { eye: v.target, eyeLat: targetGeo.lat, eyeLng: targetGeo.lng, eyeAlt: targetGeo.h }, radius: this.casterReach } : undefined,
+    };
     const sel = selectNodes(sv, this.cache, this.ranges, this.prevSplit, opts, this.nextSplit, this.selected);
     this.nextSplit = this.prevSplit;
     this.prevSplit = sel.split;
@@ -318,7 +325,7 @@ export class Terrain {
       f[o] = so[s * 3] - eye[0];
       f[o + 1] = so[s * 3 + 1] - eye[1];
       f[o + 2] = so[s * 3 + 2] - eye[2];
-      f[o + 3] = node.cell + 20; // skirt depth
+      f[o + 3] = node.cell + 20; // skirt depth (quadtree.ts SKIRT: outOfView counts on it)
       writePage(f, u, o + 4, o + 20, node, page);
       writePage(f, u, o + 8, o + 23, node, parent);
       f[o + 12] = hb;
@@ -433,7 +440,7 @@ export class Terrain {
     if (!this.drawCount) return;
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(1, this.bindGroup);
-    pass.setIndexBuffer(this.indexBuf, "uint32");
+    pass.setIndexBuffer(this.indexBuf, "uint16");
     pass.drawIndexed(this.indexCount, this.drawCount);
   }
 
@@ -442,7 +449,7 @@ export class Terrain {
     if (!this.drawCount) return;
     pass.setPipeline(this.shadowPipeline);
     pass.setBindGroup(1, this.bindGroup);
-    pass.setIndexBuffer(this.indexBuf, "uint32");
+    pass.setIndexBuffer(this.indexBuf, "uint16");
     const b = this.rowBounds;
     const c: Vec3 = [0, 0, 0];
     let start = -1;

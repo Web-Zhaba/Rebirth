@@ -20,6 +20,11 @@ const UNKNOWN_RANGE: [number, number] = [-500, 9000 * 1.6];
 const EQUATOR_R = 6378137;
 const HORIZON_SLACK = 25_000; // m the horizon sphere is shrunk by, so the ellipsoid's flattening never over-culls
 const RAD = Math.PI / 180;
+const HULL = [0, 2, 4, 10, 12, 14, 20, 22, 24]; // the corner, edge-middle and centre samples: a 3 x 3 grid over the tile
+const HULL_FROM = 4; // zoom from which the hull test is used: wider tiles bulge too far over their samples
+const HULL_GUARD = 1.1; // the view is taken this much wider, so a node is selected a little before it shows
+const HULL_PAD = 10; // m added to both ends of the height range
+const SKIRT = 20; // m a node's skirt hangs below its lowest point, on top of one grid cell (terrain.ts)
 
 export interface HeightRange {
   min: number; // m, as drawn (exaggerated)
@@ -79,7 +84,12 @@ export interface SelectOptions {
   tau: number;
   maxZoom: number;
   maxNodes: number;
+  // Nodes within `radius` metres of this point stay selected even out of view: they may cast into the sun's shadow map.
+  casters?: { at: GroundPoint; radius: number };
 }
+
+// A point the distance to a node is measured from: the eye, or the camera target for the shadow casters.
+export type GroundPoint = Pick<SelectView, "eye" | "eyeLat" | "eyeLng" | "eyeAlt">;
 
 export interface Selection {
   nodes: NodeInfo[];
@@ -248,7 +258,7 @@ export interface EyeCache {
   cosLng: number;
 }
 
-export function eyeCache(v: SelectView): EyeCache {
+export function eyeCache(v: Pick<SelectView, "eyeLat" | "eyeLng">): EyeCache {
   return {
     mx: lngToMx(v.eyeLng),
     my: latToMy(v.eyeLat),
@@ -262,7 +272,7 @@ export function eyeCache(v: SelectView): EyeCache {
 // Distance from the eye to the node's nearest point: clamp the eye into the tile in mercator space, lift to the
 // eye's altitude within the node's height range. Exact enough for LOD, cheap (the clamped point's latitude and
 // longitude are either the eye's or a tile edge's, all with cached sin/cos), and correct across the antimeridian.
-export function nodeDistance(node: NodeInfo, v: SelectView, e: EyeCache = eyeCache(v)): number {
+export function nodeDistance(node: NodeInfo, v: GroundPoint, e: EyeCache = eyeCache(v)): number {
   const n = 2 ** node.z;
   let ex = e.mx * n;
   const cx = node.x + 0.5;
@@ -313,6 +323,51 @@ export function inFrustum(node: NodeInfo, v: SelectView, sx = Math.sqrt(1 + (v.t
   return true;
 }
 
+// Out of view for sure: everything the node draws lies beyond one side of the view. Its surface (the morph towards the
+// parent's heights and the skirts included) is inside the hull of nine samples at the bottom and at the lifted top of
+// its height range: between samples half a tile apart the globe bulges by the sagitta of their diagonal, which the top
+// is raised by. The bounding sphere of inFrustum is far wider than a flat tile: under a camera near the ground it let
+// through most of the coarse tiles around the view, every one a full grid of vertices for nothing.
+export function outOfView(node: NodeInfo, v: SelectView): boolean {
+  if (node.z < HULL_FROM || node.y === 0 || node.y === 2 ** node.z - 1) return false; // the polar rows also draw the cap
+  const p = node.parent;
+  const half = (node.cell * (GRID - 1)) / 2;
+  const lo = Math.min(node.hmin, p ? p.hmin : node.hmin) - node.cell - SKIRT - HULL_PAD;
+  const hi = Math.max(node.hmax, p ? p.hmax : node.hmax) + (half * half) / (4 * 6.3e6) + HULL_PAD;
+  const s = node.samples;
+  const u = node.ups;
+  const e = v.eye;
+  const r = v.right;
+  const up = v.up;
+  const f = v.forward;
+  const tx = v.tanHalfY * v.aspect * HULL_GUARD;
+  const ty = v.tanHalfY * HULL_GUARD;
+  let left = true;
+  let right = true;
+  let above = true;
+  let below = true;
+  let behind = true;
+  for (let i = 0; i < HULL.length; i++) {
+    const k = HULL[i] * 3;
+    for (let j = 0; j < 2; j++) {
+      const h = j ? hi : lo;
+      const px = s[k] + u[k] * h - e[0];
+      const py = s[k + 1] + u[k + 1] * h - e[1];
+      const pz = s[k + 2] + u[k + 2] * h - e[2];
+      const z = px * f[0] + py * f[1] + pz * f[2];
+      const x = px * r[0] + py * r[1] + pz * r[2];
+      const y = px * up[0] + py * up[1] + pz * up[2];
+      if (x <= z * tx) right = false;
+      if (-x <= z * tx) left = false;
+      if (y <= z * ty) above = false;
+      if (-y <= z * ty) below = false;
+      if (z >= v.near) behind = false;
+      if (!(left || right || above || below || behind)) return false;
+    }
+  }
+  return true;
+}
+
 // Hidden behind the planet if no sample (lifted to the node's max height) has a clear line to the eye. The earth is
 // treated as a sphere through each sample, shrunk a little so the ellipsoid's flattening never over-culls.
 export function aboveHorizon(node: NodeInfo, v: SelectView): boolean {
@@ -347,11 +402,14 @@ export function selectNodes(v: SelectView, cache: NodeCache, heights: HeightRang
   const version = heights.version ? heights.version() : NaN;
   const sx = Math.sqrt(1 + (v.tanHalfY * v.aspect) ** 2);
   const sy = Math.sqrt(1 + v.tanHalfY ** 2);
+  const casters = opt.casters && opt.casters.radius > 0 ? opt.casters : null;
+  const castersAt = casters ? eyeCache(casters.at) : e;
   let visited = 0;
   const visit = (node: NodeInfo) => {
     visited++;
     refreshBounds(node, heights, version);
     if (!inFrustum(node, v, sx, sy) || !aboveHorizon(node, v)) return;
+    if (outOfView(node, v) && !(casters && nodeDistance(node, casters.at, castersAt) <= casters.radius)) return;
     node.dist = nodeDistance(node, v, e);
     const sse = (node.cell / Math.max(node.dist, near)) * k;
     node.sse = sse;

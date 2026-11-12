@@ -159,8 +159,7 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
       if (rebuild(tf)) dirty = false;
       else wait = RETRY_FRAMES;
     }
-    const s = engine.state;
-    const mpp = (2 * s.distance * Math.tan((s.fovY * Math.PI) / 360)) / Math.max(1, engine.canvas.clientHeight);
+    const mpp = engine.metersPerPixel();
     mesh.ruinsShown = (ruinsShown.peek() || ruinsAutoShown.peek()) && mpp <= RUIN_WALL_MPP;
     if (tf && mesh.ruinsShown && ruinsDirty && ruinsWait-- <= 0) {
       if (startRuins(tf)) ruinsDirty = false;

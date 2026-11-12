@@ -68,6 +68,14 @@ export class ShadowMap {
     return this.cache.stale([...f.origin, ...this.sun, f.radius, size, r(e[0], 0.01), r(e[1], 0.01), r(e[2], 0.01), r(fw[0], 1e-5), r(fw[1], 1e-5), r(fw[2], 1e-5), ...casters]);
   }
 
+  // How far from the camera target (m) something can stand and still cast into the map of this view: the reach of the
+  // map's box (its half-extent across, twice that along the sun). 0 with the shadows off.
+  reach(view: CameraView): number {
+    if (this.quality === "off") return 0;
+    const d = Math.hypot(view.eye[0] - view.target[0], view.eye[1] - view.target[1], view.eye[2] - view.target[2]);
+    return Math.sqrt(6) * shadowRadius(d, SHADOW_SIZES[this.quality]);
+  }
+
   // Whether a caster's bounding sphere (absolute ECEF) reaches into this frame's map.
   covers(center: Vec3, radius: number): boolean {
     return this.frame !== null && shadowCovers(this.frame, center, radius);

@@ -391,6 +391,11 @@ export class Forest implements Drawable {
     this.writeLook(up);
   }
 
+  // The scatter tests its candidates against the occluders' depth while there is anything to scatter.
+  wantsHiZ(): boolean {
+    return this.jobCount > 0 && this.occlusion;
+  }
+
   compute(encoder: GPUCommandEncoder): void {
     if (!this.jobCount) return;
     this.scatterEye = this.eye;

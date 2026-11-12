@@ -13,7 +13,7 @@ const pinSvg = (color: string) =>
 // The View on the own engine: the canvas is the engine's, the camera is its control, events come from the canvas.
 export function createEngineView(engine: Engine, camera: CameraControl, container: HTMLElement): View {
   const canvas = engine.canvas;
-  const heightPx = () => canvas.clientHeight || 1;
+  const heightPx = () => engine.height;
   const fov = () => engine.state.fovY;
 
   const target = (goal: CameraGoal): CameraTarget => ({
@@ -42,7 +42,7 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
     const ground = engine.groundAt(m.at[1], m.at[0]) ?? 0;
     const p = engine.project(m.at[1], m.at[0], ground);
     // Only markers on screen ask for a line of sight: a ray costs, and one off screen is clipped by the layer anyway.
-    const off = !p || p[0] < 0 || p[1] < 0 || p[0] > canvas.clientWidth || p[1] > canvas.clientHeight;
+    const off = !p || p[0] < 0 || p[1] < 0 || p[0] > engine.width || p[1] > engine.height;
     if (!p || (!off && hidden(m.key, m.at[1], m.at[0], ground))) m.holder.style.display = "none";
     else {
       m.holder.style.display = "";
@@ -57,6 +57,7 @@ export function createEngineView(engine: Engine, camera: CameraControl, containe
   return {
     canvas,
     container,
+    size: () => [engine.width, engine.height],
 
     camera(): Camera {
       const s = engine.state;

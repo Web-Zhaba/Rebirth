@@ -138,8 +138,8 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     let nw = 0;
     walkers = [];
     const eye = close ? dots.toLocal(v!.eye) : null;
-    const width = engine.canvas.clientWidth;
-    const height = engine.canvas.clientHeight;
+    const width = engine.width;
+    const height = engine.height;
     const moving = o.gameMinPerSec() > 0;
     const seconds = now / 1000;
     const tall: { d: number; who: number; sex: "m" | "f"; age: number; p: [number, number, number]; at: [number, number]; g: number; dir: [number, number]; action: Action }[] = [];

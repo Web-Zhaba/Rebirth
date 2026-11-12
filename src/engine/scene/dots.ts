@@ -124,8 +124,8 @@ export class Dots implements Drawable {
     if (!this.origin || !this.axes) return;
     const o = this.origin;
     const { east, north, up } = this.axes;
-    const h = Math.max(1, engine.canvas.clientHeight);
-    this.data.set([o[0] - view.eye[0], o[1] - view.eye[1], o[2] - view.eye[2], h / 2, ...east, 0, ...north, 0, ...up, 0, engine.canvas.clientWidth / h, 0, 0, 0]);
+    const h = engine.height;
+    this.data.set([o[0] - view.eye[0], o[1] - view.eye[1], o[2] - view.eye[2], h / 2, ...east, 0, ...north, 0, ...up, 0, engine.width / h, 0, 0, 0]);
     this.device.queue.writeBuffer(this.uniform, 0, this.data);
   }
 

@@ -69,6 +69,7 @@ export interface Overlay {
 
 export interface View {
   readonly canvas: HTMLCanvasElement;
+  size(): [number, number]; // the canvas in CSS px, without asking the page for its layout
   readonly container: HTMLElement; // for DOM the tools pin over the map
 
   camera(): Camera;

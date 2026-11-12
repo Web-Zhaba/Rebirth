@@ -55,8 +55,7 @@ export function attachBadges(view: View): void {
       return;
     }
     const levers = state.peek()?.levers;
-    const cw = view.canvas.clientWidth;
-    const ch = view.canvas.clientHeight;
+    const [cw, ch] = view.size();
     const inView = (at: [number, number]) => {
       const [x, y] = view.project(at);
       return x >= 0 && y >= 0 && x <= cw && y <= ch; // NaN (behind the camera) fails too
