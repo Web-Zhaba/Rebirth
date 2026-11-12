@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Доска доменов — наука</title>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800&family=Golos+Text:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bark:#e2d2b0;--bark-r:#ecdfc2;--bark-s:#d3c09b;--tar:#1f1a13;--moss:#2f3a2c;--resin:#c07a22;--pencil:#554935}
+*{box-sizing:border-box;margin:0}
+html,body{height:900px;overflow:hidden;background:var(--moss);font-family:"Golos Text",sans-serif;color:var(--tar)}
+.work{width:1440px;height:900px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.sheet{flex:1;display:flex;flex-direction:column;min-height:0;background:
+  repeating-linear-gradient(0deg,rgba(31,26,19,.04) 0 1px,transparent 1px 22px),
+  linear-gradient(178deg,var(--bark-r),var(--bark) 70%,var(--bark-s));
+  border:1.5px solid var(--tar);box-shadow:0 16px 30px rgba(10,14,8,.55)}
+.head{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:2px solid var(--tar)}
+.head h1{font-family:"Bitter",serif;font-weight:800;font-size:26px;letter-spacing:-.01em}
+.head .s{font-family:"Bitter",serif;font-size:12.5px;color:var(--pencil)}
+.head .filters{margin-left:auto;display:flex;gap:6px}
+.f{border:1.5px solid var(--tar);padding:3px 9px;font-size:11.5px;font-family:"Bitter",serif;font-weight:600}
+.f.on{background:var(--tar);color:var(--bark-r)}
+/* board: domains as columns, eras as bands */
+.board{flex:1;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:auto 1fr 1fr;min-height:0}
+.corner{border-right:1px solid var(--tar);border-bottom:1px solid var(--tar);background:var(--bark-s);padding:7px 10px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--pencil)}
+.colhead{border-right:1px solid var(--tar);border-bottom:1px solid var(--tar);padding:8px 10px;display:flex;align-items:center;gap:7px;font-family:"Bitter",serif;font-weight:800;font-size:12.5px}
+.colhead i{width:9px;height:9px;border:1px solid var(--tar);flex:none}
+.colhead .n{margin-left:auto;font-weight:400;font-size:10.5px;color:var(--pencil)}
+.eras{display:flex;align-items:center;justify-content:center;border-right:1px solid var(--tar);border-bottom:1px solid var(--tar);background:var(--bark-s);writing-mode:horizontal-tb;padding:8px 4px;text-align:center}
+.eras b{font-family:"Bitter",serif;font-size:13px;font-weight:800;display:block}
+.eras span{font-size:10.5px;color:var(--pencil);display:block;margin-top:3px}
+.cell{border-right:1px solid var(--tar);border-bottom:1px solid var(--tar);padding:7px;display:flex;flex-direction:column;gap:5px;overflow:hidden}
+.chip{display:flex;align-items:center;gap:6px;border:1.5px solid var(--tar);background:var(--bark-r);padding:4px 7px;font-family:"Bitter",serif;font-size:11.5px;font-weight:600;line-height:1.2}
+.chip small{font-family:"Golos Text";font-size:9.5px;font-weight:400;color:var(--pencil);margin-left:auto;white-space:nowrap}
+.chip.lock{border-style:dashed;background:transparent;color:var(--pencil);font-weight:400}
+.chip.go{border-color:var(--tar);background:var(--resin)}
+.chip.sel{background:var(--tar);color:var(--bark-r)}
+.chip.sel small{color:var(--bark-s)}
+.foot{display:flex;align-items:center;gap:14px;padding:9px 22px 13px;border-top:2px solid var(--tar);font-size:12px}
+.foot .bar{width:140px;height:7px;border:1px solid var(--tar);background:var(--bark-s)}
+.foot .bar i{display:block;height:100%;width:34%;background:var(--tar)}
+.btn{height:32px;padding:0 14px;background:var(--tar);color:var(--bark-r);font-family:"Bitter",serif;font-weight:800;font-size:13px;border:0}
+.btn.g{background:transparent;color:var(--tar);border:1.5px solid var(--tar)}
+</style>
+</head>
+<body>
+<div class="work"><div class="sheet">
+  <div class="head">
+    <h1>Наука</h1>
+    <span class="s">Эпоха I «Поселение» · 0 из 21</span>
+    <div class="filters"><span class="f on">Все</span><span class="f">Доступные</span><span class="f">Закрытые</span><span class="f">Изученные</span></div>
+  </div>
+  <div class="board">
+    <div class="corner">Домены →<br>Эпохи ↓</div>
+    <div class="colhead"><i style="background:#a4562f"></i>Строительство<span class="n">0/4</span></div>
+    <div class="colhead"><i style="background:#6b8e3d"></i>Земледелие<span class="n">0/7</span></div>
+    <div class="colhead"><i style="background:#7b5f8c"></i>Ремесло<span class="n">0/3</span></div>
+    <div class="colhead"><i style="background:#c08a1e"></i>Торговля<span class="n">0/3</span></div>
+    <div class="colhead"><i style="background:#3a6f9c"></i>Знание<span class="n">0/2</span></div>
+    <div class="colhead" style="border-right:0"><i style="background:#9c3a52"></i>Вера и здоровье<span class="n">0/2</span></div>
+
+    <div class="eras"><b>I</b><span>Поселение</span></div>
+    <div class="cell">
+      <div class="chip sel">Плотницкое дело<small>1 дн.</small></div>
+      <div class="chip lock">Работа с камнем<small>3 дн.</small></div>
+      <div class="chip lock">Просторное жильё<small>9 дн.</small></div>
+      <div class="chip lock">Кладка стен<small>12 дн.</small></div>
+    </div>
+    <div class="cell">
+      <div class="chip go">Хранение запасов<small>1 дн.</small></div>
+      <div class="chip go">Лесной промысел<small>1 дн.</small></div>
+      <div class="chip go">Рыболовство<small>3 дн.</small></div>
+      <div class="chip lock">Огородничество<small>9 дн.</small></div>
+      <div class="chip lock">Сады<small>5 дн.</small></div>
+      <div class="chip lock">Трёхполье<small>5 дн.</small></div>
+      <div class="chip lock">Пчельник<small>7 дн.</small></div>
+    </div>
+    <div class="cell">
+      <div class="chip lock">Ремёсла<small>3 дн.</small></div>
+      <div class="chip lock">Цеховое дело<small>3 дн.</small></div>
+      <div class="chip lock">Кузнечное дело<small>9 дн.</small></div>
+    </div>
+    <div class="cell">
+      <div class="chip lock">Торговля<small>5 дн.</small></div>
+      <div class="chip lock">Рынок<small>9 дн.</small></div>
+      <div class="chip lock">Меною<small>12 дн.</small></div>
+    </div>
+    <div class="cell">
+      <div class="chip lock">Счёт<small>7 дн.</small></div>
+      <div class="chip lock">Письмо<small>14 дн.</small></div>
+    </div>
+    <div class="cell" style="border-right:0">
+      <div class="chip lock">Вера<small>5 дн.</small></div>
+      <div class="chip lock">Лечение<small>9 дн.</small></div>
+    </div>
+
+    <div class="eras"><b>II</b><span>Деревня</span></div>
+    <div class="cell"><div class="chip lock">Каменная дорога<small>5 дн.</small></div><div class="chip lock">Мост<small>7 дн.</small></div></div>
+    <div class="cell"><div class="chip lock">Погреб<small>9 дн.</small></div><div class="chip lock">Пасека<small>9 дн.</small></div></div>
+    <div class="cell"><div class="chip lock">Гончарня<small>9 дн.</small></div></div>
+    <div class="cell"><div class="chip lock">Ярмарка<small>12 дн.</small></div></div>
+    <div class="cell"><div class="chip lock">Школа<small>9 дн.</small></div></div>
+    <div class="cell" style="border-right:0"><div class="chip lock">Больница<small>12 дн.</small></div></div>
+  </div>
+  <div class="foot">
+    <span>Исследуется: <b>—</b></span><span class="bar"><i></i></span>
+    <span>Наука простаивает</span>
+    <span style="margin-left:auto;display:flex;gap:8px"><button class="btn">Исследовать</button><button class="btn g">В очередь</button></span>
+  </div>
+</div></div>
+</body>
+</html>

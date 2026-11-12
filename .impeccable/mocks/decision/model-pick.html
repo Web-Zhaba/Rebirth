@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Годичные кольца — первый экран</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800&family=Golos+Text:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--wood:#3a2f24;--wood2:#4a3b2c;--pale:#c8b48d;--cream:#e6dcc4;--walnut:#241c14;--heart:#9e3b2a;--sap:#7d8f6a}
+*{box-sizing:border-box;margin:0}
+html,body{height:900px;overflow:hidden;background:var(--wood);font-family:"Golos Text",sans-serif;color:var(--cream)}
+.stage{position:relative;width:1440px;height:900px;overflow:hidden;
+  background:radial-gradient(1100px 800px at 42% 48%,#4a3b2c 0%,#3a2f24 58%,#2b2219 100%)}
+/* the cross-section: one object, seen once */
+.disc{position:absolute;left:-150px;top:50%;transform:translateY(-50%);width:940px;height:940px;border-radius:50%;
+  background:
+    radial-gradient(circle,#8a7350 0 6%,#7a6444 6% 8%,#8f7852 8% 12%,#7d6746 12% 15%,#937c56 15% 19%,
+      #80694a 19% 23%,#957e58 23% 27%,#846d4d 27% 31%,#9a8260 31% 35%,#87704f 35% 39%,#9c8563 39% 43%,
+      #8a7351 43% 47%,#a08865 47% 51%,#8d7654 51% 55%,#a28a68 55% 59%,#907957 59% 63%,
+      #a48c6a 63% 67%,#937c5a 67% 72%,#a68e6c 72% 78%,#957e5c 78% 85%,#8b7453 85% 100%);
+  box-shadow:inset 0 0 0 3px #2b2219, 0 40px 80px rgba(0,0,0,.55), inset -30px -20px 90px rgba(20,15,10,.6)}
+.ringline{position:absolute;left:-150px;top:50%;transform:translateY(-50%);width:940px;height:940px;border-radius:50%;
+  border:1.5px solid rgba(36,28,20,.42)}
+.mapin{position:absolute;left:118px;top:50%;transform:translateY(-50%);width:404px;height:404px;border-radius:50%;
+  overflow:hidden;box-shadow:inset 0 0 0 4px var(--heart),inset 0 0 40px rgba(20,15,10,.55);
+  background:radial-gradient(circle at 40% 34%,#5d6d4f,#43503a 70%)}
+.mapin .forest{position:absolute;inset:0;opacity:.55;background:
+  radial-gradient(circle at 30% 40%,#2f3a2c 0 6px,transparent 7px),
+  radial-gradient(circle at 62% 28%,#2f3a2c 0 5px,transparent 6px),
+  radial-gradient(circle at 74% 66%,#2f3a2c 0 7px,transparent 8px),
+  radial-gradient(circle at 44% 74%,#2f3a2c 0 4px,transparent 5px);background-size:150px 140px}
+.mapin svg{position:absolute;inset:0}
+.pin{position:absolute;left:50%;top:44%;width:18px;height:18px;border:3px solid var(--heart);border-radius:50%;
+  color:var(--cream)}
+.pin::after{content:"";position:absolute;inset:5px;background:var(--heart);border-radius:50%}
+.year{position:absolute;left:250px;top:150px;font-family:"Bitter",serif;font-size:13px;font-weight:700;
+  letter-spacing:.14em;color:#4a3b2c;transform:rotate(-12deg)}
+.axes{position:absolute;left:0;top:0;width:940px;height:900px;pointer-events:none}
+
+/* search on a planed plank */
+.search{position:absolute;left:56px;top:44px;width:400px;height:52px;display:flex;align-items:center;
+  background:linear-gradient(180deg,#e6dcc4,#d3c5a6);color:var(--walnut);
+  box-shadow:0 10px 20px rgba(0,0,0,.45);border-left:5px solid var(--heart)}
+.search .q{padding:0 16px;font-size:15px;color:#6b5d46}
+.search .gl{margin-left:auto;margin-right:10px;padding:7px 11px;background:var(--walnut);color:var(--cream);
+  font-size:12px;font-weight:700;letter-spacing:.03em}
+.hint{position:absolute;left:56px;top:110px;font-family:"Bitter",serif;font-size:16px;color:#cbb894;
+  letter-spacing:.01em}
+.hint b{color:var(--heart);font-weight:700}
+
+/* founding board: a walnut slab, cream ink */
+.board{position:absolute;right:52px;top:56px;width:410px;padding:28px 28px 24px;
+  background:linear-gradient(176deg,#e9dfc9,#d9cbaa 70%,#cdbd9a);
+  color:var(--walnut);box-shadow:0 24px 46px rgba(0,0,0,.5);
+  border-top:6px solid var(--heart)}
+.eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#7a6a4c;font-weight:700}
+h2{font-family:"Bitter",serif;font-weight:800;font-size:26px;line-height:1.12;margin-top:6px}
+.coords{margin-top:8px;font-family:"Bitter",serif;font-size:13px;letter-spacing:.08em;color:#5d5039}
+.rule{height:2px;background:var(--walnut);opacity:.7;margin:16px 0 12px}
+.facts{display:grid;grid-template-columns:1fr auto;font-size:13.5px}
+.facts dt{color:#5b4e38;padding:7px 0;border-bottom:1px dotted rgba(36,28,20,.28)}
+.facts dd{text-align:right;font-weight:700;padding:7px 0;border-bottom:1px dotted rgba(36,28,20,.28);
+  font-variant-numeric:tabular-nums}
+.note{margin-top:14px;font-size:13px;line-height:1.5;color:#453a28;padding-left:12px;border-left:2.5px solid var(--heart)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.tag{padding:5px 10px;border:1.5px solid var(--walnut);font-family:"Bitter",serif;font-size:13px;font-weight:600}
+.tag[aria-pressed="true"]{background:var(--walnut);color:#e9dfc9}
+.name{margin-top:12px;height:44px;display:flex;align-items:center;padding:0 13px;background:#f1e8d3;
+  border:1.5px solid var(--walnut);font-size:15px;color:#7a6a4c}
+.go{margin-top:13px;width:100%;height:50px;display:grid;place-items:center;background:var(--heart);
+  color:#f3ebd8;font-family:"Bitter",serif;font-size:19px;font-weight:800;letter-spacing:.03em}
+.credit{position:absolute;right:52px;bottom:26px;font-size:11px;color:rgba(230,220,196,.45)}
+.foot{position:absolute;left:56px;bottom:40px;max-width:300px;font-size:12px;line-height:1.6;color:#b3a488}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="disc"></div>
+  <div class="ringline" style="width:820px;height:820px;left:-110px"></div>
+  <div class="ringline" style="width:680px;height:680px;left:-40px"></div>
+  <div class="ringline" style="width:540px;height:540px;left:30px"></div>
+  <div class="ringline" style="width:404px;height:404px;left:118px;border-color:#9e3b2a"></div>
+  <div class="mapin">
+    <div class="forest"></div>
+    <svg viewBox="0 0 404 404" aria-hidden="true">
+      <path d="M-10 250 C 80 230,140 280,210 250 S 330 190,420 210" fill="none" stroke="#7d94a0" stroke-width="7" opacity=".6"/>
+    </svg>
+    <div class="pin" style="left:calc(50% - 9px);top:calc(44% - 9px)"></div>
+  </div>
+  <div class="year">1998 · 2026</div>
+
+  <div class="search">
+    <span class="q">Найти город или село</span>
+    <span class="gl">Где я</span>
+  </div>
+  <div class="hint">Выберите место — <b>и лес скажет, сколько лет</b> оно стояло пустым</div>
+
+  <section class="board">
+    <div class="eyebrow">Срез земли</div>
+    <h2>Основать поселение</h2>
+    <div class="coords">54.7261, 38.1660</div>
+    <div class="rule"></div>
+    <dl class="facts">
+      <dt>Под лагерем</dt><dd>лес</dd>
+      <dt>Высота</dt><dd>148 м</dd>
+      <dt>Уклон</dt><dd>4°</dd>
+      <dt>Лес вокруг</dt><dd>63%</dd>
+      <dt>Вода вокруг</dt><dd>8%</dd>
+      <dt>Камень, песок</dt><dd>3%</dd>
+    </dl>
+    <p class="note">Густой лес: брёвна рядом, но поля придётся расчищать</p>
+    <div class="tags">
+      <span class="tag" aria-pressed="true">Лесной</span>
+      <span class="tag">Речной</span>
+      <span class="tag">Луговой</span>
+      <span class="tag">Холмистый</span>
+      <span class="tag">Озёрный</span>
+    </div>
+    <div class="name">Лесной</div>
+    <button class="go">Основать</button>
+  </section>
+  <div class="foot">Кольцо — год. Широкое кольцо: год был щедрым. Узкое: год, который лес едва пережил.</div>
+  <div class="credit">Поиск: Photon, © OpenStreetMap</div>
+</div>
+</body>
+</html>

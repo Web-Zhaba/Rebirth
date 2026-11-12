@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Хронология — наука</title>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800&family=Golos+Text:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bark:#e2d2b0;--bark-r:#ecdfc2;--bark-s:#d3c09b;--tar:#1f1a13;--moss:#2f3a2c;--resin:#c07a22;--pencil:#554935}
+*{box-sizing:border-box;margin:0}
+html,body{height:900px;overflow:hidden;background:var(--moss);font-family:"Golos Text",sans-serif;color:var(--tar)}
+.work{width:1440px;height:900px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.sheet{flex:1;display:flex;flex-direction:column;min-height:0;background:
+  repeating-linear-gradient(0deg,rgba(31,26,19,.04) 0 1px,transparent 1px 22px),
+  linear-gradient(178deg,var(--bark-r),var(--bark) 70%,var(--bark-s));
+  border:1.5px solid var(--tar);box-shadow:0 16px 30px rgba(10,14,8,.55)}
+.head{display:flex;align-items:baseline;gap:18px;padding:16px 24px 12px;border-bottom:2px solid var(--tar)}
+.head h1{font-family:"Bitter",serif;font-weight:800;font-size:28px;letter-spacing:-.01em}
+.head .s{font-family:"Bitter",serif;font-size:12.5px;color:var(--pencil);letter-spacing:.04em}
+.head .q{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12px}
+.head .q b{font-family:"Bitter",serif}
+.axis{display:grid;grid-template-columns:196px 1fr;border-bottom:1px solid var(--tar);padding:6px 0;background:var(--bark-s)}
+.axis .lbl{padding-left:18px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--pencil)}
+.ticks{display:flex;padding-right:24px}
+.ticks span{flex:1;font-size:10.5px;color:var(--pencil);font-family:"Bitter",serif;border-left:1px solid rgba(31,26,19,.35);padding-left:4px}
+.bands{flex:1;overflow-y:auto;min-height:0}
+.era{border-bottom:2px solid var(--tar)}
+.era-head{display:flex;align-items:baseline;gap:12px;padding:12px 24px 6px}
+.era-head h2{font-family:"Bitter",serif;font-weight:800;font-size:17px}
+.era-head .s{font-size:12px;color:var(--pencil)}
+.era-head .p{margin-left:auto;font-family:"Bitter",serif;font-size:12px}
+.lane{display:grid;grid-template-columns:196px 1fr;align-items:center;min-height:56px;border-top:1px dotted rgba(31,26,19,.28)}
+.lane:first-of-type{border-top:0}
+.lane .dom{padding-left:18px;display:flex;align-items:center;gap:8px;font-size:12.5px}
+.lane .dom i{width:9px;height:9px;border:1px solid var(--tar);display:block}
+.track{position:relative;height:56px;margin-right:24px;display:flex;align-items:center;gap:10px;padding-left:6px}
+.node{position:relative;border:1.5px solid var(--tar);background:var(--bark-r);padding:5px 9px;font-size:12px;font-family:"Bitter",serif;font-weight:600;white-space:nowrap;display:flex;flex-direction:column;gap:1px}
+.node small{font-family:"Golos Text";font-size:10px;font-weight:400;color:var(--pencil);letter-spacing:.02em}
+.node.lock{border-style:dashed;color:var(--pencil);background:transparent}
+.node.lock small{color:var(--pencil)}
+.node.on{background:var(--tar);color:var(--bark-r)}
+.node.on small{color:var(--bark-s)}
+.node.go{border-color:var(--resin);box-shadow:inset 0 0 0 2px rgba(192,122,34,.35)}
+.dot{width:6px;height:6px;background:var(--tar);border-radius:50%;flex:none;opacity:.5}
+.foot{display:flex;align-items:center;gap:16px;padding:10px 24px 14px;border-top:2px solid var(--tar);font-size:12px}
+.foot .bar{width:150px;height:7px;border:1px solid var(--tar);background:var(--bark-s)}
+.foot .bar i{display:block;height:100%;width:34%;background:var(--tar)}
+.btn{height:34px;padding:0 16px;background:var(--tar);color:var(--bark-r);font-family:"Bitter",serif;font-weight:800;font-size:14px;border:0}
+.btn.g{background:transparent;color:var(--tar);border:1.5px solid var(--tar)}
+</style>
+</head>
+<body>
+<div class="work"><div class="sheet">
+  <div class="head">
+    <h1>Наука</h1>
+    <span class="s">Эпоха I «Поселение» · изучено 0 из 21</span>
+    <div class="q"><span>В очереди 0 из 3</span><span style="opacity:.4">|</span><span>Скорость <b>×1,0</b></span></div>
+  </div>
+  <div class="axis"><div class="lbl">Дни эпохи</div><div class="ticks"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span><span>30</span><span>36</span><span>42</span></div></div>
+  <div class="bands">
+    <section class="era">
+      <div class="era-head"><h2>Эпоха I «Поселение»</h2><span class="s">до 100 жителей</span><span class="p">0 / 21 · ≈189 дн. всего</span></div>
+      <div class="lane"><div class="dom"><i style="background:#a4562f"></i>Строительство</div>
+        <div class="track">
+          <span class="node go">Плотницкое дело<small>1 дн. · лесопилка</small></span><span class="dot"></span>
+          <span class="node lock">Работа с камнем<small>3 дн. · нужен плотник</small></span><span class="dot"></span>
+          <span class="node lock">Просторное жильё<small>9 дн. · нужны ремёсла</small></span>
+        </div>
+      </div>
+      <div class="lane"><div class="dom"><i style="background:#6b8e3d"></i>Земледелие</div>
+        <div class="track">
+          <span class="node go">Хранение запасов<small>1 дн. · склад</small></span><span class="dot"></span>
+          <span class="node go">Лесной промысел<small>1 дн. · охотник</small></span><span class="dot"></span>
+          <span class="node go">Рыболовство<small>3 дн. · причал</small></span><span class="dot"></span>
+          <span class="node lock">Огородничество<small>9 дн. · нужен склад</small></span>
+        </div>
+      </div>
+      <div class="lane"><div class="dom"><i style="background:#7b5f8c"></i>Ремесло</div>
+        <div class="track">
+          <span class="node lock">Ремёсла<small>3 дн. · нужен плотник</small></span><span class="dot"></span>
+          <span class="node lock">Цеховое дело<small>3 дн. · нужны ремёсла</small></span>
+        </div>
+      </div>
+      <div class="lane"><div class="dom"><i style="background:#c08a1e"></i>Торговля</div>
+        <div class="track">
+          <span class="node lock">Торговля<small>5 дн. · нужны ремёсла</small></span><span class="dot"></span>
+          <span class="node lock">Рынок<small>9 дн. · нужна торговля</small></span>
+        </div>
+      </div>
+    </section>
+    <section class="era">
+      <div class="era-head"><h2>Эпоха II «Деревня»</h2><span class="s">жители 14 / 100 · 0 / 12</span><span class="p">пока закрыта</span></div>
+      <div class="lane"><div class="dom" style="opacity:.55"><i style="background:#a4562f"></i>Строительство</div>
+        <div class="track"><span class="node lock">Каменная дорога<small>5 дн.</small></span><span class="dot"></span><span class="node lock">Мост<small>7 дн.</small></span></div>
+      </div>
+      <div class="lane"><div class="dom" style="opacity:.55"><i style="background:#3a6f9c"></i>Знание</div>
+        <div class="track"><span class="node lock">Школа<small>9 дн.</small></span></div>
+      </div>
+    </section>
+  </div>
+  <div class="foot">
+    <span>Исследуется: <b>—</b></span>
+    <span class="bar"><i></i></span>
+    <span>Наука простаивает</span>
+    <span style="margin-left:auto;display:flex;gap:8px"><button class="btn">Исследовать</button><button class="btn g">В очередь</button></span>
+  </div>
+</div></div>
+</body>
+</html>
