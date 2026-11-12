@@ -38,6 +38,7 @@ export function AboutDialog() {
           </li>
         ))}
       </ul>
+      <p class="about-version">{L("Версия", "Version")} {__APP_VERSION__}</p>
     </Dialog>
   );
 }

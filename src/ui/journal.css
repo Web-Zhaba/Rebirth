@@ -463,6 +463,12 @@
   font-weight: 700;
 }
 
+.about-version {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
 /* ---- «Настройки» ---- */
 .settings {
   max-width: min(420px, calc(100vw - 32px));

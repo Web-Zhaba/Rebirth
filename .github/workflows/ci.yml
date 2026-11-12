@@ -41,10 +41,13 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The Yandex Games build: checked against the archive rules, uploaded as an artifact whose zip is ready for
-      # the developer console (index.html at its root).
-      - name: Build for Yandex Games
-        run: npx vite build --mode yandex --outDir dist-yandex && node scripts/pack-yandex.mjs dist-yandex
+      # The portal builds, checked against each portal's archive rules (publish.yml makes the release zips). The
+      # Yandex one is uploaded as an artifact whose zip is ready for the developer console (index.html at its root).
+      - name: Build for the portals
+        run: |
+          npx vite build --mode yandex --outDir dist-yandex && node scripts/pack.mjs yandex dist-yandex
+          npx vite build --mode crazygames --outDir dist-crazygames && node scripts/pack.mjs crazygames dist-crazygames
+          node scripts/pack.mjs itch dist
 
       - name: Upload Yandex Games archive
         uses: actions/upload-artifact@v4

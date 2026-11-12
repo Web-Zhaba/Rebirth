@@ -1,0 +1,107 @@
+name: Publish
+
+# One release, every portal. Called by release-please.yml once a release is cut, or run by hand for a tag:
+# builds each portal's archive, attaches the zips to the GitHub release and pushes the itch.io build with butler.
+# Yandex Games and CrazyGames have no upload API: their zips go up in the developer consoles (the run summary links
+# both). The site on Vercel deploys itself from main. Setup and the manual steps: docs/DEVELOPMENT.md, "Publishing".
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. rebirth-v0.5.1
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build portal archives
+        run: npm run build:yandex && npm run build:crazygames && npm run build:itch
+
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Attach archives to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" rebirth-yandex.zip rebirth-crazygames.zip rebirth-itch.zip --clobber
+
+      - name: Keep the itch.io build for the push
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-itch
+          path: dist-itch/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Manual steps
+        env:
+          ASSETS: ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ inputs.tag }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Rebirth ${{ steps.version.outputs.version }}
+
+          - **Vercel**: deploys itself from main.
+          - **itch.io**: the \`itch\` job pushes it (skipped until the \`ITCH_GAME\` variable is set).
+          - **Yandex Games**: [rebirth-yandex.zip]($ASSETS/rebirth-yandex.zip) → [console](https://games.yandex.ru/console/) → the game → new version → upload the archive, version ${{ steps.version.outputs.version }} → send for moderation.
+          - **CrazyGames**: [rebirth-crazygames.zip]($ASSETS/rebirth-crazygames.zip) → [developer portal](https://developer.crazygames.com/) → the game → upload a new build.
+          EOF
+
+  itch:
+    needs: build
+    if: vars.ITCH_GAME != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Add a required reviewer to this environment (repository settings) to approve each push by hand.
+    environment: itch
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-itch
+          path: dist-itch
+
+      - name: Install butler
+        run: |
+          curl -fsSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler
+          chmod +x butler/butler
+
+      - name: Push to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: butler/butler push dist-itch "${{ vars.ITCH_GAME }}:html5" --userversion "${{ needs.build.outputs.version }}"

@@ -1,6 +1,6 @@
-// The portal the game is published on, picked at build time: `vite build --mode yandex` reads `.env.yandex`.
+// The portal the game is published on, picked at build time: `vite build --mode <portal>` reads `.env.<portal>`.
 // The core talks only to this module; a portal's SDK never reaches the standalone bundle (the branch below is a
-// build-time constant, so Vite drops the other adapter).
+// build-time constant, so Vite drops the other adapters).
 export interface Platform {
   // The portal's interface language as an ISO 639-1 code ('ru', 'en', ...), or null when there is no portal.
   lang: string | null;
@@ -28,5 +28,8 @@ export async function initPlatform(): Promise<void> {
   if (import.meta.env.VITE_PLATFORM === "yandex") {
     const { initYandex } = await import("./yandex");
     platform = await initYandex();
+  } else if (import.meta.env.VITE_PLATFORM === "crazygames") {
+    const { initCrazyGames } = await import("./crazygames");
+    platform = await initCrazyGames();
   }
 }

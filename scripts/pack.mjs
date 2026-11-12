@@ -1,22 +1,31 @@
-// Checks a Yandex Games build against the archive rules (https://yandex.ru/dev/games/doc/ru/console/add-new-game):
-// index.html at the root, at most 100 MB unpacked, file names without spaces or non-ASCII, relative asset paths.
-// Lists the external hosts the bundle mentions: the ones the game actually fetches must be requested on the
-// console's CSP tab. With an output path, also writes the zip for the console.
-// Usage: node scripts/pack-yandex.mjs <build dir> [out.zip]
+// Checks a portal build against that portal's archive rules and, with an output path, writes the zip to upload.
+// Every portal wants index.html at the root and relative asset paths; names stay ASCII without spaces (Yandex demands
+// it, the rest serve such names unreliably). Lists the external hosts the bundle mentions: on Yandex the ones the
+// game actually fetches must be requested on the console's CSP tab.
+// Usage: node scripts/pack.mjs <yandex|crazygames|itch> <build dir> [out.zip]
 //
 // The zip is written here rather than by an OS tool: Windows PowerShell 5.1 `Compress-Archive` stores entry names
-// with backslashes (`assets\index.js`), which the portal serves as files named that way, so every asset 404s.
+// with backslashes (`assets\index.js`), which the portals serve as files named that way, so every asset 404s.
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 
-const MAX_BYTES = 100 * 1024 * 1024;
-// Hosts the Yandex Games CSP allows by default, and link-only hosts (credits) the game never fetches.
-const KNOWN = [/(^|\.)yandex\.[a-z]+$/, /(^|\.)yandex\.net$/, /^yastatic\.net$/, /^www\.w3\.org$/];
+const MB = 1024 * 1024;
+// Link-only hosts (credits) the game never fetches.
+const LINKS = [/^www\.w3\.org$/];
+const TARGETS = {
+  // https://yandex.ru/dev/games/doc/ru/console/add-new-game
+  yandex: { maxBytes: 100 * MB, own: [/(^|\.)yandex\.[a-z]+$/, /(^|\.)yandex\.net$/, /^yastatic\.net$/] },
+  // https://docs.crazygames.com/requirements/technical/ (the 50 MB initial-download limit is checked by hand)
+  crazygames: { maxBytes: 250 * MB, maxFiles: 1500, own: [/(^|\.)crazygames\.com$/] },
+  // https://itch.io/docs/creators/html5
+  itch: { maxBytes: 500 * MB, maxFiles: 1000, maxFileBytes: 200 * MB, maxPath: 240, own: [] },
+};
 
-const dir = process.argv[2];
-if (!dir) {
-  console.error("usage: node scripts/pack-yandex.mjs <build dir> [out.zip]");
+const [target, dir, out] = process.argv.slice(2);
+const rules = TARGETS[target];
+if (!rules || !dir) {
+  console.error(`usage: node scripts/pack.mjs <${Object.keys(TARGETS).join("|")}> <build dir> [out.zip]`);
   process.exit(2);
 }
 
@@ -36,39 +45,43 @@ const rel = (p) => relative(dir, p).replaceAll("\\", "/");
 if (!files.some((p) => rel(p) === "index.html")) errors.push("index.html is not at the archive root");
 
 const total = files.reduce((n, p) => n + statSync(p).size, 0);
-if (total > MAX_BYTES) errors.push(`unpacked size ${(total / 1048576).toFixed(1)} MB is over 100 MB`);
+if (total > rules.maxBytes) errors.push(`unpacked size ${(total / MB).toFixed(1)} MB is over ${rules.maxBytes / MB} MB`);
+if (rules.maxFiles && files.length > rules.maxFiles) errors.push(`${files.length} files, over ${rules.maxFiles}`);
 
 for (const p of files) {
-  if (!/^[\x21-\x7e]+$/.test(rel(p))) errors.push(`file name with a space or non-ASCII character: ${rel(p)}`);
+  const name = rel(p);
+  if (!/^[\x21-\x7e]+$/.test(name)) errors.push(`file name with a space or non-ASCII character: ${name}`);
+  if (rules.maxPath && name.length > rules.maxPath) errors.push(`path over ${rules.maxPath} characters: ${name}`);
+  if (rules.maxFileBytes && statSync(p).size > rules.maxFileBytes) errors.push(`file over ${rules.maxFileBytes / MB} MB: ${name}`);
 }
 
 const html = readFileSync(join(dir, "index.html"), "utf8");
-for (const m of html.matchAll(/\b(?:src|href)="(\/[^"/][^"]*)"/g)) errors.push(`absolute path in index.html: ${m[1]}`);
+for (const m of html.matchAll(/(?:src|href)="(\/[^"/][^"]*)"/g)) errors.push(`absolute path in index.html: ${m[1]}`);
 
+const known = [...rules.own, ...LINKS];
 const hosts = new Map();
 for (const p of files.filter((p) => /\.(js|css|html)$/.test(p))) {
   for (const m of readFileSync(p, "utf8").matchAll(/https:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)) {
     const host = m[1].toLowerCase();
-    if (KNOWN.some((re) => re.test(host))) continue;
+    if (known.some((re) => re.test(host))) continue;
     hosts.set(host, (hosts.get(host) ?? new Set()).add(rel(p)));
   }
 }
 
-console.log(`${files.length} files, ${(total / 1048576).toFixed(2)} MB unpacked`);
+console.log(`${target}: ${files.length} files, ${(total / MB).toFixed(2)} MB unpacked`);
 if (hosts.size) {
-  console.log("External hosts in the bundle (request the fetched ones on the CSP tab; links in credits need nothing):");
+  console.log("External hosts in the bundle (on Yandex, request the fetched ones on the CSP tab; links in credits need nothing):");
   for (const [h, where] of [...hosts].sort()) console.log(`  ${h}  (${[...where].join(", ")})`);
 }
 if (errors.length) {
   for (const e of errors) console.error(`error: ${e}`);
   process.exit(1);
 }
-console.log("Yandex Games archive checks passed.");
+console.log(`${target} archive checks passed.`);
 
-const out = process.argv[3];
 if (out) {
   writeFileSync(out, zip(files.map((p) => ({ name: rel(p), data: readFileSync(p) }))));
-  console.log(`Wrote ${out} (${(statSync(out).size / 1048576).toFixed(2)} MB)`);
+  console.log(`Wrote ${out} (${(statSync(out).size / MB).toFixed(2)} MB)`);
 }
 
 // A plain deflate zip with forward-slash entry names (the only separator the format allows).
