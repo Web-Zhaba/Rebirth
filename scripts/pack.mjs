@@ -1,8 +1,9 @@
 // Checks a portal build against that portal's archive rules and, with an output path, writes the zip to upload.
 // Every portal wants index.html at the root and relative asset paths; names stay ASCII without spaces (Yandex demands
-// it, the rest serve such names unreliably). Lists the external hosts the bundle mentions: on Yandex the ones the
-// game actually fetches must be requested on the console's CSP tab.
-// Usage: node scripts/pack.mjs <yandex|crazygames|itch> <build dir> [out.zip]
+// it, the rest serve such names unreliably). The bundle must carry its own portal's SDK and no other portal's: the
+// builds never mix. Lists the external hosts the bundle mentions: on Yandex the ones the game actually fetches must be
+// requested on the console's CSP tab, on Poki approved by its support.
+// Usage: node scripts/pack.mjs <portal> <build dir> [out.zip]
 //
 // The zip is written here rather than by an OS tool: Windows PowerShell 5.1 `Compress-Archive` stores entry names
 // with backslashes (`assets\index.js`), which the portals serve as files named that way, so every asset 404s.
@@ -13,12 +14,21 @@ import { crc32, deflateRawSync } from "node:zlib";
 const MB = 1024 * 1024;
 // Link-only hosts (credits) the game never fetches.
 const LINKS = [/^www\.w3\.org$/];
+// `sdk`: a string only that portal's adapter (src/platform) puts in the bundle. `own`: the portal's hosts.
 const TARGETS = {
   // https://yandex.ru/dev/games/doc/ru/console/add-new-game
-  yandex: { maxBytes: 100 * MB, own: [/(^|\.)yandex\.[a-z]+$/, /(^|\.)yandex\.net$/, /^yastatic\.net$/] },
+  yandex: { sdk: "YaGames", maxBytes: 100 * MB, own: [/(^|\.)yandex\.[a-z]+$/, /(^|\.)yandex\.net$/, /^yastatic\.net$/] },
   // https://docs.crazygames.com/requirements/technical/ (the 50 MB initial-download limit is checked by hand)
-  crazygames: { maxBytes: 250 * MB, maxFiles: 1500, own: [/(^|\.)crazygames\.com$/] },
-  // https://itch.io/docs/creators/html5
+  crazygames: { sdk: "sdk.crazygames.com", maxBytes: 250 * MB, maxFiles: 1500, own: [/(^|\.)crazygames\.com$/] },
+  // https://developers.poki.com (an initial download under 8 MB is the target, not a limit)
+  poki: { sdk: "game-cdn.poki.com", own: [/(^|\.)poki\.(com|io|dev)$/] },
+  // https://dev.vk.ru/ru/mini-apps/development/hosting/overview
+  vk: { sdk: "VKWebAppInit", own: [/(^|\.)vk\.(com|ru)$/, /(^|\.)userapi\.com$/] },
+  // https://github.com/GameDistribution/GD-HTML5/wiki/SDK-Implementation
+  gamedistribution: { sdk: "html5.api.gamedistribution.com", own: [/(^|\.)gamedistribution\.com$/] },
+  // https://partners.gamepix.com/sdk/doc/javascript
+  gamepix: { sdk: "integration.gamepix.com", own: [/(^|\.)gamepix\.com$/] },
+  // https://itch.io/docs/creators/html5 (the standalone build: no SDK)
   itch: { maxBytes: 500 * MB, maxFiles: 1000, maxFileBytes: 200 * MB, maxPath: 240, own: [] },
 };
 
@@ -45,7 +55,7 @@ const rel = (p) => relative(dir, p).replaceAll("\\", "/");
 if (!files.some((p) => rel(p) === "index.html")) errors.push("index.html is not at the archive root");
 
 const total = files.reduce((n, p) => n + statSync(p).size, 0);
-if (total > rules.maxBytes) errors.push(`unpacked size ${(total / MB).toFixed(1)} MB is over ${rules.maxBytes / MB} MB`);
+if (rules.maxBytes && total > rules.maxBytes) errors.push(`unpacked size ${(total / MB).toFixed(1)} MB is over ${rules.maxBytes / MB} MB`);
 if (rules.maxFiles && files.length > rules.maxFiles) errors.push(`${files.length} files, over ${rules.maxFiles}`);
 
 for (const p of files) {
@@ -56,12 +66,20 @@ for (const p of files) {
 }
 
 const html = readFileSync(join(dir, "index.html"), "utf8");
-for (const m of html.matchAll(/(?:src|href)="(\/[^"/][^"]*)"/g)) errors.push(`absolute path in index.html: ${m[1]}`);
+for (const m of html.matchAll(/\b(?:src|href)="(\/[^"/][^"]*)"/g)) errors.push(`absolute path in index.html: ${m[1]}`);
+
+const code = files.filter((p) => /\.(js|css|html)$/.test(p)).map((p) => ({ p, text: readFileSync(p, "utf8") }));
+for (const [name, other] of Object.entries(TARGETS)) {
+  if (!other.sdk) continue;
+  const found = code.some(({ text }) => text.includes(other.sdk));
+  if (name === target && !found) errors.push(`the ${name} SDK adapter is missing (built without --mode ${name}?)`);
+  if (name !== target && found) errors.push(`the ${name} SDK is in a ${target} build`);
+}
 
 const known = [...rules.own, ...LINKS];
 const hosts = new Map();
-for (const p of files.filter((p) => /\.(js|css|html)$/.test(p))) {
-  for (const m of readFileSync(p, "utf8").matchAll(/https:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)) {
+for (const { p, text } of code) {
+  for (const m of text.matchAll(/https:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)) {
     const host = m[1].toLowerCase();
     if (known.some((re) => re.test(host))) continue;
     hosts.set(host, (hosts.get(host) ?? new Set()).add(rel(p)));
@@ -70,7 +88,7 @@ for (const p of files.filter((p) => /\.(js|css|html)$/.test(p))) {
 
 console.log(`${target}: ${files.length} files, ${(total / MB).toFixed(2)} MB unpacked`);
 if (hosts.size) {
-  console.log("External hosts in the bundle (on Yandex, request the fetched ones on the CSP tab; links in credits need nothing):");
+  console.log("External hosts in the bundle (the fetched ones go on Yandex's CSP tab and to Poki's support; credit links need nothing):");
   for (const [h, where] of [...hosts].sort()) console.log(`  ${h}  (${[...where].join(", ")})`);
 }
 if (errors.length) {

@@ -1,6 +1,6 @@
 // The portal the game is published on, picked at build time: `vite build --mode <portal>` reads `.env.<portal>`.
 // The core talks only to this module; a portal's SDK never reaches the standalone bundle (the branch below is a
-// build-time constant, so Vite drops the other adapters).
+// build-time constant, so Vite drops the other adapters; scripts/pack.mjs checks that no other portal's SDK ships).
 export interface Platform {
   // The portal's interface language as an ISO 639-1 code ('ru', 'en', ...), or null when there is no portal.
   lang: string | null;
@@ -31,5 +31,17 @@ export async function initPlatform(): Promise<void> {
   } else if (import.meta.env.VITE_PLATFORM === "crazygames") {
     const { initCrazyGames } = await import("./crazygames");
     platform = await initCrazyGames();
+  } else if (import.meta.env.VITE_PLATFORM === "poki") {
+    const { initPoki } = await import("./poki");
+    platform = await initPoki();
+  } else if (import.meta.env.VITE_PLATFORM === "vk") {
+    const { initVk } = await import("./vk");
+    platform = await initVk();
+  } else if (import.meta.env.VITE_PLATFORM === "gamedistribution") {
+    const { initGameDistribution } = await import("./gamedistribution");
+    platform = await initGameDistribution();
+  } else if (import.meta.env.VITE_PLATFORM === "gamepix") {
+    const { initGamePix } = await import("./gamepix");
+    platform = await initGamePix();
   }
 }

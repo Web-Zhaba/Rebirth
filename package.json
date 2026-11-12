@@ -9,9 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "pace": "vitest run --config vitest.pace.config.ts --reporter=dot",
-    "build:yandex": "tsc --noEmit && vite build --mode yandex --outDir dist-yandex && node scripts/pack.mjs yandex dist-yandex rebirth-yandex.zip",
-    "build:crazygames": "tsc --noEmit && vite build --mode crazygames --outDir dist-crazygames && node scripts/pack.mjs crazygames dist-crazygames rebirth-crazygames.zip",
-    "build:itch": "tsc --noEmit && vite build --outDir dist-itch && node scripts/pack.mjs itch dist-itch rebirth-itch.zip"
+    "build:portals": "node scripts/build-portals.mjs"
   },
   "dependencies": {
     "@fontsource/bitter": "^5.3.0",
@@ -20,6 +18,7 @@
     "@fontsource/pt-serif": "^5.3.0",
     "@mapbox/vector-tile": "^3.0.0",
     "@preact/signals": "^2.11.3",
+    "@vkontakte/vk-bridge": "^3.0.2",
     "earcut": "^3.2.4",
     "pbf": "^5.1.2",
     "preact": "^11.0.2"

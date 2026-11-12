@@ -1,4 +1,5 @@
 import { NO_PLATFORM, type Platform } from "./index";
+import { loadScript } from "./script";
 
 // Yandex Games SDK v2 (https://yandex.ru/dev/games/doc/ru/sdk/sdk-about). The portal serves `/sdk.js` next to the
 // game; anywhere else (local preview) it is missing and the game runs without the portal.
@@ -21,17 +22,6 @@ declare global {
 }
 
 const SDK_URL = "/sdk.js";
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error(`${src} did not load`));
-    document.head.append(s);
-  });
-}
 
 export async function initYandex(): Promise<Platform> {
   let ysdk: YaSdk;

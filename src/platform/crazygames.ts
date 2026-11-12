@@ -1,4 +1,5 @@
 import { NO_PLATFORM, type Platform, type PlatformHooks } from "./index";
+import { loadScript } from "./script";
 
 // CrazyGames HTML5 SDK v3 (https://docs.crazygames.com/sdk/intro/). Served from the portal's CDN; on a host that is
 // not CrazyGames (or localhost) the SDK reports `disabled` and its calls throw, so the game runs without the portal.
@@ -22,17 +23,6 @@ declare global {
 }
 
 const SDK_URL = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error(`${src} did not load`));
-    document.head.append(s);
-  });
-}
 
 export async function initCrazyGames(): Promise<Platform> {
   let sdk: CrazySdk;

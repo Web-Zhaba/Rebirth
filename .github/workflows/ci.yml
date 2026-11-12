@@ -21,6 +21,8 @@ jobs:
   test-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VITE_GD_GAME_ID: ${{ vars.GD_GAME_ID }}
 
     steps:
       - name: Checkout
@@ -41,13 +43,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The portal builds, checked against each portal's archive rules (publish.yml makes the release zips). The
-      # Yandex one is uploaded as an artifact whose zip is ready for the developer console (index.html at its root).
+      # Every portal build, checked against its portal's archive rules and for other portals' SDKs (publish.yml
+      # makes the release zips). The Yandex one is uploaded as an artifact ready for the developer console.
       - name: Build for the portals
-        run: |
-          npx vite build --mode yandex --outDir dist-yandex && node scripts/pack.mjs yandex dist-yandex
-          npx vite build --mode crazygames --outDir dist-crazygames && node scripts/pack.mjs crazygames dist-crazygames
-          node scripts/pack.mjs itch dist
+        run: npm run build:portals
 
       - name: Upload Yandex Games archive
         uses: actions/upload-artifact@v4

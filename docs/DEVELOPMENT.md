@@ -62,34 +62,52 @@ The repository starts from version `0.0.0`; the first releasable Conventional Co
 
 One release goes to every portal under one version number (`package.json`, shown in «Об игре»). Each portal gets its
 own build: `vite build --mode <portal>` reads `.env.<portal>` and picks the adapter in `src/platform`; the standalone
-build (site, itch.io) has none. `scripts/pack.mjs <portal> <dir> [zip]` checks a build against that portal's archive
-rules and writes the zip.
+build (site, itch.io) has none. `npm run build:portals [portal ...]` type-checks once, builds `dist-<portal>/` for each
+portal (all of them with no names) and packs `rebirth-<portal>.zip` through `scripts/pack.mjs`, which checks the
+portal's archive rules and that the bundle carries its own portal's SDK and no other's: one build never talks to two
+portals.
 
-| Portal | Build | How it goes up |
-|---|---|---|
-| Site (Vercel) | `npm run build` | Vercel deploys `main` itself. |
-| itch.io | `npm run build:itch` | `publish.yml` pushes it with butler. |
-| Yandex Games | `npm run build:yandex` | By hand in the console: no upload API. |
-| CrazyGames | `npm run build:crazygames` | By hand in the developer portal: no upload API. |
+| Portal | How it goes up |
+|---|---|
+| Site (Vercel) | Vercel deploys `main` itself. |
+| itch.io | `publish.yml` pushes it with butler. |
+| Poki | `publish.yml` uploads a version with the Poki CLI; the review is requested in Poki for Developers. |
+| VK Games | `publish.yml` deploys it to VK hosting. |
+| Yandex Games | By hand in the console: no upload API. |
+| CrazyGames | By hand in the developer portal: no upload API. |
+| GameDistribution | By hand in the developer portal: no upload API. |
+| GamePix | By hand in the partners portal: no upload API. |
 
 `.github/workflows/publish.yml` runs after each release (called from `release-please.yml`; a release made with
 `GITHUB_TOKEN` fires no `release` event) or by hand from the Actions tab with a tag, e.g. to publish again. It tests,
-builds the three portal zips, attaches them to the GitHub release and pushes itch.io. Its run summary lists the
-manual steps with links to the zips and consoles:
+builds every portal zip, attaches them to the GitHub release and runs the pushes whose variables are set. Its run
+summary lists the manual steps with links to the zips and consoles:
 
 1. Yandex Games: console → the game → new version → upload `rebirth-yandex.zip`, version = the release number → send
    for moderation (3–5 working days; one moderation at a time).
 2. CrazyGames: developer portal → the game → upload `rebirth-crazygames.zip`.
+3. GameDistribution: developer portal → the game → upload `rebirth-gamedistribution.zip`.
+4. GamePix: partners portal → the game → upload `rebirth-gamepix.zip`.
 
 Saves live in each portal's own origin, so players never move a save between portals, but a portal under moderation
 lags behind the others: a save must load in any later version, not only the next one.
 
 ### One-time setup
 
-- **itch.io**: create the project as an HTML game, then in the repository settings add the secret `BUTLER_API_KEY`
-  (itch.io → settings → API keys) and the variable `ITCH_GAME` (`user/game`, as in the project URL). After the first
-  push, tick "This file will be played in the browser" on the `html5` upload. Until `ITCH_GAME` is set the push is
-  skipped. To approve each push by hand, add a required reviewer to the `itch` environment.
+Variables and secrets go in the repository settings (Secrets and variables → Actions). A push is skipped until its
+variable is set. To approve a portal's pushes by hand, add a required reviewer to its environment (`itch`, `poki`,
+`vk`).
+
+- **itch.io**: create the project as an HTML game; secret `BUTLER_API_KEY` (itch.io → settings → API keys), variable
+  `ITCH_GAME` (`user/game`, as in the project URL). After the first push, tick "This file will be played in the
+  browser" on the `html5` upload.
+- **Poki**: variable `POKI_GAME` (the game id from its Poki for Developers page), secret `POKI_UPLOAD_TOKEN` (an upload
+  token from Poki for Developers). Poki blocks requests to other hosts unless its support approves them: send it the
+  map, terrain, place-search and Wikipedia hosts `scripts/pack.mjs` lists, or the map stays empty.
+- **VK Games**: variable `VK_APP_ID`, secret `VK_DEPLOY_TOKEN` (the app's service token from its settings in VK).
+  Deploys go to the `production` environment of VK hosting.
+- **GameDistribution**: variable `GD_GAME_ID` (the game id from developer.gamedistribution.com; public, it ships in
+  the bundle). Without it the GameDistribution build is skipped. Turn rewarded ads on in the game's settings there.
 - **CrazyGames**: `.env.crazygames` turns the rewarded-ad offers off for the Basic Launch, where the portal serves no
   ads. Delete `VITE_REWARDED_ADS=off` there for the Full Launch.
 
@@ -103,6 +121,6 @@ npm test
 npm run build
 ```
 
-It also builds the Yandex Games and CrazyGames targets and runs the archive checks for all three portal builds.
+It also runs `npm run build:portals`: every portal build and its archive checks.
 
 Node.js 24 is used to match the Vercel project runtime.
