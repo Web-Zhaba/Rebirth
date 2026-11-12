@@ -2,7 +2,7 @@ import { BUILDINGS } from "../sim/buildings";
 import { PLACE_VARIANTS, ROAD_MATERIALS, isMaterialTool, isPlaceTool, type Tool } from "../map/tools";
 import { CATEGORIES, toolLabel } from "./buildMenu";
 
-// The search line over the build bar (docs/PLAN-build.md section 3.2): every tool and every kind of one by its name.
+// The search line over the build bar: every tool and every kind of one by its name.
 
 export interface SearchHit {
   tool: Tool;

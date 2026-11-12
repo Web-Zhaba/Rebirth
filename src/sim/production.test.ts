@@ -891,7 +891,7 @@ describe("determinism with production", () => {
   });
 });
 
-describe("logistics (docs/PLAN-balance.md B4)", () => {
+describe("logistics", () => {
   const woods = (extra: Building[] = []) => folk(town([bld(1, "woodcutter", 1500, "active", { forest: 1, water: 0, rock: 0 }), ...extra]), [{ home: null, adults: 2, job: 1 }]);
   it("a producer far from the stores loses hours to carting; a store beside it brings the rate back", () => {
     const far = work(woods());
@@ -941,7 +941,7 @@ describe("logistics (docs/PLAN-balance.md B4)", () => {
   });
 });
 
-describe("administration (docs/PLAN-balance.md B7)", () => {
+describe("administration", () => {
   const crowd = (n: number, extra: Building[] = []) => folk(town([bld(1, "quarry", 50), ...extra]), [{ home: null, adults: 2, job: 1 }, { home: null, adults: n - 2 }]);
   it("past what the offices manage every work rate drops gently, never below the floor", () => {
     expect(overload(ADMIN.elders, ADMIN.elders)).toBe(1);

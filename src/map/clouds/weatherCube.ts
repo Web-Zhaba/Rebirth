@@ -1,6 +1,6 @@
 import { climate, cloudField, TUNING, yearFrac } from "../../sim/weather";
 
-// Pure parts of the weather cube map (PLAN-clouds.md section 4).
+// Pure parts of the weather cube map.
 //
 // Frame: MapLibre unit sphere, X = sin(lng)cos(lat), Y = sin(lat) (north), Z = cos(lng)cos(lat).
 // Faces: GL order +X -X +Y -Y +Z -Z. A texel (i, j) of an RGBA8 face (row 0 first in memory, i.e. t = 0 first, no

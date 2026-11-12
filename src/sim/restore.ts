@@ -6,7 +6,7 @@ import { INSIGHT_BY_ID } from "./tech";
 import type { Building, FoundFoundation, SimState } from "./types";
 import { L } from "../i18n";
 
-// Restoring an old building "as it was" (docs/PLAN-restoration.md section 2): ordinary construction on an old foundation
+// Restoring an old building "as it was": ordinary construction on an old foundation
 // whose purpose matches its known old kind (`Building.asItWas`). This module keeps its consequences: the site is being
 // restored once ordered, restored once finished (research, an idea, a chronicle line) and lost once demolished.
 

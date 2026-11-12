@@ -1,4 +1,4 @@
-// The game's window onto the world (docs/PLAN-engine.md, N1). UI and tools talk to this, never to the renderer, so
+// The game's window onto the world. UI and tools talk to this, never to the renderer, so
 // the backend under src/view/ can be swapped for the own engine without touching them.
 //
 // No zoom levels: the camera is a target, an eye distance, heading and pitch; scale questions are answered in metres

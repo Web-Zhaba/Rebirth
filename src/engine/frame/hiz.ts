@@ -1,7 +1,7 @@
 import { createShader } from "../gpu/wgsl";
 import hizWgsl from "./hiz.wgsl?raw";
 
-// Hi-Z pyramid for occlusion culling (docs/PLAN-engine.md N6, hiz.wgsl). The engine draws the occluders first (terrain,
+// Hi-Z pyramid for occlusion culling (hiz.wgsl). The engine draws the occluders first (terrain,
 // buildings), builds this from their depth, then the GPU culling passes (the forest's scatter) test bounding spheres
 // against it before the rest of the frame is drawn: occluders and the culled are different things, so one phase on this
 // frame's depth is exact, with no reprojection and no pop-in when the camera moves.

@@ -3,9 +3,8 @@ import type { FoundFoundation, ProgressState, SimState } from "./types";
 import type { DomainId } from "./domains";
 import { L } from "../i18n";
 
-// Which OpenMapTiles POI classes mark an old building of a known kind and which knowledge domain it feeds
-// (PLAN-research.ru.md section 3, docs/PLAN-restoration.md section 3). Static; the values were checked against real z14
-// tiles. A game abstraction: the player-facing text never claims a historical cause.
+// Which OpenMapTiles POI classes mark an old building of a known kind and which knowledge domain it feeds.
+// Static; the values were checked against real z14 tiles. A game abstraction: the player-facing text never claims a historical cause.
 //
 // Two groups of kinds: candidates for a unique building (worship, schools, halls, a station...), which the player alone
 // decides about, and typical ones (shops, banks, pharmacies...), a chain or an everyday service, which grow like any
@@ -92,7 +91,7 @@ export const isHeritage = (f: { cls?: string }): boolean => isCurated(f.cls);
 // Domain of a stored foundation's kind, typical kinds included.
 export const siteDomain = (cls: string | undefined): DomainId | null => heritageDomain(cls);
 
-// ---------- tiers (docs/PLAN-restoration.md section 3) ----------
+// ---------- tiers ----------
 // Ordinary (no known kind): restoring gives the function and counts toward the place's recognisability. Typical (a
 // typical kind, or a candidate that is nameless or whose name repeats in the revealed area: a chain): a small bonus,
 // less for each further one. Unique: an idea, a chronicle line, and it works as a monument. A Wikipedia article of the
@@ -158,7 +157,7 @@ export function tierOf(f: Pick<FoundFoundation, "cls" | "name"> & Ringed, ctx: T
 // A typical building "as it was" adds this share of a unique one's research weight, and no idea.
 export const TYPICAL_SHARE = 0.25;
 
-// ---------- restoration (PLAN-research.ru.md section 7) ----------
+// ---------- restoration ----------
 // Pure data and rules shared by the worker and the panel.
 
 // What a kind is called on the map and in the panel (neutral wording, no historical claim).
@@ -210,7 +209,7 @@ const WORK_TEMPLATE: Record<string, string> = {
 };
 export const workTemplate = (cls: string | undefined): string | null => (cls && WORK_TEMPLATE[cls]) || null;
 
-// The purpose that brings a foundation of a known old kind back "as it was" (docs/PLAN-restoration.md section 2): the
+// The purpose that brings a foundation of a known old kind back "as it was": the
 // building it worked as, or a monument; null for a foundation of no known kind.
 export const asItWasTemplate = (cls: string | undefined): string | null => (siteDomain(cls) ? (workTemplate(cls) ?? "restored") : null);
 

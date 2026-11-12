@@ -17,7 +17,7 @@ import { L } from "../i18n";
 import "./tech.css";
 import "./museum.css";
 
-// The museum window (docs/PLAN-restoration.md section 6.3). The museum is drawn as its own plan: the old ring it stands
+// The museum window. The museum is drawn as its own plan: the old ring it stands
 // on, cut into its halls. A hall opened shows its exhibition as museum labels, or where its finds lie on a small map.
 // Under the plan, the storeroom: the themes not on show, as crates to put into a hall (a click, or a drag onto a room).
 

@@ -1,7 +1,7 @@
 import type { Engine } from "../../engine/engine";
 import type { Forest } from "../../engine/scene/forest";
 
-// Engine stats over the map (docs/PLAN-engine.md N6), for development: frame times, the terrain's nodes and pages and
+// Engine stats over the map, for development: frame times, the terrain's nodes and pages and
 // what the forest's GPU culling did (candidates, drawn, taken by the frustum and by the occluders). `?stats=1` shows it
 // and is remembered, `?stats=0` hides it again.
 

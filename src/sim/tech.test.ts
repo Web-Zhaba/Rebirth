@@ -96,7 +96,7 @@ describe("era II condition", () => {
 
 describe("old saves", () => {
   it("a save with goals gives the techs its paid unlocks cover, with prerequisites", () => {
-    // the key the craft zone had is read as the workshops' (docs/PLAN-build.md Z3)
+    // the key the craft zone had is read as the workshops'
     const sim = parseSave(old(town([bld(1, "izba")]), { done: ["izbas2", "logs20"], unlocks: ["sawpit", "barn", "cellar", "hunter", "forager", "quarry", "zone:craft"] }), NOW + 1)!.sim;
     for (const id of ["carpentry", "storage", "foraging", "cellars", "stonework", "crafts"]) expect(sim.progress.techs).toContain(id);
     expect(sim.progress.techs).not.toContain("fishing");

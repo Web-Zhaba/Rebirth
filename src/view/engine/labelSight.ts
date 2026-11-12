@@ -1,6 +1,6 @@
 import type { Engine } from "../../engine/engine";
 
-// Labels hidden behind hills (docs/PLAN-engine.md N6): a label's line of sight to the eye (Engine.behindTerrain) is
+// Labels hidden behind hills: a label's line of sight to the eye (Engine.behindTerrain) is
 // looked at again only every few frames, each label at its own moment, so a hundred labels cost a few rays a frame.
 // At most RAYS_PER_FRAME rays a frame: zooming out brings hundreds of new names at once, and a label not looked at yet
 // stays hidden until its turn comes a frame or two later.

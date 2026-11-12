@@ -8,7 +8,7 @@ import { allResearched } from "./tech";
 import type { FoundFoundation, RoadGraph, SimState } from "./types";
 import { emptyZones, regenerateCells } from "./zones";
 
-// Building in strokes (docs/PLAN-build.md, Z1): foundations along the road first, outlines dug first, lots in the gaps.
+// Building in strokes: foundations along the road first, outlines dug first, lots in the gaps.
 
 type Pt = [number, number];
 const rect = (x: number, y: number, w: number, h: number): Pt[] => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];

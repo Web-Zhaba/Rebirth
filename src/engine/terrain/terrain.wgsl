@@ -256,7 +256,7 @@ fn surface(layer: u32, uv: vec2f, texM: f32, cosLat: f32) -> vec3f {
   return vec3f(h, (he - hw) / span, (hn - hs) / span); // page v grows south
 }
 
-// Mountains (docs/PLAN-biomes.md step 4), from the real height (m), the slope (deg) and |latitude| (deg): above the
+// Mountains, from the real height (m), the slope (deg) and |latitude| (deg): above the
 // treeline the land turns to alpine meadow, above the snowline to lasting snow (off the steepest faces); steep slopes
 // are bare rock at any height. The drape's biome colour holds below.
 fn treeline(lat: f32) -> f32 {

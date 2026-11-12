@@ -4,7 +4,7 @@ import { lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot, type T
 import { roadNet } from "./roadNetCache";
 import type { Building, RoadGraph, SimState, Stock } from "./types";
 
-// Logistics (docs/PLAN-balance.md B4). Resources lie in stores: the camp at the founding point (id 0) and the finished
+// Logistics. Resources lie in stores: the camp at the founding point (id 0) and the finished
 // barns, cellars, timber yards, stone yards and warehouses. `SimState.stock` stays the town's total, `SimState.stores`
 // what each store holds. Producers carry their output to the nearest store with room and sites fetch their materials
 // from the nearest one that holds them; the carting takes their own hours, by road distance. Flows with no place of

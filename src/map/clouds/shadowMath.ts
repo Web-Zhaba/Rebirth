@@ -2,7 +2,7 @@ import { TUNING } from "../../sim/weather";
 import { CLOUD_BASE_M, CLOUD_TOP_M, FADE_FROM, FADE_TO, GLOBE_EXAGGERATION } from "./constants";
 import { EARTH_RADIUS_M, localFrame, type LocalFrame, type Vec3 } from "./sphere";
 
-// Pure maths of the ground-shadow layer (PLAN-clouds.md section 6), mirrored in sky/weather.wgsl (cloudShade).
+// Pure maths of the ground-shadow layer, mirrored in sky/weather.wgsl (cloudShade).
 
 const RAD = Math.PI / 180;
 

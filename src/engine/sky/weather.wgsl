@@ -1,6 +1,6 @@
 #include "frame"
 
-// Weather in the shading model (docs/PLAN-engine.md N7): the weather cube pair and the base noise of the clouds
+// Weather in the shading model: the weather cube pair and the base noise of the clouds
 // (map/clouds: built by the cloud worker), and the town's weather on the ground. Bound in group 0 beside the frame, so
 // every surface reads the same clouds: their shadows at the real world position, snow, ice and wet ground.
 //

@@ -11,7 +11,7 @@ import { INSIGHT_BY_ID, lockReason, TECH_BY_ID } from "../sim/tech";
 import type { FoundFoundation, FoundState, SimState, StoredArticle } from "../sim/types";
 import { decimal, L, plural } from "../i18n";
 
-// Pure view model of the heritage panel (docs/PLAN-restoration.md section 2): what a typed old building is, and what
+// Pure view model of the heritage panel: what a typed old building is, and what
 // bringing it back "as it was" costs and gives. That is ordinary construction of the purpose that matches its old kind;
 // any other purpose is put on the foundation from the build bar, without the restoration's bonus.
 
@@ -151,7 +151,7 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   };
 }
 
-// ---------- an outline or an ordinary foundation (docs/PLAN-restoration.md section 5) ----------
+// ---------- an outline or an ordinary foundation ----------
 
 export interface OutlineView {
   id: string;

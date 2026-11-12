@@ -146,7 +146,7 @@ export function refreshServices<T extends SimState>(s: T): T {
   return { ...s, coverage, landValue: computeLandValue(s, coverage) };
 }
 
-// The least share of its goods any family of a house got at the last midnight (docs/PLAN-balance.md B3); houses whose
+// The least share of its goods any family of a house got at the last midnight; houses whose
 // families have not been served yet are left out.
 export function houseGoods(households: Record<number, Household>): Map<number, number> {
   const out = new Map<number, number>();

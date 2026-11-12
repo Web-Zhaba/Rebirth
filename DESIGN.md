@@ -190,7 +190,6 @@ Do not make every panel bark (the screen becomes one sheet of old paper) and do 
 - **Builders' tag** (`.builder-tasks`): tar tag with the count; open, a bark list rises above it.
 - **Right-slot sheet** (`.rs-panel`): bark under a sticky tar head (icon tile, name, status stamp and size line, close); parts are `Section`s ruled off by lenticels with Bitter titles; construction shows the share done large beside the bar; residents are rows with a locate button to follow; the actions stay pinned to the foot of the sheet.
 - **Research screen** (`.tech-screen`): a full-screen bark spread over a moss scrim — era rail on the left, the era's register in the middle (available first, then the rest, rows separated by lenticels), the chosen technology's leaf on the right, the queue along the foot. Domain identity is a square swatch and a word, never a coloured side bar. A row's state is a word in a tag: изучать / идёт / в очереди / изучено / закрыто, colour only backing it up.
-- **Map chrome**: MapLibre's zoom group is a tar square on the moss floor with `invert(1)` icons; the attribution is bark with square corners (it must override `.maplibregl-compact`, which ships white with a 12 px radius).
 
 ## Do's and Don'ts
 

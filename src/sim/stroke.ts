@@ -8,7 +8,7 @@ import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, FoundFoundation, RoadGraph, Site, SimState } from "./types";
 import { L } from "../i18n";
 
-// Building in strokes (docs/PLAN-build.md section 3.3): the player drags along a road and gets a row of buildings of one
+// Building in strokes: the player drags along a road and gets a row of buildings of one
 // template. Old foundations along the stroke are taken first, at their full ring; outlines still to dig become a dig with
 // the building to follow; the gaps get regular lots (unless only foundations are wanted). The plan is pure: the build
 // tool previews it and the worker places it, so what the player sees is what gets built.

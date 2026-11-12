@@ -1,7 +1,7 @@
 import type { Stock } from "./types";
 import { L } from "../i18n";
 
-// Goods (docs/PLAN-balance.md B3): the workshops' output, in pieces. Clothing, dishes and furnishings are handed out to
+// Goods: the workshops' output, in pieces. Clothing, dishes and furnishings are handed out to
 // the households by the shops and markets; tools wear out with work.
 export const GOODS = ["clothes", "dishes", "furniture", "tools"] as const;
 export type Good = (typeof GOODS)[number];
@@ -42,5 +42,5 @@ export function takeGoods(st: Stock, n: number): Stock | null {
 }
 export const homeGoods = (st: Stock): number => st.clothes + st.dishes + st.furniture;
 
-// Saves from before goods groups (B3) carried one `wares` number: it is split by these shares.
+// Saves from before goods groups carried one `wares` number: it is split by these shares.
 export const WARES_SPLIT: Record<Good, number> = { clothes: 0.45, dishes: 0.25, furniture: 0.1, tools: 0.2 };

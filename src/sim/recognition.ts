@@ -8,7 +8,7 @@ import type { Finds, ProgressState, SimState } from "./types";
 import type { DomainId } from "./domains";
 import { L } from "../i18n";
 
-// Recognisability of a dig (docs/PLAN-restoration.md section 4): the share of its old foundations, by area, that carry a
+// Recognisability of a dig: the share of its old foundations, by area, that carry a
 // finished building again. Rewards go by share, not by count: each threshold brings one, once, and stays, so their number
 // is bounded by the digs, not the buildings, and they go to finishing places.
 

@@ -2,7 +2,7 @@ import { YEAR_DAYS } from "./time";
 import type { ServiceId } from "./types";
 import { L } from "../i18n";
 
-// Service tuning (design: PLAN.md section 9). Reach is road distance in metres.
+// Service tuning. Reach is road distance in metres.
 export interface ServiceInfo {
   id: ServiceId;
   name: string;

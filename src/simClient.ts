@@ -33,7 +33,7 @@ export const articles = computed(() => state.value?.articles ?? []);
 // The save (or its absence) has come back from the worker: the game can be played from here on.
 export const loaded = signal(false);
 
-// Visual life of the current game day (cosmetic, from the worker; see PLAN.md section 10).
+// Visual life of the current game day (cosmetic, from the worker).
 export const lifeTrips = signal<Trip[]>([]);
 export const lifeRests = signal<Rest[]>([]);
 export const lifeTraffic = signal<Record<number, number>>({});

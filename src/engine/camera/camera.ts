@@ -1,10 +1,10 @@
 import { cross, ecefToGeodetic, enuAt, geodeticToEcef, madd, normalize, scale, add, type Vec3 } from "../geo/ellipsoid";
 import { multiply, perspectiveReversedInfinite, viewRotation, type Mat4 } from "./projection";
 
-// Camera without zoom (docs/PLAN-engine.md section 3.5): a target on the ground, the eye's distance to it, heading and
+// Camera without zoom: a target on the ground, the eye's distance to it, heading and
 // pitch. The same state works from orbit to street level; only the derived near plane and LOD change.
 
-export const FOV_Y_DEG = 36.87; // MapLibre's, so benchmark scenes frame the same view (src/bench/scenes.ts)
+export const FOV_Y_DEG = 36.87; // MapLibre's, kept so views framed before the engine switch look the same
 export const MAX_PITCH = 80;
 export const MIN_DISTANCE = 5;
 export const MAX_DISTANCE = 40_000_000;

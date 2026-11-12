@@ -2,7 +2,7 @@ import { NO_PLATFORM, type Platform, type PlatformHooks } from "./index";
 import { loadScript } from "./script";
 
 // GameDistribution HTML5 SDK (https://github.com/GameDistribution/GD-HTML5/wiki/SDK-Implementation). The SDK reads its
-// options from a global set before it loads; the game's id is public and sits in `.env.gamedistribution`.
+// options from a global set before it loads; the game's id is public and sits in `env/.env.gamedistribution`.
 interface GdSdk {
   showAd(type?: "rewarded"): Promise<unknown>;
 }

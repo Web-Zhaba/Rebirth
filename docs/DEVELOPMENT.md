@@ -61,9 +61,9 @@ The repository starts from version `0.0.0`; the first releasable Conventional Co
 ## Publishing
 
 One release goes to every portal under one version number (`package.json`, shown in «Об игре»). Each portal gets its
-own build: `vite build --mode <portal>` reads `.env.<portal>` and picks the adapter in `src/platform`; the standalone
-build (site, itch.io) has none. `npm run build:portals [portal ...]` type-checks once, builds `dist-<portal>/` for each
-portal (all of them with no names) and packs `rebirth-<portal>.zip` through `scripts/pack.mjs`, which checks the
+own build: `vite build --mode <portal>` reads `env/.env.<portal>` and picks the adapter in `src/platform`; the standalone
+build (site, itch.io) has none. `npm run build:portals [portal ...]` type-checks once, builds `release/<portal>/` for each
+portal (all of them with no names) and packs `release/rebirth-<portal>.zip` through `scripts/pack.mjs`, which checks the
 portal's archive rules and that the bundle carries its own portal's SDK and no other's: one build never talks to two
 portals.
 
@@ -108,7 +108,7 @@ variable is set. To approve a portal's pushes by hand, add a required reviewer t
   Deploys go to the `production` environment of VK hosting.
 - **GameDistribution**: variable `GD_GAME_ID` (the game id from developer.gamedistribution.com; public, it ships in
   the bundle). Without it the GameDistribution build is skipped. Turn rewarded ads on in the game's settings there.
-- **CrazyGames**: `.env.crazygames` turns the rewarded-ad offers off for the Basic Launch, where the portal serves no
+- **CrazyGames**: `env/.env.crazygames` turns the rewarded-ad offers off for the Basic Launch, where the portal serves no
   ads. Delete `VITE_REWARDED_ADS=off` there for the Full Launch.
 
 ## CI

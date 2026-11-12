@@ -1,6 +1,6 @@
 import type { WeatherState } from "./weather";
 
-// What the weather does to work, food and people (design: PLAN-weather.md section 3). Pure factor functions; every
+// What the weather does to work, food and people. Pure factor functions; every
 // number is in EFFECTS. The calm state (no site: tests, old saves) gives exactly 1 everywhere and no fuel, no spoilage.
 
 export const EFFECTS = {

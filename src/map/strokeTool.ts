@@ -14,7 +14,7 @@ import { itemLook, spansAlong, strokePad, strokeSummary } from "./strokeModel";
 import { flash, isStrokeTool, onlyFoundations, placeTemplate, setOnlyFoundations, setSpacePan, syncPan, tool, BUILD_MAX_MPP, type StrokeTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
-// The stroke tool (docs/PLAN-build.md sections 3.3-3.4): houses, workshops and shops laid in rows along roads. Hover
+// The stroke tool: houses, workshops and shops laid in rows along roads. Hover
 // shows the one building a click puts down; a drag shows the whole row live; on release a row of more than one is held
 // as a plan with a summary card until the player confirms it, dropping single buildings by clicking them. The plan is
 // the sim's own (sim/stroke.ts) computed on the main thread's copy of the town; the worker plans again on confirm.

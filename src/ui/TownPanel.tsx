@@ -85,7 +85,7 @@ const RATION_IDS: Rations[] = ["reduced", "normal", "generous"];
 
 const pct = (v: number) => `${Math.round(v * 100)}${L(" %", "%")}`;
 
-// Why families come, or do not (docs/PLAN-balance.md B6): the score, its parts and the inflow it brings now.
+// Why families come, or do not: the score, its parts and the inflow it brings now.
 function AttractionBlock() {
   const s = state.value;
   if (!s?.attraction || !s.inflow) return null;

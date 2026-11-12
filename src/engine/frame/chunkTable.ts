@@ -1,6 +1,6 @@
 import type { Vec3 } from "../geo/ellipsoid";
 
-// Floating origin (docs/PLAN-engine.md section 3.4). Every resident chunk has an f64 ECEF origin; its vertices are f32 metres
+// Floating origin. Every resident chunk has an f64 ECEF origin; its vertices are f32 metres
 // relative to it. Each frame the CPU writes `origin - eye`, subtracted in f64 and only then rounded to f32, so the
 // GPU never adds two large numbers: the error of a vertex near the eye is one f32 rounding of |origin - eye| plus
 // one of its local offset, i.e. it shrinks with chunk size and with the chunk's distance to the eye.

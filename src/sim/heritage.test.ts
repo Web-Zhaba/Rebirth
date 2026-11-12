@@ -20,7 +20,7 @@ describe("heritage table", () => {
       ["place_of_worship", "christian", "care"],
       ["place_of_worship", undefined, "care"],
       ["hospital", "clinic", "care"],
-      // typical kinds (docs/PLAN-restoration.md section 3)
+      // typical kinds
       ["doctors", "doctors", "care"],
       ["pharmacy", "pharmacy", "care"],
       ["bank", "bank", "trade"],

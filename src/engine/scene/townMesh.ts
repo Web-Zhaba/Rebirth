@@ -8,7 +8,7 @@ import "../frame/frameUniforms";
 import "../sky/atmosphere";
 import townMeshWgsl from "./townMesh.wgsl?raw";
 
-// The town's models (docs/PLAN-engine.md N4): two indexed meshes in metres in the east/north/up frame of the town
+// The town's models: two indexed meshes in metres in the east/north/up frame of the town
 // origin, built by the game (view/engine/models.ts) from the same model builders the old map used. Roads first without
 // depth writes (ribbons of two chains overlap at a junction, equal depths would flicker), then the buildings, then the
 // window lights added on top; the old city's broken walls with the buildings while they are shown; the townspeople's

@@ -15,7 +15,7 @@ import type { FoundFoundation, FoundPlace, ProgressState, RoadGraph, SimState, S
 import { emptyZones, regenerateCells } from "./zones";
 import { placesView } from "../ui/placesModel";
 
-// Tiers of old buildings, recognisability of a dig and streets restored in full (docs/PLAN-restoration.md sections 3, 4).
+// Tiers of old buildings, recognisability of a dig and streets restored in full.
 
 type Pt = [number, number];
 const rect = (x: number, y: number, w: number, h: number): Pt[] => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];

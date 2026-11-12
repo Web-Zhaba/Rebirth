@@ -2,7 +2,7 @@ import type { CameraView } from "../camera/camera";
 import { dot, normalize, type Vec3 } from "../geo/ellipsoid";
 import { ShadowCache, shadowCovers, shadowFade, shadowFrame, shadowMatrix, shadowRadius, steppedSun, type ShadowFrame } from "./shadowMath";
 
-// The sun's local shadow map (docs/PLAN-shadows.md section 3): one depth texture around the camera target, rendered
+// The sun's local shadow map: one depth texture around the camera target, rendered
 // from the sun by the casters' own depth-only pipelines (SHADOW_DEPTH) and sampled by the receivers through
 // shadow.wgsl. It is re-rendered only when what it was baked from changed (shadowMath.ts ShadowCache); a still camera
 // costs no shadow pass.

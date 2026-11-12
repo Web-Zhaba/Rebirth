@@ -13,7 +13,7 @@ import type { City, FoundFoundation, ProgressState, RoadGraph, SimState } from "
 import { firewoodDaily } from "./weatherEffects";
 import { emptyZones, regenerateCells } from "./zones";
 
-// Old foundations set the building (docs/PLAN-restoration.md section 2): the ring at full size, the floors of the old
+// Old foundations set the building: the ring at full size, the floors of the old
 // building, limits by purpose and technology, capacity and heating by the floor area.
 
 const NOW = 1_800_000_000_000;

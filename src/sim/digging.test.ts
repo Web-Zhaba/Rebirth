@@ -10,7 +10,7 @@ import type { FoundFoundation, FoundPlace, RoadGraph, SimState } from "./types";
 import { emptyZones } from "./zones";
 import { buildOutlineView } from "../ui/heritageModel";
 
-// Excavation in two stages (docs/PLAN-restoration.md section 5): the survey leaves ghost outlines, each dug on its own.
+// Excavation in two stages: the survey leaves ghost outlines, each dug on its own.
 
 type Pt = [number, number];
 const rect = (x: number, y: number, w: number, h: number): Pt[] => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];

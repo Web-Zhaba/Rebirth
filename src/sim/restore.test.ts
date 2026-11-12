@@ -17,7 +17,7 @@ import type { Building, City, FoundFoundation, ProgressState, RoadGraph, SaveV4,
 import { emptyZones, regenerateCells } from "./zones";
 import type { FromWorker } from "./protocol";
 
-// Restoring "as it was" (docs/PLAN-restoration.md section 2): ordinary construction of the purpose that matches a
+// Restoring "as it was": ordinary construction of the purpose that matches a
 // foundation's known old kind, with its consequences kept in sim/restore.ts.
 
 const NOW = 1_800_000_000_000;

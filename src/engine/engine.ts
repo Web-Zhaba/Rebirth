@@ -13,9 +13,9 @@ import { Sky } from "./sky/sky";
 import type { WeatherGpu } from "./sky/weather";
 import { EXAGGERATION, Terrain } from "./terrain/terrain";
 
-// The engine on one canvas (docs/PLAN-engine.md section 4): device, the main pass with MSAA and one reversed-Z depth
+// The engine on one canvas: device, the main pass with MSAA and one reversed-Z depth
 // buffer, terrain, sky and whatever else registers to draw, plus the camera questions the game asks (pick, project).
-// Content kinds (N3+) add themselves as Drawables.
+// Content kinds add themselves as Drawables.
 
 export interface Drawable {
   occluder?: boolean; // drawn before the Hi-Z build (terrain-like solid geometry that hides what lies behind it)
@@ -241,7 +241,7 @@ export class Engine {
     // The timer spans the shadow pass (when it runs), the occluders and the main pass.
     const times = this.timer?.passWrites();
     const begin = times && { querySet: times.querySet, beginningOfPassWriteIndex: times.beginningOfPassWriteIndex };
-    // The sun's shadow map first, when what it is baked from changed (docs/PLAN-shadows.md): every receiver below
+    // The sun's shadow map first, when what it is baked from changed: every receiver below
     // samples it. The forest casts the instances its scatter made last frame (scene/forest.ts drawShadow).
     if (castShadows) {
       const shadowPass = this.shadow.beginPass(encoder, begin);
@@ -251,7 +251,7 @@ export class Engine {
       shadowPass.end();
     }
     // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else
-    // on top of the same colour and depth (docs/PLAN-engine.md N6).
+    // on top of the same colour and depth.
     const colorView = this.color!.createView();
     const depthView = this.depth.createView();
     const occluders = encoder.beginRenderPass({

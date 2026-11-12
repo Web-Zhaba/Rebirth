@@ -16,7 +16,7 @@ import { isUnlocked, TECHS } from "../sim/tech";
 import type { ClientState, Site, ZoneType } from "../sim/types";
 import { emptyWeather } from "../sim/weather";
 
-// Pacing harness (PLAN-pace.md P0): plays a fixed build order through the real Handler on a flat synthetic
+// Pacing harness: plays a fixed build order through the real Handler on a flat synthetic
 // site, driving it with a fake wall clock, and reports the real time (at speed 1x) of each pacing milestone.
 
 declare const process: { stdout: { write(s: string): void }; stderr: { write(s: string): void }; env: Record<string, string | undefined> }; // no @types/node in the project
@@ -44,7 +44,7 @@ it("pacing harness", async () => {
   const h = new Handler(mem, post, async () => ({ land: "meadow", slope: 0 }), async () => 200);
   await h.handle({ t: "found", city: { name: "Тест", lat: weather ? 50 : 59.12, lng: 37.9, foundedAt: T0 }, now: T0 });
   if (!weather) h["save"]!.sim.weather = emptyWeather();
-  // PACE_FOUNDATION=1: two old foundations of 240 m² by the first houses (docs/PLAN-restoration.md RB1): one of a
+  // PACE_FOUNDATION=1: two old foundations of 240 m² by the first houses: one of a
   // five-storey building (19 m), one of unknown height. The house strokes take them first; their floors follow the techs.
   const foundations = process.env.PACE_FOUNDATION === "1";
   if (foundations) {
@@ -83,7 +83,7 @@ it("pacing harness", async () => {
     return send(`path to ${to} m`, { type: "addRoad", kind: "path", pts, snapTol: 6, labor });
   };
   // Where the player lays each class: stretches of the road (x from, to), as the zones were painted before
-  // docs/PLAN-build.md Z3; a stretch of new road is added when the class runs out of ground.
+  // strokes replaced them; a stretch of new road is added when the class runs out of ground.
   const stretches: Record<ZoneType, [number, number][]> = { res: [], craft: [], trade: [] };
   const allow = (cls: ZoneType, from: number, to: number, what: string) => {
     stretches[cls].push([from, to]);
@@ -136,7 +136,7 @@ it("pacing harness", async () => {
   const unlocked = (key: string) => isUnlocked(st.progress, key);
   const ready = (n: number) => houses() >= n && roadBuilt(200);
   // How many more buildings of a class the town could use, by the demand rules the zones grew by before
-  // docs/PLAN-build.md Z3: a house while families wait for one, workshops and shops by the population.
+  // strokes replaced them: a house while families wait for one, workshops and shops by the population.
   const jobsOf = (cls: ZoneType) => Object.values(st.buildings).reduce((n, b) => n + (b.zone === cls ? BUILDINGS[b.template].jobs : 0), 0);
   const wanted = (cls: ZoneType) => {
     const p = st.people;
@@ -300,7 +300,7 @@ it("pacing harness", async () => {
     if (done.size === steps.length && st.stock.logs < BUILDINGS.izba.materials.logs && cutters > 0 && cutters < 1 + Math.floor(houses() / 5)) {
       await place("woodcutter", -1, 130, { forest: 0.6, water: 0, rock: 0 });
     }
-    // A store group nearly full: a sensible player puts a store of that kind by the producers (docs/PLAN-balance.md B4).
+    // A store group nearly full: a sensible player puts a store of that kind by the producers.
     if (unlocked("barn"))
       for (const [group, tpl] of [["food", "barn"], ["wood", "logyard"], ["stone", "stoneyard"], ["goods", "warehouse"]] as const) {
         const used = STORE_GROUPS[group].reduce((n, k) => n + st.stock[k], 0);
@@ -308,7 +308,7 @@ it("pacing harness", async () => {
         const low = group === "food" ? houses() >= 10 && capacityOf(st.buildings, group) - used < 0.5 * CAMP_STORE.food : capacityOf(st.buildings, group) - used < 0.1 * CAMP_STORE[group]; // a barn once the first houses stand
         if (!pending && low) await place(tpl, -1, 130);
       }
-    // The administration nears its limit: a sensible player puts up the town hall, then district offices (docs/PLAN-balance.md B7).
+    // The administration nears its limit: a sensible player puts up the town hall, then district offices.
     {
       const adm = st.economy.admin;
       const offices = Object.values(st.buildings).filter((b) => b.template === "townhall" || b.template === "office");

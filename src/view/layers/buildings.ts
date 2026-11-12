@@ -157,7 +157,7 @@ export function attachBuildingPick(view: View): void {
     selectedBuilding.value = buildingAt(e.lngLat[0], e.lngLat[1], slop);
   });
   // Middle click: the pipette, the tool and kind of the building or plan under the pointer; over open ground, the last
-  // tool again (docs/PLAN-build.md section 3.2).
+  // tool again.
   view.on("pointerdown", (e) => {
     if (e.original.button !== 1 || !e.isPrimary) return;
     const id = buildingAt(e.lngLat[0], e.lngLat[1]);

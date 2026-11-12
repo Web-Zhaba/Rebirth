@@ -1,4 +1,4 @@
-// Lightning schedule (PLAN-clouds.md section 5). A pure function of (storm cell index, strength, REAL time in seconds),
+// Lightning schedule. A pure function of (storm cell index, strength, REAL time in seconds),
 // so the flicker does not follow game speed and two layers agree. The GPU only receives the few flashes active now.
 
 export const FLASH_MAX = 6; // flashes drawn at once

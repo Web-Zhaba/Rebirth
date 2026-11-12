@@ -6,7 +6,7 @@ import { createShader } from "../gpu/wgsl";
 import "../frame/frameUniforms";
 import fieldsWgsl from "./fields.wgsl?raw";
 
-// The town's farm fields up close (docs/PLAN-engine.md N8, port of the old three.js field layer): one mesh of every field draped
+// The town's farm fields up close (port of the old three.js field layer): one mesh of every field draped
 // on the ground in the town origin's east/north/up frame, the furrows, crops, stubble, headlands and snow procedural in
 // fields.wgsl. The game builds the mesh, rewrites the farms' work into it and sets the `look` every frame
 // (view/engine/fields.ts); null draws nothing.

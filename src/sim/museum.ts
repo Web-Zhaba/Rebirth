@@ -4,7 +4,7 @@ import { catalogue, foundIds, type Item } from "./items";
 import type { Building, Resident, SimState, StoredArticle } from "./types";
 import { L } from "../i18n";
 
-// The museum (docs/PLAN-restoration.md section 6.3): a purpose of any old foundation. Its halls go by floor area and
+// The museum: a purpose of any old foundation. Its halls go by floor area and
 // each shows one themed exhibition (a street, the railway, crafts, gardens, a building), made of the finds of that theme
 // found and neither returned nor used. A complete exhibition, every known find of its theme shown, gives research in its
 // domain and makes the town more attractive; one with enough finds but not all of them gives a part of that, by the share

@@ -5,7 +5,7 @@ import type { DomainId } from "./domains";
 import type { Building, FindFate, Finds, FoundFoundation, SimState, StoredArticle } from "./types";
 import { L } from "../i18n";
 
-// Finds (docs/PLAN-restoration.md section 6). Every find comes from one real feature of the data: a named place gives
+// Finds. Every find comes from one real feature of the data: a named place gives
 // its sign, or the typical object of its kind with its real name; a named street its street sign; a garden old seeds, an
 // industrial ground machine parts, a railway its rails, a well its bucket; an article of the notebook with a building's
 // name its archive page. The catalogue is derived from the finds the survey recorded; a find is found once a dug

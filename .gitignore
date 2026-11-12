@@ -2,8 +2,7 @@ node_modules
 dist
 .claude/worktrees/
 dev-server.log
-dist-*
-*.zip
+release/
 
 # Local agent state, settings and heavy binaries
 .sharrowkin/

@@ -6,7 +6,7 @@ import { articlesNear, extracts, type WikiArticle } from "../world/wiki";
 import { articleId, selectArticleHits, UNLOCK_EXTRA } from "../world/wikiSelect";
 import { discsChanged } from "./excavation";
 
-// Wikipedia entries for the notebook (PLAN.md section 13): articles whose coordinates fall near a revealed disc.
+// Wikipedia entries for the notebook: articles whose coordinates fall near a revealed disc.
 const SEARCH_EXTRA = UNLOCK_EXTRA; // m added to the disc radius for the geosearch
 const EXTRACT_CHARS = 800;
 const SEND_BATCH = 50;

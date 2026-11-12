@@ -112,14 +112,14 @@ export interface Building {
   level: number; // a house's families (its level); on an old foundation the floors built
   streak: number; // days in a row a house met the upgrade conditions
   upgrade?: Upgrade; // the next level (or floor) in progress; the building stays active meanwhile
-  radius?: number; // dig site: revealed radius in m (PLAN.md section 12)
+  radius?: number; // dig site: revealed radius in m
   staff?: number; // hiring limit of a workplace, 0..jobs; absent = all jobs
   hand?: number; // person-hours of hand-made materials added to the labor when it was paid
   haul?: number; // person-hours of carting its materials from the stores, added to the labor when it was paid
   ripe?: number; // orchard: gameMinutes from which the trees bear (a year after it was finished)
   door?: [number, number]; // point of the ring nearest to the road: where services, jobs and walks reach the building
   materials?: Materials; // cost by area, instead of the template's
-  // A building on an old foundation (sim/foundationLots.ts, docs/PLAN-restoration.md section 2): the footprint is the
+  // A building on an old foundation (sim/foundationLots.ts): the footprint is the
   // simplified ring (3..64 points), the lot its oriented box.
   foundationId?: string;
   scale?: number; // the ring's area against the template's footprint; times the floors built it is the floor area
@@ -193,14 +193,14 @@ export interface TownEvent {
   site?: string; // a discovery: the foundation whose panel opens
 }
 
-// Notable moments kept forever (PLAN.md section 11); `kind` is a machine key, `text` the Russian line.
+// Notable moments kept forever; `kind` is a machine key, `text` the Russian line.
 export interface ChronicleEntry {
   at: number; // gameMinutes
   kind: string;
   text: string;
 }
 
-// Excavation finds (PLAN.md section 12); coordinates are local meters.
+// Excavation finds; coordinates are local meters.
 export interface FoundFoundation {
   id: string;
   ring: [number, number][];
@@ -230,7 +230,7 @@ export interface FoundPlace {
   restored?: number; // a street: gameMinutes when it was restored in full and got its name back (sim/streets.ts)
 }
 
-// A Wikipedia article unlocked by a dig (PLAN.md section 13). Text is CC BY-SA 4.0.
+// A Wikipedia article unlocked by a dig. Text is CC BY-SA 4.0.
 export interface StoredArticle {
   id: string; // "<lang>:<pageid>"
   title: string;
@@ -261,7 +261,7 @@ export interface Finds {
   fates: Record<string, FindFate>; // find id -> what the player did with it
 }
 
-// A real feature of the tile data that gives one find (docs/PLAN-restoration.md section 6): a garden (seeds), an
+// A real feature of the tile data that gives one find: a garden (seeds), an
 // industrial ground (machine parts), a railway (rails), a well (bucket), a house number (counted per street, no item), or
 // a named place beyond the revealed discs (a sign that points to it).
 export type FeatureKind = "seeds" | "parts" | "rails" | "bucket" | "number" | "sign";
@@ -336,7 +336,7 @@ export interface ProdState {
   haul?: Record<number, number>; // producer id -> share of its work hours that went to carting at the last work tick (sim/storage.ts)
 }
 
-// Research and eras (PLAN-research.ru.md section 4; sim/tech.ts holds the tree, sim/research.ts the rules).
+// Research and eras (sim/tech.ts holds the tree, sim/research.ts the rules).
 export interface ProgressState {
   era: number; // 1..2
   techs: string[]; // researched, in the order they finished
@@ -385,9 +385,9 @@ export interface SimState extends PeopleState {
   coverage: Record<number, number>;
   landValue: Record<number, number>; // house id -> 0..100
   summary: DaySummary | null; // «Итоги дня» of the last 22:00
-  levers: Levers; // player levers (P5)
+  levers: Levers; // player levers
   progress: ProgressState; // researched techs, the research under way, eras
-  weather: WeatherState; // climate at the town (PLAN-weather.md)
+  weather: WeatherState; // climate at the town
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.

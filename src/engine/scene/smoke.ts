@@ -6,7 +6,7 @@ import { createShader } from "../gpu/wgsl";
 import "../frame/frameUniforms";
 import smokeWgsl from "./smoke.wgsl?raw";
 
-// Chimney smoke (docs/PLAN-engine.md N7, port of the old three.js smoke layer): chimneys in the town origin's east/north/up
+// Chimney smoke (port of the old three.js smoke layer): chimneys in the town origin's east/north/up
 // frame, the nearest MAX_CHIMNEYS within REACH of the eye drawn as instances of PUFFS camera-facing puffs each
 // (smoke.wgsl). The game sets the chimneys and, every frame, `look` (view/engine/smoke.ts); null draws nothing.
 

@@ -1,7 +1,7 @@
 import { cross, dot, normalize, type Vec3 } from "../geo/ellipsoid";
 import type { Mat4 } from "../camera/projection";
 
-// The sun's orthographic shadow camera (docs/PLAN-shadows.md section 3): one local map around the camera target,
+// The sun's orthographic shadow camera: one local map around the camera target,
 // texel-snapped in absolute ECEF so it does not shimmer while the camera moves. The map's content depends only on the
 // snapped frame below; the matrix the GPU uses is rebuilt from it every frame against the eye, so positions stay
 // camera-relative (f64 here, f32 on the GPU) like everything else in the engine.
@@ -89,7 +89,7 @@ export function shadowCovers(f: ShadowFrame, center: Vec3, radius: number): bool
   return Math.abs(dot(d, f.right)) <= f.radius + radius && Math.abs(dot(d, f.up)) <= f.radius + radius && Math.abs(dot(d, f.fwd)) <= f.depth / 2 + radius;
 }
 
-// The map's version (docs/PLAN-shadows.md section 4.2): it is re-rendered only when what it was baked from changed —
+// The map's version: it is re-rendered only when what it was baked from changed —
 // the stepped sun, the snapped frame, the casters' versions or the view the casters were culled for. A still camera
 // costs nothing.
 export class ShadowCache {

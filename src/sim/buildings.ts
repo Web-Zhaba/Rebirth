@@ -24,7 +24,7 @@ export interface BuildingTemplate {
   group: JobGroup | null; // job group of a workplace (houses: null); a new template must declare one
 }
 
-// Job groups: the player sets a hiring priority for each (PLAN-ui.md glossary). Construction is a key of its own,
+// Job groups: the player sets a hiring priority for each. Construction is a key of its own,
 // but it has no buildings: its priority sets the builders' floor.
 export const JOB_GROUPS = ["food", "materials", "crafts", "trade", "services"] as const;
 export type JobGroup = (typeof JOB_GROUPS)[number];
@@ -89,7 +89,7 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   quarry: T("quarry", L("Карьер", "Quarry"), "placed", 2, 2, 14, 14, 3, 120, 8, [7, 1, 0], "materials"),
   fisher: T("fisher", L("Рыболовный причал", "Fishing pier"), "placed", 1, 1, 6, 6, 3, 70, 4, [10, 2, 0], "food"),
   barn: T("barn", L("Амбар", "Barn"), "placed", 2, 2, 12, 10, 7, 160, 0, [32, 10, 3], "services"),
-  // Services (PLAN.md section 9); labor and materials chosen here, like the placed buildings above.
+  // Services; labor and materials chosen here, like the placed buildings above.
   well: T("well", L("Колодец", "Well"), "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3], "services"),
   market: T("market", L("Рынок", "Market"), "placed", 2, 3, 15, 16, 5, 260, 8, [50, 10, 3], "trade"),
   chapel: T("chapel", L("Храм", "Temple"), "placed", 1, 2, 7, 12, 10, 180, 1, [35, 4, 6], "services"),
@@ -103,21 +103,21 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
   orchard: T("orchard", L("Сад", "Orchard"), "placed", 2, 3, 15, 20, 3, 100, 4, [7, 1, 0], "food"),
   apiary: T("apiary", L("Пасека", "Apiary"), "placed", 1, 1, 7, 6, 2, 50, 3, [5, 2, 0], "food"),
   cellar: T("cellar", L("Погреб", "Cellar"), "placed", 1, 1, 6, 6, 2, 110, 0, [16, 5, 6], "services"),
-  // Stores of the other goods (docs/PLAN-balance.md B4): variants of the storehouse tool.
+  // Stores of the other goods: variants of the storehouse tool.
   logyard: T("logyard", L("Склад леса", "Timber yard"), "placed", 2, 2, 12, 10, 4, 90, 0, [14, 2, 0], "services"),
   stoneyard: T("stoneyard", L("Склад камня", "Stone yard"), "placed", 2, 2, 12, 12, 2, 70, 0, [6, 1, 2], "services"),
   warehouse: T("warehouse", L("Товарный склад", "Warehouse"), "placed", 2, 2, 10, 10, 6, 140, 0, [26, 6, 3], "services"),
-  // Administration (docs/PLAN-balance.md B7, sim/governance.ts): clerks who manage the town; kinds of one build-bar tool.
+  // Administration (sim/governance.ts): clerks who manage the town; kinds of one build-bar tool.
   townhall: T("townhall", L("Ратуша", "Town hall"), "placed", 2, 3, 14, 12, 9, 300, 4, [60, 12, 15], "services"),
   office: T("office", L("Районная управа", "District office"), "placed", 2, 2, 10, 10, 7, 160, 2, [30, 6, 6], "services"),
-  // Excavation (PLAN.md section 12).
+  // Excavation.
   dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 6, [2, 0.5, 0], "services"),
   // A museum: a purpose of any old foundation, its halls by floor area (sim/museum.ts).
   museum: T("museum", L("Музей", "Museum"), "placed", 2, 2, 10, 10, 6, 140, 2, [30, 6, 4], "services"),
   // Digging one surveyed outline (sim/digging.ts): a site of the artel on the old ring, gone once it is dug; 8
   // person-hours per 100 m2.
   excavation: T("excavation", L("Раскопки фундамента", "Foundation dig"), "placed", 1, 1, 10, 10, 0.5, 8, 0, [0, 0, 0], null),
-  // An old building kept as a monument, one of the purposes of an old foundation (docs/PLAN-restoration.md section 2): no
+  // An old building kept as a monument, one of the purposes of an old foundation: no
   // jobs, no residents; its shape, size and cost come from the foundation it stands on.
   restored: T("restored", L("Памятник", "Monument"), "placed", 1, 1, 8, 8, 8, 50, 0, [6, 1.5, 4], null),
 };
@@ -125,11 +125,11 @@ export const BUILDINGS: Record<string, BuildingTemplate> = {
 // Materials of a building: its own (a restored old building is priced by its area) or its template's.
 export const materialsOf = (b: Pick<Building, "template" | "materials">): Materials | undefined => b.materials ?? BUILDINGS[b.template]?.materials;
 
-// Raising a house by one level (PLAN.md section 9, docs/PLAN-balance.md B2): taken like construction, the families stay.
+// Raising a house by one level: taken like construction, the families stay.
 // The cost of a level is this times the level the house has now; each level adds this much height.
 export const UPGRADE = { labor: 60, materials: { logs: 10, planks: 2, stone: 0 } as Materials, height: 1.5 };
 
-// ---------- buildings on old foundations (docs/PLAN-restoration.md section 2) ----------
+// ---------- buildings on old foundations ----------
 // The foundation sets the building: its ring is the footprint and its old height the floors. `scale` is the ring's area
 // against the template's own footprint; times the floors built (`level`) it is the floor area, which sets the capacity,
 // the cost and the heating.
@@ -163,7 +163,7 @@ export const scaledJobs = (v: number, b: Pick<Building, "scale" | "level" | "fou
   return Math.max(1, Math.min(Math.round(v * Math.sqrt(k)), v * FLOOR.jobsCap));
 };
 
-// House levels (docs/PLAN-balance.md B2): a house holds as many families as its level. A new house starts at the
+// House levels: a house holds as many families as its level. A new house starts at the
 // families its template is built for (a house 1, a large house 2) and may be raised once more, by the upper floor of
 // the rebuild. A house on an old foundation has no such levels: it holds a family per FLOOR.familyArea of the floors
 // built, and its highest level is the floors of the old building.
@@ -217,7 +217,7 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 
 // ---------- storage ----------
 
-// Resources lie in stores (docs/PLAN-balance.md B4, sim/storage.ts): the camp at the founding point holds a little of
+// Resources lie in stores (sim/storage.ts): the camp at the founding point holds a little of
 // everything, a barn or cellar food, a timber yard logs and planks, a stone yard stone, a warehouse the goods. Each store
 // has a room per group of goods, in the units of the stock (kg, m3, t, pieces).
 export type StoreGroup = "food" | "wood" | "stone" | "goods";

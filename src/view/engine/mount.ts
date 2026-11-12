@@ -113,8 +113,8 @@ function keepCameraInHash(engine: Engine, view: View, camera: CameraControl): vo
   });
 }
 
-// The engine's view, or null when it cannot start: then a screen in place of the game says why (the game needs WebGPU,
-// docs/PLAN-engine.md 3.1) and the error goes to the log.
+// The engine's view, or null when it cannot start: then a screen in place of the game says why (the game needs WebGPU)
+// and the error goes to the log.
 export async function tryMountEngineView(o: EngineMountOptions): Promise<EngineMount | null> {
   try {
     return await mountEngineView(o);

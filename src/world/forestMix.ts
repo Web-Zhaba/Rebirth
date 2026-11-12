@@ -1,4 +1,4 @@
-// Vegetation over the land, shared by the renderers and the bake workers (docs/PLAN-engine.md N5): which landcover
+// Vegetation over the land, shared by the renderers and the bake workers: which landcover
 // classes carry trees or small details (bushes, reed clumps, boulders) and how densely, what the ruins' foundations
 // add, and how the tree kinds split by latitude. The engine's cover pages store an 8-bit class id per texel and the
 // scatter shader reads the shares from COVER_SHARES.

@@ -3,7 +3,7 @@ import type { ArticleInput } from "./protocol";
 import type { SimState, StoredArticle } from "./types";
 import { L } from "../i18n";
 
-// Wikipedia articles unlocked by digs (PLAN.md section 13).
+// Wikipedia articles unlocked by digs.
 export const ARTICLE_CAP = 500;
 export const EXTRACT_MAX = 800;
 const BATCH_MAX = 100;

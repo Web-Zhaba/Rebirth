@@ -8,7 +8,7 @@ import type { Building, FoundFoundation, ProgressState, RoadGraph, Site, SimStat
 import { CELL_SIZE } from "./zones";
 import { L } from "../i18n";
 
-// Old foundations as building sites (PLAN.md section 12, docs/PLAN-restoration.md section 2). The foundation sets the
+// Old foundations as building sites. The foundation sets the
 // building: any purpose takes the ring as it is, at full size, and the floors of the old building. A stroke of houses
 // (sim/stroke.ts) takes the foundations along it first, and the player can put a building on any of them. Rectangular lots never
 // cover such a foundation. Whether a foundation is built on is derived (a building with its `foundationId`), so a

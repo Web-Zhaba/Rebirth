@@ -1,7 +1,7 @@
 import { BUILDINGS, scaledJobs } from "./buildings";
 import type { Building, Resident } from "./types";
 
-// Administration (docs/PLAN-balance.md B7). The founding elders manage a hamlet; a town hall and district offices
+// Administration. The founding elders manage a hamlet; a town hall and district offices
 // manage more, each by the share of its clerks at work. Past what the town can manage every work rate (production,
 // field work, construction) drops gently: «перегрузка управления».
 export const ADMIN = {

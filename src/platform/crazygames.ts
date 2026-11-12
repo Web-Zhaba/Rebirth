@@ -45,7 +45,7 @@ export async function initCrazyGames(): Promise<Platform> {
     listen(h) {
       hooks = h;
     },
-    // Off for the Basic Launch, where the portal serves no ads at all (`.env.crazygames`).
+    // Off for the Basic Launch, where the portal serves no ads at all (`env/.env.crazygames`).
     rewarded:
       import.meta.env.VITE_REWARDED_ADS === "off"
         ? null

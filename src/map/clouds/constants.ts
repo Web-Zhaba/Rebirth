@@ -1,6 +1,6 @@
 import type { CloudQuality } from "./settings";
 
-// Numbers the cloud volume and the ground shadows must agree on (PLAN-clouds.md sections 4-6).
+// Numbers the cloud volume and the ground shadows must agree on.
 
 // Weather cube face size per quality; both layers must ask for the same size or they refill each other's cubes.
 export const CUBE_SIZE: Record<CloudQuality, number> = { low: 128, medium: 192, high: 192 };

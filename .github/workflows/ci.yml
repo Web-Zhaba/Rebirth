@@ -52,6 +52,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rebirth-yandex-${{ github.sha }}
-          path: dist-yandex/
+          path: release/yandex/
           if-no-files-found: error
           retention-days: 14

@@ -177,7 +177,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     const lot = raw.lot;
     if (!isRecord(lot) || !isNum(lot.cx) || !isNum(lot.cy) || !isNum(lot.angle)) return null;
     // A building on an old foundation (sim/foundationLots.ts) has the real ring as its footprint and a lot that is a
-    // free-sized box. Saves from before docs/PLAN-restoration.md held a restoration ordered apart as `siteId`.
+    // free-sized box. Saves from before foundations set the building held a restoration ordered apart as `siteId`.
     const idOk = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
     const isSite = idOk(raw.siteId);
     const ringShaped = isSite || idOk(raw.foundationId);
@@ -233,7 +233,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
       const m = raw.materials;
       if (isRecord(m) && isNum(m.logs) && isNum(m.planks) && isNum(m.stone) && m.logs >= 0 && m.planks >= 0 && m.stone >= 0) out[id].materials = { logs: m.logs, planks: m.planks, stone: m.stone };
     }
-    // Saves from before services have no level (1), no streak. Saves from before house levels (docs/PLAN-balance.md B2)
+    // Saves from before services have no level (1), no streak. Saves from before house levels
     // had level 2 only for the house and a large house of level 1 holding two families: a house is at least at the
     // level its template starts at, at most at the highest its area allows.
     const level = Number.isInteger(raw.level) ? (raw.level as number) : 1;
@@ -385,14 +385,14 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
   return { residents, households, nextPersonId: nextPerson, nextHouseholdId: nextHouse, events: events.slice(-MAX_EVENTS) };
 }
 
-// Saves from before goods groups (B3) trade "wares": they trade clothing now.
+// Saves from before goods groups trade "wares": they trade clothing now.
 function oldTrade(v: unknown): unknown {
   if (!isRecord(v)) return v;
   const fix = (g: unknown) => (g === "wares" ? "clothes" : g);
   return { ...v, give: fix(v.give), get: fix(v.get) };
 }
 
-// A stock with any broken figure gives back the founding stock. Saves from before goods groups (docs/PLAN-balance.md B3)
+// A stock with any broken figure gives back the founding stock. Saves from before goods groups
 // carry one `wares` figure: it is split by WARES_SPLIT.
 function parseStock(v: unknown): Stock {
   const ok = (k: string) => isRecord(v) && isNum(v[k]) && (v[k] as number) >= 0;
@@ -404,7 +404,7 @@ function parseStock(v: unknown): Stock {
   return { ...base, clothes: w * WARES_SPLIT.clothes, dishes: w * WARES_SPLIT.dishes, furniture: w * WARES_SPLIT.furniture, tools: w * WARES_SPLIT.tools };
 }
 
-// Saves from before B6 (docs/PLAN-balance.md) have none: the founding party's (`fallback`) until the next midnight sets it.
+// Saves from before immigration by attractiveness have none: the founding party's (`fallback`) until the next midnight sets it.
 function parseAttraction(v: unknown, fallback: Attraction): Attraction {
   if (!isRecord(v)) return fallback;
   const out = { ...NO_ATTRACTION };
@@ -412,7 +412,7 @@ function parseAttraction(v: unknown, fallback: Attraction): Attraction {
   return out;
 }
 
-// What each store holds; saves from before the stores (docs/PLAN-balance.md B4) spread their stock over the stores they
+// What each store holds; saves from before the stores spread their stock over the stores they
 // have. A record that does not add up to the stock is set right by the next tick (storage.ts Ledger.sync).
 function parseStores(v: unknown, stock: Stock, buildings: Record<number, Building>): Stores {
   if (!isRecord(v)) return spreadStores({ stock, buildings, roads: emptyRoads() });
@@ -646,7 +646,7 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   const roads = parseRoads(sim.roads);
   if (!roads) return null;
   // Cells are rebuilt from roads on load, so broken cell data never costs the whole town (a rejected save would send
-  // the player back to founding). Saves from before docs/PLAN-build.md Z3 carry painted zones and a lastSpawn record:
+  // the player back to founding). Saves from before strokes replaced the zones carry painted zones and a lastSpawn record:
   // both are left out, and the buildings the zones grew stay where they stand.
   const zones = parseZones(sim.zones) ?? emptyZones();
   const growth = parseGrowth(sim, city, sim.gameMinutes);

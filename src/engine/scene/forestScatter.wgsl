@@ -1,4 +1,4 @@
-// GPU tree scatter (scene/forest.ts, docs/PLAN-engine.md N5): one thread per candidate of the tiles chosen this frame
+// GPU tree scatter (scene/forest.ts): one thread per candidate of the tiles chosen this frame
 // (scene/forestTiles.ts). A candidate is a jittered cell of a web-mercator tile's grid; it grows when the cover page's
 // class under it carries its kind (world/forestMix.ts), the game mask does not block it (clearings, lots, roads, zones,
 // fields; ruins add bushes and stones), the distance keeps it, it lies inside the view and inside its kind's reach. The

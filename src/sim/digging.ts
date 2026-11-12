@@ -13,7 +13,7 @@ import type { Building, FoundFoundation, SimState } from "./types";
 import { CELL_SIZE } from "./zones";
 import { L, plural } from "../i18n";
 
-// Digging a surveyed outline (docs/PLAN-restoration.md section 5): the second stage of excavation. The order is a site of
+// Digging a surveyed outline: the second stage of excavation. The order is a site of
 // the artel on the old ring, built like any construction (an \`excavation\` building, so the work, the crews and the
 // player's levers are those of construction); finished, it is gone and the foundation is dug: it can be built on, gives
 // its old stone, and a unique old building opens with a card while an ordinary house opens quietly.

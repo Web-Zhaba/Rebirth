@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
 import { searchTools, type SearchHit } from "./toolSearchModel";
 import { L } from "../i18n";
 
-// The search line over the build bar (docs/PLAN-build.md section 3.2): «/» or the dock's button opens it; typing
+// The search line over the build bar: «/» or the dock's button opens it; typing
 // filters the tools and their kinds, Enter picks, Esc closes. Empty, it lists the recent tools of Alt+1–4.
 export const searchOpen = signal(false);
 

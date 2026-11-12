@@ -3,7 +3,7 @@ import { rgb } from "../../map/modelGeometry";
 import { createShader } from "../gpu/wgsl";
 import villagersWgsl from "./villagers.wgsl?raw";
 
-// Villagers on raw WebGPU for the preview page (/villagers.html): every figure's vertices are rewritten on the CPU each
+// Villagers on raw WebGPU for the preview page (/dev/villagers.html): every figure's vertices are rewritten on the CPU each
 // frame from poseOf() into one vertex buffer, and the figures stand on a flat patch. Not part of the globe engine.
 
 const FLOATS = 9; // position, normal, colour

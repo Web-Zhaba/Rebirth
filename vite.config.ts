@@ -9,6 +9,8 @@ const { version } = JSON.parse(readFileSync(new URL("./package.json", import.met
 export default defineConfig({
   // Relative asset paths: portals serve the game from a subfolder inside their iframe.
   base: "./",
+  // Per-portal settings: `vite build --mode <portal>` reads `env/.env.<portal>`.
+  envDir: "env",
   // One release number on every portal; release-please bumps it in package.json.
   define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [Icons({ compiler: "jsx", jsx: "preact" })],

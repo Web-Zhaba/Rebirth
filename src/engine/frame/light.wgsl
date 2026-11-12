@@ -1,6 +1,6 @@
 #include "frame"
 
-// The light on what stands on the ground (docs/PLAN-graphics.md G2): buildings, roads, residents, trees. Their colours
+// The light on what stands on the ground: buildings, roads, residents, trees. Their colours
 // are display colours shaded flat, so the light is a display-space multiplier: a cool fill from the open sky on what
 // faces up, a warm one from the ground on what faces down, and the sun on top, warming as it nears the horizon. In the
 // sun's shadow only the fills are left, which is what turns a shadow ink blue.

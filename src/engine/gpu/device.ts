@@ -1,4 +1,4 @@
-// WebGPU device and canvas (docs/PLAN-engine.md section 3.1: WebGPU only). Optional features are requested only when the
+// WebGPU device and canvas (WebGPU only). Optional features are requested only when the
 // adapter has them; callers check `features` instead of assuming.
 
 export interface Gpu {

@@ -1,4 +1,4 @@
-// The portal the game is published on, picked at build time: `vite build --mode <portal>` reads `.env.<portal>`.
+// The portal the game is published on, picked at build time: `vite build --mode <portal>` reads `env/.env.<portal>`.
 // The core talks only to this module; a portal's SDK never reaches the standalone bundle (the branch below is a
 // build-time constant, so Vite drops the other adapters; scripts/pack.mjs checks that no other portal's SDK ships).
 export interface Platform {

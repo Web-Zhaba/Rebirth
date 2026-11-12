@@ -1,6 +1,6 @@
 import { precipDensity } from "./weatherMath";
 
-// Which chimneys smoke and how hard (PLAN-3d-world.ru.md stage 7). Pure maths: view/engine/smoke.ts draws it.
+// Which chimneys smoke and how hard. Pure maths: view/engine/smoke.ts draws it.
 //
 // A chimney smokes when its building is finished and in use (the model layer's items carry `lamp` only for houses with
 // a household and workplaces with a worker: src/sim/life.ts lights). A house burns wood with the cold (strong below

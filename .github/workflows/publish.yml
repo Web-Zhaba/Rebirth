@@ -61,16 +61,17 @@ jobs:
       - name: Attach archives to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" rebirth-*.zip --clobber
+        run: gh release upload "${{ inputs.tag }}" release/rebirth-*.zip --clobber
 
       - name: Keep the builds the next jobs push
         uses: actions/upload-artifact@v4
         with:
           name: push-builds
           path: |
-            dist-itch/
-            dist-poki/
-            dist-vk/
+            release/itch/
+            release/poki/
+            release/vk/
+          # Stored without the release/ prefix (the common folder); the push jobs download it back into release/.
           if-no-files-found: error
           retention-days: 7
 
@@ -90,7 +91,7 @@ jobs:
           - **CrazyGames**: [rebirth-crazygames.zip]($ASSETS/rebirth-crazygames.zip) → [developer portal](https://developer.crazygames.com/) → the game → new build.
           - **GamePix**: [rebirth-gamepix.zip]($ASSETS/rebirth-gamepix.zip) → [partners portal](https://partners.gamepix.com/) → the game → new build.
           EOF
-          if [ -f rebirth-gamedistribution.zip ]; then
+          if [ -f release/rebirth-gamedistribution.zip ]; then
             echo "- **GameDistribution**: [rebirth-gamedistribution.zip]($ASSETS/rebirth-gamedistribution.zip) → [developer portal](https://developer.gamedistribution.com/) → the game → upload." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "- **GameDistribution**: not built, the \`GD_GAME_ID\` variable is not set." >> "$GITHUB_STEP_SUMMARY"
@@ -108,6 +109,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: push-builds
+          path: release
 
       - name: Install butler
         run: |
@@ -118,7 +120,7 @@ jobs:
       - name: Push to itch.io
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-        run: butler/butler push dist-itch "${{ vars.ITCH_GAME }}:html5" --userversion "${{ needs.build.outputs.version }}"
+        run: butler/butler push release/itch "${{ vars.ITCH_GAME }}:html5" --userversion "${{ needs.build.outputs.version }}"
 
   poki:
     needs: build
@@ -131,6 +133,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: push-builds
+          path: release
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -141,7 +144,7 @@ jobs:
       - name: Upload to Poki
         env:
           POKI_UPLOAD_TOKEN: ${{ secrets.POKI_UPLOAD_TOKEN }}
-        run: npx --yes @poki/cli@0.1.19 upload --game "${{ vars.POKI_GAME }}" --build-dir dist-poki --name "${{ needs.build.outputs.version }}" --notes "${{ inputs.tag }}"
+        run: npx --yes @poki/cli@0.1.19 upload --game "${{ vars.POKI_GAME }}" --build-dir release/poki --name "${{ needs.build.outputs.version }}" --notes "${{ inputs.tag }}"
 
   vk:
     needs: build
@@ -154,6 +157,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: push-builds
+          path: release
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -166,6 +170,6 @@ jobs:
           MINI_APPS_ENVIRONMENT: production
         run: |
           cat > vk-hosting-config.json <<EOF
-          { "static_path": "dist-vk", "app_id": ${{ vars.VK_APP_ID }}, "endpoints": { "mobile": "index.html", "mvk": "index.html", "web": "index.html" } }
+          { "static_path": "release/vk", "app_id": ${{ vars.VK_APP_ID }}, "endpoints": { "mobile": "index.html", "mvk": "index.html", "web": "index.html" } }
           EOF
           npx --yes @vkontakte/vk-miniapps-deploy@1.0.3

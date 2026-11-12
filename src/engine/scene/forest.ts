@@ -17,7 +17,7 @@ import forestWgsl from "./forest.wgsl?raw";
 import scatterWgsl from "./forestScatter.wgsl?raw";
 import { bakeTreeAtlas, IMPOSTOR_STEP, IMPOSTOR_VIEWS, TREE_VERTEX_LAYOUT, uploadTreeMeshes, type TreeAtlas, type TreeMeshes, type TreeModelData } from "./treeAtlas";
 
-// The forest on the GPU (docs/PLAN-engine.md N5): trees, bushes, reeds and boulders grown every frame by a compute
+// The forest on the GPU: trees, bushes, reeds and boulders grown every frame by a compute
 // pass (forestScatter.wgsl) from the cover pages (bake/drape.ts rasterCover), the height pages and the game's mask,
 // over the tiles around the eye that lie in view (scene/forestTiles.ts), culled per candidate against the frustum and
 // the reach of their kind, then drawn with indirect draws: models near, impostors far. Nothing about a tree lives on

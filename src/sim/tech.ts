@@ -2,7 +2,7 @@ import type { DomainId } from "./domains";
 import type { ProgressState, RoadKind, SimState } from "./types";
 import { L } from "../i18n";
 
-// The technology tree and the eras (PLAN-research.ru.md sections 4-6, 9). Static: none of it is saved, only
+// The technology tree and the eras. Static: none of it is saved, only
 // `SimState.progress` (the ids of what is researched). sim/research.ts holds the rules that move it.
 
 // What a technology changes besides its unlock keys. Fractions are added up over the researched techs: 0.1 = +10 %.
@@ -259,7 +259,7 @@ const LEGACY_GOAL_UNLOCKS: Record<string, string[]> = {
   craft5: ["upgrade"],
 };
 
-// Keys the zones had before docs/PLAN-build.md Z3.
+// Keys the zones had before strokes replaced them.
 const LEGACY_KEY: Record<string, string> = { "zone:craft": "workshop", "zone:trade": "shop" };
 
 // Unlock keys an old save's `goals` record had paid (its unlock list plus what its done goals pay); empty without one.

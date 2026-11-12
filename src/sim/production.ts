@@ -46,7 +46,7 @@ export const HAND_HOURS = { logs: 4, planks: 12, stone: 2 };
 
 const EPS = 1e-9;
 
-// Heating (docs/PLAN-restoration.md section 2.3): a house burns by its floor area, and only while somebody lives in it.
+// Heating: a house burns by its floor area, and only while somebody lives in it.
 // The firewood rate of the weather is that of HEAT_AREA m2, the room of one family in a house of the old kind; a house
 // of the old kind (and a tent) heats that much per family, a building on an old foundation its whole floor area, shared
 // by the families in it, so a large half-filled house costs its whole area.
@@ -222,7 +222,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     flags = { ...flags, rot: flags.rot + (kg - stored) };
   };
   // Units made in `h` work hours at `perHour` a work hour: the producer carts its output to the nearest store with room
-  // (and its input from the nearest store holding it), which takes its share of the hours (docs/PLAN-balance.md B4).
+  // (and its input from the nearest store holding it), which takes its share of the hours.
   const carted = (b: Building, g: keyof Stock, perHour: number, h: number, input?: { g: keyof Stock; per: number }): number => {
     if (h <= 0 || perHour <= 0) return 0;
     const at = lotFront(b);

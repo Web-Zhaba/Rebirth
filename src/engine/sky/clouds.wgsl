@@ -2,7 +2,7 @@
 #include "weather"
 
 // Volumetric clouds of the globe views: a WGSL port of the old cloud layer (map/clouds/cloudShaders.ts MARCH_FRAG and
-// COMPOSITE_FRAG, PLAN-clouds.md section 5). The march runs into a low-resolution target only when the picture changed
+// COMPOSITE_FRAG). The march runs into a low-resolution target only when the picture changed
 // (sky/clouds.ts); the composite lays it over the frame, premultiplied, times the zoom fade.
 //
 // Frame: the cube's unit sphere (X to 90°E, Y north, Z to 0°E 0°N), the ellipsoid scaled to radius 1 (an ECEF point

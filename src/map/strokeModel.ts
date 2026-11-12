@@ -5,7 +5,7 @@ import type { StrokeItem, StrokePlan, StrokeSpan } from "../sim/stroke";
 import type { FoundFoundation, RoadGraph } from "../sim/types";
 import { CELL_SIZE } from "../sim/zones";
 
-// The pure half of the stroke tool (docs/PLAN-build.md section 3.3): the dragged path turned into road spans, and the
+// The pure half of the stroke tool: the dragged path turned into road spans, and the
 // numbers of the summary card.
 
 type Pt = [number, number];

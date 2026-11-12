@@ -1,6 +1,6 @@
 #include "frame"
 
-// Object shadows (docs/PLAN-shadows.md): one local depth map around the camera target, rendered from the sun
+// Object shadows: one local depth map around the camera target, rendered from the sun
 // (shadow/shadowMap.ts). A receiver multiplies only its direct-sun term by sunShadow, so shadows keep the sky light and
 // their colour (frame/light.wgsl modelLight for what stands on the ground); shadowInk tints the shaded part of the
 // farm fields' flat ramp towards ink blue. Bound in group 0 beside the frame, so every receiver samples the same map.

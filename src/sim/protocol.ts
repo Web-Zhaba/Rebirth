@@ -24,7 +24,7 @@ export interface ArticleInput {
 export type Cmd =
   // pts and labor are local meters / person-hours; labor has one entry per segment.
   // span: longest water run (m) of the line, for the bridge span limit; houses: lay them along both sides of the new road
-  // (docs/PLAN-build.md «дорога с домами»), once its ground is surveyed
+  //, once its ground is surveyed
   | { type: "addRoad"; kind: RoadKind; pts: [number, number][]; snapTol: number; labor: number[]; span?: number; houses?: { template: string; onlyFoundations?: boolean } }
   | { type: "removeRoad"; edgeId: number }
   | { type: "upgradeRoad"; kind: RoadKind; edges: number[]; labor: number[]; span?: number } // labor: each edge built anew as `kind`; span: longest water run of the bridge
@@ -48,7 +48,7 @@ export type Cmd =
   | { type: "setExhibition"; building: number; hall: number; theme: string | null }
   | { type: "arrangeExhibitions" } // the best themes in every hall of the town
   | { type: "demolish"; id: number }
-  // Player levers (PLAN-pace.md section 8). A site key is a building id, or -id of a clearing; null clears the priority.
+  // Player levers. A site key is a building id, or -id of a clearing; null clears the priority.
   | { type: "setPriority"; key: number | null }
   | { type: "callToloka"; key: number }
   | { type: "setSchedule"; strada: boolean }

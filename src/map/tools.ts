@@ -34,7 +34,7 @@ effect(() => {
 
 export const isTool = (t: unknown): t is Tool => typeof t === "string" && (isRoadTool(t as Tool) || isLandTool(t as Tool) || isPlaceTool(t as Tool));
 
-// The last tools picked, newest first, on Alt+1–4 (docs/PLAN-build.md section 3.2); kept between sessions.
+// The last tools picked, newest first, on Alt+1–4; kept between sessions.
 export const RECENT_MAX = 4;
 const RECENT_STORE = "rebirth.tools.recent";
 const readRecent = (): Tool[] => {
@@ -86,7 +86,7 @@ export function roadKindOf(t: Tool | null, material: Record<MaterialTool, RoadKi
   return t && isMaterialTool(t) ? material[t] : null;
 }
 // Kinds of building one placement tool puts down, picked with a switch (new buildings come as variants of a tool, not
-// as tools of their own): the storehouse (docs/PLAN-balance.md B4) and the administration (B7). The first is the default.
+// as tools of their own): the storehouse and the administration. The first is the default.
 export interface PlaceVariant {
   id: string; // template
   label: string;
@@ -147,7 +147,7 @@ export function setOnlyFoundations(on: boolean): void {
   }
 }
 
-// The road tools lay houses along both sides of a new road (docs/PLAN-build.md «дорога с домами»); kept between sessions.
+// The road tools lay houses along both sides of a new road; kept between sessions.
 const ROAD_HOUSES_STORE = "rebirth.road.houses";
 const readRoadHouses = (): boolean => {
   try {

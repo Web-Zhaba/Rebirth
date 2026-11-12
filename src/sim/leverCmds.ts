@@ -14,7 +14,7 @@ import { calendar } from "./time";
 import type { SimState } from "./types";
 import { L } from "../i18n";
 
-// Player levers as pure state changes (PLAN-pace.md section 8); the handler turns them into commands.
+// Player levers as pure state changes; the handler turns them into commands.
 
 export type LeverResult = { ok: true; sim: SimState } | { ok: false; reason: string };
 

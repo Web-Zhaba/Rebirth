@@ -1,9 +1,9 @@
-import { VillagerPreview, type Actor } from "../debug/villagers";
+import { VillagerPreview, type Actor } from "./villagers";
 import { ACTIONS, buildRig, villagerLook, type Action, type Look, type Vec3 } from "../../map/villagerModel";
 import { fitCanvas, initGpu, WebGpuUnavailable, type Gpu } from "../gpu/device";
 import { L } from "../../i18n";
 
-// Villagers preview (dev page /villagers.html): a row of residents of different ages on a flat patch, each with a random
+// Villagers preview (dev page /dev/villagers.html): a row of residents of different ages on a flat patch, each with a random
 // look from its seed (sex, stature by age, hair, clothes); one action for all. Drag to orbit, wheel to zoom.
 
 const AGES = [1, 3, 6, 10, 14, 18, 25, 33, 41, 52, 63, 74];

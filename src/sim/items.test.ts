@@ -16,7 +16,7 @@ import { placesView } from "../ui/placesModel";
 import { findsView } from "../ui/findsModel";
 import { museumView } from "../ui/museumModel";
 
-// Finds and the museum (docs/PLAN-restoration.md section 6).
+// Finds and the museum.
 
 type Pt = [number, number];
 const rect = (x: number, y: number, w: number, h: number): Pt[] => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];

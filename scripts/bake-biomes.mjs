@@ -1,4 +1,4 @@
-// Bakes the biome map (docs/PLAN-biomes.md step 1): the RESOLVE Ecoregions 2017 polygons (Dinerstein et al. 2017,
+// Bakes the biome map: the RESOLVE Ecoregions 2017 polygons (Dinerstein et al. 2017,
 // CC BY 4.0, https://storage.googleapis.com/teow2016/Ecoregions2017.zip) rasterised onto an equirectangular grid as
 // one 8-bit class id per pixel (src/world/biomes.ts BIOMES, ids from 1), written as a greyscale PNG. The sea and lakes
 // take the class of the nearest land, since the drape's coastline (OSM) differs from RESOLVE's and water is decided

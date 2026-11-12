@@ -5,7 +5,7 @@ import { nodeOrigin } from "../terrain/nodeMesh";
 import { MAX_ZOOM } from "../terrain/quadtree";
 import { localOffset, shaderRelative } from "./chunkTable";
 
-// N0 precision test (docs/PLAN-engine.md section 5): camera-relative positions through the chunk-table path stay within
+// Precision test: camera-relative positions through the chunk-table path stay within
 // 1 mm of the f64 truth for points 1-100 m from the eye, at the antimeridian at 60 N and at (0, 0).
 
 function rng(seed: number) {

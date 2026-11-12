@@ -1,4 +1,4 @@
-// Tileable 3D noise volumes for the cloud ray-march (PLAN-clouds.md section 4). Pure, deterministic, no Math.random.
+// Tileable 3D noise volumes for the cloud ray-march. Pure, deterministic, no Math.random.
 // Lattice and feature-point grids wrap, so a volume repeats seamlessly (value at 0 == value at N on every axis).
 
 export const BASE_SIZE = 64;

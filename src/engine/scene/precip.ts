@@ -6,7 +6,7 @@ import { createShader } from "../gpu/wgsl";
 import "../frame/frameUniforms";
 import precipWgsl from "./precip.wgsl?raw";
 
-// Rain and snow around the eye (docs/PLAN-engine.md N7): one instanced draw of camera-relative particles, positions
+// Rain and snow around the eye: one instanced draw of camera-relative particles, positions
 // from the instance index and the time (precip.wgsl). The game sets `look` (view/engine/weather.ts); null draws nothing.
 
 export interface PrecipLook {
