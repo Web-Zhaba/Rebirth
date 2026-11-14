@@ -164,12 +164,13 @@ jobs:
         with:
           node-version: 24
 
+      # noprompt: without it the CLI asks "Would you like to deploy?" and, with no terminal, exits 0 having deployed nothing.
       - name: Deploy to VK hosting
         env:
           MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_DEPLOY_TOKEN }}
           MINI_APPS_ENVIRONMENT: production
         run: |
           cat > vk-hosting-config.json <<EOF
-          { "static_path": "release/vk", "app_id": ${{ vars.VK_APP_ID }}, "endpoints": { "mobile": "index.html", "mvk": "index.html", "web": "index.html" } }
+          { "static_path": "release/vk", "app_id": ${{ vars.VK_APP_ID }}, "noprompt": true, "update_prod": true, "update_dev": true, "endpoints": { "mobile": "index.html", "mvk": "index.html", "web": "index.html" } }
           EOF
           npx --yes @vkontakte/vk-miniapps-deploy@1.0.3
