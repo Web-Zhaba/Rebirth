@@ -12,4 +12,6 @@ export const warehouse: BuildingRules = {
   labor: 140,
   crew: 0,
   materials: { logs: 26, planks: 6, stone: 3 },
+  store: { goods: 500 }, // pieces
+  sizeClass: "store",
 };

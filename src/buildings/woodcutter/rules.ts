@@ -11,4 +11,9 @@ export const woodcutter: BuildingRules = {
   labor: 45,
   crew: 5,
   materials: { logs: 10, planks: 1, stone: 0 },
+  job: L("лесоруб", "woodcutter"),
+  firstBuilt: L("Построена первая лесозаготовка", "The first woodcutter is set up"),
+  usesTools: true,
+  reach: 150,
+  needs: { forest: 0.1 },
 };

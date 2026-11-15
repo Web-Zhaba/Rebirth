@@ -11,4 +11,8 @@ export const chapel: BuildingRules = {
   labor: 180,
   crew: 1,
   materials: { logs: 35, planks: 4, stone: 6 },
+  job: L("служит в Храме", "serves at the Temple"),
+  firstBuilt: L("Построен первый храм", "The first temple is built"),
+  sizeClass: "hall",
+  service: { name: L("Храм", "Temple"), reach: 1000, mood: 7, color: "#8e6bb0" },
 };

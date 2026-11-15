@@ -1,4 +1,4 @@
-import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_USERS, TOOL_WEAR, TOOLLESS } from "./goods";
+import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_WEAR, TOOLLESS } from "./goods";
 import { leverMood, workHours } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
 import { allocateLabor, BUILDINGS, floorArea, FOUNDING_STOCK, foodCapacity, groupOf, homesOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
@@ -265,7 +265,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     const wf = workFactor(b.template, s.weather); // rain, frost, storms
     if (wf <= 0) continue;
     let h = eff * dt * wf * admin * (b.zone === "craft" ? shopMul : 1) * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
-    if (TOOL_USERS.has(b.template)) {
+    if (BUILDINGS[b.template]?.usesTools) {
       // tools wear out with the work; what has none works at TOOLLESS of its rate
       const wear = h * TOOL_WEAR;
       const got = ledger.take("tools", Math.min(stock.tools, wear), lotFront(b)).taken;

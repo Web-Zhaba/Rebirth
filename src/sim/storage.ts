@@ -1,4 +1,4 @@
-import { CAMP_STORE, STORE_GROUPS, STORES, groupOf, storeRoom, type StoreGroup, type StoreRoom } from "./buildings";
+import { BUILDINGS, CAMP_STORE, STORE_GROUPS, groupOf, storeRoom, type StoreGroup, type StoreRoom } from "./buildings";
 import { makeIdentityCache } from "./memo";
 import { lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot, type Tree } from "./people";
 import { roadNet } from "./roadNetCache";
@@ -50,7 +50,7 @@ const storeSet = makeIdentityCache((buildings: Record<number, Building>): StoreS
 
 // The camp and every finished store, the camp first.
 export const storePoints = (buildings: Record<number, Building>): readonly StorePoint[] => storeSet(buildings).points;
-export const isStore = (b: Pick<Building, "template">): boolean => b.template in STORES;
+export const isStore = (b: Pick<Building, "template">): boolean => !!BUILDINGS[b.template]?.store;
 
 // ---------- distances ----------
 

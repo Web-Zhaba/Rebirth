@@ -1,4 +1,4 @@
-import type { Building, Clearing, Stock, ZoneType } from "./types";
+import type { Building, Clearing, Stock } from "./types";
 import { RULES } from "../buildings/rules";
 import type { BuildingRules } from "../buildings/types";
 import { L } from "../i18n";
@@ -9,10 +9,8 @@ export interface Materials {
   stone: number; // t
 }
 
-export interface BuildingTemplate {
-  id: string;
-  name: string;
-  zone: ZoneType | "placed"; // the class: res (house), craft (workshop), trade (shop), placed (any other)
+// A building's rules (src/buildings/<id>/rules.ts) with the flat fields the sim reads.
+export interface BuildingTemplate extends BuildingRules {
   w: number; // lot width in cells, along the road
   d: number; // lot depth in cells
   along: number; // footprint size along the road, m
@@ -22,8 +20,6 @@ export interface BuildingTemplate {
   residents: number; // capacity of a house (all its families)
   homes: number; // families a house holds (0 for any other building)
   jobs: number; // capacity of a workplace (a gumno's depends on its fields, see fields.ts)
-  materials: Materials;
-  group: JobGroup | null; // job group of a workplace (houses: null); a new template must declare one
 }
 
 // Job groups: the player sets a hiring priority for each. Construction is a key of its own,
@@ -43,9 +39,7 @@ export const isJobKey = (v: unknown): v is JobKey => typeof v === "string" && (J
 // A template of the rules (src/buildings/<id>/rules.ts) in the shape the sim reads: a house's crew are its residents,
 // a workplace's its jobs.
 const template = (r: BuildingRules): BuildingTemplate => ({
-  id: r.id,
-  name: r.name,
-  zone: r.zone,
+  ...r,
   w: r.lot.w,
   d: r.lot.d,
   along: r.size.along,
@@ -56,7 +50,6 @@ const template = (r: BuildingRules): BuildingTemplate => ({
   homes: r.homes ?? (r.zone === "res" ? 1 : 0),
   jobs: r.zone === "res" ? 0 : r.crew,
   materials: { ...r.materials },
-  group: r.group,
 });
 
 // Every building template, by id, in the order of the registry.
@@ -166,15 +159,12 @@ export const groupOf = (g: keyof Stock): StoreGroup => (g === "food" ? "food" : 
 export type StoreRoom = Partial<Record<StoreGroup, number>>;
 
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp
-export const BARN_CAP = 60_000; // kg per finished barn
-export const CELLAR_CAP = 20_000; // kg per finished cellar; it keeps food better than a barn (weatherEffects spoilage)
 export const CAMP_STORE: Required<StoreRoom> = { food: FOOD_CAMP_CAP, wood: 200, stone: 60, goods: 150 };
-export const STORES: Record<string, StoreRoom> = { barn: { food: BARN_CAP }, cellar: { food: CELLAR_CAP }, logyard: { wood: 400 }, stoneyard: { stone: 300 }, warehouse: { goods: 500 } };
 export const FOUNDING_STOCK: Stock = { food: 3000, logs: 100, planks: 12, stone: 12, clothes: 12, dishes: 6, furniture: 2, tools: 10 };
 
 // The room of a finished store (linear in the floor area on an old foundation); empty for any other building.
 export function storeRoom(b: Pick<Building, "template" | "scale" | "level" | "foundationId">): StoreRoom {
-  const r = STORES[b.template];
+  const r = BUILDINGS[b.template]?.store;
   if (!r) return {};
   const out: StoreRoom = {};
   const k = floorScale(b);
@@ -189,6 +179,10 @@ export function capacityOf(buildings: Record<number, Building>, group: StoreGrou
   return cap;
 }
 export const foodCapacity = (buildings: Record<number, Building>): number => capacityOf(buildings, "food");
+
+// Kg of food a finished barn and a finished cellar hold.
+export const BARN_CAP = BUILDINGS.barn.store!.food!;
+export const CELLAR_CAP = BUILDINGS.cellar.store!.food!;
 
 // Kg of food a finished building holds on top of the camp (scaled with its old foundation).
 export const storageOf = (b: Pick<Building, "template" | "scale" | "level" | "foundationId">): number => storeRoom(b).food ?? 0;

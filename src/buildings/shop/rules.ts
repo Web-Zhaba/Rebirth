@@ -11,4 +11,7 @@ export const shop: BuildingRules = {
   labor: 100,
   crew: 4,
   materials: { logs: 24, planks: 3, stone: 2 },
+  job: L("работает в Магазине", "works at the Shop"),
+  firstBuilt: L("Построен первый магазин", "The first shop is built"),
+  service: { name: L("Магазин", "Shop"), reach: 800, mood: 5, color: "#c9803a" },
 };

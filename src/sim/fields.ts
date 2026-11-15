@@ -17,8 +17,6 @@ export const FOOD_RATE: Record<string, { kgHour: number; season: [number, number
   orchard: { kgHour: 0.8, season: [0, 0, 1, 0] },
   apiary: { kgHour: 0.3, season: [0.3, 1, 0.7, 0] },
 };
-// Gathering in the forest asks for this share of forest around the site (growth.ts checks it).
-export const FORAGER_FOREST = 0.2;
 // Years before planted trees bear.
 export const ORCHARD_YEARS = 1;
 export const foodKgHour = (template: string, season: number): number => {
@@ -34,7 +32,7 @@ export const FIELD = {
   reapKgHour: 2,
   haPerJob: 2.5,
   maxJobs: 16,
-  radius: 400, // m, from the lot centre of a gumno to the centroid of a field
+  radius: BUILDINGS.gumno.reach!, // m, from the lot centre of a gumno to the centroid of a field
   harvestDays: DAYS_PER_SEASON / 2, // first half of autumn
 };
 // Day of the year on which the harvest window closes (autumn is the third season).

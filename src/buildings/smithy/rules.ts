@@ -11,4 +11,6 @@ export const smithy: BuildingRules = {
   labor: 160,
   crew: 6,
   materials: { logs: 18, planks: 2, stone: 9 },
+  job: L("кузнец — Кузница", "smith — Smithy"),
+  firstBuilt: L("Построена первая кузница", "The first smithy is built"),
 };

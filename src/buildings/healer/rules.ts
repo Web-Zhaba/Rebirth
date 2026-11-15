@@ -11,4 +11,7 @@ export const healer: BuildingRules = {
   labor: 80,
   crew: 1,
   materials: { logs: 14, planks: 2, stone: 1 },
+  job: L("врач", "healer"),
+  firstBuilt: L("Построена первая лечебница", "The first infirmary is built"),
+  service: { name: L("Лечебница", "Infirmary"), reach: 1000, mood: 2, color: "#c4504a" },
 };

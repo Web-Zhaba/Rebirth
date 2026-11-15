@@ -11,4 +11,9 @@ export const gumno: BuildingRules = {
   labor: 70,
   crew: 0,
   materials: { logs: 24, planks: 3, stone: 3 },
+  job: L("фермер — Ферма", "farmer — Farm"),
+  firstBuilt: L("Построена первая ферма", "The first farm is built"),
+  sizeClass: "store",
+  usesTools: true,
+  reach: 400, // m from the lot centre to the centroid of a field it works (sim/fields.ts)
 };

@@ -13,4 +13,5 @@ export const izba5: BuildingRules = {
   crew: 14,
   homes: 2,
   materials: { logs: 40, planks: 4, stone: 3 },
+  firstBuilt: L("Построен первый большой дом", "The first large house is built"),
 };

@@ -12,4 +12,6 @@ export const stoneyard: BuildingRules = {
   labor: 70,
   crew: 0,
   materials: { logs: 6, planks: 1, stone: 2 },
+  store: { stone: 300 }, // t
+  sizeClass: "store",
 };

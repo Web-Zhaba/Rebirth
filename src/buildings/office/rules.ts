@@ -12,4 +12,5 @@ export const office: BuildingRules = {
   labor: 160,
   crew: 2,
   materials: { logs: 30, planks: 6, stone: 6 },
+  sizeClass: "hall",
 };

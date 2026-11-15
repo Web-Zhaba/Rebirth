@@ -12,4 +12,7 @@ export const orchard: BuildingRules = {
   labor: 100,
   crew: 4,
   materials: { logs: 7, planks: 1, stone: 0 },
+  job: L("садовник — Сад", "gardener — Orchard"),
+  firstBuilt: L("Заложен первый сад", "The first orchard is planted"),
+  dryLand: true,
 };

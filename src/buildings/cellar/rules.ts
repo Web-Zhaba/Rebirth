@@ -12,4 +12,7 @@ export const cellar: BuildingRules = {
   labor: 110,
   crew: 0,
   materials: { logs: 16, planks: 5, stone: 6 },
+  firstBuilt: L("Вырыт первый погреб", "The first cellar is dug"),
+  store: { food: 20_000 }, // kg; it keeps food better than a barn (sim/weatherEffects.ts spoilage)
+  sizeClass: "store",
 };

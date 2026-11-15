@@ -11,4 +11,7 @@ export const weaver: BuildingRules = {
   labor: 120,
   crew: 6,
   materials: { logs: 20, planks: 3, stone: 1 },
+  job: L("ткач — Ткацкая мастерская", "weaver — Weaving workshop"),
+  firstBuilt: L("Построена первая ткацкая мастерская", "The first weaving workshop is built"),
+  usesTools: true,
 };

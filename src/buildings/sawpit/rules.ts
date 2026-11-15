@@ -11,4 +11,7 @@ export const sawpit: BuildingRules = {
   labor: 55,
   crew: 4,
   materials: { logs: 9, planks: 2, stone: 0 },
+  job: L("рабочий лесопилки", "sawmill worker"),
+  firstBuilt: L("Построена первая лесопилка", "The first sawmill is built"),
+  usesTools: true,
 };

@@ -1,38 +1,10 @@
+import { BUILDINGS } from "./buildings";
 import { calendar } from "./time";
 import type { ChronicleEntry, SimState, TownEvent } from "./types";
 import { L } from "../i18n";
 
 export const CHRONICLE_CAP = 1000;
 export const POP_MILESTONES = [25, 50, 100, 250, 500, 1000];
-
-// "Построена первая ..." for the first finished building of each template (the first house has its own entry).
-const FIRST_BUILT: Record<string, string> = {
-  izba5: L("Построен первый большой дом", "The first large house is built"),
-  smithy: L("Построена первая кузница", "The first smithy is built"),
-  carpentry: L("Построена первая столярная мастерская", "The first carpentry workshop is built"),
-  pottery: L("Построена первая гончарня", "The first pottery is built"),
-  weaver: L("Построена первая ткацкая мастерская", "The first weaving workshop is built"),
-  shop: L("Построен первый магазин", "The first shop is built"),
-  tavern: L("Построена первая таверна", "The first tavern is built"),
-  gumno: L("Построена первая ферма", "The first farm is built"),
-  woodcutter: L("Построена первая лесозаготовка", "The first woodcutter is set up"),
-  sawpit: L("Построена первая лесопилка", "The first sawmill is built"),
-  quarry: L("Построен первый карьер", "The first quarry is opened"),
-  fisher: L("Построен первый рыболовный причал", "The first fishing pier is built"),
-  garden: L("Разбит первый огород", "The first vegetable garden is laid out"),
-  hunter: L("Поставлен первый охотничий пост", "The first hunting post is set up"),
-  forager: L("Начат первый сбор в лесу", "Foraging in the forest begins"),
-  orchard: L("Заложен первый сад", "The first orchard is planted"),
-  apiary: L("Поставлена первая пасека", "The first apiary is set up"),
-  cellar: L("Вырыт первый погреб", "The first cellar is dug"),
-  barn: L("Построен первый склад", "The first storehouse is built"),
-  well: L("Построен первый колодец", "The first well is built"),
-  market: L("Построен первый рынок", "The first market is built"),
-  chapel: L("Построен первый храм", "The first temple is built"),
-  school: L("Построена первая школа", "The first school is built"),
-  healer: L("Построена первая лечебница", "The first infirmary is built"),
-  dig: L("Заложен первый раскоп", "The first dig is opened"),
-};
 
 // Appends an entry (oldest dropped beyond the cap). E1 adds excavation finds through this.
 export function addChronicle(list: ChronicleEntry[], at: number, kind: string, text: string): ChronicleEntry[] {
@@ -79,7 +51,7 @@ export function recordChronicle(prev: SimState, next: SimState): SimState {
       const was = prev.buildings[b.id];
       if (b.state === "active" && was && was.state !== "active") {
         if (b.zone === "res") once("house", L("Построен первый дом", "The first house is built"));
-        const text = FIRST_BUILT[b.template];
+        const text = BUILDINGS[b.template]?.firstBuilt; // "Построена первая ..." (the first house has its own entry)
         if (text) once(`built:${b.template}`, text);
       }
       if (b.level >= 2 && was && was.level < 2) once("level2", L("Первый дом улучшен до второго уровня", "The first house is upgraded to level two"));

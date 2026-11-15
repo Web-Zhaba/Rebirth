@@ -12,4 +12,7 @@ export const garden: BuildingRules = {
   labor: 35,
   crew: 6,
   materials: { logs: 3, planks: 1, stone: 0 },
+  job: L("работает в Огороде", "works in the Vegetable garden"),
+  firstBuilt: L("Разбит первый огород", "The first vegetable garden is laid out"),
+  dryLand: true,
 };

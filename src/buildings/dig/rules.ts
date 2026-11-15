@@ -12,4 +12,6 @@ export const dig: BuildingRules = {
   labor: 30,
   crew: 6,
   materials: { logs: 2, planks: 0.5, stone: 0 },
+  job: L("землекоп — Раскоп", "digger — Dig"),
+  firstBuilt: L("Заложен первый раскоп", "The first dig is opened"),
 };

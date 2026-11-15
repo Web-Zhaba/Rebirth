@@ -11,4 +11,8 @@ export const fisher: BuildingRules = {
   labor: 70,
   crew: 4,
   materials: { logs: 10, planks: 2, stone: 0 },
+  job: L("рыбак", "fisher"),
+  firstBuilt: L("Построен первый рыболовный причал", "The first fishing pier is built"),
+  reach: 100,
+  needs: { water: 0.05 },
 };

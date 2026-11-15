@@ -1,4 +1,4 @@
-import type { JobGroup, Materials } from "../sim/buildings";
+import type { JobGroup, Materials, StoreRoom } from "../sim/buildings";
 import type { ZoneType } from "../sim/types";
 
 // The contracts between one building's folder (src/buildings/<id>/) and the game. A folder holds:
@@ -22,4 +22,24 @@ export interface BuildingRules {
   crew: number; // people a house holds (all its families), or the jobs of a workplace
   homes?: number; // families a house holds when built (default: 1 for a house, 0 for any other building)
   materials: Materials; // m3 of logs, m3 of planks, t of stone
+
+  // Optional parts: a building without one has none of it.
+  job?: string; // what its worker is called in the resident card (default: "works — <name>")
+  firstBuilt?: string; // the chronicle's line when the first one is finished
+  store?: StoreRoom; // room of a finished store per group of goods (sim/storage.ts), in the units of the stock
+  sizeClass?: "store" | "hall"; // size limits on an old foundation (sim/foundationLots.ts); absent: a heated building
+  service?: ServiceRules; // it serves the houses within reach by road (sim/services.ts)
+  usesTools?: boolean; // its work wears tools out (sim/goods.ts TOOL_WEAR)
+  reach?: number; // m around it that it works: the circle of the placement preview and of the reach layer
+  needs?: { forest?: number; water?: number }; // the least share of forest or water within `reach`, sampled when placed
+  dryLand?: boolean; // not on water or marsh
+  onePerTown?: string; // one in a town: why another can't be placed
+  foundationOnly?: boolean; // stands only on an old foundation
+}
+
+export interface ServiceRules {
+  name: string; // of the service ("Water" for a well)
+  reach: number; // m by road
+  mood: number; // added to the mood target of covered households
+  color: string; // of the service's map layer
 }

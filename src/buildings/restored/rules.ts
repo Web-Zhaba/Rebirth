@@ -13,4 +13,6 @@ export const restored: BuildingRules = {
   labor: 50,
   crew: 0,
   materials: { logs: 6, planks: 1.5, stone: 4 },
+  sizeClass: "hall",
+  foundationOnly: true,
 };

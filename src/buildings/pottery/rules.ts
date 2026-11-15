@@ -11,4 +11,7 @@ export const pottery: BuildingRules = {
   labor: 130,
   crew: 6,
   materials: { logs: 18, planks: 2, stone: 7 },
+  job: L("гончар — Гончарня", "potter — Pottery"),
+  firstBuilt: L("Построена первая гончарня", "The first pottery is built"),
+  usesTools: true,
 };

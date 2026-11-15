@@ -11,4 +11,7 @@ export const barn: BuildingRules = {
   labor: 160,
   crew: 0,
   materials: { logs: 32, planks: 10, stone: 3 },
+  firstBuilt: L("Построен первый склад", "The first storehouse is built"),
+  store: { food: 60_000 }, // kg
+  sizeClass: "store",
 };

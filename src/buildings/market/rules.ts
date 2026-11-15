@@ -11,4 +11,7 @@ export const market: BuildingRules = {
   labor: 260,
   crew: 8,
   materials: { logs: 50, planks: 10, stone: 3 },
+  job: L("торгует на Рынке", "trades at the Market"),
+  firstBuilt: L("Построен первый рынок", "The first market is built"),
+  sizeClass: "store",
 };

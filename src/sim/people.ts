@@ -1039,31 +1039,6 @@ export function syncPeople<T extends Pick<SimState, "buildings" | "residents" | 
 
 // ---------- inspector ----------
 
-const WORK_TEXT: Record<string, string> = {
-  smithy: L("кузнец — Кузница", "smith — Smithy"),
-  carpentry: L("столяр — Столярная мастерская", "carpenter — Carpentry workshop"),
-  pottery: L("гончар — Гончарня", "potter — Pottery"),
-  weaver: L("ткач — Ткацкая мастерская", "weaver — Weaving workshop"),
-  shop: L("работает в Магазине", "works at the Shop"),
-  tavern: L("работает в Таверне", "works at the Tavern"),
-  gumno: L("фермер — Ферма", "farmer — Farm"),
-  woodcutter: L("лесоруб", "woodcutter"),
-  garden: L("работает в Огороде", "works in the Vegetable garden"),
-  hunter: L("охотник — Охотничий пост", "hunter — Hunting post"),
-  forager: L("собирает в лесу", "forages in the forest"),
-  orchard: L("садовник — Сад", "gardener — Orchard"),
-  apiary: L("пасечник", "beekeeper"),
-  sawpit: L("рабочий лесопилки", "sawmill worker"),
-  quarry: L("рабочий карьера", "quarry worker"),
-  fisher: L("рыбак", "fisher"),
-  well: L("работает у колодца", "works at the well"),
-  market: L("торгует на Рынке", "trades at the Market"),
-  chapel: L("служит в Храме", "serves at the Temple"),
-  school: L("учитель — Школа", "teacher — School"),
-  healer: L("врач", "healer"),
-  dig: L("землекоп — Раскоп", "digger — Dig"),
-};
-
 function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: ReadonlySet<number>): string {
   if (age < ADULT_MIN) return r.inClass ? L("школьник", "pupil") : L("ребёнок", "child");
   if (age >= ADULT_MAX) return r.sex === "m" ? L("старик", "old man") : L("старуха", "old woman");
@@ -1072,7 +1047,7 @@ function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: 
   if (r.job !== null) {
     const b = s.buildings[r.job];
     const t = b && BUILDINGS[b.template];
-    if (b && t) return WORK_TEXT[t.id] ?? L(`работает — ${t.name}`, `works — ${t.name}`);
+    if (b && t) return t.job ?? L(`работает — ${t.name}`, `works — ${t.name}`);
   }
   return work ? L("на стройке", "at a building site") : L("без работы", "without work");
 }

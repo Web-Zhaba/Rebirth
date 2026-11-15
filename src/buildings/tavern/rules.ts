@@ -11,4 +11,6 @@ export const tavern: BuildingRules = {
   labor: 330,
   crew: 8,
   materials: { logs: 130, planks: 15, stone: 12 },
+  job: L("работает в Таверне", "works at the Tavern"),
+  firstBuilt: L("Построена первая таверна", "The first tavern is built"),
 };

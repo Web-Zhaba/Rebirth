@@ -65,9 +65,7 @@ const STAGES: Record<SizeClass, Stage[]> = {
     { techs: ["trusses"], area: Infinity, floors: 5 },
   ],
 };
-const STORE_CLASS = new Set(["barn", "cellar", "logyard", "stoneyard", "warehouse", "market", "gumno"]);
-const HALL_CLASS = new Set(["chapel", "school", "townhall", "office", "restored", "museum"]);
-const sizeClass = (t: BuildingTemplate): SizeClass => (STORE_CLASS.has(t.id) ? "store" : HALL_CLASS.has(t.id) ? "hall" : "heated");
+const sizeClass = (t: BuildingTemplate): SizeClass => t.sizeClass ?? "heated";
 
 type Progress = Pick<ProgressState, "techs">;
 const holds = (p: Progress, st: Stage): boolean => st.techs.every((id) => p.techs.includes(id));

@@ -11,4 +11,7 @@ export const well: BuildingRules = {
   labor: 30,
   crew: 0,
   materials: { logs: 2, planks: 0.5, stone: 3 },
+  job: L("работает у колодца", "works at the well"),
+  firstBuilt: L("Построен первый колодец", "The first well is built"),
+  service: { name: L("Вода", "Water"), reach: 150, mood: 8, color: "#4f86a8" },
 };

@@ -2,6 +2,7 @@ import { play } from "../ui/sound";
 import { effect, signal } from "@preact/signals";
 import { mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
 import type { RoadKind, ServiceId } from "../sim/types";
+import { BUILDINGS } from "../sim/buildings";
 import { storedChoice } from "../ui/preferenceModel";
 import { mppAtZoom, type View } from "../view/view";
 import { L } from "../i18n";
@@ -270,4 +271,5 @@ export const TRAFFIC_STOPS: { n: number; color: string; width: number }[] = [
 export const placeReach = signal<{ x: number; y: number; range: number; color: string } | null>(null);
 
 // Radius (m) of the terrain around a lot that matters to a placed building.
-export const SITE_RADIUS: Partial<Record<PlaceTool, number>> = { woodcutter: 150, fisher: 100, forager: 150 };
+// Radius (m) of the land sampled around a building that needs a share of forest or water there; undefined for others.
+export const siteRadius = (template: string): number | undefined => (BUILDINGS[template]?.needs ? BUILDINGS[template].reach : undefined);

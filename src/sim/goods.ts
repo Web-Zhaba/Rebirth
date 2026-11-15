@@ -18,10 +18,9 @@ export function needsAt(level: number): Exclude<Good, "tools">[] {
 // A family whose goods were served at least this share at the last midnight lets its house be raised.
 export const GOODS_UPGRADE = 0.8;
 
-// Tools: pieces worn per worker-hour at the places that use them; without tools such a place works at TOOLLESS of its rate.
+// Tools: pieces worn per worker-hour at the places that use them (rules `usesTools`); without tools such a place works at TOOLLESS of its rate.
 export const TOOL_WEAR = 0.002;
 export const TOOLLESS = 0.5;
-export const TOOL_USERS: ReadonlySet<string> = new Set(["woodcutter", "sawpit", "quarry", "gumno", "weaver", "pottery", "carpentry"]);
 
 // All the goods in the stock, pieces.
 export const goodsTotal = (st: Stock): number => GOODS.reduce((a, g) => a + st[g], 0);

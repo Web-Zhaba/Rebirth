@@ -2,7 +2,7 @@ import { DIG, emptyFinds } from "./excavation";
 import { initialProgress } from "./tech";
 import { emptyLevers } from "./levers";
 import { allocateLabor, FRONT_SETBACK, levelHeight, startLevel, BUILDINGS, type BuildingTemplate, type SiteLever } from "./buildings";
-import { fieldCentroid, FORAGER_FOREST } from "./fields";
+import { fieldCentroid } from "./fields";
 import { createFounders, FOUNDERS, MOOD_START } from "./people";
 import { clearingLogs } from "./clearing";
 import { FOUNDATION_LOT, foundationBuilding, FOUNDATION_TAKEN, lotCheck, onReservedGround, OUTLINE_TAKEN } from "./foundationLots";
@@ -141,10 +141,10 @@ export function makeBuilding(t: BuildingTemplate, c0: LotCell, c1: LotCell, id: 
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
 
 const NO_PLACE = (reason: string): PlaceCheck => ({ ok: false, reason });
-// A town has one town hall; past it the administration grows by district offices (governance.ts).
-const secondHall = (s: Pick<SimState, "buildings">, t: BuildingTemplate): PlaceCheck | null =>
-  t.id === "townhall" && Object.values(s.buildings).some((b) => b.template === "townhall") ? NO_PLACE(L("Ратуша уже есть: управление расширяют районные управы", "There is a town hall already: district offices extend the administration")) : null;
-export const PLACE_MIN = { forest: 0.1, water: 0.05, foragerForest: FORAGER_FOREST }; // site shares the woodcutter, the fisher and the forager need
+// One of a kind in a town (the town hall: past it the administration grows by district offices, governance.ts).
+const secondOne = (s: Pick<SimState, "buildings">, t: BuildingTemplate): PlaceCheck | null =>
+  t.onePerTown && Object.values(s.buildings).some((b) => b.template === t.id) ? NO_PLACE(t.onePerTown) : null;
+const pct = (share: number): number => Math.round(share * 100);
 
 const BLOCK_REASON: Record<string, string> = {
   road: L("Здесь дорога", "A road is here"),
@@ -167,10 +167,9 @@ export function canPlace(
   site: Site,
   planned = false,
 ): PlaceCheck {
-  if (t.id === "restored") return NO_PLACE(L("Памятник ставится только на старый фундамент", "A monument stands only on an old foundation"));
-  if (t.id === "museum") return NO_PLACE(L("Музей ставится только на старый фундамент", "A museum stands only on an old foundation"));
-  const hall = secondHall(s, t);
-  if (hall) return hall;
+  if (t.foundationOnly) return NO_PLACE(L(`${t.name} ставится только на старый фундамент`, `A ${t.name.toLowerCase()} stands only on an old foundation`));
+  const one = secondOne(s, t);
+  if (one) return one;
   const e = s.roads.edges[edge];
   if (!e) return NO_PLACE(L("Нет такой дороги", "No such road"));
   if (e.done < e.labor && !planned) return NO_PLACE(L("Дорога ещё не построена", "The road is not built yet"));
@@ -190,10 +189,10 @@ export function canPlace(
       cells.push(c);
     }
   }
-  if (t.id === "woodcutter" && site.forest < PLACE_MIN.forest) return NO_PLACE(L("Рядом мало леса (нужно от 10 %)", "Too little forest nearby (10% needed)"));
-  if (t.id === "fisher" && site.water < PLACE_MIN.water) return NO_PLACE(L("Рядом нет воды (нужно от 5 %)", "No water nearby (5% needed)"));
-  if (t.id === "forager" && site.forest < PLACE_MIN.foragerForest) return NO_PLACE(L("Рядом мало леса (нужно от 20 %)", "Too little forest nearby (20% needed)"));
-  if (t.id === "quarry" || t.id === "garden" || t.id === "orchard" || t.id === "apiary") {
+  const need = t.needs;
+  if (need?.forest !== undefined && site.forest < need.forest) return NO_PLACE(L(`Рядом мало леса (нужно от ${pct(need.forest)} %)`, `Too little forest nearby (${pct(need.forest)}% needed)`));
+  if (need?.water !== undefined && site.water < need.water) return NO_PLACE(L(`Рядом нет воды (нужно от ${pct(need.water)} %)`, `No water nearby (${pct(need.water)}% needed)`));
+  if (t.dryLand) {
     for (const c of cells) {
       const land = s.zones.terrain[qkey(c.cx, c.cy)]?.land;
       if (land === "water" || land === "wetland") return NO_PLACE(L(`${t.name} нельзя ставить на воде и болоте`, `${t.name} can’t be placed on water or marsh`));
@@ -204,8 +203,8 @@ export function canPlace(
 
 // Can the player put `t` on the old foundation `foundationId`? (Shared by the worker and the placement tool.)
 export function canPlaceOnFoundation(s: Pick<SimState, "roads" | "zones" | "buildings" | "finds" | "progress">, t: BuildingTemplate, foundationId: string, planned = false): PlaceCheck {
-  const hall = secondHall(s, t);
-  if (hall) return hall;
+  const one = secondOne(s, t);
+  if (one) return one;
   const f = s.finds.foundations.find((x) => x.id === foundationId);
   if (!f) return NO_PLACE(L("Нет такого фундамента", "No such foundation"));
   const r = lotCheck(s, f, t, planned);

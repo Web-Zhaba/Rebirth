@@ -1,9 +1,10 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, housesAlong, recentTools, roadHouses, setRoadHouses, isMaterialTool, isPlaceTool, isRoadTool, isStrokeTool, onlyFoundations, setOnlyFoundations, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
+import { flash, housesAlong, recentTools, roadHouses, setRoadHouses, isMaterialTool, isPlaceTool, isRoadTool, isStrokeTool, onlyFoundations, setOnlyFoundations, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/tech";
 import { DIG } from "../sim/excavation";
 import { FIELD } from "../sim/fields";
+import { BUILDINGS } from "../sim/buildings";
 import { SERVICES } from "../sim/services";
 import type { Housing } from "../sim/types";
 import { people, state } from "../simClient";
@@ -100,13 +101,13 @@ function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<
     shop: `${stroke}. ${L(`Охват ${SERVICES.shop.reach} м по дорогам, нужны работники`, `Reach ${SERVICES.shop.reach} m by road, needs workers`)}`,
     tavern: stroke,
     gumno: `${place}. ${L(`Круг — досягаемость полей (${FIELD.radius} м)`, `Circle — field reach (${FIELD.radius} m)`)}`,
-    woodcutter: `${place}. ${L(`Круг — лес вокруг (${SITE_RADIUS.woodcutter} м)`, `Circle — forest around (${SITE_RADIUS.woodcutter} m)`)}`,
+    woodcutter: `${place}. ${L(`Круг — лес вокруг (${BUILDINGS.woodcutter.reach} м)`, `Circle — forest around (${BUILDINGS.woodcutter.reach} m)`)}`,
     sawpit: place,
     quarry: place,
-    fisher: `${place}. ${L(`Круг — вода рядом (${SITE_RADIUS.fisher} м)`, `Circle — water nearby (${SITE_RADIUS.fisher} m)`)}`,
+    fisher: `${place}. ${L(`Круг — вода рядом (${BUILDINGS.fisher.reach} м)`, `Circle — water nearby (${BUILDINGS.fisher.reach} m)`)}`,
     garden: place,
     hunter: place,
-    forager: `${place}. ${L(`Круг — лес вокруг (${SITE_RADIUS.forager} м)`, `Circle — forest around (${SITE_RADIUS.forager} m)`)}`,
+    forager: `${place}. ${L(`Круг — лес вокруг (${BUILDINGS.forager.reach} м)`, `Circle — forest around (${BUILDINGS.forager.reach} m)`)}`,
     orchard: place,
     apiary: place,
     cellar: place,

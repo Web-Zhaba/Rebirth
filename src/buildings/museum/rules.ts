@@ -12,4 +12,6 @@ export const museum: BuildingRules = {
   labor: 140,
   crew: 2,
   materials: { logs: 30, planks: 6, stone: 4 },
+  sizeClass: "hall",
+  foundationOnly: true,
 };

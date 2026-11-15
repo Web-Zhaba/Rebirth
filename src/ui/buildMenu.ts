@@ -2,12 +2,11 @@ import { FIELD, FOOD_RATE } from "../sim/fields";
 import { workLength } from "../sim/levers";
 import { DIG } from "../sim/excavation";
 import { CLEARING } from "../sim/clearing";
-import { PLACE_MIN } from "../sim/growth";
-import { BUILDINGS, STORES, type Materials, type StoreGroup, type StoreRoom } from "../sim/buildings";
+import { BUILDINGS, type Materials, type StoreGroup, type StoreRoom } from "../sim/buildings";
 import { ADMIN } from "../sim/governance";
 import { ROAD_KINDS } from "../sim/roads";
 import { SERVICES, isService } from "../sim/services";
-import { isPlaceTool, placeTemplate, placeVariant, roadKindOf, roadMaterial, SITE_RADIUS, type MaterialTool, type Tool } from "../map/tools";
+import { isPlaceTool, placeTemplate, placeVariant, roadKindOf, roadMaterial, type MaterialTool, type Tool } from "../map/tools";
 import type { RoadKind } from "../sim/types";
 import type { IconName } from "./icons";
 import { decimal, L } from "../i18n";
@@ -131,9 +130,9 @@ const SITE: Partial<Record<Tool, string>> = {
   dirt: L("Между двумя точками на суше, уклон не круче 12 %", "Between two points on land, slope up to 12%"),
   footbridge: L("Через воду (пролёт до 25 м) или по суше, уклон не круче 30 %", "Across water (span up to 25 m) or on land, slope up to 30%"),
   bridge: L("Через воду (пролёт до 30 м) или по суше, уклон не круче 10 %", "Across water (span up to 30 m) or on land, slope up to 10%"),
-  woodcutter: L(`В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`, `In forest: at least ${Math.round(PLACE_MIN.forest * 100)}% forest within ${SITE_RADIUS.woodcutter} m`),
-  fisher: L(`У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`, `By water: at least ${Math.round(PLACE_MIN.water * 100)}% water within ${SITE_RADIUS.fisher} m`),
-  forager: L(`В лесу: от ${Math.round(PLACE_MIN.foragerForest * 100)} % леса в ${SITE_RADIUS.forager} м вокруг`, `In forest: at least ${Math.round(PLACE_MIN.foragerForest * 100)}% forest within ${SITE_RADIUS.forager} m`),
+  woodcutter: L(`В лесу: от ${Math.round(BUILDINGS.woodcutter.needs!.forest! * 100)} % леса в ${BUILDINGS.woodcutter.reach} м вокруг`, `In forest: at least ${Math.round(BUILDINGS.woodcutter.needs!.forest! * 100)}% forest within ${BUILDINGS.woodcutter.reach} m`),
+  fisher: L(`У воды: от ${Math.round(BUILDINGS.fisher.needs!.water! * 100)} % воды в ${BUILDINGS.fisher.reach} м вокруг`, `By water: at least ${Math.round(BUILDINGS.fisher.needs!.water! * 100)}% water within ${BUILDINGS.fisher.reach} m`),
+  forager: L(`В лесу: от ${Math.round(BUILDINGS.forager.needs!.forest! * 100)} % леса в ${BUILDINGS.forager.reach} м вокруг`, `In forest: at least ${Math.round(BUILDINGS.forager.needs!.forest! * 100)}% forest within ${BUILDINGS.forager.reach} m`),
   quarry: L("Не на воде и не на болоте; камень добывается на любой суше", "Not on water or marsh; stone can be quarried on any land"),
   orchard: L("Не на воде и не на болоте", "Not on water or marsh"),
   apiary: L("Не на воде и не на болоте", "Not on water or marsh"),
@@ -205,8 +204,8 @@ export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roa
   let reach: string | null = null;
   if (isService(t)) reach = L(`Охват ${SERVICES[t].reach} м по дорогам`, `Reach ${SERVICES[t].reach} m by road`);
   else if (t === "gumno") reach = L(`Поля до ${FIELD.radius} м от фермы`, `Fields within ${FIELD.radius} m of the farm`);
-  else if (t === "woodcutter" || t === "fisher" || t === "forager") reach = L(`Радиус ${SITE_RADIUS[t]} м`, `Radius ${SITE_RADIUS[t]} m`);
-  else if (b && STORES[b.id]) reach = L(`Вмещает: ${roomText(STORES[b.id])}`, `Holds: ${roomText(STORES[b.id])}`);
+  else if (t === "woodcutter" || t === "fisher" || t === "forager") reach = L(`Радиус ${BUILDINGS[t].reach} м`, `Radius ${BUILDINGS[t].reach} m`);
+  else if (b?.store) reach = L(`Вмещает: ${roomText(b.store)}`, `Holds: ${roomText(b.store)}`);
   else if (t === "dig") reach = L(`Вскрывает ${DIG.startRadius} м, потом растёт до ${DIG.maxRadius} м и снимается сам`, `Opens ${DIG.startRadius} m, then grows to ${DIG.maxRadius} m and removes itself`);
   else if (t === "garden" || t === "hunter" || t === "orchard" || t === "apiary") {
     // The best season with every job filled, a full working day.

@@ -12,4 +12,7 @@ export const apiary: BuildingRules = {
   labor: 50,
   crew: 3,
   materials: { logs: 5, planks: 2, stone: 0 },
+  job: L("пасечник", "beekeeper"),
+  firstBuilt: L("Поставлена первая пасека", "The first apiary is set up"),
+  dryLand: true,
 };

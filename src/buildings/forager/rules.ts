@@ -12,4 +12,8 @@ export const forager: BuildingRules = {
   labor: 40,
   crew: 6,
   materials: { logs: 3, planks: 1, stone: 0 },
+  job: L("собирает в лесу", "forages in the forest"),
+  firstBuilt: L("Начат первый сбор в лесу", "Foraging in the forest begins"),
+  reach: 150,
+  needs: { forest: 0.2 },
 };

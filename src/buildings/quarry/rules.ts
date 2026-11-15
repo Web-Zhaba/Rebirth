@@ -11,4 +11,8 @@ export const quarry: BuildingRules = {
   labor: 120,
   crew: 8,
   materials: { logs: 7, planks: 1, stone: 0 },
+  job: L("рабочий карьера", "quarry worker"),
+  firstBuilt: L("Построен первый карьер", "The first quarry is opened"),
+  usesTools: true,
+  dryLand: true,
 };

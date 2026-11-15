@@ -12,4 +12,6 @@ export const townhall: BuildingRules = {
   labor: 300,
   crew: 4,
   materials: { logs: 60, planks: 12, stone: 15 },
+  sizeClass: "hall",
+  onePerTown: L("Ратуша уже есть: управление расширяют районные управы", "There is a town hall already: district offices extend the administration"),
 };

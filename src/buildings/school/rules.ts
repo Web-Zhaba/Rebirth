@@ -11,4 +11,8 @@ export const school: BuildingRules = {
   labor: 150,
   crew: 2,
   materials: { logs: 40, planks: 5, stone: 3 },
+  job: L("учитель — Школа", "teacher — School"),
+  firstBuilt: L("Построена первая школа", "The first school is built"),
+  sizeClass: "hall",
+  service: { name: L("Школа", "School"), reach: 800, mood: 3, color: "#3f9a76" },
 };

@@ -17,7 +17,7 @@ import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, isStrokeTool, BUILD_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, isStrokeTool, BUILD_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, siteRadius, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -188,7 +188,7 @@ export function attachPlaceTool(view: View): void {
       footprint = cellCorners(c0);
       center = [c0.cx, c0.cy];
     }
-    const radius = SITE_RADIUS[id];
+    const radius = siteRadius(id);
     let site: Site = NO_SITE;
     let pending = false;
     if (radius !== undefined) {
@@ -241,8 +241,9 @@ export function attachPlaceTool(view: View): void {
         },
       ],
     });
-    // Circle of the site: woodcutter and fisher reach, and the fields a farmstead can work.
-    const r = id === "gumno" ? FIELD.radius : id === "woodcutter" || id === "fisher" || id === "forager" ? v.radius : id === "dig" ? DIG.startRadius : undefined;
+    // Circle of the site: the land a woodcutter or a fisher samples (none on an old foundation), the fields a farm can work.
+    const rules = BUILDINGS[id];
+    const r = id === DIG.template ? DIG.startRadius : rules?.needs ? v.radius : rules?.reach;
     if (r === undefined) {
       view.overlay("place-radius").setData(empty());
       return;

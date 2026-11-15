@@ -12,4 +12,6 @@ export const hunter: BuildingRules = {
   labor: 50,
   crew: 4,
   materials: { logs: 7, planks: 2, stone: 0 },
+  job: L("охотник — Охотничий пост", "hunter — Hunting post"),
+  firstBuilt: L("Поставлен первый охотничий пост", "The first hunting post is set up"),
 };

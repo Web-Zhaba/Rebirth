@@ -12,4 +12,6 @@ export const logyard: BuildingRules = {
   labor: 90,
   crew: 0,
   materials: { logs: 14, planks: 2, stone: 0 },
+  store: { wood: 400 }, // m3
+  sizeClass: "store",
 };

@@ -1,3 +1,5 @@
+import { BUILDINGS } from "../sim/buildings";
+import { DIG } from "../sim/excavation";
 import { L } from "../i18n";
 export interface CoveragePreview {
   houses: number;
@@ -12,9 +14,6 @@ export function coveragePreviewText(p: CoveragePreview): string {
 }
 
 export function relationRadius(template: string, currentDigRadius: number | undefined): number | null {
-  if (template === "gumno") return 400;
-  if (template === "woodcutter" || template === "forager") return 150;
-  if (template === "fisher") return 100;
-  if (template === "dig") return currentDigRadius ?? 25;
-  return null;
+  if (template === DIG.template) return currentDigRadius ?? 25;
+  return BUILDINGS[template]?.reach ?? null;
 }
