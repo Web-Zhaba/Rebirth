@@ -123,7 +123,8 @@ export const MODEL_COLORS = {
 } as const satisfies Record<string, { wall: readonly string[]; roof: readonly string[]; accent: readonly string[] }>;
 export type ModelFamily = keyof typeof MODEL_COLORS;
 
-// The town's own buildings drawn as 3D models (townModels.ts): material choices, each building picks from its seed. Map only.
+// The town's own buildings drawn as 3D models (src/buildings/<id>/model.ts): material choices, each building picks
+// from its seed. Map only.
 export const TOWN_COLORS = {
   logs: ["#a47c52", "#8f6a45", "#b38a5c", "#9a7a5a", "#7d5e40", "#a88a64"],
   plaster: ["#d8ccb0", "#e2d6bc", "#cdbf9f", "#d6c29c"],

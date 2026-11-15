@@ -8,7 +8,7 @@ import { buildScaffold, type Model, type XY } from "./modelGeometry";
 import { drapeRoad, seatBridge, seatBuilding, seatPier, type Ground } from "./groundSeat";
 import { buildRoadModel } from "./roadModels";
 import { buildJunctionModel, type RoadJunction } from "./roadJunctions";
-import { buildTownModel } from "./townModels";
+import { buildTownModel, townSeat } from "./townModels";
 
 // The town's models (view/engine/models.ts draws them): what to
 // draw (ModelItem), the model of each item on flat ground or seated on the relief, the cache key of everything that
@@ -19,7 +19,7 @@ const PROGRESS_STEPS = 24; // progress < 1 is quantised, so a slowly growing sit
 // A building to draw: ring in town-local metres, height in metres, progress 0..1 (below 1 the building-site look: log
 // walls as high as the progress allows, corner posts at full height).
 // - heritage: a restored old building; kind is its OSM class (the `cls` of src/sim/heritage.ts), height its eaves.
-// - town: one of the town's own; kind is the template (src/sim/buildings.ts), height the template's (after an upgrade).
+// - town: one of the town's own; kind is the template (src/buildings/<id>/), height the template's (after an upgrade).
 // - road: a built road chain; ring is its centre line (not closed), kind its RoadKind, height unused.
 // - junction: the apron where built chains meet (roadJunctions.ts); ring is the node, `junction` its arms, kind the
 //   dominant arm's RoadKind.
@@ -68,7 +68,7 @@ export function seatedModelOf(it: ModelItem, ground: Ground | null): Model {
   const m = modelOf(it);
   if (!ground) return m;
   if (it.style === "junction") return drapeRoad(m, ground);
-  if (it.style !== "road") return it.kind === "fisher" ? seatPier(m, it.ring, ground) : seatBuilding(m, it.ring, ground, PLINTH);
+  if (it.style !== "road") return it.style === "town" && townSeat(it.kind) === "piles" ? seatPier(m, it.ring, ground) : seatBuilding(m, it.ring, ground, PLINTH);
   return BRIDGES.has(it.kind) ? seatBridge(m, it.ring, ground) : drapeRoad(m, ground);
 }
 

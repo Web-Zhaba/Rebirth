@@ -432,8 +432,8 @@ export function dailyEconomy(s: SimState): SimState {
   } else if (fed >= 1 - EPS && flags.hungry) flags = { ...flags, hungry: false };
   // heat and damp spoil the stock; what lies in cellars and barns suffers less (cellars hold the best), at the camp most
   for (const p of ledger.points) {
-    const kind = s.buildings[p.id]?.template;
-    const spoiled = ledger.held(p.id, "food") * spoilage(s.weather, kind === "barn" ? 1 : 0, kind === "cellar" ? 1 : 0);
+    const keeps = BUILDINGS[s.buildings[p.id]?.template ?? ""]?.keeps;
+    const spoiled = ledger.held(p.id, "food") * spoilage(s.weather, keeps === "dry" ? 1 : 0, keeps === "cool" ? 1 : 0);
     ledger.lose(p.id, "food", spoiled);
     flags = { ...flags, rot: flags.rot + spoiled };
   }

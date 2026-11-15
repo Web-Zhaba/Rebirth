@@ -36,6 +36,7 @@ export interface BuildingRules {
   dryLand?: boolean; // not on water or marsh
   onePerTown?: string; // one in a town: why another can't be placed
   foundationOnly?: boolean; // stands only on an old foundation
+  keeps?: "dry" | "cool"; // a food store that keeps its food better than the camp (a barn dry, a cellar cool)
   produce?: Produce; // what its workers make (sim/production.ts)
   weather?: (w: WeatherState) => number; // share of the hours it works in this weather (default: all of them)
 }

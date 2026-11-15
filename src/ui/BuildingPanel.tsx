@@ -1,6 +1,6 @@
 import { GOOD_NAMES, GOODS_UPGRADE, needsAt, zeroStock } from "../sim/goods";
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, floorArea, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
+import { BUILDINGS, floorArea, isFarm, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
 import { storeAmount, storeGroupName } from "./buildMenu";
 import { domainName } from "../sim/domains";
 import { kindName, siteDomain, siteTitle } from "../sim/heritage";
@@ -320,7 +320,7 @@ export function BuildingPanel() {
   const capacity =
     t.residents > 0
       ? L(`Вмещает ${houseCapacity(b)} чел.`, `Houses ${houseCapacity(b)} people`)
-      : b.template === "gumno" && info?.kind !== "workplace"
+      : isFarm(b.template) && info?.kind !== "workplace"
         ? L("Места зависят от полей", "Jobs depend on the fields")
         : jobs > 0
           ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}`
@@ -431,7 +431,7 @@ export function BuildingPanel() {
           )}
           {output && (
             <Line icon={output.icon} label={`${L("Делает", "Makes")}: ${output.name}`}>
-              {b.template === "gumno" ? L("вчера собрано", "gathered yesterday") : L("вчера", "yesterday")} {num(output.made)} {output.unit}
+              {isFarm(b.template) ? L("вчера собрано", "gathered yesterday") : L("вчера", "yesterday")} {num(output.made)} {output.unit}
             </Line>
           )}
           {weatherWork && (

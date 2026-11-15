@@ -15,6 +15,12 @@ export type { TownOptions } from "./townKit";
 // keep their work in a yard towards the street (the forge and anvil, the kiln and pots, haystacks behind a fence, herb
 // beds and a drying rack), shops get an awning with goods, the tavern barrels and a hanging sign, the school a belfry.
 
+// How a building's model sits on the ground: on piles (a pier), or on a plinth (the default).
+export const townSeat = (template: string): "piles" | "plinth" => {
+  const m = (MODELS as Record<string, (typeof MODELS)[keyof typeof MODELS] | undefined>)[template];
+  return m && "build" in m && m.seat === "piles" ? "piles" : "plinth";
+};
+
 // Builds the model of a building of the town. `height` is the template height in metres (after any upgrade). A
 // template without a model of its own (or an unknown one) is drawn as a log house.
 export function buildTownModel(ringIn: readonly XY[], height: number, template: string, opts: TownOptions = {}): Model {

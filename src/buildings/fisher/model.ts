@@ -75,4 +75,4 @@ function pier(c: Ctx): void {
   revolve(c.mesh, hl - 0.7, vs, deck, [[0.3, 0], [0.3, 0.12], [0.18, 0.12], [0.18, 0.02], [0, 0.02]], rgb(TOWN_COLORS.hide[0]), 10);
 }
 
-export const fisherModel: TownModel = { build: pier };
+export const fisherModel: TownModel = { build: pier, seat: "piles" };

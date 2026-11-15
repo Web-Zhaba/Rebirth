@@ -2,7 +2,7 @@ import { play } from "../ui/sound";
 import { roomText } from "../ui/buildMenu";
 import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect, untracked } from "@preact/signals";
-import { BUILDINGS, materialsOf, scaledJobs, storeRoom, type BuildingTemplate } from "../sim/buildings";
+import { BUILDINGS, isFarm, materialsOf, scaledJobs, storeRoom, type BuildingTemplate } from "../sim/buildings";
 import { centroid, DIG } from "../sim/excavation";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
 import { foundationBuilding, foundationIndex, foundationKindText, lotCheck, lotRing, usesFoundation } from "../sim/foundationLots";
@@ -123,10 +123,9 @@ export function attachPlaceTool(view: View): void {
 
   // ----- evaluation -----
   const siteText = (id: PlaceTool, site: Site, t: BuildingTemplate, center: Pt): string => {
-    if (id === "woodcutter") return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
-    if (id === "fisher") return L(`Вода рядом: ${pct(site.water)}`, `Water nearby: ${pct(site.water)}`);
-    if (id === "forager") return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
-    if (id === "gumno") {
+    if (t.needs?.forest !== undefined) return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
+    if (t.needs?.water !== undefined) return L(`Вода рядом: ${pct(site.water)}`, `Water nearby: ${pct(site.water)}`);
+    if (isFarm(t.id)) {
       let n = 0;
       let ha = 0;
       for (const f of zones.value?.fields ?? []) {

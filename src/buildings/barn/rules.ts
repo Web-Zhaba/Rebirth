@@ -14,4 +14,5 @@ export const barn: BuildingRules = {
   firstBuilt: L("Построен первый склад", "The first storehouse is built"),
   store: { food: 60_000 }, // kg
   sizeClass: "store",
+  keeps: "dry", // the food in it suffers less from damp (sim/weatherEffects.ts spoilage)
 };

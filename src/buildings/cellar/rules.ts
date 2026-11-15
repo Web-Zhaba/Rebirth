@@ -15,4 +15,5 @@ export const cellar: BuildingRules = {
   firstBuilt: L("Вырыт первый погреб", "The first cellar is dug"),
   store: { food: 20_000 }, // kg; it keeps food better than a barn (sim/weatherEffects.ts spoilage)
   sizeClass: "store",
+  keeps: "cool", // the food in it suffers least from heat and damp (sim/weatherEffects.ts spoilage)
 };

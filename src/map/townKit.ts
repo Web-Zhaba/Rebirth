@@ -264,5 +264,6 @@ export function logStack(c: Ctx, a: XY, b: XY, rows: number, r = 0.18): void {
 
 // What a building's model is (src/buildings/<id>/model.ts): it draws into the framed lot, or makes the whole model
 // itself (the temple is an old-style hall, map/heritageModels.ts). `smoke`: its chimney smokes through the working day
-// ("furnace") or cooks into the evening ("tavern"), map/smokeMath.ts.
-export type TownModel = { build: (c: Ctx) => void; smoke?: "furnace" | "tavern" } | { whole: (ring: readonly XY[], height: number, opts: TownOptions) => Model };
+// ("furnace") or cooks into the evening ("tavern"), map/smokeMath.ts. `seat: "piles"`: it stands on piles reaching down
+// to the ground under each (map/groundSeat.ts seatPier), not on a plinth.
+export type TownModel = { build: (c: Ctx) => void; smoke?: "furnace" | "tavern"; seat?: "piles" } | { whole: (ring: readonly XY[], height: number, opts: TownOptions) => Model };
