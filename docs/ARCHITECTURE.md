@@ -76,7 +76,8 @@ import only leaf modules (`i18n.ts`, `buildings/types.ts`, `buildings/workshop.t
 anywhere but map, ui, view, engine and world), every building is reachable from the build bar, and no code outside
 `src/buildings/` compares a template id (only the balance scenario in `src/pace/` names buildings): it asks the rules
 (`needs`, `monument`, `evenings`, `seats`, `isFarm`, `recipeOf`...) or, for a system's own site, the system's
-constant (`DIG.template`, `MUSEUM.template`). `buildings/meshes.test.ts` pins
+constant (`DIG.template`, `MUSEUM.template`). Nor does it keep a list of buildings: the lists left are of tools and unlocks (`map/tools.ts`,
+`ui/buildMenu.ts`, `sim/tech.ts`) and the services in the order of their coverage bits (`sim/services.ts`). `buildings/meshes.test.ts` pins
 the mesh of every model: a change meant to alter how a building looks updates its snapshot.
 
 The goods of the stock have one row each in `GOOD_INFO` (`sim/goods.ts`): names, unit, store group, mass, cart load,
