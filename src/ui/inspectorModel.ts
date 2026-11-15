@@ -3,6 +3,7 @@ import type { Building, BuildingQuery, Clearing, Stock } from "../sim/types";
 import { clearingLogs } from "../sim/clearing";
 import type { IconName } from "./icons";
 import { UI } from "../buildings/ui";
+import { byGood } from "../sim/goods";
 import type { BuildingUi } from "../buildings/uiKit";
 import { decimal, L } from "../i18n";
 
@@ -35,16 +36,8 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
 export const templateIcon = (template: string): IconName => (UI as Record<string, BuildingUi | undefined>)[template]?.icon ?? "res";
 
 // What a workplace makes, in the nominative, with the icon of the good.
-export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: IconName }> = {
-  food: { name: L("еда", "food"), unit: L("кг", "kg"), icon: "food" },
-  logs: { name: L("брёвна", "logs"), unit: L("м³", "m³"), icon: "log" },
-  planks: { name: L("доски", "planks"), unit: L("м³", "m³"), icon: "planks" },
-  stone: { name: L("камень", "stone"), unit: L("т", "t"), icon: "stone" },
-  clothes: { name: L("одежда", "clothing"), unit: L("шт", "pcs"), icon: "shirt" },
-  dishes: { name: L("посуда", "dishes"), unit: L("шт", "pcs"), icon: "wares" },
-  furniture: { name: L("утварь", "furnishings"), unit: L("шт", "pcs"), icon: "chair" },
-  tools: { name: L("инструменты", "tools"), unit: L("шт", "pcs"), icon: "toolbox" },
-};
+const GOOD_ICON: Record<keyof Stock, IconName> = { food: "food", logs: "log", planks: "planks", stone: "stone", clothes: "shirt", dishes: "wares", furniture: "chair", tools: "toolbox" };
+export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: IconName }> = byGood((g, k) => ({ name: g.name, unit: g.unit, icon: GOOD_ICON[k] }));
 
 // Hands one site can use at once: its crew (`crew`, siteCrew of a building, CREW of a clearing), two crews in a толока.
 export const siteHands = (artel: number, toloka: boolean, crew = CREW): number => Math.min(artel, toloka ? crew * FOCUS_CREWS : crew);

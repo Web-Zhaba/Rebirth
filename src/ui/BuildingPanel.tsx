@@ -1,4 +1,4 @@
-import { GOOD_NAMES, GOODS_UPGRADE, needsAt } from "../sim/goods";
+import { GOOD_NAMES, GOODS_UPGRADE, needsAt, zeroStock } from "../sim/goods";
 import { useEffect, useState } from "preact/hooks";
 import { BUILDINGS, floorArea, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
 import { storeAmount, storeGroupName } from "./buildMenu";
@@ -233,7 +233,7 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
   );
 }
 
-const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
+const EMPTY_STOCK: Stock = zeroStock();
 
 // A market at a glance: each stall with what it trades, and the way into the market window (MarketPanel.tsx).
 function MarketSummary() {

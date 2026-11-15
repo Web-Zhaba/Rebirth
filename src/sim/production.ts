@@ -1,4 +1,4 @@
-import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_WEAR, TOOLLESS } from "./goods";
+import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_WEAR, TOOLLESS, zeroStock } from "./goods";
 import { leverMood, workHours } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
 import { allocateLabor, BUILDINGS, floorArea, isFarm, recipeOf, FOUNDING_STOCK, foodCapacity, groupOf, homesOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
@@ -612,7 +612,7 @@ export function marketTraders(s: Pick<SimState, "residents" | "buildings" | "hou
 
 export function economyStats(s: SimState): EconomyStats {
   const need = foodPerDay(s.residents, s.gameMinutes, s.levers, s.weather);
-  const yesterday: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
+  const yesterday: Stock = zeroStock();
   for (const [key, n] of Object.entries(s.prod.yesterday)) {
     const b = s.buildings[Number(key)];
     const g = b && GOOD[b.template];

@@ -1,5 +1,5 @@
 import type { Stock } from "./types";
-import { L } from "../i18n";
+import { byGood, STOCK_KEYS } from "./goods";
 
 // Trade at the market (the town has no money): the player sets up to a few orders, each one good to give away and one to
 // get, and the market workers swap them every day at fixed values minus a margin. Only what lies above the order's reserve
@@ -8,9 +8,9 @@ import { L } from "../i18n";
 // cap can be set is opened by research (tech.ts tradeSlots, tradeLimits).
 
 export type TradeGood = keyof Stock;
-export const TRADE_GOODS: readonly TradeGood[] = ["food", "logs", "planks", "stone", "clothes", "dishes", "furniture", "tools"];
+export const TRADE_GOODS: readonly TradeGood[] = STOCK_KEYS;
 
-export const TRADE_NAME: Record<TradeGood, string> = { food: L("еду", "food"), logs: L("брёвна", "logs"), planks: L("доски", "planks"), stone: L("камень", "stone"), clothes: L("одежду", "clothing"), dishes: L("посуду", "dishes"), furniture: L("утварь", "furnishings"), tools: L("инструменты", "tools") };
+export const TRADE_NAME: Record<TradeGood, string> = byGood((g) => g.accusative);
 
 export interface TradeOrder {
   give: TradeGood;
@@ -28,10 +28,12 @@ export interface TradeSwap {
 }
 
 export const TRADE = {
-  // Worth of one unit (kg, m3, m3, t, piece) in the same abstract points; felt, not labor-derived, because building materials come PACE times faster.
-  value: { food: 3, logs: 4, planks: 10, stone: 6, clothes: 20, dishes: 20, furniture: 35, tools: 40 } satisfies Record<TradeGood, number>,
-  keep: { food: 1500, logs: 80, planks: 20, stone: 20, clothes: 10, dishes: 6, furniture: 4, tools: 8 } satisfies Record<TradeGood, number>, // default reserve, never given away
-  step: { food: 250, logs: 20, planks: 5, stone: 5, clothes: 2, dishes: 2, furniture: 1, tools: 2 } satisfies Record<TradeGood, number>, // step of the reserve and the cap in the panel
+  // Worth of one unit in the same abstract points (felt, not labor-derived, because building materials come PACE times
+  // faster), the default reserve never given away and the step of the reserve and the cap in the panel: each good's row
+  // in sim/goods.ts.
+  value: byGood((g) => g.trade.value),
+  keep: byGood((g) => g.trade.keep),
+  step: byGood((g) => g.trade.step),
   limit: 1e6, // largest reserve or cap an order takes
   margin: 0.25, // share of the worth the neighbours keep
   perWorker: 150, // points of the given goods a market worker moves in a day

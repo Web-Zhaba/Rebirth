@@ -1,5 +1,6 @@
 import type { Building, Clearing, Stock } from "./types";
 import { RULES } from "../buildings/rules";
+import { GOOD_INFO, STOCK_KEYS } from "./goods";
 import type { BuildingRules, Recipe } from "../buildings/types";
 import { L } from "../i18n";
 
@@ -165,8 +166,9 @@ export const FRONT_SETBACK = 2; // m between the lot front and the footprint
 // everything, a barn or cellar food, a timber yard logs and planks, a stone yard stone, a warehouse the goods. Each store
 // has a room per group of goods, in the units of the stock (kg, m3, t, pieces).
 export type StoreGroup = "food" | "wood" | "stone" | "goods";
-export const STORE_GROUPS: Record<StoreGroup, readonly (keyof Stock)[]> = { food: ["food"], wood: ["logs", "planks"], stone: ["stone"], goods: ["clothes", "dishes", "furniture", "tools"] };
-export const groupOf = (g: keyof Stock): StoreGroup => (g === "food" ? "food" : g === "logs" || g === "planks" ? "wood" : g === "stone" ? "stone" : "goods");
+const GROUPS: readonly StoreGroup[] = ["food", "wood", "stone", "goods"];
+export const STORE_GROUPS = Object.fromEntries(GROUPS.map((gr) => [gr, STOCK_KEYS.filter((g) => GOOD_INFO[g].store === gr)])) as unknown as Record<StoreGroup, readonly (keyof Stock)[]>;
+export const groupOf = (g: keyof Stock): StoreGroup => GOOD_INFO[g].store;
 export type StoreRoom = Partial<Record<StoreGroup, number>>;
 
 export const FOOD_CAMP_CAP = 3000; // kg, at the camp

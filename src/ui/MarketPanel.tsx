@@ -2,7 +2,7 @@ import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { city, state, stock } from "../simClient";
-import { GOOD_NAMES } from "../sim/goods";
+import { byGood, zeroStock } from "../sim/goods";
 import { orderKeep, STALL_NAME_MAX, TRADE, TRADE_GOODS, tradeCapacity, tradeRate, type TradeGood, type TradeOrder } from "../sim/trade";
 import type { Stock } from "../sim/types";
 import { Icon } from "./Icon";
@@ -30,8 +30,8 @@ export function openMarket(): void {
   openPanel("market");
 }
 
-const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
-export const TRADE_LABEL: Record<TradeGood, string> = { food: L("Еда", "Food"), logs: L("Брёвна", "Logs"), planks: L("Доски", "Planks"), stone: L("Камень", "Stone"), clothes: GOOD_NAMES.clothes, dishes: GOOD_NAMES.dishes, furniture: GOOD_NAMES.furniture, tools: GOOD_NAMES.tools };
+const EMPTY_STOCK: Stock = zeroStock();
+export const TRADE_LABEL: Record<TradeGood, string> = byGood((g) => g.label);
 const pairOf = (o: Pick<TradeOrder, "give" | "get">) => `${o.give}>${o.get}`;
 const unit = (g: TradeGood) => OUTPUT[g].unit;
 const pct = (n: number) => `${Math.round(n * 100)} %`;

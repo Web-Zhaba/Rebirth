@@ -1,4 +1,4 @@
-import { goodsTotal } from "./goods";
+import { goodsTotal, zeroStock } from "./goods";
 import { peopleStats } from "./people";
 import { GOOD } from "./production";
 import { massText } from "./units";
@@ -17,7 +17,7 @@ const volume = (v: number): string => decimal((Math.round(v * 10) / 10).toString
 
 // What the town made today: workshop output by good, plus the clothing of the evening crafts (key 0 of prod.today).
 export function madeToday(s: Pick<SimState, "prod" | "buildings">): Stock {
-  const out: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
+  const out: Stock = zeroStock();
   for (const [key, n] of Object.entries(s.prod.today)) {
     const id = Number(key);
     const b = s.buildings[id];

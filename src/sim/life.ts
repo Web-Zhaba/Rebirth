@@ -12,6 +12,7 @@ import { roadCrew, workableEdges } from "./roads";
 import { CAMP_STORE_ID, Ledger } from "./storage";
 import { pointInPolygon } from "./zones";
 import { START_MINUTE_OF_DAY } from "./time";
+import { byGood } from "./goods";
 import type { Building, Resident, SimState, Stock } from "./types";
 
 // Visual life: derived from the state once per game day and never stored in it.
@@ -27,7 +28,7 @@ export const MAX_WALKERS = 300;
 export const MAX_CARTS = 6; // per producer per day
 export const CART_SPEED = 3000 / 60; // m per game minute, 3 km/h
 export const CART_RANGE = 6000; // m of road from the camp
-export const LOAD: Record<keyof Stock, number> = { logs: 5, planks: 2, stone: 3, food: 500, clothes: 20, dishes: 20, furniture: 6, tools: 15 };
+export const LOAD: Record<keyof Stock, number> = byGood((g) => g.load); // units in one cart load
 export const MAX_GUESTS = 12; // evening walkers to one tavern
 const DAY_MIN = 1440;
 export const CAMP_CLEAR = 3; // m around the founding point the tent folk leave free
