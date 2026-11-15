@@ -8,9 +8,9 @@ const placeColour = (p: Record<string, unknown>) => (p.pending ? PALETTE.warn : 
 const strokeColour = (p: Record<string, unknown>) => (p.dropped ? PALETTE.pencilFaint : p.kind === "asItWas" ? PALETTE.info : p.kind === "dig" ? PALETTE.warn : PALETTE.ok);
 
 export const TOOL_OVERLAYS: OverlayLayer[] = [
-  // red under the bulldozer; a road a drawing tool would rebuild: on a paper halo, green, amber while priced, red when it can't be
-  { source: "road-hover", style: { kind: "line", color: PALETTE.paperRaised, widthPx: 10, opacity: 0.8, filter: (p) => p.up === true } },
-  { source: "road-hover", style: { kind: "line", color: (p) => (!p.up ? PALETTE.bad : p.ok === null ? PALETTE.warn : p.ok ? PALETTE.ok : PALETTE.bad), widthPx: (p) => (p.up ? 5 : 6), opacity: (p) => (p.up ? 0.95 : 0.75) } },
+  // red under the bulldozer (a line a metre wider than the 3D road that covers the overlay); a road a drawing tool would rebuild: on a paper halo, green, amber while priced, red when it can't be
+  { source: "road-hover", style: { kind: "line", color: PALETTE.paperRaised, widthPx: 10, widthM: (p) => Number(p.w ?? 0) + 4, opacity: 0.8, filter: (p) => p.up === true } },
+  { source: "road-hover", style: { kind: "line", color: (p) => (!p.up ? PALETTE.bad : p.ok === null ? PALETTE.warn : p.ok ? PALETTE.ok : PALETTE.bad), widthPx: (p) => (p.up ? 5 : 6), widthM: (p) => (p.w === undefined ? 0 : Number(p.w) + 2), opacity: (p) => (p.up ? 0.95 : 0.75) } },
   // A paper halo under the preview: on the green land its dark green alone hardly reads.
   { source: "road-preview", style: { kind: "line", color: PALETTE.paperRaised, widthPx: 6, opacity: 0.55 } },
   { source: "road-preview", style: { kind: "line", color: (p) => (p.ok ? PALETTE.ok : PALETTE.bad), widthPx: 3, dash: [2, 1.5] } },

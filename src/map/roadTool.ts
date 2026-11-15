@@ -464,7 +464,8 @@ export function attachRoadTool(view: View): void {
       features: [
         {
           type: "Feature",
-          properties: { up: true, ok: u.priced ? u.ok : null },
+          // `w`: the ribbon of the wider of the two kinds; the overlay lies under the 3D road, so only what sticks out of it shows.
+          properties: { up: true, ok: u.priced ? u.ok : null, w: Math.max(ROAD_KINDS[u.from].width, ROAD_KINDS[u.kind].width) },
           geometry: { type: "LineString", coordinates: u.pts.map(([x, y]) => f.toLngLat(x, y)) },
         },
       ],
@@ -714,7 +715,7 @@ export function attachRoadTool(view: View): void {
       const b = g.nodes[edge.b];
       view.overlay("road-hover").setData({
         type: "FeatureCollection",
-        features: [line(f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y))],
+        features: [line(f.toLngLat(a.x, a.y), f.toLngLat(b.x, b.y), { w: ROAD_KINDS[edge.kind].width })],
       });
       const pct = Math.floor(100 * workShare(edge));
       const up = edge.done >= edge.labor && edge.upgrade ? ` · ${L("улучшение", "upgrade")}: ${ROAD_KINDS[edge.upgrade.kind].name.toLowerCase()}` : "";
