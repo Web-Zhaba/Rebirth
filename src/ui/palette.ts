@@ -86,35 +86,9 @@ export const MAP_ONLY = {
   badDeep: "#5e2314",
 } as const;
 
-// Building colors by category: houses/workshops/shops by class, and the other templates. Map only.
+// Building colors by class: houses, workshops and shops (each other building's is in its src/buildings/<id>/ui.ts).
+// Map only.
 export const BUILDING_ZONE_COLORS = { res: "#a9865c", craft: "#857b6c", trade: "#b07d4c" } as const;
-export const PLACED_BUILDING_COLORS = {
-  house: BUILDING_ZONE_COLORS.res,
-  workshop: BUILDING_ZONE_COLORS.craft,
-  shop: BUILDING_ZONE_COLORS.trade,
-  tavern: BUILDING_ZONE_COLORS.trade,
-  gumno: "#b8963f",
-  woodcutter: "#5c7342",
-  sawpit: "#a97d4d",
-  quarry: "#7d7f82",
-  fisher: "#4a7088",
-  garden: "#6f8a3a",
-  hunter: "#7a5a3c",
-  forager: "#5f7a52",
-  orchard: "#8f9a3c",
-  apiary: "#c49a2c",
-  cellar: "#7a6048",
-  barn: "#94503a",
-  dig: "#7d6340",
-  restored: "#8a7f6a",
-  museum: "#6f6a8a",
-  well: "#4f7f9c",
-  market: "#b9772f", // a trade building, not a service
-  chapel: "#85689f",
-  school: "#3f8a6b",
-  healer: "#b24d46",
-  townhall: "#6c6a8f",
-} as const;
 
 // Restored old buildings drawn as 3D models (heritageModels.ts): wall, roof and accent (dome, spire, chimney, cornice)
 // choices per model family; each building picks one of each from its seed. Map only, like the colours above; the

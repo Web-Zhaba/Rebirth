@@ -159,17 +159,16 @@ function useResidents(id: number | null, active: boolean, bump: string): Buildin
   return data && data.id === id ? data.q : null;
 }
 
-const SITE_FACT = new Set(["woodcutter", "fisher", "forager"]);
-// Whether Production below has anything to show for this workplace.
-const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && SITE_FACT.has(template)) || !!p.orchard || !!p.store || !!p.haul || !!p.full || !!p.fields || !!p.missing;
+// Whether Production below has anything to show for this workplace (the share of forest or water around a site is
+// shown where the building needs one).
+const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && !!BUILDINGS[template]?.needs) || !!p.orchard || !!p.store || !!p.haul || !!p.full || !!p.fields || !!p.missing;
 
 function Production({ template, p }: { template: string; p: ProductionInfo }) {
   const site = p.site;
   return (
     <div class="prod">
-      {site && template === "woodcutter" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
-      {site && template === "fisher" && <div>{L("Вода рядом:", "Water nearby:")} {pct(site.water)}</div>}
-      {site && template === "forager" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
+      {site && BUILDINGS[template]?.needs?.forest !== undefined && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
+      {site && BUILDINGS[template]?.needs?.water !== undefined && <div>{L("Вода рядом:", "Water nearby:")} {pct(site.water)}</div>}
       {p.orchard && <div>{p.orchard.ripeDays > 0 ? L(`Деревья растут: ещё ${p.orchard.ripeDays} дн.`, `Trees are growing: ${p.orchard.ripeDays} more d`) : L(`Урожай этого года: ${pct(p.orchard.quality)}`, `This year’s crop: ${pct(p.orchard.quality)}`)}</div>}
       {p.store &&
         (Object.keys(p.store.room) as StoreGroup[]).map((g) => {
