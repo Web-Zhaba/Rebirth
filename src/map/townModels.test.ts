@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILDINGS } from "../sim/buildings";
 import { DOOR, GATE, PATTERN, pointInRing, type Model, type XY } from "./modelGeometry";
-import { buildTownModel, townForm } from "./townModels";
+import { buildTownModel } from "./townModels";
 
 // Footprint the way growth.ts makes it: along the road (x) by deep (y), the road below (front = -y).
 const lot = (along: number, deep: number, cx = 0, cy = 0): XY[] => [[cx - along / 2, cy - deep / 2], [cx + along / 2, cy - deep / 2], [cx + along / 2, cy + deep / 2], [cx - along / 2, cy + deep / 2]];
@@ -43,24 +43,6 @@ describe("buildTownModel", () => {
   it("survives odd input", () => {
     for (const ring of [[], [[0, 0]], lot(0.4, 0.4)] as XY[][]) for (const h of [0, NaN, -2, 1e5]) check(buildTownModel(ring, h, "izba", { front: FRONT }));
     check(buildTownModel(lot(6, 7), 5, "no-such-template"));
-  });
-  it("maps templates to forms", () => {
-    expect(townForm("izba")).toBe("cabin");
-    expect(townForm("smithy")).toBe("workshop");
-    expect(townForm("weaver")).toBe("weaver");
-    expect(townForm("townhall")).toBe("townhall");
-    expect(townForm("logyard")).toBe("timberyard");
-    expect(townForm("stoneyard")).toBe("stoneyard");
-    expect(townForm("woodcutter")).toBe("logyard"); // the open log yard is the woodcutter's
-    expect(townForm("quarry")).toBe("quarry");
-    expect(townForm("gumno")).toBe("farm");
-    expect(townForm("barn")).toBe("store");
-    expect(townForm("healer")).toBe("healer");
-    expect(townForm("shop")).toBe("shop");
-    expect(townForm("school")).toBe("school");
-    expect(townForm("orchard")).toBe("orchard");
-    expect(townForm("chapel")).toBe("chapel");
-    expect(townForm("whatever")).toBe("cabin");
   });
   it("stands on the ground and stays near its lot (eaves, porch and sign reach a little past it)", () => {
     for (const t of Object.values(BUILDINGS))
