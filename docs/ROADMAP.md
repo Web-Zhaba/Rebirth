@@ -3,6 +3,11 @@
 Open work carried over from the finished plans (their full text is in git history, `docs/PLAN-*.md` before
 2026-11-12). Everything not listed here is built.
 
+## Architecture
+
+- **One folder per building**: rules, 3D model and UI of each building in `src/buildings/<id>/`; plan in
+  `docs/PLAN-buildings.md`.
+
 ## Balance and pace
 
 - **Finite resources.** Forest stands are felled and regrow over years; woodcutters work the forest within their

@@ -1,4 +1,6 @@
 import type { Building, Clearing, Stock, ZoneType } from "./types";
+import { RULES } from "../buildings/rules";
+import type { BuildingRules } from "../buildings/types";
 import { L } from "../i18n";
 
 export interface Materials {
@@ -38,89 +40,27 @@ export const PRIORITY_NAMES: readonly string[] = [L("Нет", "None"), L("Низ
 export const isPriority = (v: unknown): v is Priority => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 3;
 export const isJobKey = (v: unknown): v is JobKey => typeof v === "string" && (JOB_KEYS as readonly string[]).includes(v);
 
-const T = (
-  id: string,
-  name: string,
-  zone: ZoneType | "placed",
-  w: number,
-  d: number,
-  along: number,
-  deep: number,
-  height: number,
-  labor: number,
-  capacity: number,
-  materials: [number, number, number],
-  group: JobGroup | null,
-  homes = zone === "res" ? 1 : 0,
-): BuildingTemplate => ({
-  id,
-  name,
-  zone,
-  w,
-  d,
-  along,
-  deep,
-  height,
-  labor,
-  residents: zone === "res" ? capacity : 0,
-  homes,
-  jobs: zone === "res" ? 0 : capacity,
-  materials: { logs: materials[0], planks: materials[1], stone: materials[2] },
-  group,
+// A template of the rules (src/buildings/<id>/rules.ts) in the shape the sim reads: a house's crew are its residents,
+// a workplace's its jobs.
+const template = (r: BuildingRules): BuildingTemplate => ({
+  id: r.id,
+  name: r.name,
+  zone: r.zone,
+  w: r.lot.w,
+  d: r.lot.d,
+  along: r.size.along,
+  deep: r.size.deep,
+  height: r.size.height,
+  labor: r.labor,
+  residents: r.zone === "res" ? r.crew : 0,
+  homes: r.homes ?? (r.zone === "res" ? 1 : 0),
+  jobs: r.zone === "res" ? 0 : r.crew,
+  materials: { ...r.materials },
+  group: r.group,
 });
 
-// Labor is paced for play, not history: a village raised houses together (толока), and an
-// izba should take about one game day of the founding party's work. Materials are m3 / m3 / t
-// (logs, planks, stone); the labor of placed buildings is not in the design table, chosen here.
-export const BUILDINGS: Record<string, BuildingTemplate> = {
-  // Sizes are real-world ones (a log house of 8 x 9 m, a workshop of 10 x 8 m) and a workplace employs a real crew, so a
-  // town needs a few buildings of a kind, not dozens. A large house holds two families.
-  izba: T("izba", L("Дом", "House"), "res", 2, 3, 8, 9, 5, 30, 6, [17, 1.5, 1], null),
-  izba5: T("izba5", L("Большой дом", "Large house"), "res", 2, 4, 11, 13, 7, 70, 14, [40, 4, 3], null, 2),
-  smithy: T("smithy", L("Кузница", "Smithy"), "craft", 2, 2, 10, 8, 5, 160, 6, [18, 2, 9], "crafts"),
-  carpentry: T("carpentry", L("Столярная мастерская", "Carpentry workshop"), "craft", 2, 3, 12, 9, 6, 190, 8, [38, 5, 3], "crafts"),
-  pottery: T("pottery", L("Гончарня", "Pottery"), "craft", 2, 2, 10, 8, 5, 130, 6, [18, 2, 7], "crafts"),
-  weaver: T("weaver", L("Ткацкая мастерская", "Weaving workshop"), "craft", 2, 2, 10, 8, 5, 120, 6, [20, 3, 1], "crafts"),
-  shop: T("shop", L("Магазин", "Shop"), "trade", 1, 2, 7, 8, 5, 100, 4, [24, 3, 2], "trade"),
-  tavern: T("tavern", L("Таверна", "Tavern"), "trade", 3, 3, 16, 12, 8, 330, 8, [130, 15, 12], "trade"),
-  gumno: T("gumno", L("Ферма", "Farm"), "placed", 2, 2, 12, 14, 7, 70, 0, [24, 3, 3], "food"),
-  woodcutter: T("woodcutter", L("Лесозаготовка", "Woodcutter"), "placed", 1, 1, 7, 6, 3, 45, 5, [10, 1, 0], "materials"),
-  sawpit: T("sawpit", L("Лесопилка", "Sawmill"), "placed", 1, 1, 7, 6, 4, 55, 4, [9, 2, 0], "materials"),
-  quarry: T("quarry", L("Карьер", "Quarry"), "placed", 2, 2, 14, 14, 3, 120, 8, [7, 1, 0], "materials"),
-  fisher: T("fisher", L("Рыболовный причал", "Fishing pier"), "placed", 1, 1, 6, 6, 3, 70, 4, [10, 2, 0], "food"),
-  barn: T("barn", L("Амбар", "Barn"), "placed", 2, 2, 12, 10, 7, 160, 0, [32, 10, 3], "services"),
-  // Services; labor and materials chosen here, like the placed buildings above.
-  well: T("well", L("Колодец", "Well"), "placed", 1, 1, 2, 2, 2, 30, 0, [2, 0.5, 3], "services"),
-  market: T("market", L("Рынок", "Market"), "placed", 2, 3, 15, 16, 5, 260, 8, [50, 10, 3], "trade"),
-  chapel: T("chapel", L("Храм", "Temple"), "placed", 1, 2, 7, 12, 10, 180, 1, [35, 4, 6], "services"),
-  school: T("school", L("Школа", "School"), "placed", 2, 2, 10, 12, 6, 150, 2, [40, 5, 3], "services"),
-  healer: T("healer", L("Лечебница", "Infirmary"), "placed", 1, 2, 8, 8, 5, 80, 1, [14, 2, 1], "services"),
-  // Food without fields (fields.ts FOOD_RATE): a kitchen garden by the houses, a hunter's hut.
-  garden: T("garden", L("Огород", "Vegetable garden"), "placed", 2, 2, 10, 10, 1, 35, 6, [3, 1, 0], "food"),
-  hunter: T("hunter", L("Охотничий пост", "Hunting post"), "placed", 1, 1, 6, 6, 3, 50, 4, [7, 2, 0], "food"),
-  // Alternative food (fields.ts FOOD_RATE): picking in the forest, fruit trees, bees; and a cellar that keeps the stock.
-  forager: T("forager", L("Сбор в лесу", "Forager"), "placed", 1, 1, 6, 6, 2, 40, 6, [3, 1, 0], "food"),
-  orchard: T("orchard", L("Сад", "Orchard"), "placed", 2, 3, 15, 20, 3, 100, 4, [7, 1, 0], "food"),
-  apiary: T("apiary", L("Пасека", "Apiary"), "placed", 1, 1, 7, 6, 2, 50, 3, [5, 2, 0], "food"),
-  cellar: T("cellar", L("Погреб", "Cellar"), "placed", 1, 1, 6, 6, 2, 110, 0, [16, 5, 6], "services"),
-  // Stores of the other goods: variants of the storehouse tool.
-  logyard: T("logyard", L("Склад леса", "Timber yard"), "placed", 2, 2, 12, 10, 4, 90, 0, [14, 2, 0], "services"),
-  stoneyard: T("stoneyard", L("Склад камня", "Stone yard"), "placed", 2, 2, 12, 12, 2, 70, 0, [6, 1, 2], "services"),
-  warehouse: T("warehouse", L("Товарный склад", "Warehouse"), "placed", 2, 2, 10, 10, 6, 140, 0, [26, 6, 3], "services"),
-  // Administration (sim/governance.ts): clerks who manage the town; kinds of one build-bar tool.
-  townhall: T("townhall", L("Ратуша", "Town hall"), "placed", 2, 3, 14, 12, 9, 300, 4, [60, 12, 15], "services"),
-  office: T("office", L("Районная управа", "District office"), "placed", 2, 2, 10, 10, 7, 160, 2, [30, 6, 6], "services"),
-  // Excavation.
-  dig: T("dig", L("Раскоп", "Dig"), "placed", 1, 1, 6, 6, 1, 30, 6, [2, 0.5, 0], "services"),
-  // A museum: a purpose of any old foundation, its halls by floor area (sim/museum.ts).
-  museum: T("museum", L("Музей", "Museum"), "placed", 2, 2, 10, 10, 6, 140, 2, [30, 6, 4], "services"),
-  // Digging one surveyed outline (sim/digging.ts): a site of the artel on the old ring, gone once it is dug; 8
-  // person-hours per 100 m2.
-  excavation: T("excavation", L("Раскопки фундамента", "Foundation dig"), "placed", 1, 1, 10, 10, 0.5, 8, 0, [0, 0, 0], null),
-  // An old building kept as a monument, one of the purposes of an old foundation: no
-  // jobs, no residents; its shape, size and cost come from the foundation it stands on.
-  restored: T("restored", L("Памятник", "Monument"), "placed", 1, 1, 8, 8, 8, 50, 0, [6, 1.5, 4], null),
-};
+// Every building template, by id, in the order of the registry.
+export const BUILDINGS: Record<string, BuildingTemplate> = Object.fromEntries(Object.values(RULES).map((r) => [r.id, template(r)]));
 
 // Materials of a building: its own (a restored old building is priced by its area) or its template's.
 export const materialsOf = (b: Pick<Building, "template" | "materials">): Materials | undefined => b.materials ?? BUILDINGS[b.template]?.materials;
