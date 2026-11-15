@@ -71,7 +71,7 @@ fn vs(v: VsIn) -> VsOut {
 // The sun's shadow map pass (shadow/shadowMap.ts): buildings and ruins cast.
 @vertex
 fn shadowVs(@location(0) pos: vec3f) -> @builtin(position) vec4f {
-  return frame.shadowProj * vec4f(toRel(pos), 1.0);
+  return frame.shadowCast * vec4f(toRel(pos), 1.0);
 }
 
 // The townspeople (TownMesh.setFigures): flat-shaded figures with a colour per vertex, lit like the buildings' walls
@@ -161,11 +161,20 @@ fn grid(p: i32, f: vec4f) -> array<vec4f, 2> {
   }
 }
 
-// A door at the middle of the wall (dk 1 door, 2 gate): no windows next to it on the ground floor.
-fn nearDoor(dk: i32, z: f32, f: vec4f) -> bool {
+// Where the window column under s is centred (the same grid as windows()).
+fn windowCentre(s: f32, len: f32, ww: f32, sp: f32) -> f32 {
+  let n = select(0.0, floor((len - 1.4 - ww) / sp) + 1.0, len >= ww + 1.4);
+  let start = (len - (n - 1.0) * sp) * 0.5;
+  return start + clamp(floor((s - start) / sp + 0.5), 0.0, max(n - 1.0, 0.0)) * sp;
+}
+
+// A door at the middle of the wall (dk 1 door, 2 gate): the ground-floor window columns that would touch it are left
+// out whole (by the column's centre, so a window is never cut by the door); ww, sp: the facade's window width and spacing.
+fn nearDoor(dk: i32, z: f32, f: vec4f, ww: f32, sp: f32) -> bool {
   let dw = select(1.0, 2.6, dk == 2);
   let dh = select(2.0, 2.5, dk == 2);
-  return dk > 0 && abs(f.x - f.y * 0.5) < dw * 0.5 + 0.6 && z < dh + 0.4;
+  let reach = dw * 0.5 + 0.12 + (ww + 0.27) * 0.5; // the door's frame and the window's own
+  return dk > 0 && abs(windowCentre(f.x, f.y, ww, sp) - f.y * 0.5) < reach && z < dh + 0.4;
 }
 
 // Dark seams every "period" metres of x, gone once they get thinner than a pixel.
@@ -247,7 +256,7 @@ fn fs(v: VsOut) -> @location(0) vec4f {
   } else if (p == 8) {
     col *= 1.0 - 0.16 * seams(v.f.x, aw, 0.28);
   }
-  if (sp > 0.0 && !nearDoor(dk, z, v.f)) {
+  if (sp > 0.0 && !nearDoor(dk, z, v.f, g[0].w, sp)) {
     // glass inside a light frame 0.1 m wide with a deeper sill; the panes darken up into the lintel's shade and are
     // parted by two glazing bars, which go once they are thinner than a pixel
     let win = windows(v.f.x, v.f.y, z, v.f.z, aw, az, g[0].x, g[0].y, g[0].z, g[0].w, sp);
@@ -310,7 +319,7 @@ fn lampFs(v: VsOut) -> @location(0) vec4f {
   let p = code - dk * 10;
   let g = grid(p, v.f);
   let sp = g[1].x;
-  if (on < 0.01 || sp <= 0.0 || code >= 30 || nearDoor(dk, z, v.f)) {
+  if (on < 0.01 || sp <= 0.0 || code >= 30 || nearDoor(dk, z, v.f, g[0].w, sp)) {
     discard;
   }
   let w = windows(v.f.x, v.f.y, z, v.f.z, aw, az, g[0].x, g[0].y, g[0].z, g[0].w, sp);

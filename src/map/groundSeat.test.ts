@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildHeritageModel } from "./heritageModels";
-import { drapeRoad, ROAD_LIFT, seatBridge, seatBuilding } from "./groundSeat";
+import { drapeRoad, ROAD_LIFT, seatBridge, seatBuilding, seatPier } from "./groundSeat";
+import { buildTownModel } from "./townModels";
 import type { Model, XY } from "./modelGeometry";
 import { buildRoadModel } from "./roadModels";
 
@@ -20,6 +21,19 @@ describe("groundSeat", () => {
     expect(Math.min(...zs(s))).toBeLessThan(100);
     expect(s.indices.length).toBeGreaterThan(m.indices.length);
     expect(Math.max(...s.indices)).toBeLessThan(s.positions.length / 3);
+  });
+
+  it("seats a pier on its piles: no plinth, the deck at the top of the lot, every pile down to the ground under it", () => {
+    const lot: XY[] = [[0, 0], [6, 0], [6, 6], [0, 6]];
+    const m = buildTownModel(lot, 3, "fisher", { seed: 1 });
+    const ground = (x: number) => 100 + x * 0.5; // 3 m across the lot
+    const s = seatPier(m, lot, ground);
+    expect(s.positions.length).toBe(m.positions.length);
+    for (let k = 0; k < m.positions.length; k += 3) {
+      const z0 = m.positions[k + 2], z1 = s.positions[k + 2];
+      if (z0 > 0.01) expect(z1).toBeCloseTo(z0 + 103, 9);
+      else expect(z1).toBeCloseTo(ground(m.positions[k]) - 0.3, 9); // piles reach the ground under them
+    }
   });
 
   it("keeps the facade height above the model's own ground (windows are laid out by it)", () => {

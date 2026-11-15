@@ -47,6 +47,12 @@ describe("buildTownModel", () => {
   it("maps templates to forms", () => {
     expect(townForm("izba")).toBe("cabin");
     expect(townForm("smithy")).toBe("workshop");
+    expect(townForm("weaver")).toBe("weaver");
+    expect(townForm("townhall")).toBe("townhall");
+    expect(townForm("logyard")).toBe("timberyard");
+    expect(townForm("stoneyard")).toBe("stoneyard");
+    expect(townForm("woodcutter")).toBe("logyard"); // the open log yard is the woodcutter's
+    expect(townForm("quarry")).toBe("quarry");
     expect(townForm("gumno")).toBe("farm");
     expect(townForm("barn")).toBe("store");
     expect(townForm("healer")).toBe("healer");
@@ -138,6 +144,36 @@ describe("smoke emitters", () => {
       expect(buildTownModel(lot(6, 5), 4, "smithy", { seed, front: FRONT }).smoke?.length).toBeGreaterThanOrEqual(1);
       expect(buildTownModel(lot(6, 5), 4, "pottery", { seed, front: FRONT }).smoke?.length).toBeGreaterThanOrEqual(1);
       expect(buildTownModel(lot(12, 10), 7, "tavern", { seed, front: FRONT }).smoke?.length).toBe(2);
+    }
+  });
+  it("the weaver is a house with a door (not a workshop gate) and no chimney", () => {
+    const w = BUILDINGS.weaver;
+    for (const seed of [1, 2, 3]) {
+      const m = buildTownModel(lot(w.along, w.deep), w.height, "weaver", { seed, front: FRONT });
+      expect(m.smoke ?? []).toHaveLength(0);
+      const walls = doorWalls(m);
+      expect(walls.length).toBeGreaterThan(0);
+      expect(walls.every((d) => d.code === PATTERN.house + DOOR)).toBe(true);
+    }
+  });
+  it("the timber and stone yards are fuller than the woodcutter's and the quarry, and under their own height", () => {
+    const ring = (id: string) => lot(BUILDINGS[id].along, BUILDINGS[id].deep);
+    for (const [store, other] of [["logyard", "woodcutter"], ["stoneyard", "quarry"]] as const) {
+      const a = buildTownModel(ring(store), BUILDINGS[store].height, store, { seed: 1, front: FRONT });
+      const b = buildTownModel(ring(store), BUILDINGS[store].height, other, { seed: 1, front: FRONT });
+      expect(a.positions.length).toBeGreaterThan(b.positions.length);
+      expect(a.smoke ?? []).toHaveLength(0);
+    }
+    expect(zMax(buildTownModel(ring("logyard"), 4, "logyard", { seed: 1, front: FRONT }))).toBeLessThan(4.2);
+    expect(zMax(buildTownModel(ring("stoneyard"), 2, "stoneyard", { seed: 1, front: FRONT }))).toBeLessThan(2.2);
+  });
+  it("the town hall's clock tower stands over its hall and roof, and it has no chimney", () => {
+    const t = BUILDINGS.townhall;
+    for (const seed of [1, 2, 3]) {
+      const m = buildTownModel(lot(t.along, t.deep), t.height, "townhall", { seed, front: FRONT });
+      expect(zMax(m)).toBeGreaterThan(t.height + 1.5);
+      expect(zMax(m)).toBeLessThan(t.height * 1.95);
+      expect(m.smoke ?? []).toHaveLength(0);
     }
   });
   it("yards and sheds have none", () => {

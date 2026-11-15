@@ -5,7 +5,7 @@ import { TOWN_COLORS } from "../ui/palette";
 import { buildHeritageModel } from "./heritageModels";
 import type { Light } from "./life";
 import { buildScaffold, type Model, type XY } from "./modelGeometry";
-import { drapeRoad, seatBridge, seatBuilding, type Ground } from "./groundSeat";
+import { drapeRoad, seatBridge, seatBuilding, seatPier, type Ground } from "./groundSeat";
 import { buildRoadModel } from "./roadModels";
 import { buildJunctionModel, type RoadJunction } from "./roadJunctions";
 import { buildTownModel } from "./townModels";
@@ -58,6 +58,9 @@ export function coverOf(items: readonly { ring: readonly XY[] }[]): XY[] {
 }
 
 const BRIDGES = new Set(["footbridge", "bridge", "stonebridge"]);
+// Flat roads and aprons lie on the ground and are drawn without depth writes; bridges stand up (deck over piles, arches,
+// parapets) and need depth like buildings do (townMesh.ts).
+export const isFlatRoad = (it: ModelItem): boolean => it.style === "junction" || (it.style === "road" && !BRIDGES.has(it.kind));
 const PLINTH = TOWN_COLORS.stone[1];
 
 // An item's model on the relief (ground: town metres -> exaggerated ground height; null: flat ground).
@@ -65,7 +68,7 @@ export function seatedModelOf(it: ModelItem, ground: Ground | null): Model {
   const m = modelOf(it);
   if (!ground) return m;
   if (it.style === "junction") return drapeRoad(m, ground);
-  if (it.style !== "road") return seatBuilding(m, it.ring, ground, PLINTH);
+  if (it.style !== "road") return it.kind === "fisher" ? seatPier(m, it.ring, ground) : seatBuilding(m, it.ring, ground, PLINTH);
   return BRIDGES.has(it.kind) ? seatBridge(m, it.ring, ground) : drapeRoad(m, ground);
 }
 
