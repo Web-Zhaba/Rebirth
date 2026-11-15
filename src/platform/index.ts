@@ -24,24 +24,26 @@ export const NO_PLATFORM: Platform = { lang: null, ready() {}, gameplay() {}, li
 // Set once by initPlatform, before the game's modules load (boot.ts): the language is read from it at their start.
 export let platform: Platform = NO_PLATFORM;
 
+// A portal SDK that fails or never answers must not keep the game from starting: it then runs without the portal.
+const INIT_WAIT_MS = 15_000;
+
 export async function initPlatform(): Promise<void> {
-  if (import.meta.env.VITE_PLATFORM === "yandex") {
-    const { initYandex } = await import("./yandex");
-    platform = await initYandex();
-  } else if (import.meta.env.VITE_PLATFORM === "crazygames") {
-    const { initCrazyGames } = await import("./crazygames");
-    platform = await initCrazyGames();
-  } else if (import.meta.env.VITE_PLATFORM === "poki") {
-    const { initPoki } = await import("./poki");
-    platform = await initPoki();
-  } else if (import.meta.env.VITE_PLATFORM === "vk") {
-    const { initVk } = await import("./vk");
-    platform = await initVk();
-  } else if (import.meta.env.VITE_PLATFORM === "gamedistribution") {
-    const { initGameDistribution } = await import("./gamedistribution");
-    platform = await initGameDistribution();
-  } else if (import.meta.env.VITE_PLATFORM === "gamepix") {
-    const { initGamePix } = await import("./gamepix");
-    platform = await initGamePix();
+  const init = await portalInit();
+  if (!init) return;
+  try {
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer")), INIT_WAIT_MS));
+    platform = await Promise.race([init(), timeout]);
+  } catch (e) {
+    console.warn(`${import.meta.env.VITE_PLATFORM} SDK failed, running without it:`, e);
   }
+}
+
+async function portalInit(): Promise<(() => Promise<Platform>) | null> {
+  if (import.meta.env.VITE_PLATFORM === "yandex") return (await import("./yandex")).initYandex;
+  if (import.meta.env.VITE_PLATFORM === "crazygames") return (await import("./crazygames")).initCrazyGames;
+  if (import.meta.env.VITE_PLATFORM === "poki") return (await import("./poki")).initPoki;
+  if (import.meta.env.VITE_PLATFORM === "vk") return (await import("./vk")).initVk;
+  if (import.meta.env.VITE_PLATFORM === "gamedistribution") return (await import("./gamedistribution")).initGameDistribution;
+  if (import.meta.env.VITE_PLATFORM === "gamepix") return (await import("./gamepix")).initGamePix;
+  return null;
 }

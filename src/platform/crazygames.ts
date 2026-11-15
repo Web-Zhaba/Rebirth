@@ -1,12 +1,12 @@
 import { NO_PLATFORM, type Platform, type PlatformHooks } from "./index";
-import { loadScript } from "./script";
 
-// CrazyGames HTML5 SDK v3 (https://docs.crazygames.com/sdk/intro/). Served from the portal's CDN; on a host that is
-// not CrazyGames (or localhost) the SDK reports `disabled` and its calls throw, so the game runs without the portal.
+// CrazyGames HTML5 SDK v3 (https://docs.crazygames.com/sdk/intro/). Its script tag sits in index.html (vite.config.ts),
+// where the portal's QA tool looks for it; on a host that is not CrazyGames (or localhost) the SDK reports `disabled`
+// and its calls throw, so the game runs without the portal.
 interface CrazySdk {
   init(): Promise<void>;
   environment: "local" | "crazygames" | "disabled";
-  user: { systemInfo: { locale: string } };
+  user?: { systemInfo?: { locale?: string } };
   game: { loadingStart(): void; loadingStop(): void; gameplayStart(): void; gameplayStop(): void };
   ad: {
     requestAd(
@@ -22,13 +22,10 @@ declare global {
   }
 }
 
-const SDK_URL = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
-
 export async function initCrazyGames(): Promise<Platform> {
   let sdk: CrazySdk;
   try {
-    await loadScript(SDK_URL);
-    if (!window.CrazyGames) throw new Error("CrazyGames SDK is not defined");
+    if (!window.CrazyGames) throw new Error("CrazyGames SDK did not load");
     sdk = window.CrazyGames.SDK;
     await sdk.init();
     if (sdk.environment === "disabled") throw new Error("not on a CrazyGames host");
@@ -41,7 +38,7 @@ export async function initCrazyGames(): Promise<Platform> {
   // page), with the same hooks a portal's overlays would use.
   let hooks: PlatformHooks | null = null;
   return {
-    lang: sdk.user.systemInfo.locale.split("-")[0] || null,
+    lang: sdk.user?.systemInfo?.locale?.split("-")[0] || null,
     listen(h) {
       hooks = h;
     },
