@@ -1,7 +1,11 @@
 import { L } from "../../i18n";
 import type { BuildingRules } from "../types";
+import { rainy, stormy } from "../../sim/weatherSigns";
 
-// Alternative food (sim/fields.ts FOOD_RATE): fruit trees.
+// Weather: picking in the wet and in a storm goes slower.
+const W = { rain: 0.7, storm: 0.5 };
+
+// Alternative food: fruit trees.
 export const orchard: BuildingRules = {
   id: "orchard",
   name: L("Сад", "Orchard"),
@@ -15,4 +19,7 @@ export const orchard: BuildingRules = {
   job: L("садовник — Сад", "gardener — Orchard"),
   firstBuilt: L("Заложен первый сад", "The first orchard is planted"),
   dryLand: true,
+  // kg; a bearing orchard feeds 5-7 adults a year, scaled by the year's quality (sim/weatherEffects.ts orchardQuality)
+  produce: { good: "food", perHour: 0.8, season: [0, 0, 1, 0], ripens: true },
+  weather: (w) => (stormy(w) ? W.storm : 1) * (rainy(w) ? W.rain : 1),
 };

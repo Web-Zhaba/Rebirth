@@ -126,7 +126,7 @@ export function weatherReason(ws: WeatherState | null | undefined): string | nul
   const w = ws.now;
   if (ws.snowpack > EFFECTS.groundSnow) return L("снег на земле", "snow on the ground");
   if (ws.frozen > 0.5) return L("земля промёрзла", "frozen ground");
-  if (ws.ice > EFFECTS.fisher.iceAbove) return L("вода подо льдом", "water under ice");
+  if (ws.ice > EFFECTS.iceAbove) return L("вода подо льдом", "water under ice");
   if (w.wind > EFFECTS.storm) return L("буря", "storm");
   if (w.precip >= RAIN_MIN_MM) {
     if (w.snow) return L("снегопад", "snowfall");

@@ -1,6 +1,6 @@
 import type { Building, Clearing, Stock } from "./types";
 import { RULES } from "../buildings/rules";
-import type { BuildingRules } from "../buildings/types";
+import type { BuildingRules, Recipe } from "../buildings/types";
 import { L } from "../i18n";
 
 export interface Materials {
@@ -54,6 +54,17 @@ const template = (r: BuildingRules): BuildingTemplate => ({
 
 // Every building template, by id, in the order of the registry.
 export const BUILDINGS: Record<string, BuildingTemplate> = Object.fromEntries(Object.values(RULES).map((r) => [r.id, template(r)]));
+
+// The recipe of a workplace that makes something by the hour (not the farm), and whether a template is a farm (its
+// food is the harvest of its fields).
+export const recipeOf = (template: string): Recipe | undefined => {
+  const p = BUILDINGS[template]?.produce;
+  return p && !("fromFields" in p) ? p : undefined;
+};
+export const isFarm = (template: string): boolean => {
+  const p = BUILDINGS[template]?.produce;
+  return !!p && "fromFields" in p;
+};
 
 // Materials of a building: its own (a restored old building is priced by its area) or its template's.
 export const materialsOf = (b: Pick<Building, "template" | "materials">): Materials | undefined => b.materials ?? BUILDINGS[b.template]?.materials;

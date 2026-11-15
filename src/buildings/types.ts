@@ -1,5 +1,6 @@
 import type { JobGroup, Materials, StoreRoom } from "../sim/buildings";
-import type { ZoneType } from "../sim/types";
+import type { Stock, ZoneType } from "../sim/types";
+import type { WeatherState } from "../sim/weather";
 
 // The contracts between one building's folder (src/buildings/<id>/) and the game. A folder holds:
 // - rules.ts: the building's numbers and rules; it runs in the sim worker, so it imports only types, i18n and leaf
@@ -35,7 +36,28 @@ export interface BuildingRules {
   dryLand?: boolean; // not on water or marsh
   onePerTown?: string; // one in a town: why another can't be placed
   foundationOnly?: boolean; // stands only on an old foundation
+  produce?: Produce; // what its workers make (sim/production.ts)
+  weather?: (w: WeatherState) => number; // share of the hours it works in this weather (default: all of them)
 }
+
+// What a workplace makes. A recipe: so much of a good per worker-hour, carted to the nearest store with room, made from
+// an input taken from the stock. A workplace that takes an input stops when no store has room for its output, unless
+// both lie in the same store (a sawmill frees timber room as it works); food never stops, it rots instead.
+export interface Recipe {
+  good: keyof Stock;
+  perHour: number; // units per worker-hour (kg, m3, t, pieces)
+  pace?: boolean; // a building material: PACE times faster than in history (sim/production.ts)
+  forest?: boolean; // times the forest share around its site (sampled when placed)
+  season?: readonly [number, number, number, number]; // factor of each season, spring .. winter
+  ripens?: boolean; // planted trees: nothing until they bear (sim/fields.ts ORCHARD_YEARS), then the year decides
+  input?: { good: keyof Stock; per: number; missing: string }; // taken per unit made; "missing" names it when out
+}
+// The farm: the harvest of the fields it works (sim/fields.ts).
+export interface FieldHarvest {
+  good: "food";
+  fromFields: true;
+}
+export type Produce = Recipe | FieldHarvest;
 
 export interface ServiceRules {
   name: string; // of the service ("Water" for a well)

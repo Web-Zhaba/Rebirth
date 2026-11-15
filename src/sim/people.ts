@@ -1,7 +1,7 @@
-import { BUILDINGS, familyCapacity, foodCapacity, homesOf } from "./buildings";
+import { BUILDINGS, familyCapacity, foodCapacity, homesOf, recipeOf } from "./buildings";
 import { buildFloor, buildingPriority, capacityOf } from "./jobs";
 import { isCleared } from "./clearing";
-import { assignFields, bears, expectedKg, FIELD, FOOD_RATE, foodKgHour, idleGumnos, idleOrchards, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
+import { assignFields, bears, expectedKg, FIELD, foodKgHour, idleGumnos, idleOrchards, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
 import { countServices, covers, SERVICE, SERVICE_IDS, servicesIn } from "./services";
 import { attractionOf, inflowPerDay } from "./attraction";
@@ -551,8 +551,9 @@ export function foodOutlook(s: ArtelState & { households: SimState["households"]
   for (const [id, n] of workers) {
     const b = s.buildings[id];
     if (!b || b.state !== "active") continue;
-    if (b.template === "orchard") {
-      if (bears(b, s.gameMinutes)) projected += n * FOOD_RATE.orchard.kgHour * workLength(s.levers) * DAYS_PER_SEASON * orchardQuality(s.prod.orchard);
+    const p = recipeOf(b.template);
+    if (p?.ripens) {
+      if (bears(b, s.gameMinutes)) projected += n * p.perHour * workLength(s.levers) * DAYS_PER_SEASON * orchardQuality(s.prod.orchard);
     } else daily += n * foodKgHour(b.template, cal.season) * workLength(s.levers);
   }
   projected += (daily + forageKg(s)) * days;

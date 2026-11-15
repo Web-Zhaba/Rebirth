@@ -1,5 +1,6 @@
 import { L } from "../../i18n";
 import type { BuildingRules } from "../types";
+import { workshopWeather } from "../workshop";
 
 export const smithy: BuildingRules = {
   id: "smithy",
@@ -13,4 +14,7 @@ export const smithy: BuildingRules = {
   materials: { logs: 18, planks: 2, stone: 9 },
   job: L("кузнец — Кузница", "smith — Smithy"),
   firstBuilt: L("Построена первая кузница", "The first smithy is built"),
+  // pieces of tools, each taking logs for charcoal (m3)
+  produce: { good: "tools", perHour: 0.015, input: { good: "logs", per: 0.05, missing: L("брёвна (на уголь)", "logs (for charcoal)") } },
+  weather: workshopWeather,
 };

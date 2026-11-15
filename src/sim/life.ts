@@ -2,7 +2,7 @@ import { unit, type Light, type Rest, type Trip } from "../map/life";
 import { BUILDINGS, CREW, FOCUS_CREWS, siteCrew } from "./buildings";
 import { EVENING } from "./evening";
 import { tolokaActive, workHours } from "./levers";
-import { idleWorkplaces, WORKSHOP_INPUT } from "./fields";
+import { idleWorkplaces, inputOf } from "./fields";
 import { polyLength, walkTo, type Walk } from "./paths";
 import { ageOf, buildingCentre, buildNet, constructionWork, isAdultAge, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
 import { residentMoveFactor } from "./needs";
@@ -84,7 +84,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
   }
   for (const b of Object.values(s.buildings)) {
     if (!isWorkplace(b) || !worked.has(b.id)) continue;
-    const input = WORKSHOP_INPUT[b.template];
+    const input = inputOf(b.template);
     if (input && s.stock[input] <= 1e-9) continue;
     const [x, y] = centre(b);
     lights.push({ id: b.id, x, y, kind: b.template === "tavern" ? "tavern" : "work" });

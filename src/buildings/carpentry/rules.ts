@@ -1,5 +1,6 @@
 import { L } from "../../i18n";
 import type { BuildingRules } from "../types";
+import { workshopWeather } from "../workshop";
 
 export const carpentry: BuildingRules = {
   id: "carpentry",
@@ -14,4 +15,7 @@ export const carpentry: BuildingRules = {
   job: L("столяр — Столярная мастерская", "carpenter — Carpentry workshop"),
   firstBuilt: L("Построена первая столярная мастерская", "The first carpentry workshop is built"),
   usesTools: true,
+  // pieces of furnishings, each taking planks (m3)
+  produce: { good: "furniture", perHour: 0.015, input: { good: "planks", per: 0.03, missing: L("доски", "planks") } },
+  weather: workshopWeather,
 };

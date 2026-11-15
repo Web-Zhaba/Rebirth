@@ -1,5 +1,6 @@
 import { L } from "../../i18n";
 import type { BuildingRules } from "../types";
+import { workshopWeather } from "../workshop";
 
 export const weaver: BuildingRules = {
   id: "weaver",
@@ -14,4 +15,6 @@ export const weaver: BuildingRules = {
   job: L("ткач — Ткацкая мастерская", "weaver — Weaving workshop"),
   firstBuilt: L("Построена первая ткацкая мастерская", "The first weaving workshop is built"),
   usesTools: true,
+  produce: { good: "clothes", perHour: 0.02 }, // pieces
+  weather: workshopWeather,
 };

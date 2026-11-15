@@ -1,7 +1,11 @@
 import { L } from "../../i18n";
 import type { BuildingRules } from "../types";
+import { rainy, stormy } from "../../sim/weatherSigns";
 
-// Alternative food (sim/fields.ts FOOD_RATE): bees.
+// Weather: bees fly only on warm, dry, calm days.
+const W = { coldBelow: 10, wind: 8 };
+
+// Alternative food: bees.
 export const apiary: BuildingRules = {
   id: "apiary",
   name: L("Пасека", "Apiary"),
@@ -15,4 +19,7 @@ export const apiary: BuildingRules = {
   job: L("пасечник", "beekeeper"),
   firstBuilt: L("Поставлена первая пасека", "The first apiary is set up"),
   dryLand: true,
+  // kg of food equivalent of the honey (an apiary feeds 1-2 adults a year); the weather decides most of it
+  produce: { good: "food", perHour: 0.3, season: [0.3, 1, 0.7, 0] },
+  weather: (w) => (w.now.temp < W.coldBelow || rainy(w) || w.now.snow || stormy(w) || w.now.wind > W.wind ? 0 : 1),
 };

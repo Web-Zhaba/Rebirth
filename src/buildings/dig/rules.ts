@@ -1,5 +1,9 @@
 import { L } from "../../i18n";
 import type { BuildingRules } from "../types";
+import { rainy } from "../../sim/weatherSigns";
+
+// Weather: frozen ground slows the digging, and so does rain.
+const W = { frozen: 0.3, frozenBelow: -5, rain: 0.7 };
 
 // Excavation: a dig that grows and finds the old town (sim/excavation.ts).
 export const dig: BuildingRules = {
@@ -14,4 +18,5 @@ export const dig: BuildingRules = {
   materials: { logs: 2, planks: 0.5, stone: 0 },
   job: L("землекоп — Раскоп", "digger — Dig"),
   firstBuilt: L("Заложен первый раскоп", "The first dig is opened"),
+  weather: (w) => (w.frozen > 0.5 && w.now.temp < W.frozenBelow ? W.frozen : 1) * (rainy(w) ? W.rain : 1),
 };

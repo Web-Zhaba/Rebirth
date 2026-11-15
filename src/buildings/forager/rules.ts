@@ -1,7 +1,11 @@
 import { L } from "../../i18n";
 import type { BuildingRules } from "../types";
+import { rainy, SIGNS, stormy } from "../../sim/weatherSigns";
 
-// Alternative food (sim/fields.ts FOOD_RATE): picking berries, mushrooms and nuts in the forest.
+// Weather: the wet forest and storms keep pickers home; snow cover stops it.
+const W = { rain: 0.5, storm: 0.3 };
+
+// Alternative food: picking berries, mushrooms and nuts in the forest.
 export const forager: BuildingRules = {
   id: "forager",
   name: L("Сбор в лесу", "Forager"),
@@ -16,4 +20,9 @@ export const forager: BuildingRules = {
   firstBuilt: L("Начат первый сбор в лесу", "Foraging in the forest begins"),
   reach: 150,
   needs: { forest: 0.2 },
+  produce: { good: "food", perHour: 0.13, season: [0.3, 1, 1.4, 0] }, // kg; a staffed forager feeds about 4 adults a year
+  weather: (w) => {
+    if (w.snowpack > SIGNS.groundSnow) return 0;
+    return stormy(w) ? W.storm : rainy(w) ? W.rain : 1;
+  },
 };
