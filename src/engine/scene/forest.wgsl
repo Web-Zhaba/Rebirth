@@ -121,7 +121,7 @@ fn meshVs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) col: ve
 // frame's eye.
 @vertex
 fn meshShadowVs(@location(0) pos: vec3f, @location(3) crown: f32, inst: Inst) -> @builtin(position) vec4f {
-  return frame.shadowProj * vec4f(meshWorld(pos, crown, inst) + forest.shift.xyz, 1.0);
+  return frame.shadowCast * vec4f(meshWorld(pos, crown, inst) + forest.shift.xyz, 1.0);
 }
 
 @fragment
@@ -193,4 +193,45 @@ fn impostorFs(v: ImpOut) -> @location(0) vec4f {
   let n = normalize(v.r * nv.x + v.up * nv.y + v.f * sqrt(max(0.0, 1.0 - dot(nv, nv))));
   let lit = sunShadow(v.world, toEcef(n));
   return vec4f(shade(a.rgb, n, crown, t.z, 0.5, kind, v.info.y, v.info.z, lit) * cloudDim(v.cloud), cover);
+}
+
+struct ImpShadowOut {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+  @location(1) @interpolate(flat) kind: u32,
+};
+
+// The sun's shadow pass (shadow/shadowMap.ts) for the far trees, and for every tree in a coarse cascade: the impostor
+// turned to face the sun (frame.sun is the cascade's own there), its silhouette from the view nearest the sun's height.
+@vertex
+fn impostorShadowVs(@builtin(vertex_index) vi: u32, inst: Inst) -> ImpShadowOut {
+  let q = vec2f(f32(vi & 1u), f32(vi >> 1u)) * 2.0 - 1.0;
+  let kind = u32(inst.b.w + 0.5);
+  let s = inst.a.w;
+  let hash = inst.b.y;
+  let U = forest.u.xyz;
+  let F = frame.sun.xyz;
+  var R = cross(U, F);
+  R = select(forest.e.xyz, normalize(R), length(R) > 1e-4);
+  let V = cross(F, R);
+  let view = clamp(floor(degrees(asin(clamp(dot(F, U), 0.0, 1.0))) / STEP + fract(hash * 5.37)), 0.0, VIEWS - 1.0);
+  let flip = select(1.0, -1.0, fract(hash * 3.1) < 0.5);
+  let p = ((R * q.x + V * q.y) * forest.colA[kind].w + U * 0.5) * s;
+  var o: ImpShadowOut;
+  o.pos = frame.shadowCast * vec4f(inst.a.xyz + p + forest.shift.xyz, 1.0);
+  o.uv = vec2f((view + 0.5 + 0.5 * q.x * flip) / VIEWS, 0.5 - 0.5 * q.y);
+  o.kind = kind;
+  return o;
+}
+
+// Depth only. A dither instead of blending: a soft edge or a crown thinned bare lets that share of the light through.
+@fragment
+fn impostorShadowFs(v: ImpShadowOut) {
+  let a = textureSample(atlasColor, atlasSampler, v.uv, v.kind).a;
+  let crown = step(0.5, textureSample(atlasData, atlasSampler, v.uv, v.kind).a);
+  let cover = a * (1.0 - crown * forest.kinds[v.kind].w * 0.7);
+  let dither = fract(52.9829189 * fract(dot(v.pos.xy, vec2f(0.06711056, 0.00583715))));
+  if (cover <= dither) {
+    discard;
+  }
 }

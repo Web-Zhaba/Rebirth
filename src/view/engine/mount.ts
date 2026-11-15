@@ -28,8 +28,9 @@ import { shadowQuality } from "../../map/graphicsSettings";
 export interface EngineMountOptions {
   container: string; // element id
   // The sun of the game clock (the map's clock: another season's while the admin panel previews one). Before a town
-  // exists there is no climate phase and the engine keeps its fixed mid-morning sun.
-  light?: { clock: ReadonlySignal<number>; phase: ReadonlySignal<number | null>; lng: ReadonlySignal<number> };
+  // exists there is no climate phase and the engine keeps its fixed mid-morning sun. `now` reads that clock at this
+  // instant (between the sim's snapshots), so the sun moves on every frame rather than with each snapshot.
+  light?: { clock: ReadonlySignal<number>; now?: () => number; phase: ReadonlySignal<number | null>; lng: ReadonlySignal<number> };
   weather?: ReadonlySignal<WeatherState | null>; // the town's weather: snow, wet ground, ice, rain, smoke
   cloudSite?: ReadonlySignal<CloudSite | null>; // the weather site the clouds are drawn for (seed and phase)
   debug3dModels?: boolean;
@@ -59,15 +60,15 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   }
   shadowQuality.subscribe((q) => (engine.shadow.quality = q));
   const light = o.light;
-  // The clock arrives in steps (a snapshot a second or so): the sun eases after it, so shadows glide instead of
-  // jumping. Time-based, so the several calls of one frame move it once; a jump of hours (a load, a season preview)
-  // is taken at once.
+  // The sun follows the clock read at this instant, eased a little so the correction a fresh snapshot of the sim brings
+  // glides instead of jumping. Time-based, so the several calls of one frame move it once; a jump of hours (a load, a
+  // season preview) is taken at once.
   let clock: number | null = null;
   let clockAt = 0;
   const smoothClock = (target: number): number => {
     const now = performance.now();
     if (clock === null || Math.abs(target - clock) > 120) clock = target;
-    else clock += (target - clock) * (1 - Math.exp(-(now - clockAt) / 400));
+    else clock += (target - clock) * (1 - Math.exp(-(now - clockAt) / 250));
     clockAt = now;
     return clock;
   };
@@ -78,7 +79,7 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
       // sim/weather's sun vector is in ECEF axes (x to 0°E 0°N, y to 90°E, z north) with noon over Greenwich. The game
       // clock is the town's own time (night and day follow sim/clock.ts daylight by its hour), so the sun is turned to
       // stand over the town's meridian at the clock's noon.
-      const [x, y, z] = sunDirection(smoothClock(light.clock.peek()), phase);
+      const [x, y, z] = sunDirection(smoothClock(light.now ? light.now() : light.clock.peek()), phase);
       const a = (light.lng.peek() * Math.PI) / 180;
       return { sun: [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a), z], intensity: SUN_INTENSITY };
     };

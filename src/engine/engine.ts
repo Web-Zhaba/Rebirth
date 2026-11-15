@@ -23,8 +23,8 @@ export interface Drawable {
   update?(view: CameraView, engine: Engine): void;
   compute?(encoder: GPUCommandEncoder): void; // GPU work the draw depends on (culling, scatter), before the main pass
   draw(pass: GPURenderPassEncoder): void;
-  drawShadow?(pass: GPURenderPassEncoder, shadow: ShadowMap): void; // casts into the sun's shadow map (depth only)
-  shadowVersion?: number; // changes whenever what drawShadow draws changed (the map is re-rendered then)
+  drawShadow?(pass: GPURenderPassEncoder, shadow: ShadowMap): void; // casts into the shadow cascade being drawn (depth only)
+  shadowVersion?: number; // changes whenever what drawShadow draws changed (the cascades are re-rendered then)
   afterSubmit?(): void; // the frame's commands are on the queue (timer read-backs)
   wantsHiZ?(): boolean; // its compute tests against the occluders' depth pyramid this frame (asked after update)
 }
@@ -228,28 +228,29 @@ export class Engine {
     const view = buildView(s, this.width, this.height, this.groundAt);
     this.view = view;
     this.overlay.update(s, this.metersPerPixel());
-    this.terrain.casterReach = this.shadow.reach(view);
+    const light = this.light(s);
+    this.shadow.fit(view, light.sun);
+    this.terrain.casterReach = this.shadow.reach;
     this.terrain.update(view);
     for (const d of this.drawables) d.update?.(view, this);
-    const light = this.light(s);
     const t = this.terrain;
     const casters = [t.groundVersion, t.stats.selectionHash, t.stats.nodes, ...this.drawables.map((d) => d.shadowVersion ?? 0)];
-    const castShadows = this.shadow.update(view, light.sun, casters);
-    this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: motionTime(), highlight: this.highlight });
+    const cast = this.shadow.update(view, light.sun, casters);
+    this.frameU.write(view, { sun: light.sun, sunIntensity: light.intensity, exaggeration: EXAGGERATION, lodTint: this.lodTint, time: motionTime(), highlight: this.highlight }, cast);
 
     const encoder = device.createCommandEncoder({ label: "frame" });
-    // The timer spans the shadow pass (when it runs), the occluders and the main pass.
+    // The timer spans the shadow passes (when they run), the occluders and the main pass.
     const times = this.timer?.passWrites();
     const begin = times && { querySet: times.querySet, beginningOfPassWriteIndex: times.beginningOfPassWriteIndex };
-    // The sun's shadow map first, when what it is baked from changed: every receiver below
-    // samples it. The forest casts the instances its scatter made last frame (scene/forest.ts drawShadow).
-    if (castShadows) {
-      const shadowPass = this.shadow.beginPass(encoder, begin);
-      shadowPass.setBindGroup(0, this.frameU.castBindGroup);
+    // The sun's shadow cascades first, those whose inputs changed: every receiver below
+    // samples them. The forest casts the instances its scatter made last frame (scene/forest.ts drawShadow).
+    cast.forEach((i, n) => {
+      const shadowPass = this.shadow.beginPass(encoder, i, n === 0 ? begin : undefined);
+      shadowPass.setBindGroup(0, this.frameU.castBindGroup(i));
       this.terrain.drawShadow(shadowPass, this.shadow);
       for (const d of this.drawables) d.drawShadow?.(shadowPass, this.shadow);
       shadowPass.end();
-    }
+    });
     // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else
     // on top of the same colour and depth.
     const colorView = this.color!.createView();
@@ -258,7 +259,7 @@ export class Engine {
       label: "occluders",
       colorAttachments: [{ view: colorView, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" }],
       depthStencilAttachment: { view: depthView, depthClearValue: 0, depthLoadOp: "clear", depthStoreOp: "store" },
-      timestampWrites: castShadows ? undefined : begin,
+      timestampWrites: cast.length ? undefined : begin,
     });
     occluders.setBindGroup(0, this.frameU.bindGroup);
     this.terrain.draw(occluders);

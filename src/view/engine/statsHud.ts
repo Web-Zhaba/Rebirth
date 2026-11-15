@@ -42,7 +42,7 @@ export function attachStatsHud(engine: Engine, container: HTMLElement, forest: F
       `frame ${interval.toFixed(1)} ms  cpu ${cpu.toFixed(2)} ms  gpu ${gpu}`,
       `terrain ${t.nodes} nodes  pages ${t.pages}/${t.pageLayers}  drape ${t.drapePages}`,
       fs.jobs
-        ? `forest ${k(fc.drawn)} drawn of ${k(fs.candidates)} candidates (${fs.jobs} tiles)\n  culled: frustum ${k(fc.frustum)}, occluded ${k(fc.occluded)}${forest.occlusion ? "" : " (test off)"}\n  scatter ${forest.timer ? scatter.toFixed(2) + " ms" : "n/a"}  reach ${Number.isFinite(fs.reach) ? Math.round(fs.reach) + " m" : "all"}`
+        ? `forest ${k(fc.drawn)} drawn of ${k(fs.candidates)} candidates (${fs.jobs} tiles)${fc.over ? `, ${k(fc.over)} over capacity` : ""}\n  culled: frustum ${k(fc.frustum)}, occluded ${k(fc.occluded)}${forest.occlusion ? "" : " (test off)"}\n  scatter ${forest.timer ? scatter.toFixed(2) + " ms" : "n/a"}  reach ${Number.isFinite(fs.reach) ? Math.round(fs.reach) + " m" : "all"}`
         : "forest: none in view",
     ].join("\n");
   });

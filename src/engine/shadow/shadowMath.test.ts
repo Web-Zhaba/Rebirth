@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { enuAt, geodeticToEcef, sub, type Vec3 } from "../geo/ellipsoid";
 import { transformPoint } from "../camera/projection";
-import { ShadowCache, shadowCovers, shadowFade, shadowFrame, shadowMatrix, shadowRadius, steppedSun, SUN_STEP } from "./shadowMath";
+import { cascadeSplits, ShadowCache, shadowCovers, shadowFade, shadowFrame, shadowMatrix, shadowStart, sliceSphere, steadyRadius, sunTolerance } from "./shadowMath";
 
 const SIZE = 2048;
 const lat = 47.27;
@@ -28,11 +28,16 @@ function texelOf(sun: Vec3, at: Vec3, from: Vec3, p: Vec3, radius = 200): [numbe
 }
 
 describe("shadowMatrix", () => {
-  it("puts the target within a texel of the map's centre, at mid depth", () => {
-    const [x, y, z] = texelOf(sunAt(120, 35), target, eye, target);
+  it("puts the target within a texel of the map's centre, its depth range reaching further towards the sun", () => {
+    const sun = sunAt(120, 35);
+    const f = shadowFrame(sun, target, 200, SIZE);
+    const [x, y, z] = texelOf(sun, target, eye, target);
     expect(Math.abs(x - SIZE / 2)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(y - SIZE / 2)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(z - 0.5)).toBeLessThan(0.01); // the depth origin snaps in coarser steps
+    expect(Math.abs(z - (0.5 + (f.depth - 2 * f.radius) / 2 / f.depth))).toBeLessThan(0.01); // the depth origin snaps in coarser steps
+    // a roof 500 m nearer the sun than the centre still lands in the map
+    const [, , roof] = texelOf(sun, target, eye, [0, 1, 2].map((i) => target[i] + sun[i] * 500) as Vec3);
+    expect(roof).toBeGreaterThan(0);
   });
 
   it("lands a point 100 m east of the target 100 / texel texels over, seen straight down", () => {
@@ -80,15 +85,47 @@ describe("shadowCovers", () => {
   });
 });
 
-describe("shadowRadius / shadowFade", () => {
-  it("grows in steps with the camera's distance", () => {
-    expect(shadowRadius(100)).toBe(200);
-    expect(shadowRadius(300)).toBe(400);
-    expect(shadowRadius(900)).toBe(800);
-    expect(shadowRadius(1500)).toBe(1600);
-    expect(shadowRadius(1500, 1024)).toBe(800); // a small map's texels would be too wide for the last step
+describe("cascades", () => {
+  it("start at the nearest ground the view sees, never at the eye", () => {
+    expect(shadowStart(500, 0.5, 1, 5000)).toBeCloseTo((0.7 * 440) / 0.5, 6);
+    expect(shadowStart(500, 0, 1, 5000)).toBe(20); // looking level: from the minimum
+    expect(shadowStart(5000, 0.5, 1, 5000)).toBe(2000); // never past 40 % of the range
   });
 
+  it("split the range from start to far, finer near the eye", () => {
+    const s = cascadeSplits(300, 5000, 4);
+    expect(s).toHaveLength(5);
+    expect(s[0]).toBeCloseTo(300, 6);
+    expect(s[4]).toBeCloseTo(5000, 6);
+    for (let i = 1; i < 4; i++) expect(s[i + 1] - s[i]).toBeGreaterThan(s[i] - s[i - 1]);
+  });
+
+  it("enclose their slice of the view", () => {
+    const tanX = 0.88;
+    const tanY = 0.45;
+    for (const [a, b] of [[20, 190], [300, 700], [1300, 5000]]) {
+      const s = sliceSphere(a, b, tanX, tanY);
+      for (const d of [a, b]) for (const sx of [-1, 1]) for (const sy of [-1, 1]) expect(Math.hypot(d * tanX * sx, d * tanY * sy, d - s.depth)).toBeLessThanOrEqual(s.radius + 1e-6);
+    }
+  });
+
+  it("keep their radius while the slice changes a little, and step it otherwise", () => {
+    const r = steadyRadius(700, 0);
+    expect(r).toBeGreaterThanOrEqual(700);
+    expect(steadyRadius(690, r)).toBe(r);
+    expect(steadyRadius(r * 1.01, r)).toBeGreaterThan(r);
+    expect(steadyRadius(300, r)).toBeLessThan(r);
+    expect(Math.log2(steadyRadius(1234, 0)) * 8).toBeCloseTo(Math.round(Math.log2(steadyRadius(1234, 0)) * 8), 6);
+  });
+
+  it("let the sun move further on a coarse cascade and a high sun before re-rendering", () => {
+    expect(sunTolerance(4, 0.5)).toBeGreaterThan(sunTolerance(0.2, 0.5));
+    expect(sunTolerance(0.2, 0.5)).toBeGreaterThan(sunTolerance(0.2, 0.12));
+    expect(sunTolerance(0.2, 0)).toBeGreaterThan(0);
+  });
+});
+
+describe("shadowFade", () => {
   it("fades out between 900 and 2600 m above the ground, smoothly", () => {
     expect(shadowFade(100, 1)).toBe(1);
     expect(shadowFade(900, 1)).toBe(1);
@@ -109,30 +146,17 @@ describe("shadowRadius / shadowFade", () => {
   });
 });
 
-describe("steppedSun", () => {
-  it("holds the sun until it moved more than SUN_STEP", () => {
-    const a = sunAt(120, 35);
-    expect(steppedSun(null, a)).toBe(a);
-    const small = sunAt(120 + ((SUN_STEP * 0.5) / Math.PI) * 180, 35);
-    expect(steppedSun(a, small)).toBe(a);
-    const big = sunAt(120 + ((SUN_STEP * 3) / Math.PI) * 180, 35);
-    expect(steppedSun(a, big)).toBe(big);
-  });
-});
-
 describe("ShadowCache", () => {
-  it("is stale when the sun, the terrain, the town or the view change, and on nothing else", () => {
+  it("matches only the inputs it last stored", () => {
     const c = new ShadowCache();
-    const inputs = (sun: number, ground: number, town: number, view: number) => [sun, ground, town, view];
-    expect(c.stale(inputs(1, 0, 0, 0))).toBe(true);
-    expect(c.stale(inputs(1, 0, 0, 0))).toBe(false);
-    expect(c.stale(inputs(2, 0, 0, 0))).toBe(true);
-    expect(c.stale(inputs(2, 1, 0, 0))).toBe(true);
-    expect(c.stale(inputs(2, 1, 1, 0))).toBe(true);
-    expect(c.stale(inputs(2, 1, 1, 1))).toBe(true);
-    expect(c.stale(inputs(2, 1, 1, 1))).toBe(false);
-    expect(c.version).toBe(5);
+    expect(c.matches([1, 0, 0])).toBe(false);
+    c.store([1, 0, 0]);
+    expect(c.matches([1, 0, 0])).toBe(true);
+    expect(c.matches([2, 0, 0])).toBe(false);
+    expect(c.matches([1, 0])).toBe(false);
+    c.store([2, 0, 0]);
+    expect(c.version).toBe(2);
     c.reset();
-    expect(c.stale(inputs(2, 1, 1, 1))).toBe(true);
+    expect(c.matches([2, 0, 0])).toBe(false);
   });
 });
