@@ -25,23 +25,19 @@ interface Info {
 }
 
 const MAX_MPP = mppAtZoom(13); // inspect only closer than old zoom 13
-const THROTTLE_MS = 150;
 
+// The card shows the ground the player clicked; panning the camera or pressing Escape dismisses it.
 export function TerrainInspector({ view }: { view: View }) {
   const [info, setInfo] = useState<Info | null>(null);
 
   useEffect(() => {
-    let last = 0;
     let seq = 0;
-    const onMove = (e: ViewPointer) => {
-      const now = Date.now();
-      if (view.metersPerPixel() > MAX_MPP) {
-        seq++;
-        setInfo(null);
-        return;
-      }
-      if (now - last < THROTTLE_MS) return;
-      last = now;
+    const dismiss = () => {
+      seq++;
+      setInfo(null);
+    };
+    const onClick = (e: ViewPointer) => {
+      if (view.metersPerPixel() > MAX_MPP) return dismiss();
       const mine = ++seq;
       const [lng, lat] = e.lngLat;
       Promise.all([landAt(lng, lat), terrainAt(lng, lat), nearRiver(lng, lat)])
@@ -52,15 +48,16 @@ export function TerrainInspector({ view }: { view: View }) {
           if (mine === seq) setInfo(null);
         });
     };
-    const onOut = () => {
-      seq++;
-      setInfo(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismiss();
     };
-    const off = view.on("pointermove", onMove);
-    view.canvas.addEventListener("pointerleave", onOut);
+    const offClick = view.on("click", onClick);
+    const offDrag = view.on("dragstart", dismiss);
+    window.addEventListener("keydown", onKey);
     return () => {
-      off();
-      view.canvas.removeEventListener("pointerleave", onOut);
+      offClick();
+      offDrag();
+      window.removeEventListener("keydown", onKey);
     };
   }, [view]);
 
@@ -79,7 +76,7 @@ export function TerrainInspector({ view }: { view: View }) {
 
   if (!info) return null;
   return (
-    <aside class="cell-panel panel" aria-label={L("Участок под курсором", "Ground under the cursor")}>
+    <aside class="cell-panel panel" aria-label={L("Выбранный участок", "Ground you clicked")}>
       <div class="cell-land">{LAND_RU[info.land]}</div>
       <div>{L("Высота:", "Elevation:")} {Math.round(info.elevation)} {L("м", "m")}</div>
       <div>{L("Уклон:", "Slope:")} {Math.round(info.slope)}°</div>
