@@ -89,7 +89,7 @@ function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined 
           {w > 0 ? L(`Вклад в науку: +${num(w * SPEED.restored * 100)} % к скорости: ${domainName(domain)}`, `Research contribution: +${num(w * SPEED.restored * 100)}% speed: ${domainName(domain)}`) : L(`Область: ${domainName(domain)}; вклад появится, когда постройка будет готова`, `Field: ${domainName(domain)}; the contribution starts once the building is finished`)}
         </div>
       )}
-      {b.template === "restored" && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
+      {BUILDINGS[b.template]?.monument && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
     </div>
   );
 }
@@ -355,7 +355,7 @@ export function BuildingPanel() {
           {!b.asItWas && site?.cls && <div class="people-note">{foundationKindText(site, t)}</div>}
         </Section>
       )}
-      {b.template === "museum" && b.state === "active" && snap && <MuseumSummary b={b} />}
+      {b.template === MUSEUM.template && b.state === "active" && snap && <MuseumSummary b={b} />}
       {(left > 0 || b.state !== "active") && (
         <Section title={upgrading ? L("Перестройка", "Rebuild") : L("Стройка", "Construction")}>
           {left > 0 && (
@@ -421,7 +421,7 @@ export function BuildingPanel() {
               <Line label={L(`Охват ${info.service.reach} м`, `Reach ${info.service.reach} m`)}>
                 {info.service.covered} {L("из", "of")} {info.service.houses} {L("домов", "houses")}
               </Line>
-              {info.service.id === "school" && (
+              {!!BUILDINGS[info.service.id]?.seats && (
                 <Line label={L("Ученики", "Pupils")}>
                   {info.service.pupils} {L("из", "of")} {info.service.seats}
                 </Line>
@@ -467,7 +467,7 @@ export function BuildingPanel() {
           <Production template={b.template} p={info.production} />
         </Section>
       )}
-      {b.template === "market" && b.state === "active" && <MarketSummary />}
+      {BUILDINGS[b.template]?.trades && b.state === "active" && <MarketSummary />}
       {info?.kind === "house" && (
         <Section title={L("Семьи", "Families")}>
           {info.households.length === 0 ? (

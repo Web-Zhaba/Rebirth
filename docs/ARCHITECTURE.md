@@ -65,7 +65,7 @@ Everything about one building lives in `src/buildings/<id>/`, where `<id>` is it
 
 | File | Holds | Runs in | Listed by |
 |---|---|---|---|
-| `rules.ts` | Name, class, lot, size, labor, crew, materials, and the optional parts (`BuildingRules` in `buildings/types.ts`): job title, chronicle line, store room, size class, service, tool wear, reach and the forest or water it needs, dry land, one per town, foundation only, food keeping, what it makes (`produce`: a recipe or the fields' harvest) and its weather. | sim worker | `buildings/rules.ts` (`RULES`, `TemplateId`) |
+| `rules.ts` | Name, class, lot, size, labor, crew, materials, and the optional parts (`BuildingRules` in `buildings/types.ts`): job title, chronicle line, store room, size class, service, tool wear, reach and the forest or water it needs, dry land, one per town, foundation only, food keeping, what it makes (`produce`: a recipe or the fields' harvest), its weather, and the roles systems look for (a work site, a monument, evening guests, school seats, trade, water). | sim worker | `buildings/rules.ts` (`RULES`, `TemplateId`) |
 | `model.ts` | Its 3D model: `build(c)` on the shared kit (`map/townKit.ts`) and forms (`map/townForms.ts`), or `whole(...)` for a model made elsewhere (the temple), plus its smoke and how it sits on the ground. | main thread | `buildings/models.ts` (`MODELS`) |
 | `ui.ts` | Its inspector icon, its kind's label on a group tool, or its own build-bar tool: icon, map colour, purpose, site, reach, placing hint (`BuildingUi` in `buildings/uiKit.ts`). | main thread | `buildings/ui.ts` (`UI`) |
 
@@ -73,9 +73,10 @@ The sim reads a building through `BUILDINGS` (`sim/buildings.ts`), built from `R
 building system (floor area, levels and upgrades, storage, labor allocation, placement, the production loop) stay in
 `sim/` and ask the rules instead of comparing template ids. `buildings/boundaries.test.ts` keeps it so: the rules
 import only leaf modules (`i18n.ts`, `buildings/types.ts`, `buildings/workshop.ts`, `sim/weatherSigns.ts`; types from
-anywhere but map, ui, view, engine and world), every building is reachable from the build bar, and a template-id
-comparison outside `src/buildings/` is allowed only in the systems that own a building (the tavern's evenings, the
-school, excavation, monuments, the market, a save migration), listed in that test. `buildings/meshes.test.ts` pins
+anywhere but map, ui, view, engine and world), every building is reachable from the build bar, and no code outside
+`src/buildings/` compares a template id (only the balance scenario in `src/pace/` names buildings): it asks the rules
+(`needs`, `monument`, `evenings`, `seats`, `isFarm`, `recipeOf`...) or, for a system's own site, the system's
+constant (`DIG.template`, `MUSEUM.template`). `buildings/meshes.test.ts` pins
 the mesh of every model: a change meant to alter how a building looks updates its snapshot.
 
 The goods of the stock have one row each in `GOOD_INFO` (`sim/goods.ts`): names, unit, store group, mass, cart load,

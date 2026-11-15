@@ -1,10 +1,11 @@
 import { MONUMENT } from "./heritage";
+import { BUILDINGS } from "./buildings";
 import type { Building } from "./types";
 
 // Old buildings kept as monuments: houses within reach feel better and sit on dearer land.
 
 // A monument: the purpose, or a unique old building restored as it was (a landmark), which works as one besides.
-export const isMonument = (b: Building): boolean => (b.template === "restored" || !!b.landmark) && b.state === "active";
+export const isMonument = (b: Building): boolean => (!!BUILDINGS[b.template]?.monument || !!b.landmark) && b.state === "active";
 
 export const finishedMonuments = (buildings: Record<number, Building>): Building[] => Object.values(buildings).filter(isMonument);
 
@@ -28,7 +29,7 @@ export const monumentLand = (count: number, typical = 0): number => Math.min(MON
 // bonus: dearer land within a short reach, under the monuments' cap.
 export const TYPICAL_LOCAL = { radius: 100, land: 2 };
 export const typicalRestored = (buildings: Record<number, Building>): Building[] =>
-  Object.values(buildings).filter((b) => b.asItWas && !b.landmark && b.template !== "restored" && b.state === "active");
+  Object.values(buildings).filter((b) => b.asItWas && !b.landmark && !BUILDINGS[b.template]?.monument && b.state === "active");
 export function typicalNear(list: readonly Building[], x: number, y: number): number {
   let n = 0;
   for (const b of list) if (Math.hypot(b.lot.cx - x, b.lot.cy - y) <= TYPICAL_LOCAL.radius) n++;

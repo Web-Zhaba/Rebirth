@@ -138,7 +138,7 @@ export function demoModelItems(): ModelItem[] {
   const out: ModelItem[] = [];
   let id = 1;
   // town templates: the street runs along y = 0 between the two rows, doors face it
-  const templates = Object.values(BUILDINGS).filter((t) => t.id !== "restored");
+  const templates = Object.values(BUILDINGS).filter((t) => !t.monument); // a monument is drawn as the old building it was
   templates.forEach((t, i) => {
     const row = i % 2 === 0 ? 1 : -1;
     const x = -100 + Math.floor(i / 2) * 16;

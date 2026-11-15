@@ -1,6 +1,6 @@
 import { GOODS, WARES_SPLIT } from "./goods";
 import { LANDS } from "../world/landcover";
-import { BUILDINGS, FLOOR, homesOf, isPriority, JOB_KEYS, levelHeight, maxLevel, startLevel } from "./buildings";
+import { BUILDINGS, FLOOR, homesOf, isPriority, JOB_KEYS, levelHeight, maxLevel, recipeOf, startLevel } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { EXCAVATION } from "./digging";
@@ -251,7 +251,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     } else if (out[id].zone === "res") out[id].level = Math.min(maxLevel(out[id]), Math.max(startLevel(out[id].template), level));
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
     if (isNum(raw.haul) && raw.haul > 0) out[id].haul = raw.haul;
-    if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
+    if (recipeOf(out[id].template)?.ripens && isNum(raw.ripe)) out[id].ripe = raw.ripe; // planted trees
     if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
     const up = raw.upgrade;
     if (up !== undefined && raw.state === "active" && isRecord(up) && isNum(up.labor) && up.labor > 0 && isNum(up.done) && up.done >= 0 && up.done <= up.labor) {

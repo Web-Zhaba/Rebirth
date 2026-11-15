@@ -11,7 +11,7 @@ import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { FIELD } from "./fields";
 import { CAMP, covers, learnPerDay, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
-import { SCHOOL_SEATS } from "./school";
+const SCHOOL_SEATS = BUILDINGS.school.seats!;
 import { nameStall, setTrade } from "./leverCmds";
 import { withStock } from "./storage";
 import type { TradeOrder } from "./trade";

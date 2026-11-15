@@ -88,7 +88,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
     const input = inputOf(b.template);
     if (input && s.stock[input] <= 1e-9) continue;
     const [x, y] = centre(b);
-    lights.push({ id: b.id, x, y, kind: b.template === "tavern" ? "tavern" : "work" });
+    lights.push({ id: b.id, x, y, kind: BUILDINGS[b.template]?.evenings ? "tavern" : "work" });
   }
   const rests = restsOf(s, sch);
   if (net.adj.size === 0) return { day, trips, rests, traffic, lights };
@@ -186,7 +186,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
   // evenings: up to MAX_GUESTS households from the homes within reach of each staffed tavern send one adult there
   // within 90 minutes of the end of work (once back from it), who stays 45-90 minutes and walks home
   let guest = 0;
-  const taverns = Object.values(s.buildings).filter((b) => b.template === "tavern" && isWorkplace(b) && worked.has(b.id));
+  const taverns = Object.values(s.buildings).filter((b) => BUILDINGS[b.template]?.evenings && isWorkplace(b) && worked.has(b.id));
   const homes = new Map<number, number>(); // house id -> an adult of its household: the guest, and the hash
   for (const h of Object.values(s.households)) {
     if (h.home === null || homes.has(h.home)) continue;

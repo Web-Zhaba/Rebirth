@@ -13,4 +13,5 @@ export const excavation: BuildingRules = {
   labor: 8,
   crew: 0,
   materials: { logs: 0, planks: 0, stone: 0 },
+  workSite: true, // a work site on an old foundation, not a building on it (sim/digging.ts): drawn on the ruins layer
 };

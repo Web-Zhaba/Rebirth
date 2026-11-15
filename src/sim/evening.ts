@@ -1,4 +1,5 @@
 import { ADULT_MAX, ADULT_MIN, ageOf, buildNet, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Spot } from "./people";
+import { BUILDINGS } from "./buildings";
 import { residentWorkFactor } from "./needs";
 import { CAMP, covers } from "./services";
 import { workHours, type Levers } from "./levers";
@@ -50,7 +51,7 @@ export function gatherHouses(s: Pick<SimState, "buildings" | "roads" | "resident
   if (covers(s.coverage[CAMP], "chapel")) out.add(CAMP);
   const workers = new Set<number>();
   for (const r of Object.values(s.residents)) if (r.job !== null) workers.add(r.job);
-  const taverns = Object.values(s.buildings).filter((b) => b.template === "tavern" && b.state === "active" && workers.has(b.id));
+  const taverns = Object.values(s.buildings).filter((b) => BUILDINGS[b.template]?.evenings && b.state === "active" && workers.has(b.id));
   if (taverns.length === 0) return out;
   const net = buildNet(s.roads);
   if (net.edges.length === 0) return out;

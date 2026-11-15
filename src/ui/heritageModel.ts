@@ -74,7 +74,7 @@ export function speedGain(restored: number, w: number): number {
 
 function purposeEffects(id: string): string[] {
   const t = BUILDINGS[id];
-  if (id === "restored")
+  if (t?.monument)
     return [L("Без жителей и рабочих мест", "No residents or jobs"), L(`Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.mood}, стоимость земли +${MONUMENT.land} (до +${MONUMENT.landCap} от всех памятников)`, `Houses within ${MONUMENT.radius} m: mood +${MONUMENT.mood}, land value +${MONUMENT.land} (up to +${MONUMENT.landCap} from all monuments)`)];
   const out = [L(`Работает как «${t.name}»`, `Works as: ${t.name}`)];
   if (t.jobs > 0) out.push(`${t.jobs} ${plural(t.jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}`);
@@ -135,9 +135,9 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     template,
     purpose: t.name,
     effects:
-      unique && template !== "restored"
+      unique && !BUILDINGS[template]?.monument
         ? [...purposeEffects(template), L(`Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.landmarkMood}`, `Houses within ${MONUMENT.radius} m: mood +${MONUMENT.landmarkMood}`)]
-        : !unique && template !== "restored"
+        : !unique && !BUILDINGS[template]?.monument
           ? [...purposeEffects(template), L(`Дома в ${TYPICAL_LOCAL.radius} м: стоимость земли +${TYPICAL_LOCAL.land}`, `Houses within ${TYPICAL_LOCAL.radius} m: land value +${TYPICAL_LOCAL.land}`)]
           : purposeEffects(template),
     research: `+${fmt(domain ? speedGain(base, w) : 0)}${L(" % к скорости", "% speed")}: ${domain ? domainName(domain) : "—"}`,
@@ -174,7 +174,7 @@ const LIMIT_CLASSES: { what: string; template: string }[] = [
 
 export function buildOutlineView(f: FoundFoundation, sim: Pick<SimState, "finds" | "buildings" | "progress">): OutlineView {
   const t = BUILDINGS.excavation;
-  const site = Object.values(sim.buildings).find((b) => b.foundationId === f.id && b.template === "excavation");
+  const site = Object.values(sim.buildings).find((b) => b.foundationId === f.id && BUILDINGS[b.template]?.workSite);
   const street = f.ghost ? streetOf(sim, f.id) : null;
   return {
     id: f.id,

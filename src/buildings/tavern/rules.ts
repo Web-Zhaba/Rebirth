@@ -13,4 +13,5 @@ export const tavern: BuildingRules = {
   materials: { logs: 130, planks: 15, stone: 12 },
   job: L("работает в Таверне", "works at the Tavern"),
   firstBuilt: L("Построена первая таверна", "The first tavern is built"),
+  evenings: true, // the homes around send a guest each evening (sim/evening.ts)
 };

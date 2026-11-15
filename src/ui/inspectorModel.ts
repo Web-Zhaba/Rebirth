@@ -1,8 +1,9 @@
-import { CREW, FOCUS_CREWS, remainingLabor } from "../sim/buildings";
+import { BUILDINGS, CREW, FOCUS_CREWS, remainingLabor } from "../sim/buildings";
 import type { Building, BuildingQuery, Clearing, Stock } from "../sim/types";
 import { clearingLogs } from "../sim/clearing";
 import type { IconName } from "./icons";
 import { UI } from "../buildings/ui";
+import { DIG } from "../sim/excavation";
 import { byGood } from "../sim/goods";
 import type { BuildingUi } from "../buildings/uiKit";
 import { decimal, L } from "../i18n";
@@ -28,8 +29,8 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
   }
   if (info?.kind === "house" && info.households.length === 0) return { label: L("пустует", "empty"), tone: "warn" };
   if (info?.kind === "house") return { label: L("заселён", "occupied"), tone: "ok" };
-  if (b.template === "restored") return { label: L("памятник", "monument"), tone: "ok" };
-  return { label: b.template === "dig" ? L("раскоп готов", "dig finished") : L("работает", "working"), tone: "ok" };
+  if (BUILDINGS[b.template]?.monument) return { label: L("памятник", "monument"), tone: "ok" };
+  return { label: b.template === DIG.template ? L("раскоп готов", "dig finished") : L("работает", "working"), tone: "ok" };
 }
 
 // Icon of a building template (src/buildings/<id>/ui.ts): houses, workshops and shops share their class's icon.

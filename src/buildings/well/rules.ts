@@ -14,4 +14,5 @@ export const well: BuildingRules = {
   job: L("работает у колодца", "works at the well"),
   firstBuilt: L("Построен первый колодец", "The first well is built"),
   service: { name: L("Вода", "Water"), reach: 150, mood: 8, color: "#4f86a8" },
+  water: true, // a lost bucket goes back to a well (sim/items.ts)
 };

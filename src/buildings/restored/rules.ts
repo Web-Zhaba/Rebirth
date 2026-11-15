@@ -15,4 +15,5 @@ export const restored: BuildingRules = {
   materials: { logs: 6, planks: 1.5, stone: 4 },
   sizeClass: "hall",
   foundationOnly: true,
+  monument: true, // its neighbours feel better and their land is worth more (sim/monuments.ts)
 };

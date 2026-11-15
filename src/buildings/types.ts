@@ -36,6 +36,12 @@ export interface BuildingRules {
   dryLand?: boolean; // not on water or marsh
   onePerTown?: string; // one in a town: why another can't be placed
   foundationOnly?: boolean; // stands only on an old foundation
+  workSite?: boolean; // a work site on an old foundation, not a building on it: it never counts as built there
+  monument?: boolean; // an old building kept as a monument (sim/monuments.ts)
+  evenings?: boolean; // the homes around send a guest each evening (sim/evening.ts, sim/life.ts walks and lights)
+  seats?: number; // pupils it teaches at once (sim/school.ts); its workers are the teachers
+  trades?: boolean; // its workers swap goods with the neighbours (sim/trade.ts)
+  water?: boolean; // a source of water: a lost bucket goes back to one (sim/items.ts)
   keeps?: "dry" | "cool"; // a food store that keeps its food better than the camp (a barn dry, a cellar cool)
   produce?: Produce; // what its workers make (sim/production.ts)
   weather?: (w: WeatherState) => number; // share of the hours it works in this weather (default: all of them)

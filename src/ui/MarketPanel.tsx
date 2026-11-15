@@ -1,4 +1,5 @@
 import { signal } from "@preact/signals";
+import { BUILDINGS } from "../sim/buildings";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { city, state, stock } from "../simClient";
@@ -410,7 +411,7 @@ export function MarketPanel() {
   const workers = st.economy.traders;
   const v = marketView(st.progress, orders, st.economy.trade, workers);
   const s = v.stalls[Math.min(selStall.value, v.stalls.length - 1)];
-  const markets = Object.values(st.buildings).filter((b) => b.template === "market" && b.state === "active").length;
+  const markets = Object.values(st.buildings).filter((b) => BUILDINGS[b.template]?.trades && b.state === "active").length;
   return (
     <div class="mk-screen" role="dialog" aria-modal="false" aria-label={L("Рынок", "Market")}>
       <div class="mk-sheet">

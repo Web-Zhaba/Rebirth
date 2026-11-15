@@ -14,4 +14,5 @@ export const market: BuildingRules = {
   job: L("торгует на Рынке", "trades at the Market"),
   firstBuilt: L("Построен первый рынок", "The first market is built"),
   sizeClass: "store",
+  trades: true, // its workers swap goods with the neighbours (sim/trade.ts, the market window)
 };

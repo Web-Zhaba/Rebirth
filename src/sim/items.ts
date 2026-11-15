@@ -1,4 +1,5 @@
 import { centroid, pointInRing } from "./excavation";
+import { BUILDINGS } from "./buildings";
 import { foundationIndex } from "./foundationLots";
 import { articleNear, normName, siteDomain, TYPICAL_SHARE } from "./heritage";
 import type { DomainId } from "./domains";
@@ -197,14 +198,14 @@ export type FateResult = { ok: true; sim: SimState } | { ok: false; reason: stri
 
 // The finished building on a foundation (no dig site), if any.
 const standingOn = (buildings: Record<number, Building>, foundationId: string): Building | undefined =>
-  Object.values(buildings).find((b) => b.foundationId === foundationId && b.state === "active" && b.template !== "excavation");
+  Object.values(buildings).find((b) => b.foundationId === foundationId && b.state === "active" && !BUILDINGS[b.template]?.workSite);
 
 // Why a find cannot go back to its place now, or null.
 export function returnBlocker(s: Pick<SimState, "finds" | "buildings"> & { articles?: readonly StoredArticle[] }, item: Item): string | null {
   if (item.kind === "seeds" || item.kind === "parts" || item.kind === "rails") return L("Этой находке нет своего места", "This find has no place of its own");
   if (item.place) return standingOn(s.buildings, item.place) ? null : L("Сначала поставьте здание на её фундамент", "Put a building on its foundation first");
   if (item.street) return s.finds.streets.find((t) => t.id === item.street)?.restored !== undefined ? null : L("Сначала восстановите улицу целиком", "Restore the whole street first");
-  if (item.kind === "bucket") return Object.values(s.buildings).some((b) => b.template === "well" && b.state === "active" && Math.hypot(b.lot.cx - item.x, b.lot.cy - item.y) <= FIND.wellReach) ? null : L(`Нужен колодец в ${FIND.wellReach} м от места находки`, `Needs a well within ${FIND.wellReach} m of the find`);
+  if (item.kind === "bucket") return Object.values(s.buildings).some((b) => BUILDINGS[b.template]?.water && b.state === "active" && Math.hypot(b.lot.cx - item.x, b.lot.cy - item.y) <= FIND.wellReach) ? null : L(`Нужен колодец в ${FIND.wellReach} м от места находки`, `Needs a well within ${FIND.wellReach} m of the find`);
   return L("Этой находке нет своего места", "This find has no place of its own");
 }
 

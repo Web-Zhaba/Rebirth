@@ -605,7 +605,7 @@ export function marketTraders(s: Pick<SimState, "residents" | "buildings" | "hou
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
-    if (b?.state === "active" && b.template === "market") n += residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
+    if (b?.state === "active" && BUILDINGS[b.template]?.trades) n += residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
   }
   return n;
 }

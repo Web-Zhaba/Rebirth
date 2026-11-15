@@ -15,4 +15,5 @@ export const school: BuildingRules = {
   firstBuilt: L("Построена первая школа", "The first school is built"),
   sizeClass: "hall",
   service: { name: L("Школа", "School"), reach: 800, mood: 3, color: "#3f9a76" },
+  seats: 30, // pupils it teaches at once (sim/school.ts); its workers are the teachers
 };

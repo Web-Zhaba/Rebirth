@@ -43,35 +43,17 @@ describe("building registries", () => {
 });
 
 describe("template checks", () => {
-  // A building's numbers and rules are in its folder; code elsewhere asks the rules (BUILDINGS[t].needs, isFarm...)
-  // instead of comparing template ids. These buildings belong to a system of their own, which names them where it
-  // keeps its rules; a new comparison anywhere else fails here.
-  const OWNED: Record<string, string[]> = {
-    "/src/sim/evening.ts": ["tavern"], // the evening walks to the taverns
-    "/src/sim/life.ts": ["tavern"],
-    "/src/sim/school.ts": ["school"], // pupils and teachers
-    "/src/sim/items.ts": ["excavation", "well"], // finds of a dig site; the bucket kept by a well
-    "/src/sim/growth.ts": ["excavation"], // excavation and restoration (digging.ts, restore.ts)
-    "/src/sim/recognition.ts": ["excavation"],
-    "/src/sim/streets.ts": ["excavation"],
-    "/src/ui/heritageModel.ts": ["excavation", "restored"],
-    "/src/view/layers/ruins.ts": ["excavation"],
-    "/src/view/layers/buildings.ts": ["excavation", "restored"],
-    "/src/sim/monuments.ts": ["restored"], // monuments
-    "/src/ui/inspectorModel.ts": ["dig", "restored"],
-    "/src/sim/production.ts": ["market"], // trade at the market (trade.ts)
-    "/src/ui/MarketPanel.tsx": ["market"],
-    "/src/ui/BuildingPanel.tsx": ["market", "museum", "restored"], // the market's, museum's and monument's own panels
-    "/src/sim/save.ts": ["orchard"], // a save migration: old saves name their templates
-  };
-  it("are left only to the systems that own those buildings", () => {
-    const found: Record<string, string[]> = {};
-    const re = /template\s*[!=]==\s*"(\w+)"/g;
+  // A building's numbers and rules are in its folder; code elsewhere asks the rules (BUILDINGS[t].needs, .monument,
+  // .evenings, isFarm...) or, for a system's own site, the system's constant (DIG.template, MUSEUM.template), instead
+  // of comparing a template id. Only the balance scenario (src/pace) names buildings directly.
+  it("are left to the building folders", () => {
+    const found: string[] = [];
+    const re = /(?:template|\.id)\s*[!=]==\s*"(\w+)"/g;
+    expect([...'b.template === "tavern"'.matchAll(re)].map((m) => m[1])).toEqual(["tavern"]);
     for (const [p, text] of Object.entries(sources)) {
       if (p.startsWith("/src/buildings/") || p.startsWith("/src/pace/") || /\.test\.tsx?$/.test(p)) continue;
-      const hits = [...new Set([...text.matchAll(re)].map((m) => m[1]).filter((t) => ids.includes(t)))].sort();
-      if (hits.length) found[p] = hits;
+      for (const m of text.matchAll(re)) if (ids.includes(m[1])) found.push(`${p}: ${m[0]}`);
     }
-    expect(found).toEqual(Object.fromEntries(Object.entries(OWNED).map(([p, t]) => [p, [...t].sort()])));
+    expect(found).toEqual([]);
   });
 });
