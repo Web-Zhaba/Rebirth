@@ -33,8 +33,6 @@ export const MAX_GUESTS = 12; // evening walkers to one tavern
 const DAY_MIN = 1440;
 export const CAMP_CLEAR = 3; // m around the founding point the tent folk leave free
 export const CAMP_PER = 1.6; // m of camp radius per square root of its people
-// Workplaces worked in the open, where the workers show on the plot: the rest work indoors, out of sight.
-export const OPEN_AIR: ReadonlySet<string> = new Set(["garden", "orchard", "apiary", "forager", "quarry", "dig", "woodcutter", "sawpit", "fisher", "market"]);
 const CART_ID0 = 2 ** 30;
 const EVENING_ID0 = 2 ** 29;
 
@@ -303,7 +301,7 @@ function restsOf(s: SimState, sch: Schedule): Rest[] {
     const artel = sites.length > 0 && isAdultAge(age) && !r.inClass && (toloka || r.job === null || idle.has(r.job));
     const spot = artel ? crewSpot(r.id) : null;
     const builder = spot !== null;
-    const at = builder ? spot : artel ? undefined : isWorkplace(job) ? (OPEN_AIR.has(job.template) ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
+    const at = builder ? spot : artel ? undefined : isWorkplace(job) ? (BUILDINGS[job.template]?.outdoors ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
     const work = at !== undefined ? { at, from: sch.workFrom, to: sch.workTo, ...(builder && { build: true }) } : undefined;
     return { who: r.id, sex: r.sex, age, home, ...(work && { work }) };
   });

@@ -17,4 +17,5 @@ export const smithy: BuildingRules = {
   // pieces of tools, each taking logs for charcoal (m3)
   produce: { good: "tools", perHour: 0.015, input: { good: "logs", per: 0.05, missing: L("брёвна (на уголь)", "logs (for charcoal)") } },
   weather: workshopWeather,
+  oldKinds: ["car_repair"], // old buildings of these kinds come back as it
 };

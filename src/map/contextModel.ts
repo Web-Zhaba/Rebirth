@@ -1,11 +1,12 @@
+import { UI } from "../buildings/ui";
+import type { BuildingUi } from "../buildings/uiKit";
+
 export type ContextLayer = "forest" | "water" | "quarry" | "ruins" | null;
 
 export function contextLayerForTool(tool: string | null): ContextLayer {
-  if (tool === "clearing" || tool === "woodcutter" || tool === "forager") return "forest";
-  if (tool === "fisher") return "water";
-  if (tool === "quarry") return "quarry";
-  if (tool === "dig" || tool === "restore") return "ruins";
-  return null;
+  if (tool === "clearing") return "forest";
+  if (tool === "restore") return "ruins";
+  return (tool && (UI as Record<string, BuildingUi | undefined>)[tool]?.tool?.context) || null; // a building's tool: its ui.ts
 }
 
 export type CursorKind = "" | "crosshair" | "not-allowed";

@@ -6,17 +6,16 @@ import { ruinsShown, toggleRuins } from "../view/ruinsShown";
 import { toggleWeatherMap, weatherMapOn } from "../map/weatherSettings";
 import { Icon } from "./Icon";
 import type { IconName } from "./icons";
+import { UI } from "../buildings/ui";
+import { SERVICE_IDS } from "../sim/services";
+import type { ServiceId } from "../sim/types";
 import { IconButton } from "./kit";
 import { SEMANTIC_IDS } from "./semanticIds";
 import { L } from "../i18n";
 
 const LAYER_ICON: Record<Overlay, IconName> = {
   none: "layerNone",
-  well: "well",
-  shop: "shop",
-  chapel: "chapel",
-  school: "school",
-  healer: "healer",
+  ...(Object.fromEntries(SERVICE_IDS.map((id) => [id, UI[id].tool!.icon])) as Record<ServiceId, IconName>),
   value: "value",
   mood: "mood",
   traffic: "traffic",

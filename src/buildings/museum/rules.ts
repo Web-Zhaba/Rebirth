@@ -14,4 +14,5 @@ export const museum: BuildingRules = {
   materials: { logs: 30, planks: 6, stone: 4 },
   sizeClass: "hall",
   foundationOnly: true,
+  oldKinds: ["museum"], // old buildings of these kinds come back as it
 };

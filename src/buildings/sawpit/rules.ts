@@ -20,4 +20,6 @@ export const sawpit: BuildingRules = {
   usesTools: true,
   produce: { good: "planks", perHour: 0.02, pace: true, input: { good: "logs", per: 1.6, missing: L("брёвна", "logs") } }, // m3
   weather: (w) => (w.now.temp < W.coldBelow ? W.cold : 1) * (rainy(w) ? W.rain : 1),
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };

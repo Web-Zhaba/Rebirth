@@ -14,4 +14,5 @@ export const warehouse: BuildingRules = {
   materials: { logs: 26, planks: 6, stone: 3 },
   store: { goods: 500 }, // pieces
   sizeClass: "store",
+  oldKinds: ["wholesale"], // old buildings of these kinds come back as it
 };

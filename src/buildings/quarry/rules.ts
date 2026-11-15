@@ -21,4 +21,6 @@ export const quarry: BuildingRules = {
   dryLand: true,
   produce: { good: "stone", perHour: 0.15, pace: true }, // t; a quarry works on any land (rock nearby changes nothing)
   weather: (w) => (heavy(w) ? W.heavy : rainy(w) ? W.light : 1) * (w.now.temp < W.coldBelow ? W.cold : 1) * (w.snowpack > SIGNS.deepSnow ? W.deepSnow : 1),
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };

@@ -21,4 +21,6 @@ export const fisher: BuildingRules = {
   needs: { water: 0.05 },
   produce: { good: "food", perHour: 0.6, season: [1, 1, 1, 0.5] }, // kg; buffed on purpose: food without fields
   weather: (w) => (stormy(w) ? W.storm : 1) * (w.ice > SIGNS.iceAbove ? W.ice : 1),
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };

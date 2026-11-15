@@ -31,4 +31,6 @@ export const woodcutter: BuildingRules = {
     if (t > 0 && t < 4 && rainy(w)) f *= W.thaw;
     return f;
   },
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };

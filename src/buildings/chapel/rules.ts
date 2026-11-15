@@ -15,4 +15,5 @@ export const chapel: BuildingRules = {
   firstBuilt: L("Построен первый храм", "The first temple is built"),
   sizeClass: "hall",
   service: { name: L("Храм", "Temple"), reach: 1000, mood: 7, color: "#8e6bb0" },
+  oldKinds: ["place_of_worship"], // old buildings of these kinds come back as it
 };

@@ -12,5 +12,6 @@ export const woodcutterUi: BuildingUi = {
     site: L(`В лесу: от ${Math.round(BUILDINGS.woodcutter.needs!.forest! * 100)} % леса в ${BUILDINGS.woodcutter.reach} м вокруг`, `In forest: at least ${Math.round(BUILDINGS.woodcutter.needs!.forest! * 100)}% forest within ${BUILDINGS.woodcutter.reach} m`),
     reach: () => radiusText("woodcutter"),
     hint: (h) => `${h.place}. ${L(`Круг — лес вокруг (${BUILDINGS.woodcutter.reach} м)`, `Circle — forest around (${BUILDINGS.woodcutter.reach} m)`)}`,
+    context: "forest",
   },
 };

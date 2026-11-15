@@ -12,5 +12,6 @@ export const foragerUi: BuildingUi = {
     site: L(`В лесу: от ${Math.round(BUILDINGS.forager.needs!.forest! * 100)} % леса в ${BUILDINGS.forager.reach} м вокруг`, `In forest: at least ${Math.round(BUILDINGS.forager.needs!.forest! * 100)}% forest within ${BUILDINGS.forager.reach} m`),
     reach: () => radiusText("forager"),
     hint: (h) => `${h.place}. ${L(`Круг — лес вокруг (${BUILDINGS.forager.reach} м)`, `Circle — forest around (${BUILDINGS.forager.reach} m)`)}`,
+    context: "forest",
   },
 };

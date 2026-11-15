@@ -14,4 +14,5 @@ export const shop: BuildingRules = {
   job: L("работает в Магазине", "works at the Shop"),
   firstBuilt: L("Построен первый магазин", "The first shop is built"),
   service: { name: L("Магазин", "Shop"), reach: 800, mood: 5, color: "#c9803a" },
+  oldKinds: ["shop", "mall", "department_store", "bank"], // old buildings of these kinds come back as it
 };

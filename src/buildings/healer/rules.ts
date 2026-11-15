@@ -14,4 +14,5 @@ export const healer: BuildingRules = {
   job: L("врач", "healer"),
   firstBuilt: L("Построена первая лечебница", "The first infirmary is built"),
   service: { name: L("Лечебница", "Infirmary"), reach: 1000, mood: 2, color: "#c4504a" },
+  oldKinds: ["hospital", "pharmacy", "doctors"], // old buildings of these kinds come back as it
 };

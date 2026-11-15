@@ -19,4 +19,6 @@ export const dig: BuildingRules = {
   job: L("землекоп — Раскоп", "digger — Dig"),
   firstBuilt: L("Заложен первый раскоп", "The first dig is opened"),
   weather: (w) => (w.frozen > 0.5 && w.now.temp < W.frozenBelow ? W.frozen : 1) * (rainy(w) ? W.rain : 1),
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };

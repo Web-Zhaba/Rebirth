@@ -20,6 +20,7 @@ export interface ToolUi {
   site?: string; // the tool card: where it may stand (default: by a built road, on free plots)
   reach?: () => string; // the tool card: what it reaches or yields
   hint?: (h: HintParts) => string; // the line under the build bar while placing
+  context?: "forest" | "water" | "quarry" | "ruins"; // the map layer the placing shows (map/contextModel.ts)
 }
 
 // The common lines of the placing hints, for a mouse or a finger (ui/BuildBar.tsx).

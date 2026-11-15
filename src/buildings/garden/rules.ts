@@ -24,4 +24,6 @@ export const garden: BuildingRules = {
     if (w.now.temp < W.frostBelow) return 0;
     return (w.soil < SIGNS.drought ? W.drought : 1) * (w.soil > SIGNS.waterlogged ? W.mud : 1);
   },
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };

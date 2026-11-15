@@ -12,5 +12,6 @@ export const fisherUi: BuildingUi = {
     site: L(`У воды: от ${Math.round(BUILDINGS.fisher.needs!.water! * 100)} % воды в ${BUILDINGS.fisher.reach} м вокруг`, `By water: at least ${Math.round(BUILDINGS.fisher.needs!.water! * 100)}% water within ${BUILDINGS.fisher.reach} m`),
     reach: () => radiusText("fisher"),
     hint: (h) => `${h.place}. ${L(`Круг — вода рядом (${BUILDINGS.fisher.reach} м)`, `Circle — water nearby (${BUILDINGS.fisher.reach} m)`)}`,
+    context: "water",
   },
 };

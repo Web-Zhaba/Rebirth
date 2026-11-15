@@ -25,10 +25,8 @@ export const FOUNDATION_LOT = {
   // old street's did (the houses of a village street stand 1-2 m from its axis line in the tile data)
 };
 
-// Templates that are open ground or depend on their surroundings (a garden, a pier, a log yard...): never on a foundation.
-const OPEN_GROUND = new Set(["garden", "orchard", "apiary", "quarry", "dig", "forager", "fisher", "well", "woodcutter", "sawpit"]);
-
-export const usesFoundation = (t: BuildingTemplate): boolean => !OPEN_GROUND.has(t.id);
+// Open ground and buildings bound to their surroundings (a garden, a pier, a log yard...) never stand on a foundation.
+export const usesFoundation = (t: BuildingTemplate): boolean => !t.openGround;
 const nominal = (t: BuildingTemplate): number => t.along * t.deep;
 
 // ---------- size limits by purpose (section 2.2) ----------

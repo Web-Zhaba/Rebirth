@@ -25,4 +25,6 @@ export const forager: BuildingRules = {
     if (w.snowpack > SIGNS.groundSnow) return 0;
     return stormy(w) ? W.storm : rainy(w) ? W.rain : 1;
   },
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };

@@ -56,4 +56,19 @@ describe("template checks", () => {
     }
     expect(found).toEqual([]);
   });
+
+  // Nor does it keep a list of buildings (a table of what some of them do is a field of their rules). The lists left
+  // are of tools and unlocks, whose ids are those of the single-building tools: the tools and their build-bar
+  // categories, the tech tree's unlocks, and the services in the order of their coverage bits. world/ reads
+  // OpenStreetMap tags, some of which are spelt like buildings (orchard, garden).
+  const LISTS = new Set(["/src/map/tools.ts", "/src/ui/buildMenu.ts", "/src/sim/tech.ts", "/src/sim/services.ts"]);
+  it("keep no lists of buildings", () => {
+    const found: string[] = [];
+    const list = /\[\s*"\w+"(?:\s*,\s*"\w+")+\s*\]/g;
+    for (const [p, text] of Object.entries(sources)) {
+      if (p.startsWith("/src/buildings/") || p.startsWith("/src/pace/") || p.startsWith("/src/world/") || LISTS.has(p) || /\.test\.tsx?$/.test(p)) continue;
+      for (const m of text.matchAll(list)) if ([...m[0].matchAll(/"(\w+)"/g)].filter((x) => ids.includes(x[1])).length >= 2) found.push(`${p}: ${m[0]}`);
+    }
+    expect(found).toEqual([]);
+  });
 });

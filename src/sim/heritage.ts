@@ -1,3 +1,4 @@
+import { BUILDINGS } from "./buildings";
 import { INSIGHTS, type InsightDef } from "./tech";
 import type { FoundFoundation, ProgressState, SimState } from "./types";
 import type { DomainId } from "./domains";
@@ -189,29 +190,16 @@ export const KIND_NAME: Record<string, string> = {
 };
 export const kindName = (cls: string | undefined): string => (cls && KIND_NAME[cls]) || L("Старая постройка", "Old building");
 
-// The purpose a kind works as; every other kind is kept as a monument.
-const WORK_TEMPLATE: Record<string, string> = {
-  place_of_worship: "chapel",
-  school: "school",
-  college: "school",
-  hospital: "healer",
-  museum: "museum",
-  marketplace: "market",
-  // typical kinds: a shop of any kind works as a shop (it grows in a trade zone), a pharmacy as an infirmary...
-  shop: "shop",
-  mall: "shop",
-  department_store: "shop",
-  bank: "shop",
-  pharmacy: "healer",
-  doctors: "healer",
-  wholesale: "warehouse",
-  car_repair: "smithy",
-};
+// The purpose a kind works as (each building's `oldKinds`, src/buildings/<id>/rules.ts: a shop of any kind works as a
+// shop, a pharmacy as an infirmary...); every other kind is kept as a monument.
+const WORK_TEMPLATE: Record<string, string> = Object.fromEntries(Object.values(BUILDINGS).flatMap((t) => (t.oldKinds ?? []).map((k) => [k, t.id])));
 export const workTemplate = (cls: string | undefined): string | null => (cls && WORK_TEMPLATE[cls]) || null;
+// The building an old one is kept as when it has no working purpose.
+export const MONUMENT_TEMPLATE = Object.values(BUILDINGS).find((t) => t.monument)!.id;
 
 // The purpose that brings a foundation of a known old kind back "as it was": the
 // building it worked as, or a monument; null for a foundation of no known kind.
-export const asItWasTemplate = (cls: string | undefined): string | null => (siteDomain(cls) ? (workTemplate(cls) ?? "restored") : null);
+export const asItWasTemplate = (cls: string | undefined): string | null => (siteDomain(cls) ? (workTemplate(cls) ?? MONUMENT_TEMPLATE) : null);
 
 export const siteTitle = (f: { cls?: string; name?: string }): string => f.name ?? kindName(f.cls);
 

@@ -10,5 +10,6 @@ export const quarryUi: BuildingUi = {
     purpose: L("Добывает камень", "Quarries stone"),
     site: L("Не на воде и не на болоте; камень добывается на любой суше", "Not on water or marsh; stone can be quarried on any land"),
     hint: (h) => h.place,
+    context: "quarry",
   },
 };

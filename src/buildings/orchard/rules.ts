@@ -22,4 +22,6 @@ export const orchard: BuildingRules = {
   // kg; a bearing orchard feeds 5-7 adults a year, scaled by the year's quality (sim/weatherEffects.ts orchardQuality)
   produce: { good: "food", perHour: 0.8, season: [0, 0, 1, 0], ripens: true },
   weather: (w) => (stormy(w) ? W.storm : 1) * (rainy(w) ? W.rain : 1),
+  openGround: true, // never on an old foundation
+  outdoors: true, // worked in the open: the workers show on the plot
 };
