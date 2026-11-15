@@ -263,7 +263,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
       h *= TOOLLESS + (1 - TOOLLESS) * (wear > 0 ? got / wear : 1);
     }
     const recipe = recipeOf(b.template);
-    switch (recipe ? "recipe" : b.template === DIG.template ? "dig" : isFarm(b.template) ? "farm" : null) {
+    switch (recipe ? "recipe" : b.template === DIG.template ? "digging" : isFarm(b.template) ? "harvest" : null) {
       case "recipe": {
         const p = recipe!;
         let rate = p.perHour * (p.pace ? PACE : 1) * (p.forest ? (b.site?.forest ?? 0) : 1) * (p.season ? p.season[cal.season] : 1);
@@ -282,7 +282,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         made(b.id, store(b, p.good, q));
         break;
       }
-      case "dig": {
+      case "digging": {
         const r0 = radiusOf(b);
         const r = growDig(r0, h);
         if (r === r0) break;
@@ -290,7 +290,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         buildings[b.id] = { ...b, radius: r };
         break;
       }
-      case "farm": {
+      case "harvest": {
         if (win === null) break;
         assign ??= assignFields(s.zones.fields, s.buildings);
         const mine = s.zones.fields.filter((f) => assign!.get(f.id) === b.id);

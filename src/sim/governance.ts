@@ -6,7 +6,6 @@ import type { Building, Resident } from "./types";
 // field work, construction) drops gently: «перегрузка управления».
 export const ADMIN = {
   elders: 150, // residents the town manages without any office
-  room: { townhall: 600, office: 350 } as Record<string, number>, // residents a fully staffed office adds
   slope: 0.4, // work rate 1 / (1 + slope x (load - 1)) past the capacity
   floor: 0.5, // the rate never drops below this
 };
@@ -17,7 +16,8 @@ export interface AdminState {
   factor: number; // 0.5..1, every work rate is multiplied by it
 }
 
-export const isOffice = (template: string): boolean => Object.hasOwn(ADMIN.room, template);
+// An office of the administration (its rules' `manages`: the residents a fully staffed one adds).
+export const isOffice = (template: string): boolean => !!BUILDINGS[template]?.manages;
 
 // The work rate at `pop` residents with `capacity` managed.
 export function overload(pop: number, capacity: number): number {
@@ -46,7 +46,7 @@ export function adminOf(s: { residents: Record<number, Resident>; buildings: Rec
   for (const b of Object.values(s.buildings)) {
     if (b.state !== "active" || !isOffice(b.template)) continue;
     const jobs = scaledJobs(BUILDINGS[b.template].jobs, b);
-    capacity += scaledJobs(ADMIN.room[b.template], b) * (jobs > 0 ? Math.min(1, (clerks.get(b.id) ?? 0) / jobs) : 1);
+    capacity += scaledJobs(BUILDINGS[b.template].manages!, b) * (jobs > 0 ? Math.min(1, (clerks.get(b.id) ?? 0) / jobs) : 1);
   }
   const out = { pop, capacity, factor: overload(pop, capacity) };
   byBuildings.set(s.buildings, out);

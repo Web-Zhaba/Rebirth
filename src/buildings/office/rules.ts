@@ -13,4 +13,5 @@ export const office: BuildingRules = {
   crew: 2,
   materials: { logs: 30, planks: 6, stone: 6 },
   sizeClass: "hall",
+  manages: 350, // residents it manages on top of the elders when all its clerks are at work (sim/governance.ts)
 };

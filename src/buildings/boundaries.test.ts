@@ -46,29 +46,52 @@ describe("template checks", () => {
   // A building's numbers and rules are in its folder; code elsewhere asks the rules (BUILDINGS[t].needs, .monument,
   // .evenings, isFarm...) or, for a system's own site, the system's constant (DIG.template, MUSEUM.template), instead
   // of comparing a template id. Only the balance scenario (src/pace) names buildings directly.
-  it("are left to the building folders", () => {
-    const found: string[] = [];
+  // The files left out besides the folders and the balance scenario (src/pace) speak of other things spelt like
+  // buildings, each listed with what it is:
+  const LISTS = new Set(["/src/map/tools.ts", "/src/ui/buildMenu.ts", "/src/sim/tech.ts", "/src/sim/services.ts"]); // tools and their categories (a single-building tool has the building's id), the tech tree's unlock keys, the services in the order of their coverage bits
+  const OSM = new Set(["/src/sim/heritage.ts", "/src/sim/items.ts", "/src/map/heritageModels.ts"]); // OpenStreetMap kinds of old buildings (school, museum, shop...)
+  const scanned = Object.entries(sources).filter(([p]) => !p.startsWith("/src/buildings/") && !p.startsWith("/src/pace/") && !p.startsWith("/src/world/") && !/\.test\.tsx?$/.test(p)); // world/: OpenStreetMap tags (orchard, garden)
+  const idsIn = (text: string, re: RegExp): string[] => [...new Set([...text.matchAll(re)].map((m) => m[1]).filter((t) => ids.includes(t)))];
+
+  it("are left to the building folders: no comparison with a template id", () => {
     const re = /(?:template|\.id)\s*[!=]==\s*"(\w+)"/g;
-    expect([...'b.template === "tavern"'.matchAll(re)].map((m) => m[1])).toEqual(["tavern"]);
-    for (const [p, text] of Object.entries(sources)) {
-      if (p.startsWith("/src/buildings/") || p.startsWith("/src/pace/") || /\.test\.tsx?$/.test(p)) continue;
-      for (const m of text.matchAll(re)) if (ids.includes(m[1])) found.push(`${p}: ${m[0]}`);
-    }
+    expect(idsIn('b.template === "tavern"; t.id !== "well"', re)).toEqual(["tavern", "well"]);
+    expect(scanned.flatMap(([p, text]) => idsIn(text, re).map((t) => `${p}: ${t}`))).toEqual([]);
+  });
+
+  it("no switch over template ids", () => {
+    const re = /case\s+"(\w+)"\s*:/g;
+    expect(idsIn('case "smithy": case "x":', re)).toEqual(["smithy"]);
+    expect(scanned.filter(([p]) => !OSM.has(p)).flatMap(([p, text]) => idsIn(text, re).map((t) => `${p}: ${t}`))).toEqual([]);
+  });
+
+  // Nor does code elsewhere keep a list or a table of buildings: what some of them do is a field of their rules.
+  it("no list of buildings", () => {
+    const list = /\[\s*"\w+"(?:\s*,\s*"\w+")+\s*\]/g;
+    const found: string[] = [];
+    for (const [p, text] of scanned) if (!LISTS.has(p)) for (const m of text.matchAll(list)) if (idsIn(m[0], /"(\w+)"/g).length >= 2) found.push(`${p}: ${m[0]}`);
     expect(found).toEqual([]);
   });
 
-  // Nor does it keep a list of buildings (a table of what some of them do is a field of their rules). The lists left
-  // are of tools and unlocks, whose ids are those of the single-building tools: the tools and their build-bar
-  // categories, the tech tree's unlocks, and the services in the order of their coverage bits. world/ reads
-  // OpenStreetMap tags, some of which are spelt like buildings (orchard, garden).
-  const LISTS = new Set(["/src/map/tools.ts", "/src/ui/buildMenu.ts", "/src/sim/tech.ts", "/src/sim/services.ts"]);
-  it("keep no lists of buildings", () => {
-    const found: string[] = [];
-    const list = /\[\s*"\w+"(?:\s*,\s*"\w+")+\s*\]/g;
-    for (const [p, text] of Object.entries(sources)) {
-      if (p.startsWith("/src/buildings/") || p.startsWith("/src/pace/") || p.startsWith("/src/world/") || LISTS.has(p) || /\.test\.tsx?$/.test(p)) continue;
-      for (const m of text.matchAll(list)) if ([...m[0].matchAll(/"(\w+)"/g)].filter((x) => ids.includes(x[1])).length >= 2) found.push(`${p}: ${m[0]}`);
+  // The direct keys of each object literal (and interface or type body) of a source, by the brace that opens it.
+  function keysByObject(text: string): string[][] {
+    const keyAt = new Map<number, string>();
+    for (const m of text.matchAll(/[{,;]\s*(\w+)\??\s*:/g)) keyAt.set(m.index! + m[0].indexOf(m[1]), m[1]);
+    const open: string[][] = [];
+    const out: string[][] = [];
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === "{") open.push([]);
+      else if (c === "}") out.push(open.pop() ?? []);
+      else if (keyAt.has(i) && open.length) open[open.length - 1].push(keyAt.get(i)!);
     }
+    return out;
+  }
+  const ICONS = "/src/ui/icons.ts"; // the icon library: keyed by icon name (a building's ui.ts picks one)
+  it("no table keyed by buildings", () => {
+    const keyed = (text: string) => keysByObject(text).map((keys) => [...new Set(keys.filter((k) => ids.includes(k)))]).filter((k) => k.length >= 2);
+    expect(keyed("const T = {\n  smithy: 1,\n  pottery: { a: 1 }, other: 3 };\nconst r = { school: 1, x: 2 }; const s = { museum: 0 };")).toEqual([["smithy", "pottery"]]);
+    const found = scanned.filter(([p]) => !LISTS.has(p) && !OSM.has(p) && p !== ICONS).flatMap(([p, text]) => keyed(text).map((k) => `${p}: ${k.join(", ")}`));
     expect(found).toEqual([]);
   });
 });

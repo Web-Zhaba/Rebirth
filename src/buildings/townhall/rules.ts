@@ -14,4 +14,5 @@ export const townhall: BuildingRules = {
   materials: { logs: 60, planks: 12, stone: 15 },
   sizeClass: "hall",
   onePerTown: L("Ратуша уже есть: управление расширяют районные управы", "There is a town hall already: district offices extend the administration"),
+  manages: 600, // residents it manages on top of the elders when all its clerks are at work (sim/governance.ts)
 };

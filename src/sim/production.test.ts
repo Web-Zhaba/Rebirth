@@ -957,7 +957,7 @@ describe("administration", () => {
     expect(adminOf(hall).capacity).toBe(ADMIN.elders);
     const two = Object.values(hall.residents).filter((r) => r.job === null).slice(0, 2);
     const staffed = { ...hall, residents: { ...hall.residents, ...Object.fromEntries(two.map((r) => [r.id, { ...r, job: 2 }])) } };
-    expect(adminOf(staffed).capacity).toBeCloseTo(ADMIN.elders + ADMIN.room.townhall / 2); // 2 of 4 clerks
+    expect(adminOf(staffed).capacity).toBeCloseTo(ADMIN.elders + BUILDINGS.townhall.manages! / 2); // 2 of 4 clerks
     expect(adminOf(crowd(10, [bld(2, "townhall", 120, "building")])).capacity).toBe(ADMIN.elders);
   });
   it("an overloaded town works slower and is told so once a day", () => {

@@ -1,7 +1,8 @@
 # Architecture
 
 How the code is laid out and which way the dependencies run. The README's "Under the map" gives the big picture;
-this file is the map for working in the repository. Design history lives in git (the old `docs/PLAN-*.md` files).
+this file is the map for working in the repository. Design history lives in git (the old `docs/PLAN-*.md` files; the
+last, `docs/PLAN-buildings.md`, one folder per building, was finished on 2026-11-16).
 
 ## Repository
 
@@ -76,8 +77,9 @@ import only leaf modules (`i18n.ts`, `buildings/types.ts`, `buildings/workshop.t
 anywhere but map, ui, view, engine and world), every building is reachable from the build bar, and no code outside
 `src/buildings/` compares a template id (only the balance scenario in `src/pace/` names buildings): it asks the rules
 (`needs`, `monument`, `evenings`, `seats`, `isFarm`, `recipeOf`...) or, for a system's own site, the system's
-constant (`DIG.template`, `MUSEUM.template`). Nor does it keep a list of buildings: the lists left are of tools and unlocks (`map/tools.ts`,
-`ui/buildMenu.ts`, `sim/tech.ts`) and the services in the order of their coverage bits (`sim/services.ts`). `buildings/meshes.test.ts` pins
+constant (`DIG.template`, `MUSEUM.template`). Nor does it switch on template ids or keep a list or a table keyed by
+them: the lists left are of tools and unlocks (`map/tools.ts`, `ui/buildMenu.ts`, `sim/tech.ts`) and the services in
+the order of their coverage bits (`sim/services.ts`). `buildings/meshes.test.ts` pins
 the mesh of every model: a change meant to alter how a building looks updates its snapshot.
 
 The goods of the stock have one row each in `GOOD_INFO` (`sim/goods.ts`): names, unit, store group, mass, cart load,
@@ -92,7 +94,8 @@ trade value and the household need.
 3. Put it on the build bar: its tool in `PlaceTool` / `PLACE_TOOLS` (`map/tools.ts`) and in a category
    (`ui/buildMenu.ts`), or as a kind of a group tool (`PLACE_KINDS` in `map/tools.ts`); new eras prefer a kind over a
    new tool.
-4. Open it in the tech tree: `unlocks` and `UNLOCK_NAME` in `sim/tech.ts`.
+4. Open it in the tech tree: `unlocks` and `UNLOCK_NAME` in `sim/tech.ts`. A new icon goes into the icon library
+   (`ui/icons.ts`), keyed by its name.
 5. Something new to make or a new kind of work is a new rule in `sim/`, as before; a new look of the snapshot
    `npx vitest run -u src/buildings/meshes.test.ts` in the same commit.
 

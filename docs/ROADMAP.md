@@ -1,7 +1,7 @@
 # Roadmap
 
 Open work carried over from the finished plans (their full text is in git history, `docs/PLAN-*.md` before
-2026-11-12). Everything not listed here is built.
+2026-11-12, and `docs/PLAN-buildings.md`, finished 2026-11-16). Everything not listed here is built.
 
 ## Balance and pace
 
