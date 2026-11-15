@@ -1,6 +1,6 @@
 import { houseGoods } from "./coverage";
 import { finishAll, grantStock, nextEra, reveal, unlockAll } from "./admin";
-import { advanceTo, type Pace, type Speed } from "./clock";
+import { advanceTo, tickMs, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
@@ -127,6 +127,7 @@ export class Handler {
   // jobs, homes and classes) and the levers (work hours, toloka); a change in any of them draws it anew.
   private lifeFrom: { day: number } & Pick<SimState, "incoming" | "residents" | "levers"> | null = null;
   private speed: Speed = 1; // session setting
+  private pausedFraction = 0; // how much of the tick in progress had run when the game was paused
   private free = false; // admin: whatever is started finishes at once; session setting
   private hiddenAt: number | null = null; // wall time the tab was hidden
   private persistedAt = 0; // wall time of the last save by tick()
@@ -196,7 +197,7 @@ export class Handler {
         case "speed":
           if (!validSpeed(msg.speed) || !finite(msg.now)) return;
           this.tick(msg.now); // up to now at the old speed; a pause then owes nothing, an unpause starts from now
-          this.speed = msg.speed;
+          this.changeSpeed(msg.speed, msg.now);
           this.postSnapshot(); // carries the new wall-time anchor
           return;
         case "visibility":
@@ -272,6 +273,7 @@ export class Handler {
     this.postedArticles = save ? save.sim.articles : null;
     this.lifeFrom = null;
     this.speed = 1;
+    this.pausedFraction = 0;
     this.free = false;
     this.hiddenAt = null;
     this.persistedAt = save?.sim.realTime ?? 0;
@@ -609,6 +611,20 @@ export class Handler {
 
   private pace(now: number): Pace {
     return { speed: this.speed, offline: this.hiddenAt !== null && now - this.hiddenAt > HIDDEN_SLOW_MS };
+  }
+
+  // A pause keeps how far into the tick the clock was, and the unpause goes on from there: the time neither rolls back
+  // nor jumps ahead to a whole tick.
+  private changeSpeed(speed: Speed, now: number): void {
+    const was = this.speed;
+    const sim = this.save?.sim;
+    if (sim && was !== 0 && speed === 0) this.pausedFraction = Math.min(1, Math.max(0, (now - sim.realTime) / tickMs(sim.gameMinutes, this.pace(now))));
+    this.speed = speed;
+    if (sim && was === 0 && speed !== 0) {
+      const realTime = now - this.pausedFraction * tickMs(sim.gameMinutes, this.pace(now));
+      this.save = { ...this.save!, sim: { ...sim, realTime } };
+      this.pausedFraction = 0;
+    }
   }
 
   // Called by the worker timer every 250 ms.

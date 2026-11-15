@@ -1,11 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
-import { clockAt } from "../sim/clock";
-import { speed, state } from "../simClient";
+import { gameNow, speed, state } from "../simClient";
 
-const now = (): number => {
-  const s = state.peek();
-  return s ? clockAt(s.gameMinutes, s.realTime, Date.now(), speed.peek()) : 0;
-};
+const now = (): number => (state.peek() ? gameNow() : 0);
 
 // Game minutes interpolated between snapshots. Checked every frame and re-rendered on each new whole minute, so at any
 // speed the clock steps minute by minute instead of a fixed number of minutes per refresh.
