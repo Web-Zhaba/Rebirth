@@ -488,20 +488,16 @@ export function dailyEconomy(s: SimState): SimState {
   // from a different one each day; each market worker then hands out to 20 households the market covers
   let shopSlots = 0;
   let marketSlots = 0;
-  let traders = 0; // working strength of the market workers
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
     if (!b || b.state !== "active") continue;
     const strength = residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
     if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (SERVICE.literateBoost * r.school) / 100) * strength;
-    else if (b.template === "market") {
-      marketSlots += SERVICE.marketHouseholds * strength;
-      traders += strength;
-    }
+    else if (b.template === "market") marketSlots += SERVICE.marketHouseholds * strength;
   }
-  // the markets swap the ordered goods before the day's goods are handed out
-  const swap = tradeDay(stock, s.levers.trade, traders, ledger.roomFor("food"));
+  // the markets swap the ordered goods before the day's goods are handed out (setTrade keeps the orders within the researched slots)
+  const swap = tradeDay(stock, s.levers.trade, marketTraders(s), ledger.roomFor("food"));
   if (swap) {
     Object.assign(stock, swap.stock);
     ledger.sync(); // the traded goods come to and go from the stores nearest to the camp
@@ -637,7 +633,7 @@ export function dailyEconomy(s: SimState): SimState {
     delete fields[Number(key)];
   }
 
-  return { ...s, stock: { ...ledger.stock }, stores: ledger.stores, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard, ...(s.prod.haul ? { haul: s.prod.haul } : {}), ...(swap && s.levers.trade ? { trade: { ...s.levers.trade, gave: swap.gave, got: swap.got } } : {}) } };
+  return { ...s, stock: { ...ledger.stock }, stores: ledger.stores, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard, ...(s.prod.haul ? { haul: s.prod.haul } : {}), ...(swap ? { trade: swap.swaps } : {}) } };
 }
 
 // m3 of brushwood the idle adults gather in a day: only when a household is cold or the stock is below the day's
@@ -665,6 +661,17 @@ export const GOOD: Record<string, keyof Stock> = {
   smithy: "tools",
   carpentry: "furniture",
 };
+
+// Working strength of the town's market workers: what drives the day's trade volume (trade.ts tradeDay).
+export function marketTraders(s: Pick<SimState, "residents" | "buildings" | "households">): number {
+  let n = 0;
+  for (const r of Object.values(s.residents)) {
+    if (r.job === null) continue;
+    const b = s.buildings[r.job];
+    if (b?.state === "active" && b.template === "market") n += residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
+  }
+  return n;
+}
 
 export function economyStats(s: SimState): EconomyStats {
   const need = foodPerDay(s.residents, s.gameMinutes, s.levers, s.weather);
@@ -716,6 +723,7 @@ export function economyStats(s: SimState): EconomyStats {
     outlook: foodOutlook(s),
     eveningWares: eveningRate(s),
     ...(s.prod.trade ? { trade: s.prod.trade } : {}),
+    traders: marketTraders(s),
     fieldWork: fieldWork(s.weather),
     buildFactor: buildFactor(s.weather),
     firewood: heatDemand(s),

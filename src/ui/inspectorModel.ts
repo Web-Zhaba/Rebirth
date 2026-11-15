@@ -49,10 +49,10 @@ export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: Ico
   logs: { name: L("брёвна", "logs"), unit: L("м³", "m³"), icon: "log" },
   planks: { name: L("доски", "planks"), unit: L("м³", "m³"), icon: "planks" },
   stone: { name: L("камень", "stone"), unit: L("т", "t"), icon: "stone" },
-  clothes: { name: L("одежда", "clothing"), unit: L("шт", "pcs"), icon: "wares" },
+  clothes: { name: L("одежда", "clothing"), unit: L("шт", "pcs"), icon: "shirt" },
   dishes: { name: L("посуда", "dishes"), unit: L("шт", "pcs"), icon: "wares" },
-  furniture: { name: L("утварь", "furnishings"), unit: L("шт", "pcs"), icon: "wares" },
-  tools: { name: L("инструменты", "tools"), unit: L("шт", "pcs"), icon: "wares" },
+  furniture: { name: L("утварь", "furnishings"), unit: L("шт", "pcs"), icon: "chair" },
+  tools: { name: L("инструменты", "tools"), unit: L("шт", "pcs"), icon: "toolbox" },
 };
 
 // Hands one site can use at once: its crew (`crew`, siteCrew of a building, CREW of a clearing), two crews in a толока.

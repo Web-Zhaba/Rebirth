@@ -11,6 +11,8 @@ export interface TechModifiers {
   workshopOutput?: number; // output of the workshops
   buildSpeed?: number; // construction progress
   bridgeSpan?: Partial<Record<RoadKind, number>>; // metres added to the span limit of a bridge kind (roads.ts effectiveSpans)
+  tradeOrders?: number; // trade orders the markets keep besides the first (trade.ts)
+  tradeLimits?: boolean; // a trade order's reserve and cap can be set (trade.ts)
 }
 
 export interface TechDef {
@@ -66,6 +68,8 @@ export const TECHS: TechDef[] = [
   { id: "housing", era: 1, domain: "build", name: L("Просторное жильё", "Spacious Housing"), days: 21, requires: ["crafts", "stonework"], unlocks: ["upgrade"], description: L("Дома можно расширять.", "Houses can be expanded.") },
   { id: "guildwork", era: 1, domain: "craft", name: L("Цеховое дело", "Guild work"), days: 21, requires: ["crafts", "trade"], unlocks: [], modifiers: { workshopOutput: 0.1 }, description: L("Мастера делятся приёмами: выработка мастерских выше на 10 %.", "Masters share their methods: workshop output is 10% higher.") },
   { id: "joinery", era: 1, domain: "build", name: L("Столярное дело", "Joinery"), days: 21, requires: ["housing"], unlocks: [], modifiers: { buildSpeed: 0.1, bridgeSpan: { bridge: 15 } }, description: L("Стройка быстрее на 10 %, свайный мост перекрывает на 15 м больше.", "Building is 10% faster; a pile bridge spans 15 m more.") },
+  { id: "stockkeeping", era: 1, domain: "trade", name: L("Учёт запасов", "Stock keeping"), days: 15, requires: ["trade"], unlocks: [], modifiers: { tradeLimits: true }, description: L("Рынок сверяется со складами: у обмена свой запас, который не отдают, и предел, до которого получают.", "The market checks the stores: an order keeps its own reserve and stops getting at a cap.") },
+  { id: "fairs", era: 1, domain: "trade", name: L("Ярмарки", "Fairs"), days: 21, requires: ["trade"], unlocks: [], modifiers: { tradeOrders: 1 }, description: L("Соседи съезжаются на ярмарку: рынок ведёт два обмена сразу.", "Neighbours come to the fair: the market keeps two trade orders at once.") },
   { id: "governance", era: 1, domain: "learn", name: L("Управление", "Governance"), days: 15, requires: ["crafts"], unlocks: ["townhall"], description: L("Писари ведут дела поселения: ратуша, без неё работа замедляется после 150 жителей.", "Clerks keep the settlement’s affairs: a town hall; without one work slows past 150 residents.") },
   // ----- era II «Деревня» -----
   { id: "paving", era: 2, domain: "build", name: L("Мощение", "Paving"), days: 24, requires: ["stonework"], unlocks: ["road:stone"], description: L("Каменная дорога: берёт уклон круче грунтовой.", "Stone road: handles steeper slopes than a dirt road.") },
@@ -73,6 +77,7 @@ export const TECHS: TechDef[] = [
   { id: "trusses", era: 2, domain: "build", name: L("Стропильные фермы", "Roof trusses"), days: 30, requires: ["stonebridge", "joinery"], unlocks: [], modifiers: { bridgeSpan: { bridge: 15, stonebridge: 40 } }, description: L("Мосты перекрывают больший пролёт: свайный +15 м, каменный +40 м.", "Bridges span farther: pile +15 m, stone +40 m.") },
   { id: "cellars", era: 2, domain: "farm", name: L("Погреба", "Cellars"), days: 18, requires: ["storage"], unlocks: ["cellar"], description: L("Запасы хранятся дольше: погреб.", "Supplies keep longer: cellar.") },
   { id: "beekeeping", era: 2, domain: "farm", name: L("Пчеловодство", "Beekeeping"), days: 18, requires: ["orchards"], unlocks: ["apiary"], description: L("Мёд и воск: пасека.", "Honey and wax: apiary.") },
+  { id: "traderoutes", era: 2, domain: "trade", name: L("Торговые пути", "Trade routes"), days: 30, requires: ["fairs", "paving"], unlocks: [], modifiers: { tradeOrders: 1 }, description: L("Мощёные дороги ведут к дальним соседям: ещё один обмен на рынке.", "Paved roads reach distant neighbours: one more trade order at the market.") },
   { id: "districts", era: 2, domain: "learn", name: L("Районное управление", "District offices"), days: 24, requires: ["governance"], unlocks: ["office"], description: L("Районные управы берут на себя дела частей города.", "District offices take over the affairs of parts of the town.") },
   { id: "letters", era: 2, domain: "learn", name: L("Грамота", "Literacy"), days: 24, requires: ["faith"], unlocks: ["school"], description: L("Учить детей чтению и счёту: школа.", "Teach children to read and count: school.") },
 ];
@@ -85,7 +90,7 @@ export const INSIGHTS: InsightDef[] = [
   { id: "one-roof", domain: "craft", tech: "crafts", cut: 0.3, text: L("Мастерская под одной крышей", "A workshop under one roof") },
   { id: "firing", domain: "craft", tech: "guildwork", cut: 0.3, text: L("Обжиг", "Kiln firing") },
   { id: "fair-row", domain: "trade", tech: "trade", cut: 0.3, text: L("Ярмарочный ряд", "The fair row") },
-  { id: "ledger", domain: "trade", tech: "guildwork", cut: 0.3, text: L("Счётная книга", "The ledger") },
+  { id: "ledger", domain: "trade", tech: "stockkeeping", cut: 0.3, text: L("Счётная книга", "The ledger") },
   { id: "primer", domain: "learn", tech: "letters", cut: 0.4, text: L("Азбука", "The primer") },
   { id: "bookmaking", domain: "learn", tech: null, cut: 0, speed: 0.1, text: L("Книжное дело", "Bookmaking") },
   { id: "vault", domain: "care", tech: "faith", cut: 0.3, text: L("Свод", "The vault") },
@@ -228,6 +233,11 @@ export const workshopMul = (p: Techs): number => 1 + sumMod(p, (m) => m.workshop
 export const buildSpeedMul = (p: Techs): number => 1 + sumMod(p, (m) => m.buildSpeed);
 // Metres the researched techs add to the span limit of a bridge kind.
 export const bridgeSpanBonus = (p: Techs, kind: RoadKind): number => sumMod(p, (m) => m.bridgeSpan?.[kind]);
+
+// Trade orders the markets keep at once, and whether an order's reserve and cap can be set.
+export const tradeSlots = (p: Techs): number => 1 + sumMod(p, (m) => m.tradeOrders);
+export const MAX_TRADE_SLOTS = tradeSlots({ techs: TECHS.map((t) => t.id) });
+export const tradeLimits = (p: Techs): boolean => (p?.techs ?? []).some((id) => TECH_BY_ID.get(id)?.modifiers?.tradeLimits === true);
 
 // Yield potential of the fields: the weather's crop times the techs' yield.
 export const cropOf = (s: { weather?: { crop: number }; progress?: Techs & { seeds?: number } }): number => (s.weather?.crop ?? 1) * fieldYieldMul(s.progress);

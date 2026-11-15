@@ -7,7 +7,7 @@ import { EXCAVATION } from "./digging";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, seedOf } from "./growth";
 import { parseProgress } from "./research";
-import { migrateProgress } from "./tech";
+import { MAX_TRADE_SLOTS, migrateProgress } from "./tech";
 import { emptyLevers, type Levers } from "./levers";
 import { migrateText } from "./legacyText";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
@@ -16,7 +16,7 @@ import { emptyRoads, ROAD_KINDS } from "./roads";
 import { spreadStores, type Stores } from "./storage";
 import { NO_ATTRACTION, type Attraction } from "./attraction";
 import { SERVICE } from "./services";
-import { isTradeOrder } from "./trade";
+import { cleanOrder, isTradeOrder, STALL_NAME_MAX, type TradeSwap } from "./trade";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
 import type {
   Building,
@@ -459,8 +459,9 @@ function parseProd(v: unknown): ProdState {
   // Saves from before the orchard: a year with nothing counted.
   const o = v.orchard;
   if (isRecord(o) && Number.isInteger(o.year)) out.orchard = { year: o.year as number, frost: num(o.frost, 0, 400, 0), stress: num(o.stress, 0, 400, 0), days: num(o.days, 0, 400, 0), hot: num(o.hot, 0, 400, 0) };
-  const t = oldTrade(v.trade);
-  if (isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0) out.trade = { give: t.give, get: t.get, gave: t.gave, got: t.got };
+  // saves from before several trade orders carry one swap
+  const swaps = (Array.isArray(v.trade) ? v.trade : [v.trade]).map(oldTrade).filter((t): t is TradeSwap => isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0);
+  if (swaps.length > 0) out.trade = swaps.map((t) => ({ give: t.give, get: t.get, gave: t.gave, got: t.got }));
   return out;
 }
 
@@ -479,8 +480,15 @@ function parseLevers(v: unknown): Levers {
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
   const j = v.jobs;
   if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
-  const order = oldTrade(v.trade);
-  if (isTradeOrder(order)) out.trade = { give: order.give, get: order.get };
+  // saves from before several trade orders carry one order or null; a broken order is dropped, the rest kept
+  const orders = Array.isArray(v.trade) ? v.trade : v.trade ? [v.trade] : [];
+  const pairs = new Set<string>();
+  for (const o of orders.slice(0, MAX_TRADE_SLOTS).map(oldTrade)) {
+    if (!isTradeOrder(o) || pairs.has(`${o.give}>${o.get}`)) continue;
+    pairs.add(`${o.give}>${o.get}`);
+    out.trade.push(cleanOrder(o));
+  }
+  if (Array.isArray(v.stallNames)) out.stallNames = v.stallNames.slice(0, MAX_TRADE_SLOTS).map((n) => (typeof n === "string" ? n.slice(0, STALL_NAME_MAX) : ""));
   return out;
 }
 

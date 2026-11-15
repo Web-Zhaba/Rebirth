@@ -246,17 +246,21 @@ describe("saving", () => {
     const back = parseSave(save({ ...s, realTime: NOW }), NOW + 1000);
     expect(back?.sim.levers).toEqual(s.levers);
   });
-  it("the market's trade order and yesterday's trade survive a round trip; a broken one is dropped", () => {
+  it("the market's trade orders and yesterday's trade survive a round trip; a broken one is dropped", () => {
     const s = world([site(1)]);
-    const trade = { give: "stone", get: "tools", gave: 25, got: 4.5 };
-    const back = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "tools" } }, prod: { ...s.prod, trade }, realTime: NOW }), NOW + 1000);
-    expect(back?.sim.levers.trade).toEqual({ give: "stone", get: "tools" });
+    const trade = [{ give: "stone", get: "tools", gave: 25, got: 4.5 }];
+    const orders = [{ give: "stone", get: "tools", keep: 40 }, { give: "logs", get: "food", until: 2000 }];
+    const back = parseSave(save({ ...s, levers: { ...s.levers, trade: orders, stallNames: ["", "Угол"] }, prod: { ...s.prod, trade }, realTime: NOW }), NOW + 1000);
+    expect(back?.sim.levers.trade).toEqual(orders);
+    expect(back?.sim.levers.stallNames).toEqual(["", "Угол"]);
     expect(back?.sim.prod.trade).toEqual(trade);
-    // saves from before goods groups trade wares: clothing now
-    const old = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "wares" } as never }, realTime: NOW }), NOW + 1000);
-    expect(old?.sim.levers.trade).toEqual({ give: "stone", get: "clothes" });
-    const bad = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "stone" } }, prod: { ...s.prod, trade: { ...trade, get: "gold" } }, realTime: NOW }), NOW + 1000);
-    expect(bad?.sim.levers.trade).toBeNull();
+    // saves from before several orders keep one order and one swap; from before goods groups trade wares: clothing now
+    const old = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "wares" } as never }, prod: { ...s.prod, trade: trade[0] as never }, realTime: NOW }), NOW + 1000);
+    expect(old?.sim.levers.trade).toEqual([{ give: "stone", get: "clothes" }]);
+    expect(old?.sim.prod.trade).toEqual(trade);
+    expect(parseSave(save({ ...s, levers: { ...s.levers, trade: null as never }, realTime: NOW }), NOW + 1000)?.sim.levers.trade).toEqual([]);
+    const bad = parseSave(save({ ...s, levers: { ...s.levers, trade: [{ give: "stone", get: "stone" }, orders[1], orders[1]] }, prod: { ...s.prod, trade: [{ ...trade[0], get: "gold" }] }, realTime: NOW }), NOW + 1000);
+    expect(bad?.sim.levers.trade).toEqual([orders[1]]);
     expect(bad?.sim.prod.trade).toBeUndefined();
   });
   it("old saves load with every lever off", () => {

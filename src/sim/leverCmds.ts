@@ -9,7 +9,8 @@ import { massText } from "./units";
 import { say } from "./production";
 import { classPupils } from "./school";
 import { nextRandom } from "./rng";
-import { isTradeOrder, TRADE_NAME, type TradeOrder } from "./trade";
+import { cleanOrder, isTradeOrder, STALL_NAME_MAX, TRADE_NAME, type TradeOrder } from "./trade";
+import { MAX_TRADE_SLOTS, tradeLimits, tradeSlots } from "./tech";
 import { calendar } from "./time";
 import type { SimState } from "./types";
 import { L } from "../i18n";
@@ -85,12 +86,34 @@ export function setRations(s: SimState, rations: Rations): LeverResult {
   return done(set(s, { rations }), `${L("Нормы еды", "Rations")}: ${RATIONS[rations].name.toLowerCase()}`);
 }
 
-// What the markets swap every day; null stops the trade.
-export function setTrade(s: SimState, order: TradeOrder | null): LeverResult {
-  if (order !== null && !isTradeOrder(order)) return fail(L("Некорректный обмен", "Invalid trade"));
+// What the markets swap every day, in order; an empty list stops the trade. No more orders than the research opens, no
+// pair twice; the reserve and the cap are kept only with stock keeping researched. A change of the reserve or the cap
+// alone is quiet: no chronicle line.
+export function setTrade(s: SimState, orders: TradeOrder[]): LeverResult {
+  if (!Array.isArray(orders) || !orders.every(isTradeOrder)) return fail(L("Некорректный обмен", "Invalid trade"));
+  const slots = tradeSlots(s.progress);
+  if (orders.length > slots) return fail(L(`Рынок ведёт не больше ${slots} обм.`, `The market keeps at most ${slots} orders`));
+  const pairs = new Set(orders.map((o) => `${o.give}>${o.get}`));
+  if (pairs.size < orders.length) return fail(L("Такой обмен уже есть", "This trade is already set"));
+  const next = orders.map((o) => cleanOrder(o, tradeLimits(s.progress)));
   const was = s.levers.trade;
-  if (was?.give === order?.give && was?.get === order?.get) return { ok: true, sim: s };
-  return done(set(s, { trade: order ? { give: order.give, get: order.get } : null }), order ? L(`Рынок меняет ${TRADE_NAME[order.give]} на ${TRADE_NAME[order.get]}`, `The market trades ${TRADE_NAME[order.give]} for ${TRADE_NAME[order.get]}`) : L("Обмен на рынке остановлен", "Market trade stopped"));
+  if (JSON.stringify(was) === JSON.stringify(next)) return { ok: true, sim: s };
+  const pairsOf = (list: TradeOrder[]) => list.map((o) => `${o.give}>${o.get}`).join(",");
+  if (pairsOf(was) === pairsOf(next)) return { ok: true, sim: set(s, { trade: next }) };
+  const list = next.map((o) => L(`${TRADE_NAME[o.give]} на ${TRADE_NAME[o.get]}`, `${TRADE_NAME[o.give]} for ${TRADE_NAME[o.get]}`)).join("; ");
+  return done(set(s, { trade: next }), next.length > 0 ? L(`Рынок меняет ${list}`, `The market trades ${list}`) : L("Обмен на рынке остановлен", "Market trade stopped"));
+}
+
+// The player's name for a market stall, quiet (no chronicle line); blank gives the generated name back.
+export function nameStall(s: SimState, index: number, name: string): LeverResult {
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_TRADE_SLOTS) return fail(L("Нет такого прилавка", "No such stall"));
+  if (typeof name !== "string") return fail(L("Некорректное название", "Invalid name"));
+  const clean = name.replace(/\s+/g, " ").trim().slice(0, STALL_NAME_MAX);
+  const names = Array.from({ length: MAX_TRADE_SLOTS }, (_, i) => s.levers.stallNames[i] ?? "");
+  if (names[index] === clean) return { ok: true, sim: s };
+  names[index] = clean;
+  while (names.length > 0 && names[names.length - 1] === "") names.pop();
+  return { ok: true, sim: set(s, { stallNames: names }) };
 }
 
 // Hiring priority of a job group (or of construction); the people are reassigned at once.

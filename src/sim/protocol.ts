@@ -56,7 +56,8 @@ export type Cmd =
   | { type: "setAdultSchool"; on: boolean }
   | { type: "callSettlers" }
   | { type: "grantSupplies" } // the reward for a watched ad
-  | { type: "setTrade"; order: TradeOrder | null } // what the markets swap every day
+  | { type: "setTrade"; orders: TradeOrder[] } // what the markets swap every day, in order; empty stops the trade
+  | { type: "nameStall"; index: number; name: string } // the player's name for a market stall; "" gives the generated one back
   // Jobs: hiring priority of a job group (or of construction), and the staff limit of a workplace.
   | { type: "setJobPriority"; group: JobKey; priority: Priority }
   | { type: "setStaff"; id: number; staff: number }

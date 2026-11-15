@@ -33,6 +33,9 @@ import Trade from "~icons/game-icons/trade";
 import Wheat from "~icons/game-icons/wheat";
 import Coins from "~icons/game-icons/coins";
 import Jug from "~icons/game-icons/jug";
+import Shirt from "~icons/game-icons/shirt";
+import WoodenChair from "~icons/game-icons/wooden-chair";
+import Toolbox from "~icons/game-icons/toolbox";
 import Log from "~icons/game-icons/log";
 import CampingTent from "~icons/game-icons/camping-tent";
 import QuillInk from "~icons/game-icons/quill-ink";
@@ -81,6 +84,8 @@ import PhStack from "~icons/ph/stack";
 import PhTrash from "~icons/ph/trash";
 import PhWarning from "~icons/ph/warning";
 import PhX from "~icons/ph/x-bold";
+import PhArrowRight from "~icons/ph/arrow-right-bold";
+import PhPencil from "~icons/ph/pencil-simple";
 import PhSearch from "~icons/ph/magnifying-glass-bold";
 import PhGpsFix from "~icons/ph/gps-fix-bold";
 import PhSignpost from "~icons/ph/signpost-bold";
@@ -90,6 +95,8 @@ export type IconComponent = (props: JSX.IntrinsicElements["svg"]) => JSX.Element
 export const ICONS = {
   // Interface (Phosphor)
   close: PhX,
+  arrowRight: PhArrowRight,
+  pencil: PhPencil,
   check: PhCheck,
   caretDown: PhCaretDown,
   caretUp: PhCaretUp,
@@ -134,6 +141,9 @@ export const ICONS = {
   planks: Planks,
   stone: StoneBlock,
   wares: Jug,
+  shirt: Shirt,
+  chair: WoodenChair,
+  toolbox: Toolbox,
   value: Coins,
   morning: Sunrise,
   day: Sun,

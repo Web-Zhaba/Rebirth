@@ -769,3 +769,9 @@ button.warn-chip:hover:not(:disabled) {
   margin: var(--sp-2) 0;
   color: var(--pencil);
 }
+
+.tip-label-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}

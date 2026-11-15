@@ -5,6 +5,7 @@ import type { Land } from "../world/landcover";
 import type { WeatherState } from "./weather";
 import type { OrchardYear } from "./weatherEffects";
 import type { Attraction } from "./attraction";
+import type { TradeSwap } from "./trade";
 
 export interface City {
   name: string;
@@ -332,7 +333,7 @@ export interface ProdState {
   today: Record<number, number>; // building id -> units made since 00:00 (kg of grain for a gumno)
   yesterday: Record<number, number>;
   orchard: OrchardYear; // what this year has done to the fruit trees (frost at the blossom, drought, heat)
-  trade?: { give: keyof Stock; get: keyof Stock; gave: number; got: number }; // what the markets swapped in the day that ended; absent when nothing moved
+  trade?: TradeSwap[]; // what each trade order swapped in the day that ended; absent when nothing moved
   haul?: Record<number, number>; // producer id -> share of its work hours that went to carting at the last work tick (sim/storage.ts)
 }
 
@@ -416,6 +417,7 @@ export interface EconomyStats {
   outlook: number; // 0..1, can the food last to the end of the next harvest window
   eveningWares: number; // pieces of clothing an hour the adults at home make at 19-22 (doubles in winter)
   trade?: ProdState["trade"]; // what the markets swapped yesterday
+  traders: number; // working strength of the market workers: the day's trade volume (trade.ts)
   fieldWork: number; // share of the field work the weather allows right now (1 = calm)
   buildFactor: number; // share of the artel's hours the weather allows right now
   firewood: number; // m3 a day the households burn at today's cold

@@ -14,6 +14,7 @@ import { FollowCamera } from "./FollowCamera";
 import { HeritagePanel } from "./HeritagePanel";
 import { HotkeysDialog } from "./HotkeysDialog";
 import { MuseumPanel } from "./MuseumPanel";
+import { MarketPanel } from "./MarketPanel";
 import { Hud } from "./Hud";
 import { NotebookHost } from "./NotebookHost";
 import { SettingsDialog } from "./SettingsDialog";
@@ -44,6 +45,7 @@ export function App({ view }: { view: View }) {
       {c && <TownPanel city={c} view={view} />}
       {c && <TechPanel />}
       {c && <MuseumPanel view={view} />}
+      {c && <MarketPanel />}
       {c && <HeritagePanel />}
       {c && <NotebookHost view={view} />}
       {c && <BuildBar />}

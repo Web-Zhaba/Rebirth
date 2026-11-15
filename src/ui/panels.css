@@ -361,6 +361,81 @@
   border-color: var(--rule);
 }
 
+/* Goods picker: a grid of goods cards that wraps to the panel's width (4 across in a normal panel). */
+.goods-pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.goods-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: var(--sp-1);
+}
+
+.goods-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-1);
+  border: var(--bw-hair) solid var(--rule-soft);
+  border-radius: 0;
+  background: var(--paper-raised);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.goods-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+}
+
+.goods-amount {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--pencil);
+}
+
+.goods-btn:hover:not(.on):not(:disabled) {
+  background: var(--paper-shade);
+}
+
+.goods-btn:disabled {
+  color: var(--pencil-faint);
+  cursor: not-allowed;
+}
+
+.goods-btn:disabled .goods-amount {
+  color: inherit;
+}
+
+.goods-btn.on {
+  border-color: var(--rule);
+  background: var(--ink);
+  color: var(--paper-raised);
+}
+
+.goods-btn.on .goods-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.goods-btn.on .goods-amount {
+  color: inherit;
+}
+
+.goods-btn:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: -2px;
+}
+
 /* ---- Town panel parts ---- */
 
 .rs-panel .tabs {
