@@ -28,6 +28,7 @@ import RopeBridge from "~icons/game-icons/rope-bridge";
 import StoneBridge from "~icons/game-icons/stone-bridge";
 import Road from "~icons/game-icons/road";
 import Shop from "~icons/game-icons/shop";
+import TavernSign from "~icons/game-icons/tavern-sign";
 import StonePile from "~icons/game-icons/stone-pile";
 import Trade from "~icons/game-icons/trade";
 import Wheat from "~icons/game-icons/wheat";
@@ -186,7 +187,8 @@ export const ICONS = {
   cellar: CellarBarrels,
   barn: Barn,
   well: Well,
-  market: Shop,
+  shop: Shop,
+  tavern: TavernSign,
   chapel: Church,
   school: Abacus,
   healer: HerbsBundle,

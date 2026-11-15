@@ -8,7 +8,7 @@ export interface WarningLike {
 
 export type WarningAction = "town" | { overlay: ServiceId } | null;
 
-const SERVICE_IDS = new Set<ServiceId>(["well", "market", "chapel", "school", "healer"]);
+const SERVICE_IDS = new Set<ServiceId>(["well", "shop", "chapel", "school", "healer"]);
 
 export function freshWarnings(previous: ReadonlySet<string>, current: readonly WarningLike[]): WarningLike[] {
   return current.filter((w) => !previous.has(w.id));

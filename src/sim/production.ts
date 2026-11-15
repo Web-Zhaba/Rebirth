@@ -11,7 +11,7 @@ import { buildingPriority } from "./jobs";
 import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
-import { covers, dwelling, SERVICE, serviceMood } from "./services";
+import { dwelling, SERVICE, serviceMood } from "./services";
 import { tradeDay } from "./trade";
 import { finishedMonuments, monumentMoodAt } from "./monuments";
 import { districtMood } from "./recognition";
@@ -485,16 +485,14 @@ export function dailyEconomy(s: SimState): SimState {
   }
 
   // goods: each employed trade worker serves 12 households a day (a literate one 20 % more, a learning one part of it), starting
-  // from a different one each day; each market worker then hands out to 20 households the market covers
+  // from a different one each day (the market's workers do not hand out: they swap goods, see trade.ts)
   let shopSlots = 0;
-  let marketSlots = 0;
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
     if (!b || b.state !== "active") continue;
     const strength = residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
     if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (SERVICE.literateBoost * r.school) / 100) * strength;
-    else if (b.template === "market") marketSlots += SERVICE.marketHouseholds * strength;
   }
   // the markets swap the ordered goods before the day's goods are handed out (setTrade keeps the orders within the researched slots)
   const swap = tradeDay(stock, s.levers.trade, marketTraders(s), ledger.roomFor("food"));
@@ -520,13 +518,6 @@ export function dailyEconomy(s: SimState): SimState {
   let slots = Math.floor(shopSlots + EPS);
   for (let k = 0; k < ids.length && slots > 0 && homeGoods(stock) > EPS; k++) {
     hand(s.households[ids[(k + dayOf(now)) % ids.length]]);
-    slots--;
-  }
-  slots = Math.floor(marketSlots + EPS);
-  for (let k = 0; k < ids.length && slots > 0 && homeGoods(stock) > EPS; k++) {
-    const h = s.households[ids[(k + dayOf(now)) % ids.length]];
-    if (served.has(h.id) || !covers(s.coverage[dwelling(h)], "market")) continue;
-    hand(h);
     slots--;
   }
 

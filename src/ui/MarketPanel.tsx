@@ -182,7 +182,7 @@ function Scales({ s }: { s: Stall }) {
   const give = !o ? "" : s.swap ? `${num(s.swap.gave)} ${unit(o.give)}` : `1 ${unit(o.give)}`;
   const get = !o ? "" : s.swap ? `${num(s.swap.got)} ${unit(o.get)}` : `${num(tradeRate(o))} ${unit(o.get)}`;
   const kept = Math.round((1 - TRADE.margin) * 100);
-  const fee = L(`Соседи берут плату ${100 - kept} %: за наш товар стоимостью 100 мы получаем товар стоимостью ${kept}. Поэтому наша чаша тяжелее.`, `The neighbours charge ${100 - kept}%: for our goods worth 100 we get goods worth ${kept}. That is why our pan is heavier.`);
+  const fee = L(``, ``);
   const note = !o
     ? s.state === "locked"
       ? L("Прилавок закрыт — весы пусты.", "The stall is shut: the scales are empty.")

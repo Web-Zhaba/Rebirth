@@ -13,7 +13,7 @@ export interface ServiceInfo {
 
 export const SERVICE_LIST: ServiceInfo[] = [
   { id: "well", name: L("Вода", "Water"), reach: 150, mood: 8, color: "#4f86a8" },
-  { id: "market", name: L("Рынок", "Market"), reach: 800, mood: 5, color: "#c9803a" },
+  { id: "shop", name: L("Магазин", "Shop"), reach: 800, mood: 5, color: "#c9803a" },
   { id: "chapel", name: L("Храм", "Temple"), reach: 1000, mood: 7, color: "#8e6bb0" },
   { id: "school", name: L("Школа", "School"), reach: 800, mood: 3, color: "#3f9a76" },
   { id: "healer", name: L("Лечебница", "Infirmary"), reach: 1000, mood: 2, color: "#c4504a" },
@@ -23,7 +23,6 @@ export const SERVICE_IDS: ServiceId[] = SERVICE_LIST.map((s) => s.id);
 export const isService = (template: string): template is ServiceId => Object.hasOwn(SERVICES, template);
 
 export const SERVICE = {
-  marketHouseholds: 20, // households a market worker hands wares to in a day
   healerDeathFactor: 0.6,
   schoolFrom: 7, // age of the children who attend
   schoolTo: 15,

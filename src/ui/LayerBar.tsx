@@ -13,7 +13,7 @@ import { L } from "../i18n";
 const LAYER_ICON: Record<Overlay, IconName> = {
   none: "layerNone",
   well: "well",
-  market: "market",
+  shop: "shop",
   chapel: "chapel",
   school: "school",
   healer: "healer",

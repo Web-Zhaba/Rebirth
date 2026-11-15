@@ -92,6 +92,7 @@ export const PLACED_BUILDING_COLORS = {
   house: BUILDING_ZONE_COLORS.res,
   workshop: BUILDING_ZONE_COLORS.craft,
   shop: BUILDING_ZONE_COLORS.trade,
+  tavern: BUILDING_ZONE_COLORS.trade,
   gumno: "#b8963f",
   woodcutter: "#5c7342",
   sawpit: "#a97d4d",
@@ -108,7 +109,7 @@ export const PLACED_BUILDING_COLORS = {
   restored: "#8a7f6a",
   museum: "#6f6a8a",
   well: "#4f7f9c",
-  market: "#b9772f",
+  market: "#b9772f", // a trade building, not a service
   chapel: "#85689f",
   school: "#3f8a6b",
   healer: "#b24d46",

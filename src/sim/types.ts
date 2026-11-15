@@ -425,7 +425,7 @@ export interface EconomyStats {
   admin: { pop: number; capacity: number; factor: number }; // residents, what the offices manage, the work rate it leaves (sim/governance.ts)
 }
 
-export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";
+export type ServiceId = "well" | "shop" | "chapel" | "school" | "healer";
 
 export interface ServiceStats {
   houses: number; // finished houses

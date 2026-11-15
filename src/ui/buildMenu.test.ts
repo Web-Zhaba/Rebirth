@@ -16,7 +16,8 @@ describe("build menu", () => {
     expect(toolForKey("KeyI", "food")).toBe("apiary");
     expect(toolForKey("KeyQ", "farm")).toBe("clearing");
     expect(toolForKey("KeyW", "farm")).toBe("woodcutter");
-    expect(toolForKey("KeyT", "farm")).toBeNull();
+    expect(toolForKey("KeyT", "farm")).toBe("market");
+    expect(toolForKey("KeyY", "farm")).toBeNull();
     expect(toolForKey("KeyQ", "town")).toBe("house");
     expect(toolForKey("KeyR", "town")).toBe("barn");
     expect(toolForKey("KeyY", "roads")).toBe("restore");

@@ -204,7 +204,7 @@ export const isUnlocked = (p: Pick<ProgressState, "techs">, key: string): boolea
 // The unlock key of a build-bar tool or template id, or null when it is available from the start.
 export function unlockKeyOf(tool: string): string | null {
   if (tool === "craft") return "workshop"; // a building class opens with the tool that lays it
-  if (tool === "trade") return "shop";
+  if (tool === "trade" || tool === "tavern") return "shop"; // the tavern is laid with the shop tool's unlock
   if (tool === "logyard" || tool === "stoneyard" || tool === "warehouse") return "barn"; // kinds of the storehouse
   if (tool === "stone" || tool === "stonebridge") return `road:${tool}`;
   return Object.hasOwn(UNLOCK_NAME, tool) && !tool.startsWith("road:") && tool !== "upgrade" ? tool : null;

@@ -108,7 +108,7 @@ describe("placing services", () => {
   it("every service stands on a lot beside a built road, like the S5 buildings", () => {
     const s = zoned();
     const edge = Object.values(s.roads.edges)[0].id;
-    for (const id of ["well", "market", "chapel", "school", "healer"]) {
+    for (const id of ["well", "chapel", "school", "healer"]) {
       const t = BUILDINGS[id];
       expect(t.zone).toBe("placed");
       const c = s.zones.cells.find((k) => k.edge === edge && k.side === 1 && k.depth === 0 && k.i === 0)!;
@@ -121,7 +121,7 @@ describe("placing services", () => {
     }
   });
   it("footprints fit their lots and the table matches the design", () => {
-    const want: Record<string, [number, number, number, number]> = { well: [1, 1, 0, 150], market: [2, 3, 8, 800], chapel: [1, 2, 1, 1000], school: [2, 2, 2, 800], healer: [1, 2, 1, 1000] };
+    const want: Record<string, [number, number, number, number]> = { well: [1, 1, 0, 150], shop: [1, 2, 4, 800], chapel: [1, 2, 1, 1000], school: [2, 2, 2, 800], healer: [1, 2, 1, 1000] };
     for (const [id, [w, d, jobs, range]] of Object.entries(want)) {
       expect(SERVICES[id as keyof typeof SERVICES].reach).toBe(range);
       const t = BUILDINGS[id];
@@ -166,9 +166,9 @@ describe("coverage by network distance", () => {
   it("does not count a service that is unfinished or unstaffed", () => {
     const houses = [bld(2, "izba", 100)];
     expect(computeCoverage(town([bld(1, "well", 0, "building"), ...houses]))).toEqual({});
-    const market = folk(town([bld(1, "market", 0), ...houses]), [{ home: null, job: 1 }]);
-    expect(covers(computeCoverage(market)[2], "market")).toBe(true);
-    expect(computeCoverage({ ...market, residents: { ...market.residents, 1: { ...market.residents[1], job: null } } })).toEqual({});
+    const shop = folk(town([bld(1, "shop", 0), ...houses]), [{ home: null, job: 1 }]);
+    expect(covers(computeCoverage(shop)[2], "shop")).toBe(true);
+    expect(computeCoverage({ ...shop, residents: { ...shop.residents, 1: { ...shop.residents[1], job: null } } })).toEqual({});
     // a school has 2 jobs but one worker is enough
     const school = folk(town([bld(1, "school", 0), ...houses]), [{ home: null, job: 1 }]);
     expect(covers(computeCoverage(school)[2], "school")).toBe(true);
@@ -224,56 +224,11 @@ describe("mood terms", () => {
 });
 
 describe("market hand-out", () => {
-  // 25 two-adult households in houses along the road, one market worker, no shops
-  const mk = (extra: HSpec[] = []) => {
-    const houses = Array.from({ length: 25 }, (_, i) => bld(10 + i, "izba", 100 + 10 * i));
-    const specs: HSpec[] = [{ home: 10, adults: 2, job: 1 }, ...houses.slice(1).map((b) => ({ home: b.id, adults: 2 })), ...extra];
-    let s = busy(folk(town([bld(1, "market", 0), ...houses]), specs));
-    s = withCoverage({ ...s, stock: { ...s.stock, clothes: 100 } });
-    return s;
-  };
-  it("each worker serves 20 covered households a day", () => {
-    const s = mk();
-    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    expect(s.stock.clothes - d.stock.clothes).toBeCloseTo(20 * 0.06);
-    expect(Object.values(d.households).filter((h) => h.mood > 60 + (10 + 45 + 10 + 5 + 10 - 60) / 4 - 0.01)).toHaveLength(20);
-  });
-  it("starts from another household the next day", () => {
-    const s = mk();
-    const lifted = (day: number) =>
-      Object.values(dailyEconomy({ ...s, gameMinutes: at(day) }).households)
-        .filter((h) => h.mood > 63)
-        .map((h) => h.id)
-        .join();
-    expect(lifted(101)).not.toBe(lifted(102));
-  });
-  it("a tent camp in the market's reach is served like a house; households outside the reach get nothing", () => {
-    const far = bld(60, "izba", 1500);
-    const s0 = mk([{ home: null, adults: 2 }, { home: 60, adults: 2 }]);
-    const s = withCoverage({ ...s0, buildings: { ...s0.buildings, 60: far } });
-    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    expect(s.stock.clothes - d.stock.clothes).toBeCloseTo(20 * 0.06);
-    expect(d.households[26].mood).toBeCloseTo(60 + (10 + 45 + 10 - 60) / 4); // tents: goods, but no house
-    expect(d.households[27].mood).toBeCloseTo(60 + (10 + 45 + 10 - 60) / 4); // a house, but out of reach
-  });
-  it("comes on top of shops: the shop trader serves 12, the market the next 20", () => {
-    const s0 = mk();
-    // the first household's second adult trades in a shop at the end of the road
-    const s = withCoverage({
-      ...s0,
-      buildings: { ...s0.buildings, 99: bld(99, "shop", 1200) },
-      residents: { ...s0.residents, 2: { ...s0.residents[2], job: 99 } },
-    });
-    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    // 25 households: 12 served by the shop, the other 13 by the market's 20 slots
-    expect(s.stock.clothes - d.stock.clothes).toBeCloseTo(25 * 0.06);
-    // without the market worker only the shop's 12 get goods
-    const shopOnly = dailyEconomy({ ...s, residents: { ...s.residents, 1: { ...s.residents[1], job: null } }, gameMinutes: at(13) });
-    expect(s.stock.clothes - shopOnly.stock.clothes).toBeCloseTo(12 * 0.06);
-  });
-  it("an unstaffed market hands out nothing", () => {
-    const s0 = mk();
-    const s = withCoverage({ ...s0, residents: { ...s0.residents, 1: { ...s0.residents[1], job: null } } });
+  it("a staffed market hands out nothing: it only swaps goods", () => {
+    const houses = Array.from({ length: 5 }, (_, i) => bld(10 + i, "izba", 100 + 10 * i));
+    const specs: HSpec[] = [{ home: 10, adults: 2, job: 1 }, ...houses.slice(1).map((b) => ({ home: b.id, adults: 2 }))];
+    const s0 = busy(folk(town([bld(1, "market", 0), ...houses]), specs));
+    const s = withCoverage({ ...s0, stock: { ...s0.stock, clothes: 100 } });
     expect(dailyEconomy({ ...s, gameMinutes: at(13) }).stock.clothes).toBe(100);
   });
 });
@@ -288,9 +243,9 @@ describe("market trade", () => {
   it("a worker swaps up to a day's volume of the surplus, minus the margin", () => {
     const s = mk([{ give: "stone", get: "clothes" }], { stone: 200 });
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    // 150 points / 6 per tonne = 25 t go; each tonne is worth 6 x 0.75 / 20 pieces of clothing; the three households get 0.06 each
+    // 150 points / 6 per tonne = 25 t go; each tonne is worth 6 x 0.75 / 20 pieces of clothing; the market hands nothing out
     expect(d.stock.stone).toBeCloseTo(175);
-    expect(d.stock.clothes).toBeCloseTo(100 + 25 * ((6 * 0.75) / 20) - 3 * 0.06);
+    expect(d.stock.clothes).toBeCloseTo(100 + 25 * ((6 * 0.75) / 20));
     expect(d.prod.trade).toMatchObject([{ give: "stone", get: "clothes", gave: 25 }]);
     expect(economyStats(d).trade).toEqual(d.prod.trade);
   });
@@ -515,7 +470,7 @@ describe("land value", () => {
 describe("house upgrade", () => {
   // all five services cover the house, a happy family (land 20 + 40 + 0.3 x 40 = 72)
   const rich = (mood = 90) => {
-    const s = folk(town([bld(1, "well", 0), bld(2, "chapel", 40), bld(3, "healer", 80), bld(4, "izba", 120), bld(5, "market", 160), bld(6, "school", 200)]), [
+    const s = folk(town([bld(1, "well", 0), bld(2, "chapel", 40), bld(3, "healer", 80), bld(4, "izba", 120), bld(5, "shop", 160), bld(6, "school", 200)]), [
       { home: 4, adults: 2, mood },
       { home: null, adults: 1, job: 2 },
       { home: null, adults: 1, job: 3 },
@@ -528,7 +483,7 @@ describe("house upgrade", () => {
   const day = (s: SimState) => dailyServices({ ...s, gameMinutes: s.gameMinutes + 1440 });
   it("starts after 20 good days in a row", () => {
     let s = day(rich());
-    expect(servicesIn(s.coverage[4])).toEqual(["well", "market", "chapel", "school", "healer"]);
+    expect(servicesIn(s.coverage[4])).toEqual(["well", "shop", "chapel", "school", "healer"]);
     expect(s.landValue[4]).toBeGreaterThanOrEqual(SERVICE.upgradeLand);
     expect(s.buildings[4].streak).toBe(1);
     for (let d = 0; d < 18; d++) s = day(s);
@@ -551,7 +506,7 @@ describe("house upgrade", () => {
   it("the land threshold is 60: four services and a happy neighbourhood are enough", () => {
     expect(SERVICE.upgradeLand).toBe(60);
     expect(upgradeShortfall(60, undefined, 80)).toEqual([]);
-    expect(upgradeShortfall(59, undefined, 80)).toEqual(["стоимость участка 59 из 60, нет: вода, рынок, храм, школа, лечебница"]);
+    expect(upgradeShortfall(59, undefined, 80)).toEqual(["стоимость участка 59 из 60, нет: вода, магазин, храм, школа, лечебница"]);
   });
   it("a house is raised only while its families get their goods", () => {
     expect(upgradeShortfall(60, undefined, 80, 0.8)).toEqual([]);
@@ -647,18 +602,18 @@ describe("workers without inputs build", () => {
 
 describe("inspector and snapshot", () => {
   const sim = () => {
-    const s = folk(town([bld(1, "well", 0), bld(2, "market", 40), bld(3, "izba", 100), bld(4, "izba", 1500)]), [{ home: 3, adults: 2, job: 2 }, { home: 4, adults: 2 }]);
+    const s = folk(town([bld(1, "well", 0), bld(2, "shop", 40), bld(3, "izba", 100), bld(4, "izba", 1500)]), [{ home: 3, adults: 2, job: 2 }, { home: 4, adults: 2 }]);
     return dailyServices(s);
   };
   it("houses report their services, land value and level", () => {
     const q = queryBuilding(sim(), 3)!;
-    expect(q).toMatchObject({ kind: "house", level: 1, upgrading: false, services: ["well", "market"] });
+    expect(q).toMatchObject({ kind: "house", level: 1, upgrading: false, services: ["well", "shop"] });
     expect(q.kind === "house" && q.landValue).toBeGreaterThan(30);
   });
   it("aggregates count houses covered per service", () => {
     const stats = serviceStats(sim());
     expect(stats.houses).toBe(2);
-    expect(stats.covered).toEqual({ well: 1, market: 1, chapel: 0, school: 0, healer: 0 });
+    expect(stats.covered).toEqual({ well: 1, shop: 1, chapel: 0, school: 0, healer: 0 });
     expect(stats.avgLandValue).toBeGreaterThan(20);
     expect(stats.level2).toBe(0);
     const snap = toSnapshot(sim());
@@ -760,7 +715,7 @@ describe("save", () => {
 describe("determinism with services", () => {
   it("two runs of a town with services are identical", () => {
     const build = () => {
-      let s = folk(town([bld(1, "well", 0), bld(2, "market", 40), bld(3, "school", 80), bld(4, "izba", 120), bld(5, "izba", 160)]), [
+      let s = folk(town([bld(1, "well", 0), bld(2, "shop", 40), bld(3, "school", 80), bld(4, "izba", 120), bld(5, "izba", 160)]), [
         { home: 4, adults: 2, kids: 2, kidAge: 9, job: 2 },
         { home: 5, adults: 2, job: 3 },
       ]);
