@@ -147,8 +147,12 @@ export function setStaff(s: SimState, id: number, staff: number): LeverResult {
 
 // The government (sim/government.ts): the head, the form of rule and the term, each said in the feed and the chronicle.
 const governed = (r: GovResult): LeverResult => (!r.ok ? fail(r.reason) : r.text ? done(r.sim, r.text) : { ok: true, sim: r.sim });
-export const chooseHeadCmd = (s: SimState, id: number): LeverResult => governed(chooseHead(s, id));
-export const setFormCmd = (s: SimState, form: Form): LeverResult => governed(setForm(s, form));
+// the new head takes their seat among the clerks at once
+export const chooseHeadCmd = (s: SimState, id: number): LeverResult => {
+  const r = governed(chooseHead(s, id));
+  return r.ok ? { ok: true, sim: rebalanceJobs(r.sim) } : r;
+};
+export const setFormCmd = (s: SimState, form: Form, force = false): LeverResult => governed(setForm(s, form, force));
 export const setTermCmd = (s: SimState, term: Term): LeverResult => governed(setTerm(s, term));
 
 // Why a call for settlers cannot be made now, or null.

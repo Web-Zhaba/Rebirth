@@ -47,7 +47,7 @@ export const GOV = {
   heirAge: 16, // a child may take the post at this age
   candidateAge: [20, 65] as const,
   candidates: 3,
-  formCooldown: YEAR_MIN, // game minutes between changes of the form
+  formCooldown: 5 * YEAR_MIN, // game minutes between changes of the form
   elderAge: 55,
 };
 
@@ -122,6 +122,14 @@ export function seatActive(buildings: Record<number, Building>): boolean {
     seatCache.set(buildings, v);
   }
   return v;
+}
+
+// The head works at the seat as one of its clerks: their job is kept there by the hiring (people.ts jobsStep).
+export function headClerk(s: Pick<SimState, "residents" | "buildings"> & { gov?: Government | null }): { id: number; seat: number } | null {
+  const id = s.gov?.head;
+  if (id == null || !s.residents[id]) return null;
+  const seat = Object.values(s.buildings).find((b) => b.state === "active" && BUILDINGS[b.template]?.seat);
+  return seat ? { id, seat: seat.id } : null;
 }
 
 type GovSource = Pick<SimState, "residents" | "buildings" | "gameMinutes"> & { gov?: Government | null };
@@ -252,13 +260,13 @@ export function chooseHead(s: SimState, id: number): GovResult {
   return { ok: true, sim: { ...s, gov: next }, text: g.form === "monarchy" && head === null && g.last === null ? L(`Основана династия: главой поселения ${verb} ${nameOf(r)}`, `A dynasty is founded: ${nameOf(r)} ${verb} the head of the town`) : text };
 }
 
-// The form of rule; the head stays and starts afresh. Once a year at most.
-export function setForm(s: SimState, form: Form): GovResult {
+// The form of rule; the head stays and starts afresh. Once in five years at most (`force`: the developer panel's switch).
+export function setForm(s: SimState, form: Form, force = false): GovResult {
   const g = s.gov;
   if (!g || !seatActive(s.buildings)) return fail(L("Сначала постройте ратушу", "Build a town hall first"));
   if (!isForm(form)) return fail(L("Неизвестная форма правления", "Unknown form of rule"));
   if (g.form === form) return { ok: true, sim: s, text: "" };
-  if (s.gameMinutes < g.formSince + GOV.formCooldown) return fail(L("Форму правления меняют не чаще раза в год", "The form of rule changes at most once a year"));
+  if (!force && s.gameMinutes < g.formSince + GOV.formCooldown) return fail(L("Форму правления меняют не чаще раза в пять лет", "The form of rule changes at most once in five years"));
   const next: Government = { ...g, form, formSince: s.gameMinutes, termStart: s.gameMinutes, terms: 1, candidates: [] };
   const f = fillCandidates(s, next);
   return { ok: true, sim: { ...s, gov: f.gov, rng: f.rng }, text: form === "monarchy" ? L("Поселение стало монархией: власть передаётся детям главы", "The town became a monarchy: power passes to the head's children") : L("Поселение стало республикой: главу выбирают на срок", "The town became a republic: the head is chosen for a term") };

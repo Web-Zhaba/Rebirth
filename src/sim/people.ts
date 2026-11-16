@@ -5,7 +5,7 @@ import { assignFields, bears, expectedKg, FIELD, foodKgHour, idleGumnos, idleOrc
 import { nextRandom } from "./rng";
 import { countServices, covers, SERVICE, SERVICE_IDS, servicesIn } from "./services";
 import { attractionOf, inflowPerDay } from "./attraction";
-import { attractMul } from "./government";
+import { attractMul, headClerk } from "./government";
 import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
@@ -666,7 +666,18 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     r.job = null;
     r.commute = null;
   };
+  // The head of the town is a clerk of the town hall whatever their age: kept out of the hiring, their place taken first.
+  const clerk = headClerk({ ...s, residents: w.residents });
+  const head = clerk ? w.residents[clerk.id] : undefined;
+  const atSeat = !!(clerk && head && cap.has(clerk.seat));
+  if (atSeat) {
+    head!.job = clerk!.seat;
+    head!.inClass = false;
+    workers.set(clerk!.seat, 1);
+  }
+  const pinned = (r: Resident) => atSeat && r === head;
   for (const r of Object.values(w.residents)) {
+    if (pinned(r)) continue;
     if (!isAdultAge(ageOf(r.born, w.now)) || r.inClass) {
       r.job = null;
       r.commute = null;
@@ -700,8 +711,9 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     const origin = locate(-1, 0, 0);
     const groups: { spot: Spot; h: Household; adults: Resident[]; cands: JobCand[]; candMap: Map<number, number> }[] = [];
     for (const h of Object.values(w.households)) {
-      // pupils in class do no work: they stay out of the hiring
-      const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)) && !r.inClass);
+      // pupils in class do no work: they stay out of the hiring; so does the head, who keeps the town hall
+      const all = h.members.map((m) => w.residents[m]);
+      const adults = all.filter((r) => isAdultAge(ageOf(r.born, w.now)) && !r.inClass && !pinned(r));
       if (adults.length === 0) continue;
       if (h.home === null) {
         for (const r of adults) lose(r);
@@ -754,9 +766,14 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
       }
     }
 
+    if (head && atSeat) {
+      const m = groups.find((g) => g.h.id === head.household)?.candMap.get(head.job!);
+      head.commute = m === undefined ? null : Math.round((m / (WALK_SPEED * residentMoveFactor(head))) * 10) / 10;
+    }
+
     const staff = new Map<number, Resident[]>();
     for (const r of Object.values(w.residents)) {
-      if (r.job === null || (workers.get(r.job) ?? 0) <= (cap.get(r.job) ?? 0)) continue;
+      if (pinned(r) || r.job === null || (workers.get(r.job) ?? 0) <= (cap.get(r.job) ?? 0)) continue;
       const list = staff.get(r.job);
       if (list) list.push(r);
       else staff.set(r.job, [r]);

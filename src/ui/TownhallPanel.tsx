@@ -131,6 +131,7 @@ function RuleTab({ v }: { v: GovView }) {
         {v.head ? (
           <>
             <Person p={v.head} />
+            <p class="mk-note">{L("Глава работает писарем в ратуше и занимает одно из её мест.", "The head works as a clerk in the town hall and takes one of its places.")}</p>
             {v.form === "republic" && (
               <p class={v.terms > 1 ? "mk-note is-warn" : "mk-note"}>
                 {v.terms > 1 ? L(`Идёт ${v.terms}-й срок подряд: выберите нового главу, чтобы жители успокоились.`, `Term ${v.terms} in a row: choose a new head to calm the residents.`) : L(`Срок кончится через ${daysText(days(v.termEnd - now))}.`, `The term ends in ${daysText(days(v.termEnd - now))}.`)}

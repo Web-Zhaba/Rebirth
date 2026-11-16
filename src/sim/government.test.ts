@@ -4,7 +4,9 @@ import { adminOf } from "./governance";
 import { choices, chooseHead, GOV, govEffect, govStep, govView, recordDay, setForm, setTerm, termMinutes, traitOf, TRAITS } from "./government";
 import { emptyGrowth, seedOf } from "./growth";
 import { parseSave } from "./save";
-import { emptyRoads } from "./roads";
+import { addRoad, emptyRoads } from "./roads";
+import { chooseHeadCmd } from "./leverCmds";
+import { rebalanceJobs } from "./people";
 import { YEAR_MIN } from "./time";
 import type { Building, City, Resident, SimState } from "./types";
 import { emptyZones } from "./zones";
@@ -91,10 +93,27 @@ describe("the government", () => {
     expect(seen.size).toBe(Object.keys(TRAITS).length);
   });
 
-  it("the form changes at most once a year", () => {
+  it("the form changes at most once in five years, unless forced from the developer panel", () => {
     const s = ok(setForm(opened(), "republic"));
     expect(setForm(s, "monarchy")).toMatchObject({ ok: false });
-    expect(setForm({ ...s, gameMinutes: s.gameMinutes + YEAR_MIN }, "monarchy")).toMatchObject({ ok: true });
+    expect(setForm({ ...s, gameMinutes: s.gameMinutes + 4 * YEAR_MIN }, "monarchy")).toMatchObject({ ok: false });
+    expect(setForm({ ...s, gameMinutes: s.gameMinutes + 5 * YEAR_MIN }, "monarchy")).toMatchObject({ ok: true });
+    expect(setForm(s, "monarchy", true)).toMatchObject({ ok: true });
+  });
+
+  it("the head works as a clerk of the town hall and keeps the place when the hall is full", () => {
+    const r = addRoad(emptyRoads(), [[-50, 0], [50, 0]], "dirt", 1, [0]);
+    if (!r.ok) throw new Error(r.reason);
+    let s = opened({ ...world(), roads: r.graph });
+    const id = choices(s).ids[0];
+    // the hall is full of other clerks already
+    const others = Object.values(s.residents).filter((x) => x.id !== id).slice(0, BUILDINGS.townhall.jobs);
+    s = { ...s, residents: { ...s.residents, ...Object.fromEntries(others.map((x) => [x.id, { ...x, job: 9 }])) } };
+    const c = chooseHeadCmd(s, id);
+    if (!c.ok) throw new Error(c.reason);
+    expect(c.sim.residents[id].job).toBe(9);
+    expect(Object.values(c.sim.residents).filter((x) => x.job === 9).length).toBeLessThanOrEqual(BUILDINGS.townhall.jobs); // the others in tents lose theirs; the head never
+    expect(rebalanceJobs(c.sim).residents[id].job).toBe(9);
   });
 
   it("records a row a day and keeps the government and the records in the save", () => {

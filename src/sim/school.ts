@@ -8,7 +8,7 @@ import type { Resident, SimState } from "./types";
 const ADULT_FROM = SERVICE.schoolTo;
 const ADULT_TO = 60;
 
-export type SchoolState = Pick<SimState, "buildings" | "residents" | "households" | "coverage" | "gameMinutes" | "levers">;
+export type SchoolState = Pick<SimState, "buildings" | "residents" | "households" | "coverage" | "gameMinutes" | "levers"> & Partial<Pick<SimState, "gov">>;
 
 export const schoolSeats = (s: Pick<SimState, "buildings">): number =>
   Object.values(s.buildings).reduce((n, b) => n + (b.state === "active" ? (BUILDINGS[b.template]?.seats ?? 0) : 0), 0);
@@ -30,7 +30,7 @@ export function classPupils(s: SchoolState): Set<number> {
     for (const r of people) {
       if (out.size >= seats) return;
       const age = (s.gameMinutes - r.born) / YEAR_MIN;
-      if (wanted(age, r) && !isTeacher(r) && inReach(r)) out.add(r.id);
+      if (wanted(age, r) && !isTeacher(r) && r.id !== s.gov?.head && inReach(r)) out.add(r.id); // the head sits in the town hall
     }
   };
   take((age) => age >= SERVICE.schoolFrom && age < SERVICE.schoolTo);

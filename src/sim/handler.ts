@@ -572,6 +572,12 @@ export class Handler {
         else if (op.k === "stock") this.save = { ...this.save, sim: grantStock(sim) };
         else if (op.k === "unlock") this.save = { ...this.save, sim: unlockAll(sim) };
         else if (op.k === "era") this.save = { ...this.save, sim: nextEra(sim) };
+        else if (op.k === "form") {
+          if (!sim.gov) return reject(L("Сначала постройте ратушу", "Build a town hall first"));
+          const r = setFormCmd(sim, sim.gov.form === "monarchy" ? "republic" : "monarchy", true);
+          if (!r.ok) return reject(r.reason);
+          this.save = { ...this.save, sim: r.sim };
+        }
         else if (op.k === "reveal") {
           const r = reveal(sim, op.x, op.y, op.r);
           if (!r.ok) return reject(r.reason);
