@@ -9,7 +9,7 @@ import { attachRoadTool } from "./map/roadTool";
 import { attachLandTool } from "./map/landTool";
 import { previewClock, previewNow, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
-import { city, frame, state, gameClock, gameMinPerSec, gameNow, lifeLights, lifeRests, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
+import { city, frame, state, gameClock, gameMinPerSec, gameNow, lifeRests, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
 import type { Speed } from "./sim/clock";
 import { platform } from "./platform";
 import { soundPaused } from "./ui/sound";
@@ -69,7 +69,7 @@ const engineMount = await tryMountEngineView({
   weather: weatherNow,
   cloudSite,
   debug3dModels: import.meta.env.DEV && localStorage.getItem("debug3dModels") === "1",
-  life: { trips: lifeTrips, rests: lifeRests, lights: lifeLights, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById },
+  life: { trips: lifeTrips, rests: lifeRests, gameMinutes: gameClock, gameMinPerSec, frame, onWalker: followResidentById },
 });
 if (engineMount) start(engineMount.view);
 // Without the engine the page explains why; the portal still has to drop its loader to show that.
