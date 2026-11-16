@@ -2,6 +2,7 @@ import { computed, effect, signal } from "@preact/signals";
 import { flash } from "../map/tools";
 import { sendCmd, state } from "../simClient";
 import { rightPanel } from "./panels";
+import { play } from "./sound";
 import { buildTechView, techBadge } from "./techModel";
 import { L } from "../i18n";
 
@@ -31,6 +32,7 @@ export const badge = computed(() => {
 async function run(cmd: "startResearch" | "queueResearch" | "cancelResearch", techId: string): Promise<void> {
   const r = await sendCmd({ type: cmd, techId });
   if (!r.ok) flash(r.reason ?? L("Не вышло", "That didn't work"));
+  else play(cmd === "cancelResearch" ? "unpin" : "pin");
 }
 export const startTech = (id: string) => run("startResearch", id);
 export const queueTech = (id: string) => run("queueResearch", id);

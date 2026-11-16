@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { Icon } from "./Icon";
-import { Button, IconButton, ProgressBar } from "./kit";
+import { Button, IconButton } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { cancelTech, queueTech, selectedTech, startTech, techView } from "./techState";
 import { eraLabel, formatDays, type TechLane, type TechNode, type TechView } from "./techModel";
@@ -265,34 +265,82 @@ export function TechPanel() {
             </aside>
           )}
         </div>
-        <footer class="tech-foot">
-          {v.active ? (
-            <div class="tf-now">
-              <button type="button" class="link tf-name" onClick={() => select(v.active!.id)}>
-                {L("Исследуется:", "Researching:")} {v.active.name}
-              </button>
-              <ProgressBar value={v.active.share} label={L(`${v.active.name}: готово ${Math.floor(v.active.share * 100)} %`, `${v.active.name}: ${Math.floor(v.active.share * 100)}% done`)} />
-              <span class="tl-why">
-                {Math.floor(v.active.share * 100)}{L(" %, осталось", "%, left:")} {formatDays(v.active.days)}
-              </span>
-              <IconButton icon="close" size={14} label={`${L("Отменить исследование", "Cancel research")}: ${v.active.name}`} onClick={() => void cancelTech(v.active!.id)} />
-            </div>
-          ) : (
-            <p class="tf-idle" role="status">
-              {L("Наука простаивает: выберите, что изучать.", "Research is idle: choose what to study.")}
-            </p>
-          )}
-          <div class="tf-queue">
-            <span class="tl-why">{L("В очереди", "Queued")} {v.queue.length} {L("из", "of")} {MAX_QUEUE}</span>
-            {v.queue.map(({ node }) => (
-              <span key={node.id} class="tf-chip">
-                {node.name}
-                <IconButton icon="close" size={12} label={`${L("Убрать из очереди", "Remove from queue")}: ${node.name}`} onClick={() => void cancelTech(node.id)} />
-              </span>
-            ))}
-          </div>
-        </footer>
+        <Desk v={v} />
       </div>
     </div>
+  );
+}
+
+// The study desk along the foot: the tech under way is a leaf read through a loupe whose rim fills as the work goes;
+// the queue hangs beside it as leaves pinned to the wall, a bare nail for each free place.
+function Desk({ v }: { v: TechView }) {
+  const a = v.active;
+  const done = a ? Math.floor(a.share * 100) : 0;
+  return (
+    <footer class="tech-foot">
+      <div class={`tf-desk${a ? " on" : ""}`}>
+        <div
+          class="tf-loupe"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={done}
+          aria-label={a ? L(`${a.name}: готово ${done} %`, `${a.name}: ${done}% done`) : L("Под лупой пусто", "Nothing under the loupe")}
+        >
+          <div class="tf-glass">
+            {a && (
+              <div class={`tf-leaf dom-${a.domain}`} key={a.id}>
+                <span class="tf-leaf-name">{a.name}</span>
+              </div>
+            )}
+          </div>
+          <svg class="tf-frame" viewBox="0 0 132 132" aria-hidden="true">
+            <path class="tf-handle" d="M88 88 L124 124" />
+            <circle class="tf-rim" cx="54" cy="54" r="46" />
+            <circle class="tf-done" cx="54" cy="54" r="46" pathLength={100} style={{ strokeDashoffset: 100 - done }} />
+            <path class="tf-glint" d="M26 44 A30 30 0 0 1 42 24" />
+          </svg>
+        </div>
+        {a ? (
+          <div class="tf-now">
+            <span class="tr-cap">{L("Исследуется", "Researching")}</span>
+            <button type="button" class="link tf-name" onClick={() => select(a.id)}>
+              {a.name}
+            </button>
+            <span class="tl-why">
+              {done}
+              {L(" %, осталось", "%, left:")} {formatDays(a.days)}
+            </span>
+            <Button variant="danger" class="tf-cancel" onClick={() => void cancelTech(a.id)}>
+              {L("Отменить", "Cancel")}
+            </Button>
+          </div>
+        ) : (
+          <p class="tf-idle" role="status">
+            {L("Наука простаивает: выберите, что изучать.", "Research is idle: choose what to study.")}
+          </p>
+        )}
+      </div>
+      <div class="tf-wall" role="group" aria-label={L("Очередь исследований", "Research queue")}>
+        <span class="tr-cap tf-wall-cap">
+          {L("В очереди", "Queued")} {v.queue.length} {L("из", "of")} {MAX_QUEUE}
+        </span>
+        {Array.from({ length: MAX_QUEUE }, (_, i) => {
+          const q = v.queue[i];
+          if (!q) return <span key={`nail-${i}`} class="tf-nail" aria-hidden="true" />;
+          const { node, waits } = q;
+          return (
+            <div key={node.id} class={`tf-note dom-${node.domain}`} style={{ "--i": i }}>
+              <i class="tf-pin" aria-hidden="true" />
+              <button type="button" class="tf-note-body" onClick={() => select(node.id)}>
+                <span class="tf-note-name">{node.name}</span>
+                <span class="tf-note-sub">{waits ? `${L("ждёт", "waits for")}: ${waits}` : formatDays(node.days)}</span>
+              </button>
+              <IconButton icon="close" size={12} label={`${L("Убрать из очереди", "Remove from queue")}: ${node.name}`} onClick={() => void cancelTech(node.id)} />
+            </div>
+          );
+        })}
+      </div>
+    </footer>
   );
 }
