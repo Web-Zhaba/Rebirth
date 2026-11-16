@@ -2,7 +2,7 @@ import { signal } from "@preact/signals";
 
 // Optional UI sounds, synthesized with the Web Audio API (no files). Off by default; the AudioContext is created lazily
 // on the first play, which always comes from a user gesture or a game event after one. Nothing here ever throws.
-export type SoundName = "click" | "place" | "finished" | "notify" | "error";
+export type SoundName = "click" | "place" | "finished" | "notify" | "error" | "stamp" | "proclaim" | "page";
 
 interface Note {
   f: number; // Hz
@@ -28,6 +28,25 @@ const NOTES: Record<SoundName, Note[]> = {
     { f: 1320, at: 0.02, len: 0.35, gain: 0.3 },
   ],
   error: [{ f: 150, at: 0, len: 0.16, type: "square", gain: 0.5 }],
+  // an order sealed in the town hall: a dull stamp on paper and a short tick
+  stamp: [
+    { f: 110, at: 0, len: 0.09, type: "triangle", gain: 0.9 },
+    { f: 220, at: 0.005, len: 0.05, type: "triangle", gain: 0.35 },
+    { f: 1760, at: 0.06, len: 0.04, gain: 0.15 },
+  ],
+  // a new head of the town: two knocks of the gavel, then a rising chord
+  proclaim: [
+    { f: 196, at: 0, len: 0.07, type: "triangle", gain: 0.8 },
+    { f: 196, at: 0.14, len: 0.07, type: "triangle", gain: 0.8 },
+    { f: 392, at: 0.3, len: 0.35, gain: 0.45 },
+    { f: 494, at: 0.38, len: 0.32, gain: 0.35 },
+    { f: 587, at: 0.46, len: 0.45, gain: 0.35 },
+  ],
+  // a page of the town's books turned: a soft rustle up
+  page: [
+    { f: 1300, at: 0, len: 0.05, type: "triangle", gain: 0.18 },
+    { f: 1700, at: 0.035, len: 0.06, type: "triangle", gain: 0.14 },
+  ],
 };
 
 const KEY = "rebirth.sound";

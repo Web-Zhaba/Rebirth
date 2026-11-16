@@ -7,6 +7,7 @@ import { DIG, growDig, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, lotFront, MAX_EVENTS, productionScales } from "./people";
 import { haulHours, Ledger } from "./storage";
 import { adminOf, adminFactor } from "./governance";
+import { govEffect } from "./government";
 import { buildingPriority } from "./jobs";
 import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
@@ -205,7 +206,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
   let events = s.events;
   let buildings = s.buildings;
   const shopMul = workshopMul(s.progress);
-  const admin = adminFactor(s); // past what the offices can manage every work goes slower
+  const admin = adminFactor(s); // past what the offices can manage every work goes slower; the head's hand too
   // food that finds no room in the stores rots
   const addFood = (kg: number, at: [number, number]) => {
     const { stored } = ledger.put("food", kg, at);
@@ -527,6 +528,7 @@ export function dailyEconomy(s: SimState): SimState {
   // mood
   const households: Record<number, Household> = {};
   const weatherMood = moodShift(s.weather);
+  const govMood = govEffect(s).mood; // the head of the town, or the want of one (sim/government.ts)
   const idle = idleResidents(s);
   const monuments = finishedMonuments(s.buildings);
   for (const h of Object.values(s.households)) {
@@ -548,7 +550,7 @@ export function dailyEconomy(s: SimState): SimState {
     const home = h.home !== null ? s.buildings[h.home] : undefined;
     const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMoodAt(monuments, home.lot.cx, home.lot.cy) + districtMood(s.progress, s.finds, home.lot.cx, home.lot.cy) : 0) : 0;
     const needMood = needMoodTerm(householdSatisfaction(h.members, s.residents));
-    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0) + needMood));
+    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + govMood + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0) + needMood));
     const next: Household = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep, served: served.get(h.id) ?? 0 };
     if (cold.has(h.id)) next.cold = true;
     else delete next.cold;

@@ -6,8 +6,9 @@ import { selectedClearing } from "../view/layers/land";
 import { cancelUiState } from "./inputModel";
 
 // The right-hand slot holds one panel at a time: the inspector of the selected
-// building or clearing, the town panel, the notebook, the science panel, the museum, the market or an old building to restore.
-export type RightPanel = "inspector" | "town" | "notebook" | "tech" | "museum" | "market" | "heritage";
+// building or clearing, the town panel, the notebook, the science panel, the museum, the market, the town hall or an old
+// building to restore.
+export type RightPanel = "inspector" | "town" | "notebook" | "tech" | "museum" | "market" | "townhall" | "heritage";
 
 export const rightPanel = signal<RightPanel | null>(null);
 

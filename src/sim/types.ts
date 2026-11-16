@@ -1,3 +1,4 @@
+import type { Government, GovView, HistoryRow } from "./government";
 import type { JobGroup, Materials } from "./buildings";
 import type { Levers } from "./levers";
 import type { DomainId } from "./domains";
@@ -170,6 +171,8 @@ export interface Resident {
   school: number; // literacy progress 0..100: grows on school days, see learnPerDay
   inClass?: boolean; // in class today: children 7-14 and, when ordered, illiterate grown-ups; they do no work
   needs?: Needs; // absent in saves from before the needs system: treated as full
+  mother?: number; // resident ids of the parents (they may be gone); absent for the founders' parents and old saves' grown-ups
+  father?: number;
 }
 
 export interface Household {
@@ -184,7 +187,7 @@ export interface Household {
   served?: number; // share of its goods the household got at the last midnight, 0..1 (none yet: not counted)
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage" | "discovery"; // goal and unlock are no longer made: old saves still carry them
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage" | "discovery" | "head"; // goal and unlock are no longer made: old saves still carry them
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -389,6 +392,8 @@ export interface SimState extends PeopleState {
   levers: Levers; // player levers
   progress: ProgressState; // researched techs, the research under way, eras
   weather: WeatherState; // climate at the town
+  gov: Government | null; // the head of the town and the form of rule, once a town hall stands (sim/government.ts)
+  history: HistoryRow[]; // the town's records at every midnight since the town hall opened
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
@@ -504,6 +509,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   museumStaff: Record<number, number>; // finished museum id -> share of its jobs filled: the strength of its halls (sim/museum.ts)
   callBlock: string | null; // why a call for settlers cannot be made now, or null
   inflow: { free: number; perDay: number }; // free homes and the families a day the town draws now (sim/attraction.ts)
+  govView: GovView | null; // the head, the choice and the government's effect (sim/government.ts)
 };
 
 // What the main thread keeps.

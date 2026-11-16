@@ -25,7 +25,7 @@ const BUCKET = 32; // m, spatial hash
 const LOT_MARGIN = 1; // m, lots are expanded by this when testing cells and occupancy
 const ROAD_SLACK = 2; // m, front of a lot may sit this far beyond the road edge
 
-type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "stock" | "stores" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attraction" | "summary" | "levers" | "progress" | "weather"> & PeopleState;
+type Growth = Pick<SimState, "buildings" | "clearings" | "nextBuildingId" | "rng" | "stock" | "stores" | "prod" | "coverage" | "landValue" | "chronicle" | "finds" | "articles" | "incoming" | "attraction" | "summary" | "levers" | "progress" | "weather" | "gov" | "history"> & PeopleState;
 
 // A fresh village at game minute `now`: the founders already live in their tents.
 export function emptyGrowth(seed: number, now = 0): Growth {
@@ -49,6 +49,8 @@ export function emptyGrowth(seed: number, now = 0): Growth {
     levers: emptyLevers(),
     progress: initialProgress(),
     weather: emptyWeather(),
+    gov: null,
+    history: [],
     ...f.people,
   };
 }

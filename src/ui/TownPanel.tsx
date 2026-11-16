@@ -1,26 +1,26 @@
 import { signal } from "@preact/signals";
 import type { View } from "../view/view";
 import { atLeastAsClose, CLOSE_UP_MPP, TOWN_VIEW_MPP } from "../view/scale";
-import { useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { calendar } from "../sim/clock";
 import { JOB_GROUPS, JOB_NAMES, type JobKey, type Priority } from "../sim/buildings";
-import { CALL, RATIONS, workHours, type Rations } from "../sim/levers";
+import { CALL, workHours } from "../sim/levers";
 import { SERVICE_LIST } from "../sim/services";
 import { INFLOW } from "../sim/attraction";
 import type { City } from "../sim/types";
 import { massText } from "../sim/units";
-import { economy, events, frame, incomingCount, people, reset, roads, services, state, zones } from "../simClient";
+import { economy, events, frame, incomingCount, people, roads, services, state, zones } from "../simClient";
 import { Icon } from "./Icon";
 import { act, Line, plural } from "./InspectorParts";
 import { jobNotes, JOB_ICON, PRIORITY_LONG, PRIORITY_SHORT } from "./jobsModel";
-import { Button, Confirm, IconButton, ProgressBar, Segmented, Tabs, type TabItem } from "./kit";
+import { Button, IconButton, ProgressBar, Segmented, Tabs, type TabItem } from "./kit";
 import { closePanel, rightPanel } from "./panels";
 import { amount, pad, roadQueue } from "./topbarModel";
 import { effectLines, weatherReason } from "./weatherModel";
 import { tabId, tabPanelId } from "./tabSemantics";
 import { SEMANTIC_IDS } from "./semanticIds";
 import { placesView } from "./placesModel";
+import { openTownhall, hallReady } from "./TownhallPanel";
 import { decimal, L } from "../i18n";
 
 type Tab = "people" | "work" | "services" | "events" | "places" | "orders";
@@ -31,8 +31,9 @@ const TABS: TabItem<Tab>[] = [
   { id: "services", label: L("Службы", "Services") },
   { id: "events", label: L("События", "Events") },
   { id: "places", label: L("Места", "Places") },
-  { id: "orders", label: L("Приказы", "Orders") },
 ];
+// «Приказы» is no section of its own: it opens the town hall window, and stays shut until a town hall stands.
+const ORDERS = L("Приказы", "Orders");
 
 const tab = signal<Tab>("people");
 
@@ -80,7 +81,6 @@ function JobsBlock() {
   );
 }
 
-const RATION_IDS: Rations[] = ["reduced", "normal", "generous"];
 
 
 const pct = (v: number) => `${Math.round(v * 100)}${L(" %", "%")}`;
@@ -114,6 +114,19 @@ function AttractionBlock() {
   );
 }
 
+// A call for settlers: food and goods for a family that comes within a day.
+function CallSettlers() {
+  const block = state.value?.callBlock ?? null;
+  return (
+    <div class="orders-row">
+      <Button aria-label={L("Призвать поселенцев", "Call settlers")} disabled={block !== null} onClick={() => act({ type: "callSettlers" })}>
+        {L("Призвать поселенцев", "Call settlers")}
+      </Button>
+      <span class={block ? "people-note" : "hud-date"}>{block ?? L(`Стоит ${CALL.food} кг еды и ${CALL.goods} шт одежды, посуды или утвари`, `Costs ${CALL.food} kg of food and ${CALL.goods} pieces of clothing, dishes or furnishings`)}</span>
+    </div>
+  );
+}
+
 function PeopleTab() {
   const p = people.value;
   const sv = services.value;
@@ -140,6 +153,7 @@ function PeopleTab() {
       </Line>
       <Line label={L("В пути", "On the way")}>{incomingCount.value > 0 ? `${incomingCount.value} ${families(incomingCount.value)}` : L("никого", "no one")}</Line>
       <AttractionBlock />
+      <CallSettlers />
       {sv && sv.houses > 0 && <Line label={L("Грамотные", "Literate")}>{Math.round(sv.literate * 100)}{L(" % взрослых", "% of adults")}</Line>}
       {eco && eco.avgMood > 0 && (
         <Line icon="mood" label={L("Настроение", "Mood")}>
@@ -322,80 +336,7 @@ function EventsTab({ view }: { view: View }) {
   );
 }
 
-// «Распоряжения»: workday schedule, rations and a call for settlers; then the restart.
-function OrdersTab() {
-  const [confirming, setConfirming] = useState(false);
-  const s = state.value;
-  const lv = s?.levers;
-  if (!s || !lv) return null;
-  const block = s.callBlock;
-  return (
-    <div class="rs-list orders" role="group" aria-label={L("Приказы", "Orders")}>
-      <div class="orders-row">
-        <Button
-          aria-label={L("Долгий день", "Long day")}
-          aria-pressed={lv.strada}
-          variant={lv.strada ? "primary" : "default"}
-          title={L("Работа с 05 до 21 часа: на треть больше труда, но настроение ниже на 8", "Work from 05:00 to 21:00: a third more labour, but mood is 8 lower")}
-          onClick={() => act({ type: "setSchedule", strada: !lv.strada })}
-        >
-          {lv.strada ? L("Долгий день: до 21:00", "Long day: until 21:00") : L("Обычный день: 07–19", "Normal day: 07–19")}
-        </Button>
-        <Button
-          aria-label={L("Взрослые в школу", "Adults to school")}
-          aria-pressed={lv.adultSchool}
-          variant={lv.adultSchool ? "primary" : "default"}
-          title={L("Неграмотные взрослые ходят в школу вместо работы, пока не выучатся. Места в школах ограничены: 30 на школу, сначала дети", "Illiterate adults go to school instead of work until they learn. School places are limited: 30 per school, children first")}
-          onClick={() => act({ type: "setAdultSchool", on: !lv.adultSchool })}
-        >
-          {lv.adultSchool ? L("Взрослые учатся", "Adults study") : L("Взрослые работают", "Adults work")}
-        </Button>
-      </div>
-      <div class="orders-row" role="radiogroup" aria-label={L("Нормы еды", "Rations")}>
-        {RATION_IDS.map((id) => (
-          <Button
-            key={id}
-            role="radio"
-            aria-checked={lv.rations === id}
-            aria-label={`${L("Нормы еды", "Rations")}: ${RATIONS[id].name.toLowerCase()}`}
-            variant={lv.rations === id ? "primary" : "default"}
-            title={`${L("Еда", "Food")} ${RATIONS[id].food * 100 - 100 > 0 ? "+" : ""}${Math.round(RATIONS[id].food * 100 - 100)}${L(" %, настроение", "%, mood")} ${RATIONS[id].mood > 0 ? "+" : ""}${RATIONS[id].mood}`}
-            onClick={() => act({ type: "setRations", rations: id })}
-          >
-            {RATIONS[id].name}
-          </Button>
-        ))}
-      </div>
-      <div class="orders-row">
-        <Button aria-label={L("Призвать поселенцев", "Call settlers")} disabled={block !== null} onClick={() => act({ type: "callSettlers" })}>
-          {L("Призвать поселенцев", "Call settlers")}
-        </Button>
-      </div>
-      <div class={block ? "people-note" : "hud-date"}>{block ?? L(`Стоит ${CALL.food} кг еды и ${CALL.goods} шт одежды, посуды или утвари`, `Costs ${CALL.food} kg of food and ${CALL.goods} pieces of clothing, dishes or furnishings`)}</div>
-      <div class="rs-danger">
-        <Button variant="danger" icon="trash" onClick={() => setConfirming(true)}>
-          {L("Начать заново", "Start over")}
-        </Button>
-      </div>
-      {confirming && (
-        <Confirm
-          title={L("Начать заново?", "Start over?")}
-          okLabel={L("Удалить поселение", "Delete the settlement")}
-          onOk={() => {
-            setConfirming(false);
-            closePanel();
-            reset();
-          }}
-          onCancel={() => setConfirming(false)}
-        >
-          {L("Поселение и всё, что в нём построено, будет удалено. Вернуть его не получится.", "The settlement and everything built in it will be deleted. It cannot be recovered.")}
-        </Confirm>
-      )}
-    </div>
-  );
-}
-
-// Town panel (right slot): people, work and demand, services, events and orders.
+// Town panel (right slot): people, work and demand, services, events, places; «Приказы» opens the town hall.
 export function TownPanel({ city, view }: { city: City; view: View }) {
   if (rightPanel.value !== "town") return null;
   return (
@@ -410,14 +351,19 @@ export function TownPanel({ city, view }: { city: City; view: View }) {
         </div>
         <IconButton icon="close" size={16} label={L("Закрыть", "Close")} onClick={closePanel} />
       </div>
-      <Tabs tabs={TABS} active={tab.value} onChange={(id) => (tab.value = id)} label={L("Разделы города", "Town sections")} idPrefix="town" />
+      <Tabs
+        tabs={[...TABS, { id: "orders", label: ORDERS, disabled: !hallReady(), title: hallReady() ? L("Открыть ратушу", "Open the town hall") : L("Приказы отдаются из ратуши: сначала постройте её", "Orders are given from the town hall: build one first") }]}
+        active={tab.value}
+        onChange={(id) => (id === "orders" ? openTownhall("orders") : (tab.value = id))}
+        label={L("Разделы города", "Town sections")}
+        idPrefix="town"
+      />
       <div class="rs-body" role="tabpanel" id={tabPanelId("town", tab.value)} aria-labelledby={tabId("town", tab.value)}>
         {tab.value === "people" && <PeopleTab />}
         {tab.value === "work" && <WorkTab city={city} view={view} />}
         {tab.value === "services" && <ServicesTab />}
         {tab.value === "events" && <EventsTab view={view} />}
         {tab.value === "places" && <PlacesTab />}
-        {tab.value === "orders" && <OrdersTab />}
       </div>
     </aside>
   );

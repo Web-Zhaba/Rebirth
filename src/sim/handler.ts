@@ -12,7 +12,8 @@ import { returnFind, useFind } from "./items";
 import { arrangeExhibitions, museumDaily, museumStaff, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
-import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, nameStall, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
+import { govView } from "./government";
+import { callBlock, callSettlers, callToloka, chooseHeadCmd, setFormCmd, setTermCmd, grantSupplies, setAdultSchool, setJobPriority, setPriority, nameStall, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
@@ -75,7 +76,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   const ps = peopleStats(sim);
   const free = freeHomes(sim.buildings, sim.households, sim.incoming).length;
   const underway = Object.values(sim.buildings).filter((b) => b.zone === "res" && b.state !== "active").length;
-  return { ...rest, people: { ...ps, housing: { tents: ps.tents, free, underway }, jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim), museumStaff: museumStaff(sim) };
+  return { ...rest, people: { ...ps, housing: { tents: ps.tents, free, underway }, jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim), museumStaff: museumStaff(sim), govView: govView(sim) };
 }
 
 // The inflow the town draws right now: its free homes and the families a day they bring (attraction.ts).
@@ -535,7 +536,7 @@ export class Handler {
         }
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
-      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "grantSupplies" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade" || cmd.type === "nameStall") {
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "grantSupplies" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade" || cmd.type === "nameStall" || cmd.type === "chooseHead" || cmd.type === "setGovForm" || cmd.type === "setTerm") {
         const r =
           cmd.type === "setPriority" ? setPriority(sim, cmd.key)
           : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
@@ -547,6 +548,9 @@ export class Handler {
           : cmd.type === "setTrade" ? setTrade(sim, cmd.orders)
           : cmd.type === "nameStall" ? nameStall(sim, cmd.index, cmd.name)
           : cmd.type === "grantSupplies" ? grantSupplies(sim)
+          : cmd.type === "chooseHead" ? chooseHeadCmd(sim, cmd.id)
+          : cmd.type === "setGovForm" ? setFormCmd(sim, cmd.form)
+          : cmd.type === "setTerm" ? setTermCmd(sim, cmd.term)
           : callSettlers(sim);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };

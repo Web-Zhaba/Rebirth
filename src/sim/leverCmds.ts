@@ -12,6 +12,7 @@ import { nextRandom } from "./rng";
 import { cleanOrder, isTradeOrder, STALL_NAME_MAX, TRADE_NAME, type TradeOrder } from "./trade";
 import { MAX_TRADE_SLOTS, tradeLimits, tradeSlots } from "./tech";
 import { calendar } from "./time";
+import { chooseHead, seatActive, setForm, setTerm, type Form, type GovResult, type Term } from "./government";
 import type { SimState } from "./types";
 import { L } from "../i18n";
 
@@ -60,9 +61,13 @@ export function callToloka(s: SimState, key: number): LeverResult {
   return done(set(s, { toloka: { site: key, until: workEndAt(s.gameMinutes, s.levers) }, tolokaReady: s.gameMinutes + TOLOKA_COOLDOWN }), L(`Общий сбор: все взрослые идут на ${site.name}, остальные дела стоят до вечера`, `All hands: every adult goes to ${site.name}, other work waits until evening`));
 }
 
+// The orders are given from the town hall: without one only an order back to the default goes through.
+export const ORDERS_CLOSED = L("Приказы отдаются из ратуши: сначала постройте её", "Orders are given from the town hall: build one first");
+
 export function setSchedule(s: SimState, strada: boolean): LeverResult {
   if (typeof strada !== "boolean") return fail(L("Некорректный распорядок", "Invalid schedule"));
   if (s.levers.strada === strada) return { ok: true, sim: s };
+  if (strada && !seatActive(s.buildings)) return fail(ORDERS_CLOSED);
   const next = set(s, { strada });
   const w = workHours(next);
   return done(next, strada ? L(`Долгий день: работают с ${w.start} до ${w.end} часов, люди устают`, `Long day: work from ${w.start}:00 to ${w.end}:00, people get tired`) : L(`Обычный распорядок: работа с ${w.start} до ${w.end} часов`, `Normal schedule: work from ${w.start}:00 to ${w.end}:00`));
@@ -72,6 +77,7 @@ export function setSchedule(s: SimState, strada: boolean): LeverResult {
 export function setAdultSchool(s: SimState, on: boolean): LeverResult {
   if (typeof on !== "boolean") return fail(L("Некорректный приказ", "Invalid order"));
   if (s.levers.adultSchool === on) return { ok: true, sim: s };
+  if (on && !seatActive(s.buildings)) return fail(ORDERS_CLOSED);
   const withLever = set(s, { adultSchool: on });
   const inClass = classPupils(withLever);
   const residents = { ...s.residents };
@@ -83,6 +89,7 @@ export function setAdultSchool(s: SimState, on: boolean): LeverResult {
 export function setRations(s: SimState, rations: Rations): LeverResult {
   if (typeof rations !== "string" || !Object.hasOwn(RATIONS, rations)) return fail(L("Неизвестные нормы еды", "Unknown rations"));
   if (s.levers.rations === rations) return { ok: true, sim: s };
+  if (rations !== "normal" && !seatActive(s.buildings)) return fail(ORDERS_CLOSED);
   return done(set(s, { rations }), `${L("Нормы еды", "Rations")}: ${RATIONS[rations].name.toLowerCase()}`);
 }
 
@@ -137,6 +144,12 @@ export function setStaff(s: SimState, id: number, staff: number): LeverResult {
   const nb = staff >= jobs ? rest : { ...rest, staff };
   return { ok: true, sim: rebalanceJobs({ ...s, buildings: { ...s.buildings, [id]: nb } }) };
 }
+
+// The government (sim/government.ts): the head, the form of rule and the term, each said in the feed and the chronicle.
+const governed = (r: GovResult): LeverResult => (!r.ok ? fail(r.reason) : r.text ? done(r.sim, r.text) : { ok: true, sim: r.sim });
+export const chooseHeadCmd = (s: SimState, id: number): LeverResult => governed(chooseHead(s, id));
+export const setFormCmd = (s: SimState, form: Form): LeverResult => governed(setForm(s, form));
+export const setTermCmd = (s: SimState, term: Term): LeverResult => governed(setTerm(s, term));
 
 // Why a call for settlers cannot be made now, or null.
 export function callBlock(s: Pick<SimState, "stock" | "buildings" | "households" | "incoming">): string | null {

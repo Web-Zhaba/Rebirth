@@ -46,6 +46,7 @@ export interface BuildingRules {
   outdoors?: boolean; // worked in the open: the workers show on the plot (sim/life.ts), the rest work indoors
   oldKinds?: readonly string[]; // kinds of old buildings (OpenStreetMap) that come back as this one, restored as they were
   manages?: number; // an office of the administration: residents it manages when all its clerks are at work
+  seat?: boolean; // the seat of the town's head: once built it opens the government and the orders (sim/government.ts)
   keeps?: "dry" | "cool"; // a food store that keeps its food better than the camp (a barn dry, a cellar cool)
   produce?: Produce; // what its workers make (sim/production.ts)
   weather?: (w: WeatherState) => number; // share of the hours it works in this weather (default: all of them)

@@ -32,6 +32,7 @@ export const KIND_ICON: Record<EventKind, IconName> = {
   era: "flag",
   heritage: "scroll",
   discovery: "foundations",
+  head: "townhall",
 };
 
 export const KIND_TONE: Record<EventKind, ToastTone> = {
@@ -53,9 +54,10 @@ export const KIND_TONE: Record<EventKind, ToastTone> = {
   era: "ok",
   heritage: "ok",
   discovery: "ok",
+  head: "warn",
 };
 
-const IMPORTANT = new Set<EventKind>(["goal", "unlock", "tech", "era", "heritage", "discovery", "shortage", "death"]);
+const IMPORTANT = new Set<EventKind>(["goal", "unlock", "tech", "era", "heritage", "discovery", "shortage", "death", "head"]);
 export const isImportant = (k: EventKind): boolean => IMPORTANT.has(k);
 
 // The sound a fresh event gets: a finished building or a goal chimes; event cards have their own «notify».

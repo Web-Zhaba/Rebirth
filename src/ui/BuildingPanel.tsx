@@ -28,6 +28,7 @@ import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspe
 import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
 import { Button, Confirm, IconButton, ProgressBar } from "./kit";
 import { nameOfStall, openMarket, TRADE_LABEL } from "./MarketPanel";
+import { openTownhall } from "./TownhallPanel";
 import { marketView } from "./marketModel";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
@@ -272,6 +273,23 @@ function MarketSummary() {
   );
 }
 
+// The town hall at a glance: the form of rule and the head, and the way into its window (TownhallPanel.tsx).
+function HallSummary() {
+  const v = state.value?.govView;
+  return (
+    <Section title={L("Правление", "Rule")}>
+      {v && (
+        <Line label={v.form === "monarchy" ? L("Монархия", "Monarchy") : L("Республика", "Republic")} tone={v.head ? undefined : "warn"}>
+          {v.head ? `${v.head.name}, ${v.head.age} ${plural(v.head.age, "год", "года", "лет", "year")}` : L("главы нет", "no head")}
+        </Line>
+      )}
+      <Button variant="primary" onClick={() => openTownhall("rule")}>
+        {L("Открыть ратушу", "Open the town hall")}
+      </Button>
+    </Section>
+  );
+}
+
 // One resident: name and age, follow, what they do, their needs and what is hard for them.
 function PersonRow({ id, name, age, needs, problems, children }: { id: number; name: string; age: number; needs?: Needs; problems?: string[]; children: ComponentChildren }) {
   return (
@@ -468,6 +486,7 @@ export function BuildingPanel() {
         </Section>
       )}
       {BUILDINGS[b.template]?.trades && b.state === "active" && <MarketSummary />}
+      {BUILDINGS[b.template]?.seat && b.state === "active" && <HallSummary />}
       {info?.kind === "house" && (
         <Section title={L("Семьи", "Families")}>
           {info.households.length === 0 ? (

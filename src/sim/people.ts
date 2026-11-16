@@ -5,6 +5,7 @@ import { assignFields, bears, expectedKg, FIELD, foodKgHour, idleGumnos, idleOrc
 import { nextRandom } from "./rng";
 import { countServices, covers, SERVICE, SERVICE_IDS, servicesIn } from "./services";
 import { attractionOf, inflowPerDay } from "./attraction";
+import { attractMul } from "./government";
 import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
@@ -142,6 +143,8 @@ function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: numb
   for (let k = 0; k < kids; k++) {
     const sex = rand() < 0.5 ? "m" : "f";
     const kid = addPerson(w, pick(sex === "m" ? MALE_NAMES : FEMALE_NAMES, rand), surnameFor(last, sex), sex, rand() * maxKid, id);
+    kid.mother = wife.id;
+    kid.father = husband.id;
     h.members.push(kid.id);
   }
   return h;
@@ -855,6 +858,8 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
         if (rand() < chance) {
           const sex = rand() < 0.5 ? "m" : "f";
           const kid = addPerson(w, pick(sex === "m" ? MALE_NAMES : FEMALE_NAMES, rand), surnameFor(h.last, sex), sex, 0, h.id);
+          kid.mother = r.id;
+          kid.father = r.spouse;
           h.members.push(kid.id);
           say(w, "birth", L(`${sex === "m" ? "Родился" : "Родилась"} ${fullName(kid)}`, `${fullName(kid)} was born`));
         }
@@ -955,6 +960,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       services: houses > 0 ? covered / houses : 0,
       pop: Object.keys(w.residents).length,
       museum: s.progress?.museumPull ?? 0,
+      gov: attractMul(s),
     });
   })();
 

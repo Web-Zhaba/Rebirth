@@ -15,4 +15,5 @@ export const townhall: BuildingRules = {
   sizeClass: "hall",
   onePerTown: L("Ратуша уже есть: управление расширяют районные управы", "There is a town hall already: district offices extend the administration"),
   manages: 600, // residents it manages on top of the elders when all its clerks are at work (sim/governance.ts)
+  seat: true, // the head of the town sits here: the government, the orders and the town's records (sim/government.ts)
 };

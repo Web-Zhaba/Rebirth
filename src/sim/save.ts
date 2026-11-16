@@ -10,6 +10,7 @@ import { parseProgress } from "./research";
 import { MAX_TRADE_SLOTS, migrateProgress } from "./tech";
 import { emptyLevers, type Levers } from "./levers";
 import { migrateText } from "./legacyText";
+import { parseGov, parseHistory } from "./government";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
@@ -271,7 +272,7 @@ function parseNeeds(v: unknown): Needs | undefined {
   if (!keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0 && (v[k] as number) <= 100)) return undefined;
   return { food: v.food as number, rest: v.rest as number, social: v.social as number, warmth: v.warmth as number };
 }
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "discovery"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "discovery", "head"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -314,6 +315,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
       school: isNum(r.school) ? Math.min(100, Math.max(0, r.school)) : 0,
       ...(r.inClass === true ? { inClass: true } : {}),
       ...(needs ? { needs } : {}),
+      ...(Number.isInteger(r.mother) && (r.mother as number) > 0 ? { mother: r.mother as number } : {}),
+      ...(Number.isInteger(r.father) && (r.father as number) > 0 ? { father: r.father as number } : {}),
     };
   }
   const households: Record<number, Household> = {};
@@ -369,6 +372,17 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     if (r.job !== null && !isWorkplace(buildings[r.job])) {
       r.job = null;
       r.commute = null;
+    }
+  }
+  // Saves from before parents: a household's younger members are the children of its married couple.
+  for (const h of Object.values(households)) {
+    const pa = h.members.map((m) => residents[m]).find((r) => r.spouse !== null && h.members.includes(r.spouse) && r.sex === "f");
+    if (!pa) continue;
+    const pb = residents[pa.spouse!];
+    for (const m of h.members) {
+      const r = residents[m];
+      if (r === pa || r === pb || r.mother !== undefined || r.father !== undefined) continue;
+      if (r.born >= Math.max(pa.born, pb.born) + 15 * YEAR_MIN) Object.assign(r, { mother: pa.id, father: pb.id });
     }
   }
   const events: TownEvent[] = [];
@@ -617,6 +631,8 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   g.weather = parseWeather(sim.weather);
+  g.gov = parseGov(sim.gov);
+  g.history = g.gov ? parseHistory(sim.history) : [];
   return g;
 }
 

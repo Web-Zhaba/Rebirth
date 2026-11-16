@@ -1,4 +1,5 @@
-import { recordChronicle } from "./chronicle";
+import { recordChronicle, withChronicle } from "./chronicle";
+import { govStep, recordDay, seatActive } from "./government";
 import { dailyServices, refreshServices } from "./coverage";
 import { allocateClearings, clearingsFirst, CREW } from "./buildings";
 import { digDone, keepRevealed } from "./excavation";
@@ -130,9 +131,20 @@ export function step(s: SimState): SimState {
   // A workplace finished in this tick hires at once, not at the next midnight.
   if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
-  if (dayOf(next.gameMinutes) !== dayOf(s.gameMinutes)) next = eraStep(museumDaily(restoreStreets(recognise(dailyServices(dailyStep(dailyEconomy(next))))))); // a tick crossed 00:00
+  const midnight = dayOf(next.gameMinutes) !== dayOf(s.gameMinutes);
+  if (midnight) next = eraStep(museumDaily(restoreStreets(recognise(dailyServices(dailyStep(dailyEconomy(next))))))); // a tick crossed 00:00
+  if (midnight || (!next.gov && seatActive(next.buildings))) next = governStep(next); // the town hall opens the government at once
   // whatever moved on the stock alone this tick (roads, trade, arrivals, gifts) is taken into the stores
   return recordChronicle(s, settleStores(settleLevers(immigrationStep(next, BASE_TICK))));
+}
+
+// The government's midnight (or its opening): what it says goes to the feed and the chronicle; the town's records
+// gain the day (the opening day too, so the records start with it).
+function governStep(s: SimState): SimState {
+  const r = govStep(s);
+  let next = r.sim;
+  for (const m of r.said) next = withChronicle({ ...next, events: say(next.events, next.gameMinutes, m.kind, m.text) }, m.kind, m.text);
+  return recordDay(next, dayOf(next.gameMinutes));
 }
 
 // Moves the simulated time up so that at most `cap` real ms are left to catch up on.

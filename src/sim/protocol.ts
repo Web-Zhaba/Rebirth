@@ -5,6 +5,7 @@ import type { SimDelta } from "./delta";
 import type { StrokeSpan } from "./stroke";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
+import type { Form, Term } from "./government";
 import type { TradeOrder } from "./trade";
 import type { FeatureKind } from "./types";
 import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState } from "./types";
@@ -55,6 +56,9 @@ export type Cmd =
   | { type: "setRations"; rations: Rations }
   | { type: "setAdultSchool"; on: boolean }
   | { type: "callSettlers" }
+  | { type: "chooseHead"; id: number } // the head of the town, among those the form allows (sim/government.ts)
+  | { type: "setGovForm"; form: Form }
+  | { type: "setTerm"; term: Term } // seasons of a republican term
   | { type: "grantSupplies" } // the reward for a watched ad
   | { type: "setTrade"; orders: TradeOrder[] } // what the markets swap every day, in order; empty stops the trade
   | { type: "nameStall"; index: number; name: string } // the player's name for a market stall; "" gives the generated one back

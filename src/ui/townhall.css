@@ -1,0 +1,305 @@
+/* The town hall window: the market's sheet (market.css: .mk-screen, .mk-sheet, .mk-head, .mk-cap, .mk-note, .mk-foot)
+   with tabs under the head: the rule (form, head, the choice), the orders and the records as a chart. */
+
+.th-sheet {
+  --tone: var(--domain-care);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.th-tabs {
+  padding: 0 var(--sp-5);
+  border-bottom: var(--bw-hair) solid var(--rule-soft);
+}
+
+.th-body {
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.th-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* ---- the rule: form and head side by side on a wide screen, the choice under them ---- */
+
+.th-rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+}
+
+@media (min-width: 900px) {
+  .th-rule {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .th-choice {
+    grid-column: 1 / -1;
+  }
+}
+
+.th-people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-3);
+}
+
+.th-person {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--paper-raised);
+  border: var(--bw) solid var(--rule);
+  border-left: 6px solid var(--tone);
+}
+
+.th-person-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.th-person-head b {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+}
+
+.th-person-head .icon-btn {
+  margin-left: auto;
+}
+
+.th-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.th-parts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px var(--sp-2);
+  padding-bottom: 6px;
+  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
+}
+
+.th-parts li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.th-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.th-chip {
+  padding: 1px 6px;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink-2);
+  background: var(--paper-shade);
+}
+
+.th-chip.is-ok {
+  color: var(--ok-text);
+  background: var(--ok-fill);
+}
+
+.th-chip.is-bad {
+  color: var(--bad);
+  background: var(--bad-fill);
+}
+
+.th-pick {
+  align-self: flex-start;
+}
+
+/* ---- the orders ---- */
+
+.th-orders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+.th-orders .btn {
+  align-self: flex-start;
+}
+
+/* ---- the records ---- */
+
+.th-records {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.th-series {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.th-series-btn {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: var(--bw-hair) solid var(--rule-soft);
+  cursor: pointer;
+}
+
+.th-series-btn:hover {
+  border-color: var(--rule);
+}
+
+.th-series-btn.on {
+  color: var(--paper-raised);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.th-series-btn:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 2px;
+}
+
+.th-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-6, 32px);
+}
+
+.th-figures > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.th-figures b {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+.th-figures b.is-ok {
+  color: var(--ok-text);
+}
+
+.th-figures b.is-bad {
+  color: var(--bad);
+}
+
+.th-chart {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0 56px;
+}
+
+.th-chart svg {
+  display: block;
+  width: 100%;
+  height: 220px;
+  background: var(--paper-raised);
+  border-left: var(--bw) solid var(--rule);
+  border-bottom: var(--bw) solid var(--rule);
+  touch-action: none;
+}
+
+.th-grid {
+  stroke: var(--rule-soft);
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.th-area {
+  fill: var(--tone);
+  opacity: 0.16;
+}
+
+.th-line {
+  fill: none;
+  stroke: var(--tone);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.th-cursor {
+  stroke: var(--ink);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.th-y {
+  position: absolute;
+  left: 0;
+  width: 50px;
+  text-align: right;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--pencil);
+}
+
+.th-y-max {
+  top: 0;
+}
+
+.th-y-min {
+  top: calc(220px - 1em);
+}
+
+.th-x {
+  position: relative;
+  height: 1.4em;
+  font-size: var(--fs-xs);
+  color: var(--pencil);
+}
+
+.th-x span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.th-readout {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* ---- the foot: the whole effect on the town ---- */
+
+.th-foot {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+@media (max-width: 640px) {
+  .th-tabs,
+  .th-body {
+    padding-left: var(--sp-4);
+    padding-right: var(--sp-4);
+  }
+
+  .th-chart {
+    padding-left: 44px;
+  }
+
+  .th-y {
+    width: 40px;
+  }
+}
