@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.6.1](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.6.0...rebirth-v0.6.1) (2026-11-16)
+
+
+### Features
+
+* **build:** the tavern gets its own tool, the shop is the goods service, the market moves to resources ([d7451ea](https://github.com/Web-Zhaba/Rebirth/commit/d7451ea5ca64b6850a458fc4b5fee988f590890e))
+* **graphics:** shadow cascades, a sun that follows the clock, steady far trees, forest clear of lots ([adb3f8e](https://github.com/Web-Zhaba/Rebirth/commit/adb3f8e21ee11ed034229fc9583d5e8d731f4040))
+* **map:** the terrain card opens on a click and closes on a pan or Escape ([e9a3d22](https://github.com/Web-Zhaba/Rebirth/commit/e9a3d22b98bd3f8a910ca921721fe7b38404e105))
+* **models:** weaving workshop, smithy yard, timber yard and pier models; piers on piles, bridges drawn with depth ([6a10390](https://github.com/Web-Zhaba/Rebirth/commit/6a103909b380b25312eebe7b4fb423611e7ffbcb))
+* **tech:** the research desk: the tech under a loupe, the queue pinned to the wall, with sounds ([f8b9149](https://github.com/Web-Zhaba/Rebirth/commit/f8b914959e5b62d37d310043dc0ea15d97932fac))
+* **townhall:** form cards with «Продолжить», orders as charters, records as a census report ([6950aea](https://github.com/Web-Zhaba/Rebirth/commit/6950aea3c8146f76b017e8f3afe2c70846c24118))
+* **townhall:** orders are sealed and lifted by a click on the charter ([c47fbc7](https://github.com/Web-Zhaba/Rebirth/commit/c47fbc784e59fd4dd3940b9db1b48134a53b0b17))
+* **townhall:** the head of the town, the form of rule and the town's records ([044681d](https://github.com/Web-Zhaba/Rebirth/commit/044681d6710f2b11562bb4732dc9be31581c18d2))
+* **townhall:** the head works as a town hall clerk; the form changes once in five years ([3024dbe](https://github.com/Web-Zhaba/Rebirth/commit/3024dbe10a4f4717b2a9df724216243d168781e4))
+* **trade:** market window with stalls, trade research and order limits ([7cf37a3](https://github.com/Web-Zhaba/Rebirth/commit/7cf37a388c1d3b0ade5691ba04f306d5cbf830f9))
+
+
+### Bug Fixes
+
+* **clock:** a pause keeps the time reached inside the tick ([d56108c](https://github.com/Web-Zhaba/Rebirth/commit/d56108c71728beb4a74c093b842012074910ce50))
+* **platform:** CrazyGames SDK tag in the page, start without a portal SDK that fails ([fef7e37](https://github.com/Web-Zhaba/Rebirth/commit/fef7e37ef64bd54760031d5612b5b7b13ae5dd12))
+* **roads:** road hover and demolish overlays as wide as the road under them ([96e4117](https://github.com/Web-Zhaba/Rebirth/commit/96e4117e202c0fb04ff2f25a48d0e06c574f3a07))
+* the market's and a foundation dig's inspector icons pointed at icons ([01286a6](https://github.com/Web-Zhaba/Rebirth/commit/01286a6dc2db61415cd3bac5ad437602d205b0ef))
+* **townhall:** rule split in two, orders sealed or cancelled, every tab fits the sheet ([e415e8c](https://github.com/Web-Zhaba/Rebirth/commit/e415e8c5ff18efccf734196a4acd1fb38186d4eb))
+
+
+### Refactoring
+
+* **buildings:** boundary checks and the buildings section of the architecture ([3b4012a](https://github.com/Web-Zhaba/Rebirth/commit/3b4012ac8b7ed9b80634aa991b4f4a28ab46cb84))
+* **buildings:** each building's interface in its own ui.ts ([01286a6](https://github.com/Web-Zhaba/Rebirth/commit/01286a6dc2db61415cd3bac5ad437602d205b0ef))
+* **buildings:** job, chronicle, store, size class, service and placement rules in each building ([857c5a8](https://github.com/Web-Zhaba/Rebirth/commit/857c5a8f1d309b4ac0afbad26585246f889a3aa3))
+* **buildings:** no template-id checks outside the building folders ([288d891](https://github.com/Web-Zhaba/Rebirth/commit/288d891f7b09f743ac216cea6a299a99ff45f985))
+* **buildings:** one 3D model file per building ([ee36389](https://github.com/Web-Zhaba/Rebirth/commit/ee36389709671950f04c174fea46a073a277ba08))
+* **buildings:** one folder per building, rules registry ([e54a47d](https://github.com/Web-Zhaba/Rebirth/commit/e54a47d3d8bb8714bc18408902ece07e1886d487))
+* **buildings:** recipes and weather of the workplaces in their rules ([8f8e6e1](https://github.com/Web-Zhaba/Rebirth/commit/8f8e6e10008f95dc6a1229936467a182eec7d8d1))
+* **buildings:** the last per-building tables move into the rules and ui files ([bff87fa](https://github.com/Web-Zhaba/Rebirth/commit/bff87fae08c51724eb0fd36bc2f7513efd3004d8))
+* **buildings:** the offices' reach in their rules; switch and table checks ([695abe8](https://github.com/Web-Zhaba/Rebirth/commit/695abe8a2f22cbfee1737c5edceb07865a8e856d))
+* **goods:** one row per good of the stock ([9d130a0](https://github.com/Web-Zhaba/Rebirth/commit/9d130a063fe1267b7f412858075606fa74a6f6d8))
+* **life:** drop the glow halos around lit buildings ([2a01b57](https://github.com/Web-Zhaba/Rebirth/commit/2a01b5735a799ae81e6a0bbb8b9ac8013ddbea49))
+
+
+### Documentation
+
+* **architecture:** the building lists left outside the folders ([892da93](https://github.com/Web-Zhaba/Rebirth/commit/892da934fe510c18d8e974ba91ad982087a9dcd0))
+* **readme:** current version 0.6.1, aligned tables ([3746d1e](https://github.com/Web-Zhaba/Rebirth/commit/3746d1e7016eed954433da2c46a9bc084af8b8f4))
+
 ## [0.6.0](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.5.1...rebirth-v0.6.0) (2026-11-12)
 
 
