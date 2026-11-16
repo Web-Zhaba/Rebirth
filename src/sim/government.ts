@@ -390,7 +390,7 @@ export function parseGov(v: unknown): Government | null {
   return {
     since: o.since,
     form: o.form,
-    settled: o.settled !== false, // saves from before the flag had chosen already
+    settled: typeof o.settled === "boolean" ? o.settled : id(o.head) !== null || id(o.last) !== null, // saves from before the flag: chosen once a head was
     formSince: o.formSince,
     head: id(o.head),
     headSince: o.headSince,

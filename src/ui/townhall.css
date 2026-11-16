@@ -1,8 +1,9 @@
 /* The town hall window: the market's sheet (market.css: .mk-screen, .mk-sheet, .mk-head, .mk-cap, .mk-note, .mk-foot)
-   with tabs under the head. «Правление» stays on the sheet's bark: the two forms of rule as cards, then the head and
-   the choice. «Приказы» and «Записи» lay their records on moss: charters torn from bark, each sealed in resin while
-   it is in force, and a ruled census report. A torn edge is a clip-path on a ::before layer, so focus rings and the
-   seal are never cut; the shadow is a drop-shadow on the sheet itself and follows the tear. */
+   with tabs under the head. «Правление» stays on the sheet's bark and splits in two: the form of rule on the left, the
+   head on the right (shut until the form is chosen). «Приказы» and «Записи» lay their records on moss: four charters
+   torn from bark, each sealed in resin while in force, and a ruled census report with the ledger beside the chart.
+   A torn edge is a clip-path on a ::before layer, so focus rings and the seal are never cut; the shadow is a
+   drop-shadow on the sheet itself and follows the tear. Every tab fits the sheet on a desktop screen. */
 
 .th-sheet {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
@@ -14,6 +15,8 @@
 }
 
 .th-body {
+  display: block; /* the market lays its body out in two columns on a wide screen; the town hall lays out its own */
+  overflow-y: auto;
   padding: var(--sp-5);
 }
 
@@ -31,11 +34,12 @@
   letter-spacing: -0.01em;
 }
 
-.th-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  min-width: 0;
+.th-h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  line-height: 1.15;
 }
 
 /* The bark of a torn sheet, shared by the form cards, the charters and the report. */
@@ -55,76 +59,102 @@
   clip-path: polygon(0 2.4%, 2.8% 0, 100% 0, 100% 97.4%, 97.2% 100%, 0 100%);
 }
 
-/* ---- the form of rule: two cards, then «Продолжить» ---- */
+/* ---- «Правление»: the form on the left, the head on the right ---- */
 
-.th-forms {
+.th-rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-6);
+}
+
+@media (min-width: 820px) {
+  .th-rule {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+    gap: 0;
+  }
+
+  .th-form-side {
+    padding-right: var(--sp-6);
+  }
+
+  /* the halves are parted by a lenticel standing upright */
+  .th-head-side {
+    padding-left: var(--sp-6);
+    background: repeating-linear-gradient(180deg, var(--ink) 0 3px, transparent 3px 10px) left / 1.5px 100% no-repeat;
+  }
+}
+
+.th-side {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
-  max-width: 880px;
+  gap: var(--sp-3);
+  min-width: 0;
 }
 
 .th-form-cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
 }
 
 .th-form {
   position: relative;
   isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
   font: inherit;
   text-align: left;
   color: var(--ink);
   background: none;
   border: 0;
+  filter: drop-shadow(0 4px 8px rgba(12, 16, 10, 0.24));
+}
+
+button.th-form {
   cursor: pointer;
-  filter: drop-shadow(0 5px 10px rgba(12, 16, 10, 0.28));
   transition:
     transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
     filter 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.th-form:hover {
+button.th-form:hover {
   transform: translateY(-2px);
-  filter: drop-shadow(0 9px 14px rgba(12, 16, 10, 0.34));
+  filter: drop-shadow(0 8px 13px rgba(12, 16, 10, 0.32));
 }
 
-/* the chosen card is ruled round in tar along its tear */
+/* the chosen card is ruled round in tar along its tear, with a tar tick drawn in its corner */
 .th-form.on::before {
   box-shadow:
     inset 0 0 0 2px var(--ink),
     inset 0 0 0 5px var(--paper-raised);
 }
 
-.th-form.on::after {
+button.th-form.on::after {
   content: "";
   position: absolute;
-  top: 14px;
-  right: 16px;
-  width: 22px;
-  height: 22px;
+  top: 12px;
+  right: 14px;
+  width: 20px;
+  height: 20px;
   background: var(--ink);
   clip-path: polygon(0 52%, 14% 38%, 40% 62%, 86% 12%, 100% 26%, 40% 90%);
 }
 
-.th-form:focus-visible {
+button.th-form:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 4px;
 }
 
 .th-figure {
-  width: 96px;
-  height: 64px;
-  margin-bottom: var(--sp-1, 4px);
+  width: 72px;
+  height: 48px;
+  margin-top: 4px;
   fill: none;
   stroke: var(--ink);
-  stroke-width: 2;
+  stroke-width: 2.2;
   stroke-linecap: square;
 }
 
@@ -136,11 +166,22 @@
   stroke-width: 4;
 }
 
+.th-form-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .th-form-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-right: 28px;
   font-family: var(--font-display);
-  font-size: var(--fs-2xl);
+  font-size: var(--fs-xl);
   font-weight: 800;
-  line-height: 1.05;
+  line-height: 1.1;
 }
 
 .th-form-lead {
@@ -152,7 +193,6 @@
 .th-form-points {
   display: flex;
   flex-direction: column;
-  width: 100%;
   margin: var(--sp-2) 0 0;
   padding: 0;
   list-style: none;
@@ -164,7 +204,7 @@
   grid-template-columns: 14px minmax(0, 1fr);
   gap: var(--sp-2);
   align-items: baseline;
-  padding: 7px 0 8px;
+  padding: 5px 0 6px;
   color: var(--ink-2);
   background: var(--lenticel) bottom / 100% 1px no-repeat;
 }
@@ -182,11 +222,7 @@
 }
 
 .th-form-tag {
-  position: absolute;
-  top: 16px;
-  right: 48px;
   padding: 2px 6px;
-  font-family: var(--font-display);
   font-size: var(--fs-xs);
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -199,73 +235,72 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3) var(--sp-4);
+  gap: var(--sp-3);
 }
 
-.th-continue .btn {
-  min-width: 220px;
-  min-height: 48px;
+.th-continue .btn-primary {
+  min-width: 200px;
+  min-height: 46px;
   font-family: var(--font-display);
   font-size: var(--fs-lg);
   font-weight: 800;
 }
 
-/* ---- the rule once chosen: the form in one line, the head, the choice ---- */
-
-.th-rule {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-6);
-}
-
-@media (min-width: 900px) {
-  .th-rule {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .th-choice {
-    grid-column: 1 / -1;
-  }
-}
-
-.th-form-now {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--sp-3) var(--sp-4);
-  align-self: start;
-  padding-bottom: var(--sp-4);
-  background: var(--lenticel) bottom / 100% 1.5px no-repeat;
-}
-
-.th-form-now .th-figure {
-  width: 72px;
-  height: 48px;
-  margin: 0;
-}
-
-.th-form-now .mk-note {
-  margin-top: 2px;
+/* a disabled action is an empty record line, not a faded button */
+.th-sheet .btn:disabled {
+  background: transparent;
+  color: var(--pencil);
+  border-color: var(--pencil);
+  cursor: default;
 }
 
 .th-term {
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+}
+
+/* the head's half while the form is not chosen: an empty, ruled-off place */
+.th-shut {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-5);
+  color: var(--pencil);
+  background:
+    var(--lenticel) top / 100% 1.5px no-repeat,
+    var(--lenticel) bottom / 100% 1.5px no-repeat,
+    var(--paper-shade);
+}
+
+.th-shut p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: 1.4;
+}
+
+.th-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
 }
 
 .th-people {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: var(--sp-4);
-}
-
-.th-person {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  margin-top: var(--sp-1);
+}
+
+/* A person is one line: name and age, what they would bring, the action. */
+.th-person {
+  display: grid;
+  grid-template-columns: minmax(120px, 10rem) minmax(0, 1fr) auto;
+  gap: var(--sp-2) var(--sp-4);
+  align-items: center;
+  padding: var(--sp-2) var(--sp-3);
   background: var(--paper-raised);
   border: 1.5px solid var(--ink);
   box-shadow: var(--shadow-hard-sm);
@@ -273,24 +308,28 @@
 
 .th-person-head {
   display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--sp-1);
 }
 
 .th-person-head b {
+  flex: 1 1 100%;
   font-family: var(--font-display);
-  font-size: var(--fs-lg);
+  font-size: var(--fs-md);
   font-weight: 800;
+  line-height: 1.2;
 }
 
 .th-person-head .icon-btn {
-  align-self: center;
-  margin-left: auto;
+  width: 24px;
+  height: 24px;
 }
 
 .th-parts {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 4px var(--sp-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -298,17 +337,15 @@
 }
 
 .th-parts li {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 4px var(--sp-2);
-  padding: 6px 0 7px;
-  background: var(--lenticel) bottom / 100% 1px no-repeat;
+  gap: 4px;
 }
 
-.th-parts li:last-child {
-  background: none;
+.th-parts li > span:first-child {
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 
 .th-chips {
@@ -337,8 +374,7 @@
 }
 
 .th-pick {
-  align-self: flex-start;
-  margin-top: var(--sp-1, 4px);
+  white-space: nowrap;
 }
 
 /* ---- the desk: moss under the charters and the report ---- */
@@ -355,14 +391,15 @@
   min-height: 100%;
 }
 
-/* ---- the orders: charters on bark ---- */
+/* ---- «Приказы»: four charters on bark ---- */
 
 .th-charters {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--sp-6) var(--sp-5);
-  align-items: start;
-  padding: var(--sp-2) var(--sp-1, 4px) var(--sp-5);
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--sp-5);
+  align-items: stretch;
+  align-content: start;
+  padding: var(--sp-2) var(--sp-1);
 }
 
 .th-charter {
@@ -371,7 +408,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  min-height: 300px;
+  padding: var(--sp-4) var(--sp-4) var(--sp-4);
   color: var(--ink);
   transform: rotate(var(--tilt, 0deg));
   filter: drop-shadow(0 10px 16px rgba(12, 16, 10, 0.45));
@@ -386,6 +424,17 @@
   animation-delay: 80ms;
 }
 
+.th-charter:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+@media (min-width: 880px) {
+  .th-charters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-4);
+  }
+}
+
 @keyframes th-lay {
   from {
     opacity: 0;
@@ -395,155 +444,93 @@
 
 .th-charter-title {
   margin: 0;
-  padding-right: 52px;
-  font-family: var(--font-display);
-  font-size: var(--fs-xl);
-  font-weight: 800;
-  line-height: 1.12;
-}
-
-.th-charter-purpose {
-  margin: 0;
   padding-bottom: var(--sp-3);
-  font-size: var(--fs-sm);
-  line-height: 1.45;
-  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  line-height: 1.15;
   background: linear-gradient(var(--ink), var(--ink)) bottom / 100% 2px no-repeat;
 }
 
-.th-clauses {
-  display: flex;
-  flex-direction: column;
-}
-
-.th-clause {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: var(--sp-3);
-  align-items: start;
-  width: 100%;
-  padding: 9px 2px 10px;
-  font: inherit;
-  text-align: left;
-  color: var(--ink-2);
-  background: var(--lenticel) bottom / 100% 1px no-repeat;
-  border: 0;
-  cursor: pointer;
-}
-
-.th-clause:last-child {
-  background: none;
-}
-
-.th-clause:hover .th-tick {
-  background: var(--paper-shade);
-}
-
-.th-clause:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-
-.th-clause-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.th-charter-text {
+  margin: 0;
   font-family: var(--font-display);
   font-size: var(--fs-md);
+  line-height: 1.45;
+  color: var(--ink-2);
 }
 
-.th-clause-text small {
-  font-family: var(--font-body);
-  font-size: var(--fs-xs);
-  color: var(--pencil);
-}
-
-.th-clause.on {
-  color: var(--ink);
-}
-
-.th-clause.on .th-clause-text {
-  font-weight: 800;
-}
-
-/* the box of a clause; the chosen one is struck through with a tar tick, drawn, never a glyph */
-.th-tick {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  border: 1.5px solid var(--ink);
-}
-
-.th-clause.on .th-tick {
-  background: var(--ink);
-}
-
-.th-clause.on .th-tick::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  background: var(--paper-raised);
-  clip-path: polygon(0 52%, 16% 37%, 40% 60%, 84% 10%, 100% 25%, 40% 92%);
+/* the foot: who signed it, and the one action, to seal or to cancel */
+.th-charter-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-3);
+  margin-top: auto;
+  padding-top: var(--sp-3);
+  background: var(--lenticel) top / 100% 1px no-repeat;
 }
 
 .th-sign {
-  margin-top: var(--sp-1, 4px);
-  padding-top: var(--sp-3);
+  min-height: 1.4em;
+  padding-right: 64px;
   font-family: var(--font-display);
   font-size: var(--fs-sm);
   font-style: italic;
   color: var(--pencil);
-  background: var(--lenticel) top / 100% 1px no-repeat;
 }
 
-/* The resin seal: the only warm colour on the sheet, and only while the order is in force. */
+/* The resin seal: the only warm colour on the sheet, and only while the order is in force. It sits by the signature. */
 .th-seal {
   position: absolute;
-  right: 18px;
-  top: 16px;
-  width: 54px;
-  height: 54px;
+  right: 12px;
+  bottom: 74px;
+  width: 78px;
+  height: 78px;
   display: grid;
   place-items: center;
-  border: 2px solid var(--resin-deep);
+  border: 3px solid var(--resin-deep);
   border-radius: 50%;
   color: var(--resin-deep);
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.1em;
   line-height: 1.15;
   text-align: center;
-  transform: rotate(-12deg);
+  background: radial-gradient(circle, rgba(192, 122, 34, 0.2), rgba(192, 122, 34, 0.06) 70%);
+  transform: rotate(-14deg);
   animation: th-stamp 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .th-seal::after {
   content: "";
   position: absolute;
-  inset: 4px;
-  border: 1px solid var(--resin-deep);
+  inset: 5px;
+  border: 1.5px solid var(--resin-deep);
   border-radius: 50%;
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 @keyframes th-stamp {
   from {
     opacity: 0;
-    transform: rotate(-12deg) scale(1.35);
+    transform: rotate(-14deg) scale(1.4);
   }
 }
 
 .th-seal.is-flat {
   position: relative;
   right: auto;
-  top: auto;
+  bottom: auto;
+  width: 64px;
+  height: 64px;
+  font-size: 10px;
   flex: none;
   animation: none;
 }
 
-/* ---- the records: the census and stock report ---- */
+/* ---- «Записи»: the census and stock report ---- */
 
 .th-report {
   position: relative;
@@ -551,9 +538,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  max-width: 920px;
   margin: 0 auto;
-  padding: var(--sp-6) var(--sp-6) var(--sp-5);
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
   color: var(--ink);
   filter: drop-shadow(0 12px 20px rgba(12, 16, 10, 0.45));
   animation: th-lay 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -578,8 +564,22 @@
   letter-spacing: -0.01em;
 }
 
+.th-report-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+}
+
+@media (min-width: 900px) {
+  .th-report-body {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: var(--sp-6);
+  }
+}
+
 .th-ledger {
   width: 100%;
+  align-self: start;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
@@ -590,6 +590,7 @@
   text-align: right;
   font-size: var(--fs-sm);
   font-weight: 400;
+  white-space: nowrap;
   background: var(--lenticel) bottom / 100% 1px no-repeat;
 }
 
@@ -597,7 +598,7 @@
   font-family: var(--font-display);
   font-size: var(--fs-xs);
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--pencil);
 }
@@ -645,10 +646,11 @@
 
 .th-chart {
   margin: 0;
+  min-width: 0;
 }
 
 .th-chart-title {
-  margin-bottom: var(--sp-2);
+  margin-bottom: var(--sp-3);
   font-family: var(--font-display);
   font-size: var(--fs-lg);
   font-weight: 800;
@@ -656,13 +658,13 @@
 
 .th-plot {
   position: relative;
-  padding-left: 56px;
+  padding-left: 52px;
 }
 
 .th-plot svg {
   display: block;
   width: 100%;
-  height: 220px;
+  height: 210px;
   overflow: visible;
   touch-action: none;
 }
@@ -703,7 +705,7 @@
 .th-y {
   position: absolute;
   left: 0;
-  width: 48px;
+  width: 44px;
   transform: translateY(-50%);
   text-align: right;
   font-size: var(--fs-xs);
@@ -724,6 +726,13 @@
   padding-left: 4px;
   white-space: nowrap;
   border-left: 1.5px solid var(--ink);
+}
+
+.th-x span.is-end {
+  transform: translateX(-100%);
+  padding: 0 4px 0 0;
+  border-left: 0;
+  border-right: 1.5px solid var(--ink);
 }
 
 .th-readout {
@@ -758,13 +767,20 @@
     padding-right: var(--sp-4);
   }
 
-  .th-form-cards {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-4);
+  .th-continue .btn {
+    flex: 1 1 auto;
   }
 
-  .th-continue .btn {
-    width: 100%;
+  .th-charter {
+    min-height: 0;
+  }
+
+  .th-person {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .th-pick {
+    justify-self: start;
   }
 
   .th-report {
@@ -781,7 +797,7 @@
   }
 
   .th-y {
-    width: 40px;
+    width: 38px;
   }
 }
 
@@ -792,11 +808,11 @@
     animation: none;
   }
 
-  .th-form {
+  button.th-form {
     transition: none;
   }
 
-  .th-form:hover {
+  button.th-form:hover {
     transform: none;
   }
 }

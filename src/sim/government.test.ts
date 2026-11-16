@@ -135,6 +135,16 @@ describe("the government", () => {
     expect(back?.sim.history).toEqual(s.history);
   });
 
+  it("a save from before the confirmed form starts with the form unless a head was chosen", () => {
+    const load = (s: SimState) => {
+      const { settled: _s, ...old } = s.gov!;
+      return parseSave({ version: 4, city, sim: JSON.parse(JSON.stringify({ ...s, gov: old, realTime: NOW })) }, NOW + 1000)?.sim.gov?.settled;
+    };
+    const s = opened();
+    expect(load(s)).toBe(false);
+    expect(load(ok(chooseHead(s, choices(s).ids[0])))).toBe(true);
+  });
+
   it("an old save's children get their parents from the household's couple", () => {
     const s = world();
     const plain = Object.fromEntries(Object.values(s.residents).map(({ mother: _m, father: _f, ...r }) => [r.id, r]));
