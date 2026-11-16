@@ -194,22 +194,22 @@ It gives game balance something better than intuition:
 
 ## Built with
 
-| Area | Technology |
-|---|---|
-| **Simulation** | TypeScript · Web Worker · IndexedDB |
-| **Interface** | Preact · @preact/signals |
-| **Engine** | Own · WebGPU · WGSL |
-| **Earth** | OpenFreeMap · OpenStreetMap · Earcut |
-| **Terrain** | Terrarium DEM / AWS Open Data |
-| **Search** | Photon |
-| **History** | Wikipedia / MediaWiki |
-| **Audio** | Web Audio API |
-| **Tooling** | Vite · Vitest |
-| **Platforms** | Vercel · Yandex Games |
+| Area           | Technology                           |
+| -------------- | ------------------------------------ |
+| **Simulation** | TypeScript · Web Worker · IndexedDB  |
+| **Interface**  | Preact · @preact/signals             |
+| **Engine**     | Own · WebGPU · WGSL                  |
+| **Earth**      | OpenFreeMap · OpenStreetMap · Earcut |
+| **Terrain**    | Terrarium DEM / AWS Open Data        |
+| **Search**     | Photon                               |
+| **History**    | Wikipedia / MediaWiki                |
+| **Audio**      | Web Audio API                        |
+| **Tooling**    | Vite · Vitest                        |
+| **Platforms**  | Vercel · Yandex Games                |
 
 ## Where to play
 
-Current version: **0.2.0** ([changelog](CHANGELOG.md)).
+Current version: **0.6.1** ([changelog](CHANGELOG.md)).
 
 - **In the browser:** [rebirth-ashy.vercel.app](https://rebirth-ashy.vercel.app/)
 - **Yandex Games:** in moderation
@@ -240,18 +240,18 @@ npm run build:portals  # every portal build and its archive in release/
 
 ## Controls
 
-| Keys | Action |
-|---|---|
-| `Space` / `P` | Pause / resume |
-| `1` `2` `3` | 1× / 2× / 4× speed |
-| `H` / `Home` | Return to settlement |
-| `N` | Research |
-| `F1` – `F5` | Tool categories |
-| `Q` – `Y` | Select tool |
-| `B` | Demolition |
-| `Esc` / Right click | Cancel / close |
-| `Enter` | Safe event choice |
-| `?` | Hotkey reference |
+| Keys                | Action               |
+| ------------------- | -------------------- |
+| `Space` / `P`       | Pause / resume       |
+| `1` `2` `3`         | 1× / 2× / 4× speed   |
+| `H` / `Home`        | Return to settlement |
+| `N`                 | Research             |
+| `F1` – `F5`         | Tool categories      |
+| `Q` – `Y`           | Select tool          |
+| `B`                 | Demolition           |
+| `Esc` / Right click | Cancel / close       |
+| `Enter`             | Safe event choice    |
+| `?`                 | Hotkey reference     |
 
 ## Open data
 

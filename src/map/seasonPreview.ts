@@ -32,4 +32,6 @@ export function seasonWeather(w: WeatherState | null, season: number | null): We
 }
 
 export const previewClock = (clock: ReadonlySignal<number>): ReadonlySignal<number> => computed(() => seasonClock(clock.value, seasonPreview.value));
+// The same for a clock read at an instant (simClient.ts gameNow).
+export const previewNow = (now: () => number) => (): number => seasonClock(now(), seasonPreview.peek());
 export const previewWeather = (w: ReadonlySignal<WeatherState | null>): ReadonlySignal<WeatherState | null> => computed(() => seasonWeather(w.value, seasonPreview.value));

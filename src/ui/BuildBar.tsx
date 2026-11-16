@@ -1,9 +1,7 @@
 import { effect, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { flash, housesAlong, recentTools, roadHouses, setRoadHouses, isMaterialTool, isPlaceTool, isRoadTool, isStrokeTool, onlyFoundations, setOnlyFoundations, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, SITE_RADIUS, type RoadMode, type Tool } from "../map/tools";
+import { flash, housesAlong, recentTools, roadHouses, setRoadHouses, isMaterialTool, isPlaceTool, isRoadTool, isStrokeTool, onlyFoundations, setOnlyFoundations, PLACE_VARIANTS, placeTemplate, placeVariant, ROAD_MATERIALS, ROAD_MODES, roadKindOf, roadMaterial, roadMode, toolMsg, tool, type RoadMode, type Tool } from "../map/tools";
 import { lockReason } from "../sim/tech";
-import { DIG } from "../sim/excavation";
-import { FIELD } from "../sim/fields";
 import { SERVICES } from "../sim/services";
 import type { Housing } from "../sim/types";
 import { people, state } from "../simClient";
@@ -14,6 +12,8 @@ import { Segmented, Tooltip } from "./kit";
 import { storedChoice } from "./preferenceModel";
 import { LANDMARK_LABELS } from "./semanticModel";
 import { L } from "../i18n";
+import { BUILDING_TOOLS, UI } from "../buildings/ui";
+import type { HintParts } from "../buildings/uiKit";
 import { touchScreen } from "../map/motion";
 import { pickTool } from "../map/toolPick";
 import { searchOpen, ToolSearch } from "./ToolSearch";
@@ -97,30 +97,18 @@ function hints(touch: boolean): { road: Record<RoadMode, string>; tool: Partial<
       : L("Наведите на раскопанную улицу — она подсветится целиком с ценой, клик — восстановить, Esc — выйти", "Hover over an excavated street — it lights up whole with its cost; click to restore, Esc — exit"),
     house: stroke,
     workshop: stroke,
-    shop: stroke,
-    gumno: `${place}. ${L(`Круг — досягаемость полей (${FIELD.radius} м)`, `Circle — field reach (${FIELD.radius} m)`)}`,
-    woodcutter: `${place}. ${L(`Круг — лес вокруг (${SITE_RADIUS.woodcutter} м)`, `Circle — forest around (${SITE_RADIUS.woodcutter} m)`)}`,
-    sawpit: place,
-    quarry: place,
-    fisher: `${place}. ${L(`Круг — вода рядом (${SITE_RADIUS.fisher} м)`, `Circle — water nearby (${SITE_RADIUS.fisher} m)`)}`,
-    garden: place,
-    hunter: place,
-    forager: `${place}. ${L(`Круг — лес вокруг (${SITE_RADIUS.forager} м)`, `Circle — forest around (${SITE_RADIUS.forager} m)`)}`,
-    orchard: place,
-    apiary: place,
-    cellar: place,
     barn: place,
-    well: service("well", ""),
-    market: service("market", L(", нужны работники", ", needs workers")),
-    chapel: service("chapel", L(", нужен работник", ", needs a worker")),
-    school: service("school", L(", нужны работники", ", needs workers")),
-    healer: service("healer", L(", нужен работник", ", needs a worker")),
-    dig: `${place}. ${L(`Круг — первое вскрытие (${DIG.startRadius} м), потом растёт до ${DIG.maxRadius} м и снимается, а найденное остаётся на карте`, `Circle — the first opening (${DIG.startRadius} m); it grows to ${DIG.maxRadius} m and is then removed, while the finds stay on the map`)}`,
     field: touch
       ? L(`Тап — вершина, тап по первой точке — замкнуть, тап по последней — убрать её, тап по готовому полю — убрать поле; ${EXIT_TOUCH}`, `Tap — add a corner, tap the first point — close, tap the last one — remove it, tap a field — remove the field; ${EXIT_TOUCH}`)
       : L("Клик — вершина, клик по первой точке или Enter — замкнуть, ПКМ — отменить точку, Esc — сбросить; клик по готовому полю — убрать его", "Click — add a corner, click the first point or Enter — close, RMB — undo a point, Esc — reset; click a field to remove it"),
     clearing: L("Как поле: контур леса до 5 га у построенной дороги (до 300 м). Строители рубят после строек, а когда брёвен на складе меньше, чем на дом, — раньше них. Брёвна идут на склад, земля станет лугом. Клик по вырубке в работе — убрать её", "Like a field: an outline of forest up to 5 ha near a built road (within 300 m). Builders fell it after the building sites, or before them when the store holds fewer logs than a house needs. Logs go to the store; the land becomes meadow. Click a clearing under way to remove it"),
   };
+  // a building's own tool says its hint in its ui.ts
+  const parts: HintParts = { place, stroke, service };
+  for (const id of BUILDING_TOOLS) {
+    const hint = UI[id].tool!.hint;
+    if (hint) tool[id as Tool] = hint(parts);
+  }
   return { road, tool };
 }
 const HINTS = { mouse: hints(false), touch: hints(true) };

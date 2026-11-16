@@ -1,15 +1,13 @@
-import { FIELD, FOOD_RATE } from "../sim/fields";
-import { workLength } from "../sim/levers";
-import { DIG } from "../sim/excavation";
 import { CLEARING } from "../sim/clearing";
-import { PLACE_MIN } from "../sim/growth";
-import { BUILDINGS, STORES, type Materials, type StoreGroup, type StoreRoom } from "../sim/buildings";
+import { BUILDINGS, type Materials, type StoreGroup, type StoreRoom } from "../sim/buildings";
 import { ADMIN } from "../sim/governance";
 import { ROAD_KINDS } from "../sim/roads";
 import { SERVICES, isService } from "../sim/services";
-import { isPlaceTool, placeTemplate, placeVariant, roadKindOf, roadMaterial, SITE_RADIUS, type MaterialTool, type Tool } from "../map/tools";
+import { isPlaceTool, placeTemplate, placeVariant, roadKindOf, roadMaterial, type MaterialTool, type Tool } from "../map/tools";
 import type { RoadKind } from "../sim/types";
 import type { IconName } from "./icons";
+import { BUILDING_TOOLS, UI } from "../buildings/ui";
+import type { BuildingUi } from "../buildings/uiKit";
 import { decimal, L } from "../i18n";
 
 export type CategoryId = "roads" | "town" | "food" | "farm" | "services" | "past";
@@ -22,10 +20,10 @@ export interface Category {
 
 export const CATEGORIES: Category[] = [
   { id: "roads", label: L("Дороги", "Roads"), tools: ["path", "dirt", "footbridge", "bridge", "bulldoze", "restore"] },
-  { id: "town", label: L("Город", "Town"), tools: ["house", "workshop", "shop", "barn", "cellar"] },
+  { id: "town", label: L("Город", "Town"), tools: ["house", "workshop", "tavern", "barn", "cellar"] },
   { id: "food", label: L("Еда", "Food"), tools: ["field", "gumno", "garden", "hunter", "fisher", "forager", "orchard", "apiary"] },
-  { id: "farm", label: L("Ресурсы", "Resources"), tools: ["clearing", "woodcutter", "sawpit", "quarry"] },
-  { id: "services", label: L("Службы", "Services"), tools: ["well", "market", "chapel", "school", "healer", "townhall"] },
+  { id: "farm", label: L("Ресурсы", "Resources"), tools: ["clearing", "woodcutter", "sawpit", "quarry", "market"] },
+  { id: "services", label: L("Службы", "Services"), tools: ["well", "shop", "chapel", "school", "healer", "townhall"] },
   { id: "past", label: L("Прошлое", "Past"), tools: ["dig", "restored", "museum"] },
 ];
 
@@ -37,7 +35,7 @@ export const DEMOLISH_KEY = "KeyB";
 
 export const categoryOf = (t: Tool): Category => CATEGORIES.find((c) => c.tools.includes(t))!;
 
-export const TOOL_ICON: Record<Tool, IconName> = {
+const OWN_ICON: Partial<Record<Tool, IconName>> = {
   path: "path",
   dirt: "dirt",
   footbridge: "footbridge",
@@ -46,31 +44,14 @@ export const TOOL_ICON: Record<Tool, IconName> = {
   restore: "street",
   house: "res",
   workshop: "craft",
-  shop: "trade",
   field: "field",
   clearing: "clearing",
-  gumno: "gumno",
-  woodcutter: "woodcutter",
-  sawpit: "sawpit",
-  quarry: "quarry",
-  fisher: "fisher",
-  garden: "garden",
-  hunter: "hunter",
-  forager: "forager",
-  orchard: "orchard",
-  apiary: "apiary",
-  cellar: "cellar",
   barn: "barn",
-  well: "well",
-  market: "market",
-  chapel: "chapel",
-  school: "school",
-  healer: "healer",
   townhall: "townhall",
-  dig: "dig",
-  restored: "monument",
-  museum: "museum",
 };
+
+// Icons of the road, land and group tools; a building's tool has its own (src/buildings/<id>/ui.ts).
+export const TOOL_ICON = { ...OWN_ICON, ...Object.fromEntries(BUILDING_TOOLS.map((id) => [id, UI[id].tool!.icon])) } as Record<Tool, IconName>;
 
 const TOOL_LABEL: Partial<Record<Tool, string>> = {
   path: L("Тропа", "Path"),
@@ -81,7 +62,6 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
   restore: L("Старые улицы", "Old streets"),
   house: L("Дом", "House"),
   workshop: L("Мастерская", "Workshop"),
-  shop: L("Лавка", "Shop"),
   field: L("Поле", "Field"),
   clearing: L("Вырубка", "Clearing"),
   barn: L("Склад", "Storehouse"),
@@ -90,7 +70,7 @@ const TOOL_LABEL: Partial<Record<Tool, string>> = {
 
 export const toolLabel = (t: Tool): string => TOOL_LABEL[t] ?? BUILDINGS[t].name;
 
-const PURPOSE: Record<Tool, string> = {
+const PURPOSE: Partial<Record<Tool, string>> = {
   path: L("Дешёвая тропа: по ней ходят пешком, ставить дома можно рядом", "A cheap path: people walk on it; houses can go beside it"),
   dirt: L("Грунтовая дорога: шире и ровнее тропы, по ней возят грузы", "Dirt road: wider and smoother than a path, carts haul goods on it"),
   footbridge: L("Подвесной мостик над водой: только для пешеходов, узкий и лёгкий", "A rope footbridge over water: pedestrians only, narrow and light"),
@@ -99,30 +79,10 @@ const PURPOSE: Record<Tool, string> = {
   restore: L("Проложить заново раскопанную улицу целиком: старая тропа станет тропой, улица — дорогой", "Rebuild an excavated street whole: an old path becomes a path, a street becomes a road"),
   house: L("Дома вдоль дороги: протяните вдоль улицы — встанет ряд. Старые фундаменты занимаются первыми", "Houses along a road: drag along a street for a row. Old foundations are taken first"),
   workshop: L("Мастерские вдоль дороги: ткацкая (одежда), гончарня (посуда), столярная (утварь), кузница (инструменты)", "Workshops along a road: weaving (clothing), pottery (dishes), carpentry (furnishings), smithy (tools)"),
-  shop: L("Магазины и таверна вдоль дороги", "Shops and a tavern along a road"),
   field: L("Поле: контур для зерна, его обрабатывают фермеры", "Field: an outline for grain, worked by farmers"),
   clearing: L("Вырубка леса: брёвна на склад, на месте леса будет луг", "Forest clearing: logs to the store, meadow where the forest was"),
-  gumno: L("Ферма: даёт работу на полях рядом и хранит урожай", "Farm: provides work on the nearby fields and stores the harvest"),
-  woodcutter: L("Валит лес вокруг и приносит брёвна на склад", "Fells the forest around and brings logs to the store"),
-  sawpit: L("Пилит брёвна в доски", "Saws logs into planks"),
-  quarry: L("Добывает камень", "Quarries stone"),
-  fisher: L("Ловит рыбу, еда без полей", "Catches fish: food without fields"),
-  garden: L("Огород у дома: овощи летом и осенью, зимой не даёт ничего", "A garden by the house: vegetables in summer and autumn, nothing in winter"),
-  hunter: L("Охотник приносит дичь, зимой и осенью больше всего", "The hunter brings game, most of all in winter and autumn"),
-  forager: L("Ягоды, грибы и орехи: летом и осенью, весной немного, зимой и под снегом ничего", "Berries, mushrooms and nuts: summer and autumn, a little in spring, nothing in winter or under snow"),
-  orchard: L("Фруктовый сад: плодоносит через год после посадки, осенью; заморозки в цвету и засуха снижают урожай", "Fruit orchard: bears fruit in autumn from a year after planting; frost at blossom and drought cut the yield"),
-  apiary: L("Пасека: мёд летом и осенью, пчёлы летают только в тёплую сухую тихую погоду", "Apiary: honey in summer and autumn; bees fly only in warm, dry, calm weather"),
   barn: L("Склад: амбар для еды, склад леса, склад камня или товарный склад. Производства возят выработку на ближайший склад с местом, стройки и дома берут из ближайшего: чем ближе склад, тем меньше времени уходит на подвоз", "Storehouse: a barn for food, a timber yard, a stone yard or a warehouse. Producers cart their output to the nearest store with room, sites and homes fetch from the nearest one: the closer the store, the less time the carting takes"),
-  cellar: L("Погреб: хранит запасы лучше склада, меньше портится в жару и сырость", "Cellar: keeps stores better than a storehouse, less spoils in heat and damp"),
-  well: L("Вода рядом с домами: настроение и здоровье", "Water near the houses: mood and health"),
-  market: L("Раздаёт товары по домам и радует людей", "Hands out goods to the houses and pleases people"),
-  chapel: L("Место для общей жизни: настроение людей", "A place for community life: people’s mood"),
-  school: L("Учит детей грамоте, грамотные работают лучше", "Teaches children to read; literate people work better"),
-  healer: L("Лечит: меньше смертей, настроение выше", "Heals: fewer deaths, higher mood"),
-  townhall: L(`Управление поселением: без управ работа замедляется, когда жителей больше ${ADMIN.elders}. Ратуша (одна на город) справляется ещё с ${ADMIN.room.townhall} жителями, каждая районная управа — с ${ADMIN.room.office}, пока в них работают писари`, `Running the settlement: without offices work slows once there are more than ${ADMIN.elders} residents. A town hall (one per town) manages ${ADMIN.room.townhall} more, each district office ${ADMIN.room.office}, while clerks work in them`),
-  dig: L("Раскоп на месте старых построек: находки для тетради, камень от фундаментов", "A dig on the site of old buildings: finds for the notebook, stone from foundations"),
-  museum: L("Музей на старом фундаменте: в залах тематические выставки находок; полная выставка даёт знания и привлекает людей", "A museum on an old foundation: its halls show themed exhibitions of finds; a complete one gives knowledge and draws people"),
-  restored: L("Сохранить старую постройку памятником на её фундаменте: без жителей и работы, рядом людям лучше и земля дороже", "Keep an old building as a monument on its foundation: no residents or jobs; people nearby feel better and land is worth more"),
+  townhall: L(`Управление поселением: без управ работа замедляется, когда жителей больше ${ADMIN.elders}. Ратуша (одна на город) справляется ещё с ${BUILDINGS.townhall.manages} жителями, каждая районная управа — с ${BUILDINGS.office.manages}, пока в них работают писари`, `Running the settlement: without offices work slows once there are more than ${ADMIN.elders} residents. A town hall (one per town) manages ${BUILDINGS.townhall.manages} more, each district office ${BUILDINGS.office.manages}, while clerks work in them`),
 };
 
 const SITE: Partial<Record<Tool, string>> = {
@@ -130,17 +90,10 @@ const SITE: Partial<Record<Tool, string>> = {
   dirt: L("Между двумя точками на суше, уклон не круче 12 %", "Between two points on land, slope up to 12%"),
   footbridge: L("Через воду (пролёт до 25 м) или по суше, уклон не круче 30 %", "Across water (span up to 25 m) or on land, slope up to 30%"),
   bridge: L("Через воду (пролёт до 30 м) или по суше, уклон не круче 10 %", "Across water (span up to 30 m) or on land, slope up to 10%"),
-  woodcutter: L(`В лесу: от ${Math.round(PLACE_MIN.forest * 100)} % леса в ${SITE_RADIUS.woodcutter} м вокруг`, `In forest: at least ${Math.round(PLACE_MIN.forest * 100)}% forest within ${SITE_RADIUS.woodcutter} m`),
-  fisher: L(`У воды: от ${Math.round(PLACE_MIN.water * 100)} % воды в ${SITE_RADIUS.fisher} м вокруг`, `By water: at least ${Math.round(PLACE_MIN.water * 100)}% water within ${SITE_RADIUS.fisher} m`),
-  forager: L(`В лесу: от ${Math.round(PLACE_MIN.foragerForest * 100)} % леса в ${SITE_RADIUS.forager} м вокруг`, `In forest: at least ${Math.round(PLACE_MIN.foragerForest * 100)}% forest within ${SITE_RADIUS.forager} m`),
-  quarry: L("Не на воде и не на болоте; камень добывается на любой суше", "Not on water or marsh; stone can be quarried on any land"),
-  orchard: L("Не на воде и не на болоте", "Not on water or marsh"),
-  apiary: L("Не на воде и не на болоте", "Not on water or marsh"),
   clearing: L(`Контур до ${CLEARING.maxArea / 10000} га, не дальше ${CLEARING.reach} м от построенной дороги`, `An outline up to ${CLEARING.maxArea / 10000} ha, within ${CLEARING.reach} m of a built road`),
   field: L("Замкнутый контур на суше, не через дорогу и не поверх другого поля", "A closed outline on land, not across a road or over another field"),
   house: L("Вдоль построенной дороги; старые фундаменты у неё — первыми, нераскопанные сначала раскопают", "Along a built road; old foundations by it go first, outlines are dug first"),
   workshop: L("Вдоль построенной дороги; старые фундаменты у неё — первыми", "Along a built road; old foundations by it go first"),
-  shop: L("Вдоль построенной дороги; старые фундаменты у неё — первыми", "Along a built road; old foundations by it go first"),
 };
 
 // Hover text of the stone materials, which replace the tool text while chosen.
@@ -201,24 +154,18 @@ export function toolInfo(t: Tool, material: Record<MaterialTool, RoadKind> = roa
   const kind = roadKindOf(t, material);
   const road = kind ? ROAD_KINDS[kind] : null;
   let reach: string | null = null;
+  const own = (UI as Record<string, BuildingUi | undefined>)[t]?.tool;
   if (isService(t)) reach = L(`Охват ${SERVICES[t].reach} м по дорогам`, `Reach ${SERVICES[t].reach} m by road`);
-  else if (t === "gumno") reach = L(`Поля до ${FIELD.radius} м от фермы`, `Fields within ${FIELD.radius} m of the farm`);
-  else if (t === "woodcutter" || t === "fisher" || t === "forager") reach = L(`Радиус ${SITE_RADIUS[t]} м`, `Radius ${SITE_RADIUS[t]} m`);
-  else if (b && STORES[b.id]) reach = L(`Вмещает: ${roomText(STORES[b.id])}`, `Holds: ${roomText(STORES[b.id])}`);
-  else if (t === "dig") reach = L(`Вскрывает ${DIG.startRadius} м, потом растёт до ${DIG.maxRadius} м и снимается сам`, `Opens ${DIG.startRadius} m, then grows to ${DIG.maxRadius} m and removes itself`);
-  else if (t === "garden" || t === "hunter" || t === "orchard" || t === "apiary") {
-    // The best season with every job filled, a full working day.
-    const rate = FOOD_RATE[t];
-    reach = L(`Даёт до ${Math.round(Math.max(...rate.season) * rate.kgHour * BUILDINGS[t].jobs * workLength())} кг еды в день`, `Yields up to ${Math.round(Math.max(...rate.season) * rate.kgHour * BUILDINGS[t].jobs * workLength())} kg of food a day`);
-  }
+  else if (own?.reach) reach = own.reach();
+  else if (b?.store) reach = L(`Вмещает: ${roomText(b.store)}`, `Holds: ${roomText(b.store)}`);
   return {
     tool: t,
     label: toolLabel(t),
-    purpose: (kind && KIND_PURPOSE[kind]) || PURPOSE[t],
+    purpose: (kind && KIND_PURPOSE[kind]) || (own?.purpose ?? PURPOSE[t] ?? ""),
     labor: road ? L(`${perMetre(road.labor)} чел.-ч на метр`, `${perMetre(road.labor)} person-h per metre`) : b ? `${num(b.labor)} ${L("чел.-ч", "person-h")}` : null,
     materials: b ? materialList(b.materials) : road?.stone ? [{ icon: "stone", text: L(`${perMetre(road.stone)} т на метр`, `${perMetre(road.stone)} t per metre`) }] : [],
     jobs: b && b.jobs > 0 ? b.jobs : null,
-    site: (kind && KIND_SITE[kind]) || (SITE[t] ?? (b ? L("У построенной дороги, на свободных участках", "By a built road, on free plots") : L("На карте", "On the map"))),
+    site: (kind && KIND_SITE[kind]) || (own?.site ?? SITE[t] ?? (b ? L("У построенной дороги, на свободных участках", "By a built road, on free plots") : L("На карте", "On the map"))),
     reach,
   };
 }

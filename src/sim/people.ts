@@ -1,10 +1,11 @@
-import { BUILDINGS, familyCapacity, foodCapacity, homesOf } from "./buildings";
+import { BUILDINGS, familyCapacity, foodCapacity, homesOf, recipeOf } from "./buildings";
 import { buildFloor, buildingPriority, capacityOf } from "./jobs";
 import { isCleared } from "./clearing";
-import { assignFields, bears, expectedKg, FIELD, FOOD_RATE, foodKgHour, idleGumnos, idleOrchards, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
+import { assignFields, bears, expectedKg, FIELD, foodKgHour, idleGumnos, idleOrchards, haOf, HARVEST_END_DAY, idleFarmers, idleWorkers, idleWorkplaces, jobsOf, workOf } from "./fields";
 import { nextRandom } from "./rng";
 import { countServices, covers, SERVICE, SERVICE_IDS, servicesIn } from "./services";
 import { attractionOf, inflowPerDay } from "./attraction";
+import { attractMul, headClerk } from "./government";
 import { workableEdges } from "./roads";
 import { rationFood, tolokaActive, workLength, type Levers } from "./levers";
 import { calendar, DAYS_PER_SEASON, dayOf, dayStart, YEAR_DAYS, YEAR_MIN } from "./time";
@@ -142,6 +143,8 @@ function makeFamily(w: W, rand: Rand, ageMin: number, ageMax: number, kids: numb
   for (let k = 0; k < kids; k++) {
     const sex = rand() < 0.5 ? "m" : "f";
     const kid = addPerson(w, pick(sex === "m" ? MALE_NAMES : FEMALE_NAMES, rand), surnameFor(last, sex), sex, rand() * maxKid, id);
+    kid.mother = wife.id;
+    kid.father = husband.id;
     h.members.push(kid.id);
   }
   return h;
@@ -551,8 +554,9 @@ export function foodOutlook(s: ArtelState & { households: SimState["households"]
   for (const [id, n] of workers) {
     const b = s.buildings[id];
     if (!b || b.state !== "active") continue;
-    if (b.template === "orchard") {
-      if (bears(b, s.gameMinutes)) projected += n * FOOD_RATE.orchard.kgHour * workLength(s.levers) * DAYS_PER_SEASON * orchardQuality(s.prod.orchard);
+    const p = recipeOf(b.template);
+    if (p?.ripens) {
+      if (bears(b, s.gameMinutes)) projected += n * p.perHour * workLength(s.levers) * DAYS_PER_SEASON * orchardQuality(s.prod.orchard);
     } else daily += n * foodKgHour(b.template, cal.season) * workLength(s.levers);
   }
   projected += (daily + forageKg(s)) * days;
@@ -662,7 +666,18 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     r.job = null;
     r.commute = null;
   };
+  // The head of the town is a clerk of the town hall whatever their age: kept out of the hiring, their place taken first.
+  const clerk = headClerk({ ...s, residents: w.residents });
+  const head = clerk ? w.residents[clerk.id] : undefined;
+  const atSeat = !!(clerk && head && cap.has(clerk.seat));
+  if (atSeat) {
+    head!.job = clerk!.seat;
+    head!.inClass = false;
+    workers.set(clerk!.seat, 1);
+  }
+  const pinned = (r: Resident) => atSeat && r === head;
   for (const r of Object.values(w.residents)) {
+    if (pinned(r)) continue;
     if (!isAdultAge(ageOf(r.born, w.now)) || r.inClass) {
       r.job = null;
       r.commute = null;
@@ -696,8 +711,9 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
     const origin = locate(-1, 0, 0);
     const groups: { spot: Spot; h: Household; adults: Resident[]; cands: JobCand[]; candMap: Map<number, number> }[] = [];
     for (const h of Object.values(w.households)) {
-      // pupils in class do no work: they stay out of the hiring
-      const adults = h.members.map((m) => w.residents[m]).filter((r) => isAdultAge(ageOf(r.born, w.now)) && !r.inClass);
+      // pupils in class do no work: they stay out of the hiring; so does the head, who keeps the town hall
+      const all = h.members.map((m) => w.residents[m]);
+      const adults = all.filter((r) => isAdultAge(ageOf(r.born, w.now)) && !r.inClass && !pinned(r));
       if (adults.length === 0) continue;
       if (h.home === null) {
         for (const r of adults) lose(r);
@@ -750,9 +766,14 @@ function jobsStep(w: W, s: SimState, work: boolean | null): void {
       }
     }
 
+    if (head && atSeat) {
+      const m = groups.find((g) => g.h.id === head.household)?.candMap.get(head.job!);
+      head.commute = m === undefined ? null : Math.round((m / (WALK_SPEED * residentMoveFactor(head))) * 10) / 10;
+    }
+
     const staff = new Map<number, Resident[]>();
     for (const r of Object.values(w.residents)) {
-      if (r.job === null || (workers.get(r.job) ?? 0) <= (cap.get(r.job) ?? 0)) continue;
+      if (pinned(r) || r.job === null || (workers.get(r.job) ?? 0) <= (cap.get(r.job) ?? 0)) continue;
       const list = staff.get(r.job);
       if (list) list.push(r);
       else staff.set(r.job, [r]);
@@ -854,6 +875,8 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
         if (rand() < chance) {
           const sex = rand() < 0.5 ? "m" : "f";
           const kid = addPerson(w, pick(sex === "m" ? MALE_NAMES : FEMALE_NAMES, rand), surnameFor(h.last, sex), sex, 0, h.id);
+          kid.mother = r.id;
+          kid.father = r.spouse;
           h.members.push(kid.id);
           say(w, "birth", L(`${sex === "m" ? "Родился" : "Родилась"} ${fullName(kid)}`, `${fullName(kid)} was born`));
         }
@@ -954,6 +977,7 @@ export function dailyStep(s: SimState, opts: RuleOpts = {}): SimState {
       services: houses > 0 ? covered / houses : 0,
       pop: Object.keys(w.residents).length,
       museum: s.progress?.museumPull ?? 0,
+      gov: attractMul(s),
     });
   })();
 
@@ -1039,31 +1063,6 @@ export function syncPeople<T extends Pick<SimState, "buildings" | "residents" | 
 
 // ---------- inspector ----------
 
-const WORK_TEXT: Record<string, string> = {
-  smithy: L("кузнец — Кузница", "smith — Smithy"),
-  carpentry: L("столяр — Столярная мастерская", "carpenter — Carpentry workshop"),
-  pottery: L("гончар — Гончарня", "potter — Pottery"),
-  weaver: L("ткач — Ткацкая мастерская", "weaver — Weaving workshop"),
-  shop: L("работает в Магазине", "works at the Shop"),
-  tavern: L("работает в Таверне", "works at the Tavern"),
-  gumno: L("фермер — Ферма", "farmer — Farm"),
-  woodcutter: L("лесоруб", "woodcutter"),
-  garden: L("работает в Огороде", "works in the Vegetable garden"),
-  hunter: L("охотник — Охотничий пост", "hunter — Hunting post"),
-  forager: L("собирает в лесу", "forages in the forest"),
-  orchard: L("садовник — Сад", "gardener — Orchard"),
-  apiary: L("пасечник", "beekeeper"),
-  sawpit: L("рабочий лесопилки", "sawmill worker"),
-  quarry: L("рабочий карьера", "quarry worker"),
-  fisher: L("рыбак", "fisher"),
-  well: L("работает у колодца", "works at the well"),
-  market: L("торгует на Рынке", "trades at the Market"),
-  chapel: L("служит в Храме", "serves at the Temple"),
-  school: L("учитель — Школа", "teacher — School"),
-  healer: L("врач", "healer"),
-  dig: L("землекоп — Раскоп", "digger — Dig"),
-};
-
 function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: boolean, idle: ReadonlySet<number>): string {
   if (age < ADULT_MIN) return r.inClass ? L("школьник", "pupil") : L("ребёнок", "child");
   if (age >= ADULT_MAX) return r.sex === "m" ? L("старик", "old man") : L("старуха", "old woman");
@@ -1072,7 +1071,7 @@ function roleOf(s: Pick<SimState, "buildings">, r: Resident, age: number, work: 
   if (r.job !== null) {
     const b = s.buildings[r.job];
     const t = b && BUILDINGS[b.template];
-    if (b && t) return WORK_TEXT[t.id] ?? L(`работает — ${t.name}`, `works — ${t.name}`);
+    if (b && t) return t.job ?? L(`работает — ${t.name}`, `works — ${t.name}`);
   }
   return work ? L("на стройке", "at a building site") : L("без работы", "without work");
 }

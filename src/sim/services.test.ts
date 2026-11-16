@@ -1,4 +1,4 @@
-import { allUnlocked } from "./tech";
+import { allUnlocked, MAX_TRADE_SLOTS, tradeSlots } from "./tech";
 import { describe, expect, it } from "vitest";
 import { advanceTo } from "./clock";
 import { BUILDINGS, homesOf, houseCapacity, upgradeLabor, upgradeMaterials, UPGRADE } from "./buildings";
@@ -11,8 +11,8 @@ import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { FIELD } from "./fields";
 import { CAMP, covers, learnPerDay, SERVICE, SERVICES, serviceMood, servicesIn } from "./services";
-import { SCHOOL_SEATS } from "./school";
-import { setTrade } from "./leverCmds";
+const SCHOOL_SEATS = BUILDINGS.school.seats!;
+import { nameStall, setTrade } from "./leverCmds";
 import { withStock } from "./storage";
 import type { TradeOrder } from "./trade";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
@@ -108,7 +108,7 @@ describe("placing services", () => {
   it("every service stands on a lot beside a built road, like the S5 buildings", () => {
     const s = zoned();
     const edge = Object.values(s.roads.edges)[0].id;
-    for (const id of ["well", "market", "chapel", "school", "healer"]) {
+    for (const id of ["well", "chapel", "school", "healer"]) {
       const t = BUILDINGS[id];
       expect(t.zone).toBe("placed");
       const c = s.zones.cells.find((k) => k.edge === edge && k.side === 1 && k.depth === 0 && k.i === 0)!;
@@ -121,7 +121,7 @@ describe("placing services", () => {
     }
   });
   it("footprints fit their lots and the table matches the design", () => {
-    const want: Record<string, [number, number, number, number]> = { well: [1, 1, 0, 150], market: [2, 3, 8, 800], chapel: [1, 2, 1, 1000], school: [2, 2, 2, 800], healer: [1, 2, 1, 1000] };
+    const want: Record<string, [number, number, number, number]> = { well: [1, 1, 0, 150], shop: [1, 2, 4, 800], chapel: [1, 2, 1, 1000], school: [2, 2, 2, 800], healer: [1, 2, 1, 1000] };
     for (const [id, [w, d, jobs, range]] of Object.entries(want)) {
       expect(SERVICES[id as keyof typeof SERVICES].reach).toBe(range);
       const t = BUILDINGS[id];
@@ -166,9 +166,9 @@ describe("coverage by network distance", () => {
   it("does not count a service that is unfinished or unstaffed", () => {
     const houses = [bld(2, "izba", 100)];
     expect(computeCoverage(town([bld(1, "well", 0, "building"), ...houses]))).toEqual({});
-    const market = folk(town([bld(1, "market", 0), ...houses]), [{ home: null, job: 1 }]);
-    expect(covers(computeCoverage(market)[2], "market")).toBe(true);
-    expect(computeCoverage({ ...market, residents: { ...market.residents, 1: { ...market.residents[1], job: null } } })).toEqual({});
+    const shop = folk(town([bld(1, "shop", 0), ...houses]), [{ home: null, job: 1 }]);
+    expect(covers(computeCoverage(shop)[2], "shop")).toBe(true);
+    expect(computeCoverage({ ...shop, residents: { ...shop.residents, 1: { ...shop.residents[1], job: null } } })).toEqual({});
     // a school has 2 jobs but one worker is enough
     const school = folk(town([bld(1, "school", 0), ...houses]), [{ home: null, job: 1 }]);
     expect(covers(computeCoverage(school)[2], "school")).toBe(true);
@@ -224,100 +224,105 @@ describe("mood terms", () => {
 });
 
 describe("market hand-out", () => {
-  // 25 two-adult households in houses along the road, one market worker, no shops
-  const mk = (extra: HSpec[] = []) => {
-    const houses = Array.from({ length: 25 }, (_, i) => bld(10 + i, "izba", 100 + 10 * i));
-    const specs: HSpec[] = [{ home: 10, adults: 2, job: 1 }, ...houses.slice(1).map((b) => ({ home: b.id, adults: 2 })), ...extra];
-    let s = busy(folk(town([bld(1, "market", 0), ...houses]), specs));
-    s = withCoverage({ ...s, stock: { ...s.stock, clothes: 100 } });
-    return s;
-  };
-  it("each worker serves 20 covered households a day", () => {
-    const s = mk();
-    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    expect(s.stock.clothes - d.stock.clothes).toBeCloseTo(20 * 0.06);
-    expect(Object.values(d.households).filter((h) => h.mood > 60 + (10 + 45 + 10 + 5 + 10 - 60) / 4 - 0.01)).toHaveLength(20);
-  });
-  it("starts from another household the next day", () => {
-    const s = mk();
-    const lifted = (day: number) =>
-      Object.values(dailyEconomy({ ...s, gameMinutes: at(day) }).households)
-        .filter((h) => h.mood > 63)
-        .map((h) => h.id)
-        .join();
-    expect(lifted(101)).not.toBe(lifted(102));
-  });
-  it("a tent camp in the market's reach is served like a house; households outside the reach get nothing", () => {
-    const far = bld(60, "izba", 1500);
-    const s0 = mk([{ home: null, adults: 2 }, { home: 60, adults: 2 }]);
-    const s = withCoverage({ ...s0, buildings: { ...s0.buildings, 60: far } });
-    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    expect(s.stock.clothes - d.stock.clothes).toBeCloseTo(20 * 0.06);
-    expect(d.households[26].mood).toBeCloseTo(60 + (10 + 45 + 10 - 60) / 4); // tents: goods, but no house
-    expect(d.households[27].mood).toBeCloseTo(60 + (10 + 45 + 10 - 60) / 4); // a house, but out of reach
-  });
-  it("comes on top of shops: the shop trader serves 12, the market the next 20", () => {
-    const s0 = mk();
-    // the first household's second adult trades in a shop at the end of the road
-    const s = withCoverage({
-      ...s0,
-      buildings: { ...s0.buildings, 99: bld(99, "shop", 1200) },
-      residents: { ...s0.residents, 2: { ...s0.residents[2], job: 99 } },
-    });
-    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    // 25 households: 12 served by the shop, the other 13 by the market's 20 slots
-    expect(s.stock.clothes - d.stock.clothes).toBeCloseTo(25 * 0.06);
-    // without the market worker only the shop's 12 get goods
-    const shopOnly = dailyEconomy({ ...s, residents: { ...s.residents, 1: { ...s.residents[1], job: null } }, gameMinutes: at(13) });
-    expect(s.stock.clothes - shopOnly.stock.clothes).toBeCloseTo(12 * 0.06);
-  });
-  it("an unstaffed market hands out nothing", () => {
-    const s0 = mk();
-    const s = withCoverage({ ...s0, residents: { ...s0.residents, 1: { ...s0.residents[1], job: null } } });
+  it("a staffed market hands out nothing: it only swaps goods", () => {
+    const houses = Array.from({ length: 5 }, (_, i) => bld(10 + i, "izba", 100 + 10 * i));
+    const specs: HSpec[] = [{ home: 10, adults: 2, job: 1 }, ...houses.slice(1).map((b) => ({ home: b.id, adults: 2 }))];
+    const s0 = busy(folk(town([bld(1, "market", 0), ...houses]), specs));
+    const s = withCoverage({ ...s0, stock: { ...s0.stock, clothes: 100 } });
     expect(dailyEconomy({ ...s, gameMinutes: at(13) }).stock.clothes).toBe(100);
   });
 });
 
 describe("market trade", () => {
-  const mk = (order: TradeOrder | null, stock: Partial<SimState["stock"]> = {}) => {
+  const mk = (orders: TradeOrder[], stock: Partial<SimState["stock"]> = {}, techs: string[] = []) => {
     const houses = Array.from({ length: 3 }, (_, i) => bld(10 + i, "izba", 100 + 10 * i));
     const s = busy(folk(town([bld(1, "market", 0), ...houses]), [{ home: 10, adults: 2, job: 1 }, { home: 11, adults: 2 }, { home: 12, adults: 2 }]));
-    return withCoverage(withStock({ ...s, levers: { ...s.levers, trade: order } }, { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 100, dishes: 0, furniture: 0, tools: 0, ...stock }));
+    const p = s.progress;
+    return withCoverage(withStock({ ...s, progress: { ...p, techs: [...p.techs, ...techs] }, levers: { ...s.levers, trade: orders } }, { food: 1750, logs: 0, planks: 0, stone: 0, clothes: 100, dishes: 0, furniture: 0, tools: 0, ...stock }));
   };
   it("a worker swaps up to a day's volume of the surplus, minus the margin", () => {
-    const s = mk({ give: "stone", get: "clothes" }, { stone: 200 });
+    const s = mk([{ give: "stone", get: "clothes" }], { stone: 200 });
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
-    // 150 points / 6 per tonne = 25 t go; each tonne is worth 6 x 0.75 / 20 pieces of clothing; the three households get 0.06 each
+    // 150 points / 6 per tonne = 25 t go; each tonne is worth 6 x 0.75 / 20 pieces of clothing; the market hands nothing out
     expect(d.stock.stone).toBeCloseTo(175);
-    expect(d.stock.clothes).toBeCloseTo(100 + 25 * ((6 * 0.75) / 20) - 3 * 0.06);
-    expect(d.prod.trade).toMatchObject({ give: "stone", get: "clothes", gave: 25 });
+    expect(d.stock.clothes).toBeCloseTo(100 + 25 * ((6 * 0.75) / 20));
+    expect(d.prod.trade).toMatchObject([{ give: "stone", get: "clothes", gave: 25 }]);
     expect(economyStats(d).trade).toEqual(d.prod.trade);
   });
   it("gives nothing below the reserve and does not fill the barns past their capacity", () => {
-    const poor = dailyEconomy({ ...mk({ give: "stone", get: "clothes" }, { stone: 15 }), gameMinutes: at(13) });
+    const poor = dailyEconomy({ ...mk([{ give: "stone", get: "clothes" }], { stone: 15 }), gameMinutes: at(13) });
     expect(poor.stock.stone).toBe(15);
     expect(poor.prod.trade).toBeUndefined();
-    const full = dailyEconomy({ ...mk({ give: "stone", get: "food" }, { stone: 500, food: 2990 }), gameMinutes: at(13) });
+    const full = dailyEconomy({ ...mk([{ give: "stone", get: "food" }], { stone: 500, food: 2990 }), gameMinutes: at(13) });
     expect(full.stock.food).toBeLessThanOrEqual(3000);
-    expect(full.prod.trade?.got).toBeGreaterThan(0);
+    expect(full.prod.trade?.[0].got).toBeGreaterThan(0);
+  });
+  it("an order's own reserve and cap bound the swap", () => {
+    // keep 190 t: only 10 t go
+    const kept = dailyEconomy({ ...mk([{ give: "stone", get: "clothes", keep: 190 }], { stone: 200 }), gameMinutes: at(13) });
+    expect(kept.stock.stone).toBeCloseTo(190);
+    // get clothing only up to 101 pieces: 1 piece = 20 / 4.5 t of stone
+    const capped = dailyEconomy({ ...mk([{ give: "stone", get: "clothes", until: 101 }], { stone: 200 }), gameMinutes: at(13) });
+    expect(capped.stock.stone).toBeCloseTo(200 - 20 / 4.5);
+    const reached = dailyEconomy({ ...mk([{ give: "stone", get: "clothes", until: 100 }], { stone: 200 }), gameMinutes: at(13) });
+    expect(reached.prod.trade).toBeUndefined();
+  });
+  it("several orders share the day's volume, the first first", () => {
+    // the first can give only 10 t of stone (60 points); the second takes the other 90 points: 9 m3 of planks
+    const s = mk([{ give: "stone", get: "clothes", keep: 190 }, { give: "planks", get: "tools" }], { stone: 200, planks: 100 }, ["stockkeeping", "fairs"]);
+    const d = dailyEconomy({ ...s, gameMinutes: at(13) });
+    expect(d.stock.stone).toBeCloseTo(190);
+    expect(d.stock.planks).toBeCloseTo(91);
+    expect(d.prod.trade?.map((w) => w.give)).toEqual(["stone", "planks"]);
   });
   it("an unstaffed market, or no order, swaps nothing", () => {
-    const s = mk({ give: "stone", get: "clothes" }, { stone: 200 });
+    const s = mk([{ give: "stone", get: "clothes" }], { stone: 200 });
     const idle = dailyEconomy({ ...s, residents: { ...s.residents, 1: { ...s.residents[1], job: null } }, gameMinutes: at(13) });
     expect(idle.stock.stone).toBe(200);
-    expect(dailyEconomy({ ...mk(null, { stone: 200 }), gameMinutes: at(13) }).stock.stone).toBe(200);
+    expect(dailyEconomy({ ...mk([], { stone: 200 }), gameMinutes: at(13) }).stock.stone).toBe(200);
   });
-  it("the order is a lever: checked, kept in a save and stopped with null", () => {
-    const s = mk(null);
-    expect(setTrade(s, { give: "stone", get: "stone" } as TradeOrder)).toMatchObject({ ok: false });
-    expect(setTrade(s, { give: "gold", get: "stone" } as never)).toMatchObject({ ok: false });
-    const r = setTrade(s, { give: "logs", get: "food" });
+  it("the orders are a lever: checked, kept within the researched slots and stopped with an empty list", () => {
+    const s = mk([]);
+    expect(setTrade(s, [{ give: "stone", get: "stone" } as TradeOrder])).toMatchObject({ ok: false });
+    expect(setTrade(s, [{ give: "gold", get: "stone" } as never])).toMatchObject({ ok: false });
+    expect(setTrade(s, [{ give: "stone", get: "food", keep: -1 }])).toMatchObject({ ok: false });
+    expect(setTrade(s, [{ give: "logs", get: "food" }, { give: "stone", get: "food" }])).toMatchObject({ ok: false }); // one slot without fairs
+    const r = setTrade(s, [{ give: "logs", get: "food", keep: 10, until: 2000 }]);
     if (!r.ok) throw new Error(r.reason);
-    expect(r.sim.levers.trade).toEqual({ give: "logs", get: "food" });
-    expect(setTrade(r.sim, { give: "logs", get: "food" })).toEqual({ ok: true, sim: r.sim }); // same order: nothing changes
-    const stop = setTrade(r.sim, null);
+    expect(r.sim.levers.trade).toEqual([{ give: "logs", get: "food" }]); // no stock keeping: the reserve and the cap are dropped
+    expect(setTrade(r.sim, [{ give: "logs", get: "food" }])).toEqual({ ok: true, sim: r.sim }); // same orders: nothing changes
+    const stop = setTrade(r.sim, []);
     if (!stop.ok) throw new Error(stop.reason);
-    expect(stop.sim.levers.trade).toBeNull();
+    expect(stop.sim.levers.trade).toEqual([]);
+  });
+  it("research opens more orders and their limits; a limit change is quiet", () => {
+    const s = mk([], {}, ["stockkeeping", "fairs"]);
+    const two = setTrade(s, [{ give: "logs", get: "food", keep: 10 }, { give: "stone", get: "food" }]);
+    if (!two.ok) throw new Error(two.reason);
+    expect(two.sim.levers.trade).toEqual([{ give: "logs", get: "food", keep: 10 }, { give: "stone", get: "food" }]);
+    expect(setTrade(two.sim, [{ give: "logs", get: "food" }, { give: "logs", get: "food" }])).toMatchObject({ ok: false }); // a pair twice
+    expect(setTrade(two.sim, [...two.sim.levers.trade, { give: "planks", get: "food" }])).toMatchObject({ ok: false }); // a third needs trade routes
+    const quiet = setTrade(two.sim, [{ give: "logs", get: "food", keep: 30, until: 2500 }, { give: "stone", get: "food" }]);
+    if (!quiet.ok) throw new Error(quiet.reason);
+    expect(quiet.sim.levers.trade[0]).toEqual({ give: "logs", get: "food", keep: 30, until: 2500 });
+    expect(quiet.sim.chronicle).toEqual(two.sim.chronicle);
+    expect(tradeSlots({ techs: ["fairs", "traderoutes"] })).toBe(3);
+    expect(MAX_TRADE_SLOTS).toBe(3);
+  });
+  it("a stall takes the player's name quietly; a blank one gives the generated name back", () => {
+    const s = mk([]);
+    const named = nameStall(s, 1, "  Хлебный   угол  ");
+    if (!named.ok) throw new Error(named.reason);
+    expect(named.sim.levers.stallNames).toEqual(["", "Хлебный угол"]);
+    expect(named.sim.chronicle).toEqual(s.chronicle);
+    expect(nameStall(named.sim, 1, "Хлебный угол")).toEqual({ ok: true, sim: named.sim });
+    const long = nameStall(s, 0, "x".repeat(50));
+    if (!long.ok) throw new Error(long.reason);
+    expect(long.sim.levers.stallNames[0]).toHaveLength(32);
+    expect(nameStall(s, 3, "a")).toMatchObject({ ok: false });
+    const back = nameStall(named.sim, 1, "");
+    if (!back.ok) throw new Error(back.reason);
+    expect(back.sim.levers.stallNames).toEqual([]);
   });
 });
 
@@ -465,7 +470,7 @@ describe("land value", () => {
 describe("house upgrade", () => {
   // all five services cover the house, a happy family (land 20 + 40 + 0.3 x 40 = 72)
   const rich = (mood = 90) => {
-    const s = folk(town([bld(1, "well", 0), bld(2, "chapel", 40), bld(3, "healer", 80), bld(4, "izba", 120), bld(5, "market", 160), bld(6, "school", 200)]), [
+    const s = folk(town([bld(1, "well", 0), bld(2, "chapel", 40), bld(3, "healer", 80), bld(4, "izba", 120), bld(5, "shop", 160), bld(6, "school", 200)]), [
       { home: 4, adults: 2, mood },
       { home: null, adults: 1, job: 2 },
       { home: null, adults: 1, job: 3 },
@@ -478,7 +483,7 @@ describe("house upgrade", () => {
   const day = (s: SimState) => dailyServices({ ...s, gameMinutes: s.gameMinutes + 1440 });
   it("starts after 20 good days in a row", () => {
     let s = day(rich());
-    expect(servicesIn(s.coverage[4])).toEqual(["well", "market", "chapel", "school", "healer"]);
+    expect(servicesIn(s.coverage[4])).toEqual(["well", "shop", "chapel", "school", "healer"]);
     expect(s.landValue[4]).toBeGreaterThanOrEqual(SERVICE.upgradeLand);
     expect(s.buildings[4].streak).toBe(1);
     for (let d = 0; d < 18; d++) s = day(s);
@@ -501,7 +506,7 @@ describe("house upgrade", () => {
   it("the land threshold is 60: four services and a happy neighbourhood are enough", () => {
     expect(SERVICE.upgradeLand).toBe(60);
     expect(upgradeShortfall(60, undefined, 80)).toEqual([]);
-    expect(upgradeShortfall(59, undefined, 80)).toEqual(["стоимость участка 59 из 60, нет: вода, рынок, храм, школа, лечебница"]);
+    expect(upgradeShortfall(59, undefined, 80)).toEqual(["стоимость участка 59 из 60, нет: вода, магазин, храм, школа, лечебница"]);
   });
   it("a house is raised only while its families get their goods", () => {
     expect(upgradeShortfall(60, undefined, 80, 0.8)).toEqual([]);
@@ -597,18 +602,18 @@ describe("workers without inputs build", () => {
 
 describe("inspector and snapshot", () => {
   const sim = () => {
-    const s = folk(town([bld(1, "well", 0), bld(2, "market", 40), bld(3, "izba", 100), bld(4, "izba", 1500)]), [{ home: 3, adults: 2, job: 2 }, { home: 4, adults: 2 }]);
+    const s = folk(town([bld(1, "well", 0), bld(2, "shop", 40), bld(3, "izba", 100), bld(4, "izba", 1500)]), [{ home: 3, adults: 2, job: 2 }, { home: 4, adults: 2 }]);
     return dailyServices(s);
   };
   it("houses report their services, land value and level", () => {
     const q = queryBuilding(sim(), 3)!;
-    expect(q).toMatchObject({ kind: "house", level: 1, upgrading: false, services: ["well", "market"] });
+    expect(q).toMatchObject({ kind: "house", level: 1, upgrading: false, services: ["well", "shop"] });
     expect(q.kind === "house" && q.landValue).toBeGreaterThan(30);
   });
   it("aggregates count houses covered per service", () => {
     const stats = serviceStats(sim());
     expect(stats.houses).toBe(2);
-    expect(stats.covered).toEqual({ well: 1, market: 1, chapel: 0, school: 0, healer: 0 });
+    expect(stats.covered).toEqual({ well: 1, shop: 1, chapel: 0, school: 0, healer: 0 });
     expect(stats.avgLandValue).toBeGreaterThan(20);
     expect(stats.level2).toBe(0);
     const snap = toSnapshot(sim());
@@ -710,7 +715,7 @@ describe("save", () => {
 describe("determinism with services", () => {
   it("two runs of a town with services are identical", () => {
     const build = () => {
-      let s = folk(town([bld(1, "well", 0), bld(2, "market", 40), bld(3, "school", 80), bld(4, "izba", 120), bld(5, "izba", 160)]), [
+      let s = folk(town([bld(1, "well", 0), bld(2, "shop", 40), bld(3, "school", 80), bld(4, "izba", 120), bld(5, "izba", 160)]), [
         { home: 4, adults: 2, kids: 2, kidAge: 9, job: 2 },
         { home: 5, adults: 2, job: 3 },
       ]);

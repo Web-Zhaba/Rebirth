@@ -1,7 +1,10 @@
 import { play } from "../ui/sound";
 import { effect, signal } from "@preact/signals";
-import { mixHex, MAP_ONLY, PALETTE, PLACED_BUILDING_COLORS } from "../ui/palette";
+import { BUILDING_ZONE_COLORS, mixHex, MAP_ONLY, PALETTE } from "../ui/palette";
+import { BUILDING_TOOLS, UI } from "../buildings/ui";
+import type { TemplateId } from "../buildings/rules";
 import type { RoadKind, ServiceId } from "../sim/types";
+import { BUILDINGS } from "../sim/buildings";
 import { storedChoice } from "../ui/preferenceModel";
 import { mppAtZoom, type View } from "../view/view";
 import { L } from "../i18n";
@@ -12,15 +15,15 @@ export type RoadTool = "path" | "dirt" | "footbridge" | "bridge" | "bulldoze" | 
 export type RoadMode = "straight" | "arc";
 // Outlines drawn on the land (map/landTool.ts).
 export type LandTool = "field" | "clearing";
-// Laid in strokes along roads (map/strokeTool.ts, sim/stroke.ts): houses, workshops and shops, as variants of three tools.
-export type StrokeTool = "house" | "workshop" | "shop";
-export type PlaceTool = StrokeTool | "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "museum" | "townhall" | ServiceId;
+// Laid in strokes along roads (map/strokeTool.ts, sim/stroke.ts): houses, workshops, shops and taverns; houses and workshops come as variants.
+export type StrokeTool = "house" | "workshop" | "shop" | "tavern";
+export type PlaceTool = StrokeTool | "gumno" | "woodcutter" | "sawpit" | "quarry" | "fisher" | "garden" | "hunter" | "forager" | "orchard" | "apiary" | "barn" | "cellar" | "dig" | "restored" | "museum" | "townhall" | "market" | ServiceId;
 export type Tool = RoadTool | LandTool | PlaceTool;
 
 export const isRoadTool = (t: Tool): t is RoadTool => t === "bulldoze" || t === "restore" || t === "path" || t === "dirt" || t === "footbridge" || t === "bridge";
 export const isLandTool = (t: Tool): t is LandTool => t === "field" || t === "clearing";
-export const STROKE_TOOLS: StrokeTool[] = ["house", "workshop", "shop"];
-export const isStrokeTool = (t: Tool | null): t is StrokeTool => t === "house" || t === "workshop" || t === "shop";
+export const STROKE_TOOLS: StrokeTool[] = ["house", "workshop", "shop", "tavern"];
+export const isStrokeTool = (t: Tool | null): t is StrokeTool => t === "house" || t === "workshop" || t === "shop" || t === "tavern";
 export const PLACE_TOOLS: PlaceTool[] = [...STROKE_TOOLS, "gumno", "woodcutter", "sawpit", "quarry", "fisher", "garden", "hunter", "forager", "orchard", "apiary", "barn", "cellar", "dig", "restored", "museum", "well", "market", "chapel", "school", "healer", "townhall"];
 export const isPlaceTool = (t: Tool): t is PlaceTool => (PLACE_TOOLS as string[]).includes(t);
 
@@ -92,32 +95,17 @@ export interface PlaceVariant {
   label: string;
   title: string;
 }
-export const PLACE_VARIANTS: Partial<Record<PlaceTool, PlaceVariant[]>> = {
-  house: [
-    { id: "izba", label: L("Дом", "House"), title: L("Дом на одну семью", "A house for one family") },
-    { id: "izba5", label: L("Большой", "Large"), title: L("Большой дом на две семьи", "A large house for two families") },
-  ],
-  workshop: [
-    { id: "weaver", label: L("Ткацкая", "Weaving"), title: L("Ткацкая мастерская: одежда", "Weaving workshop: clothing") },
-    { id: "pottery", label: L("Гончарня", "Pottery"), title: L("Гончарня: посуда", "Pottery: dishes") },
-    { id: "carpentry", label: L("Столярная", "Carpentry"), title: L("Столярная мастерская: утварь из досок", "Carpentry workshop: furnishings from planks") },
-    { id: "smithy", label: L("Кузница", "Smithy"), title: L("Кузница: инструменты", "Smithy: tools") },
-  ],
-  shop: [
-    { id: "shop", label: L("Магазин", "Shop"), title: L("Магазин: раздаёт товары по домам", "Shop: hands goods out to the houses") },
-    { id: "tavern", label: L("Таверна", "Tavern"), title: L("Таверна: вечерний отдых", "Tavern: evening rest") },
-  ],
-  barn: [
-    { id: "barn", label: L("Еда", "Food"), title: L("Амбар: зерно и припасы", "Barn: grain and provisions") },
-    { id: "logyard", label: L("Лес", "Timber"), title: L("Склад леса: брёвна и доски", "Timber yard: logs and planks") },
-    { id: "stoneyard", label: L("Камень", "Stone"), title: L("Склад камня", "Stone yard") },
-    { id: "warehouse", label: L("Товары", "Goods"), title: L("Товарный склад: одежда, посуда, утварь, инструменты", "Warehouse: clothing, dishes, furnishings, tools") },
-  ],
-  townhall: [
-    { id: "townhall", label: L("Ратуша", "Town hall"), title: L("Ратуша: одна на город", "Town hall: one per town") },
-    { id: "office", label: L("Управа", "Office"), title: L("Районная управа", "District office") },
-  ],
+// The kinds of each group tool, in the order of its switch (the first is the default); a kind's label and title are its
+// building's (src/buildings/<id>/ui.ts `variant`).
+const PLACE_KINDS: Partial<Record<PlaceTool, TemplateId[]>> = {
+  house: ["izba", "izba5"],
+  workshop: ["weaver", "pottery", "carpentry", "smithy"],
+  barn: ["barn", "logyard", "stoneyard", "warehouse"],
+  townhall: ["townhall", "office"],
 };
+export const PLACE_VARIANTS: Partial<Record<PlaceTool, PlaceVariant[]>> = Object.fromEntries(
+  Object.entries(PLACE_KINDS).map(([t, kinds]) => [t, kinds.map((id): PlaceVariant => ({ id, ...UI[id].variant! }))]),
+);
 export const placeVariant = signal<Partial<Record<PlaceTool, string>>>({});
 // The template a placement tool puts down: the kind chosen for it, or its first kind, or the tool itself.
 export const placeTemplate = (t: PlaceTool, chosen: Partial<Record<PlaceTool, string>> = placeVariant.value): string => chosen[t] ?? PLACE_VARIANTS[t]?.[0].id ?? t;
@@ -206,14 +194,16 @@ export function syncPan(view: View): void {
 }
 
 // Colours of player-placed buildings, per template.
-export const PLACED_COLORS: Record<PlaceTool, string> = PLACED_BUILDING_COLORS;
+// Colours of the placement tools on the map: the group tools' own, a building's tool its ui.ts colour.
+const GROUP_COLORS = { house: BUILDING_ZONE_COLORS.res, workshop: BUILDING_ZONE_COLORS.craft, barn: "#94503a", townhall: "#6c6a8f" };
+export const PLACED_COLORS = { ...GROUP_COLORS, ...Object.fromEntries(BUILDING_TOOLS.map((id) => [id, UI[id].tool!.color])) } as Record<PlaceTool, string>;
 
 // Map overlay: houses tinted by coverage of one service, or by a value; or roads by commuter traffic.
 export type Overlay = "none" | ServiceId | "value" | "mood" | "traffic";
 export const OVERLAYS: { id: Overlay; label: string }[] = [
   { id: "none", label: L("нет", "none") },
   { id: "well", label: L("вода (колодец)", "water (well)") },
-  { id: "market", label: L("рынок", "market") },
+  { id: "shop", label: L("магазин", "shop") },
   { id: "chapel", label: L("храм", "temple") },
   { id: "school", label: L("школа", "school") },
   { id: "healer", label: L("лечебница", "infirmary") },
@@ -243,7 +233,7 @@ export function setManualOverlay(id: Overlay): void {
   }
 }
 
-const SERVICE_OVERLAY_TOOLS: readonly ServiceId[] = ["well", "market", "chapel", "school", "healer"];
+const SERVICE_OVERLAY_TOOLS: readonly ServiceId[] = ["well", "shop", "chapel", "school", "healer"];
 export const serviceOverlayForTool = (t: Tool | null): ServiceId | null =>
   t && (SERVICE_OVERLAY_TOOLS as readonly string[]).includes(t) ? (t as ServiceId) : null;
 
@@ -274,4 +264,5 @@ export const TRAFFIC_STOPS: { n: number; color: string; width: number }[] = [
 export const placeReach = signal<{ x: number; y: number; range: number; color: string } | null>(null);
 
 // Radius (m) of the terrain around a lot that matters to a placed building.
-export const SITE_RADIUS: Partial<Record<PlaceTool, number>> = { woodcutter: 150, fisher: 100, forager: 150 };
+// Radius (m) of the land sampled around a building that needs a share of forest or water there; undefined for others.
+export const siteRadius = (template: string): number | undefined => (BUILDINGS[template]?.needs ? BUILDINGS[template].reach : undefined);

@@ -64,7 +64,7 @@ export function motionTime(): number {
   return still;
 }
 
-// The sun's shadows of buildings and trees (engine/shadow/shadowMap.ts): off, a 1024 map, or a 2048 one. Low on phones.
+// The sun's shadows of buildings and trees (engine/shadow/shadowMap.ts): off, three 1024 cascades, or four 2048 ones. Low on phones.
 export const SHADOW_QUALITIES: ShadowQuality[] = ["off", "low", "high"];
 const SHADOW_KEY = "rebirth.shadows";
 

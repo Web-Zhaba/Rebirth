@@ -1,6 +1,6 @@
-import { GOOD_NAMES, GOODS_UPGRADE, needsAt } from "../sim/goods";
+import { GOOD_NAMES, GOODS_UPGRADE, needsAt, zeroStock } from "../sim/goods";
 import { useEffect, useState } from "preact/hooks";
-import { BUILDINGS, floorArea, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
+import { BUILDINGS, floorArea, isFarm, homesOf, houseCapacity, JOB_NAMES, materialsOf, maxLevel, STORE_GROUPS, type JobGroup, type Materials, type StoreGroup, upgradable } from "../sim/buildings";
 import { storeAmount, storeGroupName } from "./buildMenu";
 import { domainName } from "../sim/domains";
 import { kindName, siteDomain, siteTitle } from "../sim/heritage";
@@ -26,14 +26,17 @@ import { buildings, digs, gameClock, queryBuilding, sendCmd, state, stock } from
 import { act, InspectorHead, Line, num, plural, Section, siteEta, SiteLevers } from "./InspectorParts";
 import { buildingRemaining, buildingStatus, OUTPUT, templateIcon } from "./inspectorModel";
 import { JOB_ICON, PRIORITY_LONG, staffLimit } from "./jobsModel";
-import { Button, Confirm, IconButton, ProgressBar, Segmented } from "./kit";
-import { TRADE, TRADE_GOODS, tradeCapacity, tradeRate, type TradeGood, type TradeOrder } from "../sim/trade";
+import { Button, Confirm, IconButton, ProgressBar } from "./kit";
+import { nameOfStall, openMarket, TRADE_LABEL } from "./MarketPanel";
+import { openTownhall } from "./TownhallPanel";
+import { marketView } from "./marketModel";
 import { closePanel, rightPanel } from "./panels";
 import { buildFactorText, workFactorText } from "./weatherModel";
 import { duplicateTool } from "./actionModel";
 import { lockOf, pickTool } from "../map/toolPick";
 import { followResident } from "./follow";
 import { NeedsBars } from "./NeedsBars";
+import { Icon } from "./Icon";
 import { SEMANTIC_IDS } from "./semanticIds";
 import { decimal, L } from "../i18n";
 
@@ -87,7 +90,7 @@ function Restored({ b, site }: { b: Building; site: FoundFoundation | undefined 
           {w > 0 ? L(`Вклад в науку: +${num(w * SPEED.restored * 100)} % к скорости: ${domainName(domain)}`, `Research contribution: +${num(w * SPEED.restored * 100)}% speed: ${domainName(domain)}`) : L(`Область: ${domainName(domain)}; вклад появится, когда постройка будет готова`, `Field: ${domainName(domain)}; the contribution starts once the building is finished`)}
         </div>
       )}
-      {b.template === "restored" && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
+      {BUILDINGS[b.template]?.monument && b.state === "active" && <div class="people-note">{L("Дома в 200 м довольнее, земля там дороже.", "Houses within 200 m are happier and land there is worth more.")}</div>}
     </div>
   );
 }
@@ -157,17 +160,16 @@ function useResidents(id: number | null, active: boolean, bump: string): Buildin
   return data && data.id === id ? data.q : null;
 }
 
-const SITE_FACT = new Set(["woodcutter", "fisher", "forager"]);
-// Whether Production below has anything to show for this workplace.
-const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && SITE_FACT.has(template)) || !!p.orchard || !!p.store || !!p.haul || !!p.full || !!p.fields || !!p.missing;
+// Whether Production below has anything to show for this workplace (the share of forest or water around a site is
+// shown where the building needs one).
+const hasProduction = (template: string, p: ProductionInfo): boolean => (!!p.site && !!BUILDINGS[template]?.needs) || !!p.orchard || !!p.store || !!p.haul || !!p.full || !!p.fields || !!p.missing;
 
 function Production({ template, p }: { template: string; p: ProductionInfo }) {
   const site = p.site;
   return (
     <div class="prod">
-      {site && template === "woodcutter" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
-      {site && template === "fisher" && <div>{L("Вода рядом:", "Water nearby:")} {pct(site.water)}</div>}
-      {site && template === "forager" && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
+      {site && BUILDINGS[template]?.needs?.forest !== undefined && <div>{L("Лес вокруг:", "Forest around:")} {pct(site.forest)}</div>}
+      {site && BUILDINGS[template]?.needs?.water !== undefined && <div>{L("Вода рядом:", "Water nearby:")} {pct(site.water)}</div>}
       {p.orchard && <div>{p.orchard.ripeDays > 0 ? L(`Деревья растут: ещё ${p.orchard.ripeDays} дн.`, `Trees are growing: ${p.orchard.ripeDays} more d`) : L(`Урожай этого года: ${pct(p.orchard.quality)}`, `This year’s crop: ${pct(p.orchard.quality)}`)}</div>}
       {p.store &&
         (Object.keys(p.store.room) as StoreGroup[]).map((g) => {
@@ -232,51 +234,59 @@ function StaffControl({ id, group, jobs, workers, staff }: { id: number; group: 
   );
 }
 
-const EMPTY_STOCK: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
+const EMPTY_STOCK: Stock = zeroStock();
 
-const TRADE_LABEL: Record<TradeGood, string> = { food: L("Еда", "Food"), logs: L("Брёвна", "Logs"), planks: L("Доски", "Planks"), stone: L("Камень", "Stone"), clothes: GOOD_NAMES.clothes, dishes: GOOD_NAMES.dishes, furniture: GOOD_NAMES.furniture, tools: GOOD_NAMES.tools };
-const TRADE_OFF = { id: "none", label: "—", title: L("Не меняем", "No trade") } as const;
-
-// The town's trade order, shown in every market: one good given, one got, swapped each day by the market workers.
-function MarketTrade({ workers }: { workers: number }) {
-  const order = state.value?.levers.trade ?? null;
-  const last = state.value?.economy.trade;
-  const st = stock.value ?? EMPTY_STOCK;
-  const set = (o: TradeOrder | null) => act({ type: "setTrade", order: o });
-  const options = (skip: TradeGood | null) => TRADE_GOODS.map((g) => ({ id: g as string, label: TRADE_LABEL[g], title: OUTPUT[g].name, disabled: g === skip }));
-  const unit = (g: TradeGood) => OUTPUT[g].unit;
-  const surplus = order ? st[order.give] - TRADE.keep[order.give] : 0;
+// A market at a glance: each stall with what it trades, and the way into the market window (MarketPanel.tsx).
+function MarketSummary() {
+  const st = state.value!;
+  const v = marketView(st.progress, st.levers.trade, st.economy.trade, st.economy.traders);
   return (
-    <div class="prod">
-      <Segmented
-        label={L("Отдаём", "We give")}
-        value={order?.give ?? TRADE_OFF.id}
-        options={[TRADE_OFF, ...options(null)]}
-        onChange={(id) => {
-          if (id === TRADE_OFF.id) return set(null);
-          const give = id as TradeGood;
-          set({ give, get: order && order.get !== give ? order.get : give === "food" ? "tools" : "food" });
-        }}
-      />
-      {order && (
-        <>
-          <Segmented label={L("Получаем", "We get")} value={order.get} options={options(order.give)} onChange={(id) => set({ give: order.give, get: id as TradeGood })} />
-          <div>
-            1 {unit(order.give)} = {num(tradeRate(order))} {unit(order.get)} · {L("до", "up to")} {num(tradeCapacity(order, workers))} {unit(order.give)} {L("в день", "a day")}
-          </div>
-          <div class="people-note">
-            {L("Остаётся на складе:", "Kept in store:")} {num(TRADE.keep[order.give])} {unit(order.give)}. {L("Обмен общий для всех рынков", "The trade is shared by all markets")}
-          </div>
-          {workers === 0 && <div class="prod-warn">{L("Некому торговать: нужны работники рынка", "No one to trade: the market needs workers")}</div>}
-          {workers > 0 && surplus <= 0 && <div class="prod-warn">{L("Излишков нет: всё, что есть, остаётся на складе", "No surplus: everything stays in store")}</div>}
-          {last && (
-            <div>
-              {L("Вчера: отдали", "Yesterday: gave")} {num(last.gave)} {unit(last.give)}, {L("получили", "got")} {num(last.got)} {unit(last.get)}
-            </div>
-          )}
-        </>
+    <Section title={L("Торговый ряд", "The market row")}>
+      <ul class="mk-sum">
+        {v.stalls.map((s) => (
+          <li key={s.index} class={`is-${s.state}`}>
+            <span class="mk-sum-n">{s.index + 1}</span>
+            <span class="mk-sum-name">{nameOfStall(s.index)}</span>
+            <span class="mk-sum-t">
+              {s.order ? (
+                <>
+                  <Icon name={OUTPUT[s.order.give].icon} size={14} />
+                  {TRADE_LABEL[s.order.give]}
+                  <Icon name="arrowRight" size={12} />
+                  <Icon name={OUTPUT[s.order.get].icon} size={14} />
+                  {TRADE_LABEL[s.order.get]}
+                </>
+              ) : s.state === "free" ? (
+                L("свободен", "free")
+              ) : (
+                L(`закрыт: ${s.tech?.name ?? ""}`, `shut: ${s.tech?.name ?? ""}`)
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div class="people-note">{L("Обмен общий для всех рынков города", "The trade is shared by all the town's markets")}</div>
+      <Button variant="primary" onClick={openMarket}>
+        {L("Открыть рынок", "Open the market")}
+      </Button>
+    </Section>
+  );
+}
+
+// The town hall at a glance: the form of rule and the head, and the way into its window (TownhallPanel.tsx).
+function HallSummary() {
+  const v = state.value?.govView;
+  return (
+    <Section title={L("Правление", "Rule")}>
+      {v && (
+        <Line label={v.form === "monarchy" ? L("Монархия", "Monarchy") : L("Республика", "Republic")} tone={v.head ? undefined : "warn"}>
+          {v.head ? `${v.head.name}, ${v.head.age} ${plural(v.head.age, "год", "года", "лет", "year")}` : L("главы нет", "no head")}
+        </Line>
       )}
-    </div>
+      <Button variant="primary" onClick={() => openTownhall("rule")}>
+        {L("Открыть ратушу", "Open the town hall")}
+      </Button>
+    </Section>
   );
 }
 
@@ -328,7 +338,7 @@ export function BuildingPanel() {
   const capacity =
     t.residents > 0
       ? L(`Вмещает ${houseCapacity(b)} чел.`, `Houses ${houseCapacity(b)} people`)
-      : b.template === "gumno" && info?.kind !== "workplace"
+      : isFarm(b.template) && info?.kind !== "workplace"
         ? L("Места зависят от полей", "Jobs depend on the fields")
         : jobs > 0
           ? `${jobs} ${plural(jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}`
@@ -363,7 +373,7 @@ export function BuildingPanel() {
           {!b.asItWas && site?.cls && <div class="people-note">{foundationKindText(site, t)}</div>}
         </Section>
       )}
-      {b.template === "museum" && b.state === "active" && snap && <MuseumSummary b={b} />}
+      {b.template === MUSEUM.template && b.state === "active" && snap && <MuseumSummary b={b} />}
       {(left > 0 || b.state !== "active") && (
         <Section title={upgrading ? L("Перестройка", "Rebuild") : L("Стройка", "Construction")}>
           {left > 0 && (
@@ -429,7 +439,7 @@ export function BuildingPanel() {
               <Line label={L(`Охват ${info.service.reach} м`, `Reach ${info.service.reach} m`)}>
                 {info.service.covered} {L("из", "of")} {info.service.houses} {L("домов", "houses")}
               </Line>
-              {info.service.id === "school" && (
+              {!!BUILDINGS[info.service.id]?.seats && (
                 <Line label={L("Ученики", "Pupils")}>
                   {info.service.pupils} {L("из", "of")} {info.service.seats}
                 </Line>
@@ -439,7 +449,7 @@ export function BuildingPanel() {
           )}
           {output && (
             <Line icon={output.icon} label={`${L("Делает", "Makes")}: ${output.name}`}>
-              {b.template === "gumno" ? L("вчера собрано", "gathered yesterday") : L("вчера", "yesterday")} {num(output.made)} {output.unit}
+              {isFarm(b.template) ? L("вчера собрано", "gathered yesterday") : L("вчера", "yesterday")} {num(output.made)} {output.unit}
             </Line>
           )}
           {weatherWork && (
@@ -475,11 +485,8 @@ export function BuildingPanel() {
           <Production template={b.template} p={info.production} />
         </Section>
       )}
-      {b.template === "market" && b.state === "active" && info?.kind === "workplace" && (
-        <Section title={L("Обмен", "Trade")}>
-          <MarketTrade workers={info.workers.length} />
-        </Section>
-      )}
+      {BUILDINGS[b.template]?.trades && b.state === "active" && <MarketSummary />}
+      {BUILDINGS[b.template]?.seat && b.state === "active" && <HallSummary />}
       {info?.kind === "house" && (
         <Section title={L("Семьи", "Families")}>
           {info.households.length === 0 ? (

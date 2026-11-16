@@ -4,7 +4,7 @@ import type { Engine } from "../../engine/engine";
 import { packColor } from "../../engine/overlay/geometry";
 import { colourBits, DOT_FLOATS, Dots, writeDot } from "../../engine/scene/dots";
 import { FIGURE_VERTEX_FLOATS, FOOT_VERTEX_FLOATS, type TownMesh } from "../../engine/scene/townMesh";
-import { lightOpacity, placeAt, standAt, type Light, type Rest, type Trip } from "../../map/life";
+import { placeAt, standAt, type Rest, type Trip } from "../../map/life";
 import { tool } from "../../map/tools";
 import { buildRig, orient, poseOf, villagerLook, writeVillager, type Action, type Detail, type Rig } from "../../map/villagerModel";
 import { MAP_ONLY, PALETTE } from "../../ui/palette";
@@ -21,10 +21,7 @@ import { mppAtZoom, type View } from "../view";
 const FRAME_MS = 50;
 const MAX_EXTRAP = 15; // game minutes the clock may run ahead of the last snapshot
 const DAY_MIN = 1440;
-const HALO = 0.3;
-const GLOW_M = { house: 5, work: 8, tavern: 12 } as const;
 const DOTS_MPP = mppAtZoom(13); // the old dots' minzoom
-const GLOWS_MPP = mppAtZoom(14);
 const HIT_PX = 10;
 const TOUCH_HIT_PX = 24; // a fingertip
 const FIGURE_TALL = 1.7; // m
@@ -44,7 +41,6 @@ const EQUATOR = 2 * Math.PI * 6378137;
 export interface LifeOptions {
   trips: ReadonlySignal<Trip[]>;
   rests: ReadonlySignal<Rest[]>;
-  lights: ReadonlySignal<Light[]>;
   gameMinutes: ReadonlySignal<number>;
   gameMinPerSec: () => number;
   frame: ReadonlySignal<Frame | null>;
@@ -109,20 +105,6 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     const zoom = Math.log2((EQUATOR * Math.cos((lat0 * Math.PI) / 180)) / (512 * mpp));
     const t = Math.min(1, Math.max(0, (zoom - 13) / 6));
     const ground = (lat: number, lng: number) => engine.groundAt(lat, lng) ?? 0;
-
-    // Glows, fading with the hour and towards the street, where the windows themselves carry the light.
-    const lights = mpp <= GLOWS_MPP ? o.lights.peek() : [];
-    const near = Math.min(1, Math.max(0, (zoom - 15.5) / 2));
-    let n = 0;
-    const g = grow(0, lights.length);
-    for (const l of lights) {
-      const a = lightOpacity(l.kind, hour) * (1 - near * (1 - HALO));
-      if (a < 0.01) continue;
-      const [lng, lat] = f.toLngLat(l.x, l.y);
-      const p = dots.local(lat, lng, ground(lat, lng) + 0.3);
-      writeDot(g, n++, p[0], p[1], p[2], GLOW_M[l.kind], colourBits(packColor(MAP_ONLY.lamp, a)), 0, 0, 0.9);
-    }
-    dots.set(0, g, n);
 
     // Walkers and carts on their trips, then those standing out of doors; the residents near the camera as figures.
     const trips = mpp <= DOTS_MPP ? o.trips.peek() : [];

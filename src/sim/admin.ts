@@ -23,6 +23,7 @@ export type AdminOp =
   | { k: "stock" }
   | { k: "unlock" } // every tech researched
   | { k: "era" } // the next era at once
+  | { k: "form" } // the other form of rule at once, past the five-year wait
   | { k: "reveal"; x: number; y: number; r: number }; // reveal the buried old city in a disc
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);

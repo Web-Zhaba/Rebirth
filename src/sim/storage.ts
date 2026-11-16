@@ -1,4 +1,5 @@
-import { CAMP_STORE, STORE_GROUPS, STORES, groupOf, storeRoom, type StoreGroup, type StoreRoom } from "./buildings";
+import { BUILDINGS, CAMP_STORE, STORE_GROUPS, groupOf, storeRoom, type StoreGroup, type StoreRoom } from "./buildings";
+import { byGood, zeroStock } from "./goods";
 import { makeIdentityCache } from "./memo";
 import { lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot, type Tree } from "./people";
 import { roadNet } from "./roadNetCache";
@@ -18,7 +19,7 @@ const KINDS = Object.values(STORE_GROUPS).flat() as (keyof Stock)[];
 const EPS = 1e-6;
 
 // Tonnes per unit of the stock (kg of food, m3 of logs and planks, t of stone, pieces of goods).
-export const MASS: Record<keyof Stock, number> = { food: 0.001, logs: 0.6, planks: 0.5, stone: 1, clothes: 0.003, dishes: 0.004, furniture: 0.02, tools: 0.004 };
+export const MASS: Record<keyof Stock, number> = byGood((g) => g.mass);
 // One hour of carting moves `tm` tonne-metres (a cart of half a tonne at walking pace, there and back, loading included);
 // off the roads a load goes `offroad` times the straight distance.
 export const HAUL = { tm: 2000, offroad: 1.5, reach: 20_000 };
@@ -50,7 +51,7 @@ const storeSet = makeIdentityCache((buildings: Record<number, Building>): StoreS
 
 // The camp and every finished store, the camp first.
 export const storePoints = (buildings: Record<number, Building>): readonly StorePoint[] => storeSet(buildings).points;
-export const isStore = (b: Pick<Building, "template">): boolean => b.template in STORES;
+export const isStore = (b: Pick<Building, "template">): boolean => !!BUILDINGS[b.template]?.store;
 
 // ---------- distances ----------
 
@@ -301,7 +302,7 @@ export function spreadStores(s: Pick<SimState, "stock" | "buildings" | "roads">)
 // The state with its stock replaced and the stores spread to match, nothing lost (a debug grant, a test fixture).
 export const withStock = <S extends Pick<SimState, "stock" | "stores" | "buildings" | "roads">>(s: S, stock: Stock): S => ({ ...s, stock, stores: spreadStores({ ...s, stock }) });
 
-const zero = (): Stock => ({ food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 });
+const zero = zeroStock;
 
 // What a store holds of a group, and its room for it.
 export function storeLoad(stores: Stores, id: number, group: StoreGroup): number {

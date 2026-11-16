@@ -7,7 +7,7 @@ import type { RenderTarget } from "../gpu/device";
 import type { HiZ } from "../frame/hiz";
 import { GpuTimer } from "../gpu/timer";
 import { createShader } from "../gpu/wgsl";
-import { SHADOW_DEPTH } from "../shadow/shadowMap";
+import { SHADOW_DEPTH, type ShadowMap } from "../shadow/shadowMap";
 import { COVER_BLOCKS } from "../bake/drape";
 import { EXAGGERATION, NO_PAGE, type Terrain } from "../terrain/terrain";
 import { birchShare, coniferShare, COVER_TABLE, DETAIL_KINDS, DETAIL_SIZE, DETAIL_SPACING, RUIN_ADD, TREE_SIZE, TREE_SPACING } from "../../world/forestMix";
@@ -26,14 +26,18 @@ import { bakeTreeAtlas, IMPOSTOR_STEP, IMPOSTOR_VIEWS, TREE_VERTEX_LAYOUT, uploa
 // Kinds: conifer, broadleaf, birch (trees), bush, reed, boulder (details); a slot per (kind, level of detail).
 export const FOREST_KINDS = 6;
 const SLOTS = FOREST_KINDS * 2;
-const CAPS = [24576, 65536, 24576, 65536, 24576, 65536, 12288, 32768, 12288, 32768, 12288, 32768];
 const INSTANCE_BYTES = 32;
 
 const MAX_TREES = 120_000; // expected trees in view
 const MAX_DETAILS = 60_000;
+const CAPS = slotCaps();
 const MAX_CANDIDATES = 3_000_000;
 const TREE_NEAR = 700; // trees nearer than this are models (and never thinned)
 const DETAIL_NEAR = 120;
+const MESH_SHADOW_TEXEL = 0.5; // m: a shadow cascade this fine takes the models' own shapes, a coarser one the impostors'
+const CASTER_SLACK = 250; // m a model's shadow can reach beyond the models' range
+const MAX_SHADOW_REACH = 6; // a shadow's length per metre of height the scatter keeps an out-of-view caster for
+const QUAD_ARGS = SLOTS * 5 * 4; // byte offset of the drawIndirect records that draw the model slots as quads
 const TREE_FAR_CAP = 12_000;
 const DETAIL_FAR_CAP = 2_000;
 const MIN_PX = 1.5; // drawn up to where a typical one is this many px tall
@@ -85,6 +89,7 @@ export interface ForestStats {
 export interface ForestCulling {
   slots: number[];
   drawn: number;
+  over: number; // appended past a slot's capacity, so dropped (should stay 0)
   frustum: number;
   occluded: number;
 }
@@ -100,7 +105,7 @@ export class Forest implements Drawable {
   grow = 0; // 0 hides the forest, 1 full size (the view eases it in with the scale)
   look: ForestLook | null = null;
   stats: ForestStats = { jobs: 0, candidates: 0, reach: Infinity, expected: 0 };
-  culling: ForestCulling = { slots: [], drawn: 0, frustum: 0, occluded: 0 };
+  culling: ForestCulling = { slots: [], drawn: 0, over: 0, frustum: 0, occluded: 0 };
   occlusion = true; // test against the Hi-Z (off: for comparisons)
   readonly timer: GpuTimer | null; // GPU time of the scatter pass, where timestamps are available
   private readonly meshes: TreeMeshes;
@@ -111,6 +116,7 @@ export class Forest implements Drawable {
   private readonly meshPipe: GPURenderPipeline;
   private readonly shadowPipe: GPURenderPipeline;
   private readonly impostorPipe: GPURenderPipeline;
+  private readonly impostorShadowPipe: GPURenderPipeline;
   private readonly uniform: GPUBuffer;
   private readonly lookBuffer: GPUBuffer;
   private readonly instances: GPUBuffer;
@@ -161,12 +167,13 @@ export class Forest implements Drawable {
     this.instances = device.createBuffer({ label: "forest instances", size: at * INSTANCE_BYTES, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX });
     this.statsRead = device.createBuffer({ label: "forest stats", size: COUNTERS * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
     this.counts = device.createBuffer({ label: "forest counts", size: COUNTERS * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
-    this.args = device.createBuffer({ label: "forest draws", size: SLOTS * 5 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST });
-    const args = new Uint32Array(SLOTS * 5);
+    this.args = device.createBuffer({ label: "forest draws", size: QUAD_ARGS + FOREST_KINDS * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST });
+    const args = new Uint32Array(QUAD_ARGS / 4 + FOREST_KINDS * 4);
     for (let k = 0; k < FOREST_KINDS; k++) {
       const r = this.meshes.ranges[k];
       args.set([r.count, 0, r.firstIndex, r.baseVertex, 0], k * 10); // drawIndexedIndirect
       args.set([4, 0, 0, 0, 0], k * 10 + 5); // drawIndirect: a quad as a strip
+      args.set([4, 0, 0, 0], QUAD_ARGS / 4 + k * 4); // the models as impostor quads, for the coarse shadow cascades
     }
     device.queue.writeBuffer(this.args, 0, args);
     this.uniform = device.createBuffer({ label: "forest scatter", size: this.data.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -232,6 +239,14 @@ export class Forest implements Drawable {
       primitive: { topology: "triangle-strip" },
       depthStencil,
       multisample: { count: target.sampleCount, alphaToCoverageEnabled: target.sampleCount > 1 },
+    });
+    this.impostorShadowPipe = device.createRenderPipeline({
+      label: "forest impostor shadows",
+      layout,
+      vertex: { module, entryPoint: "impostorShadowVs", buffers: [instanceLayout] },
+      fragment: { module, entryPoint: "impostorShadowFs", targets: [] },
+      primitive: { topology: "triangle-strip" },
+      depthStencil: SHADOW_DEPTH,
     });
   }
 
@@ -369,7 +384,7 @@ export class Forest implements Drawable {
     const put = (...v: number[]) => (d.set(v, k), (k += v.length));
     for (const p of planes) put(...p);
     const groups = Math.ceil(total / 64);
-    put(0, 0, 0, total);
+    put(...shadowReach(engine, up.up), total);
     new Uint32Array(d.buffer).set([count, Math.min(groups, 65535) * 64, 0, 0], k);
     k += 4;
     put(treeFar, ...detailFar);
@@ -442,7 +457,7 @@ export class Forest implements Drawable {
         const c = new Uint32Array(this.statsRead.getMappedRange()).slice();
         this.statsRead.unmap();
         const slots = [...c.subarray(0, SLOTS)];
-        this.culling = { slots, drawn: slots.reduce((a, n, s) => a + Math.min(n, CAPS[s]), 0), frustum: c[SLOTS], occluded: c[SLOTS + 1] };
+        this.culling = { slots, drawn: slots.reduce((a, n, s) => a + Math.min(n, CAPS[s]), 0), over: slots.reduce((a, n, s) => a + Math.max(0, n - CAPS[s]), 0), frustum: c[SLOTS], occluded: c[SLOTS + 1] };
       })
       .catch(() => {})
       .finally(() => (this.statsBusy = false));
@@ -465,16 +480,32 @@ export class Forest implements Drawable {
     }
   }
 
-  // Into the sun's shadow map: the near models only (impostors stand far beyond the map).
-  drawShadow(pass: GPURenderPassEncoder): void {
+  // Into the shadow cascade being drawn. A fine one takes the near models as they are; a coarse one, where a tree is a
+  // few texels, takes every tree as its impostor turned to the sun (a quad instead of a whole model) and leaves the
+  // small details out. The far trees cast as impostors into any cascade.
+  drawShadow(pass: GPURenderPassEncoder, shadow: ShadowMap): void {
     if (!this.jobCount || !this.scatterEye) return;
+    const near = shadow.castStart < TREE_NEAR + CASTER_SLACK;
+    const models = near && shadow.castTexel <= MESH_SHADOW_TEXEL;
     pass.setBindGroup(1, this.drawGroup);
-    pass.setPipeline(this.shadowPipe);
-    pass.setVertexBuffer(0, this.meshes.vertices);
-    pass.setIndexBuffer(this.meshes.indices, "uint32");
+    if (models) {
+      pass.setPipeline(this.shadowPipe);
+      pass.setVertexBuffer(0, this.meshes.vertices);
+      pass.setIndexBuffer(this.meshes.indices, "uint32");
+      for (let k = 0; k < FOREST_KINDS; k++) {
+        pass.setVertexBuffer(1, this.instances, this.bases[k * 2] * INSTANCE_BYTES, CAPS[k * 2] * INSTANCE_BYTES);
+        pass.drawIndexedIndirect(this.args, k * 2 * 20);
+      }
+    }
+    pass.setPipeline(this.impostorShadowPipe);
     for (let k = 0; k < FOREST_KINDS; k++) {
-      pass.setVertexBuffer(1, this.instances, this.bases[k * 2] * INSTANCE_BYTES, CAPS[k * 2] * INSTANCE_BYTES);
-      pass.drawIndexedIndirect(this.args, k * 2 * 20);
+      if (!models && k >= 3) continue; // bushes, reeds, stones: too small for a coarse cascade
+      if (near && !models) {
+        pass.setVertexBuffer(0, this.instances, this.bases[k * 2] * INSTANCE_BYTES, CAPS[k * 2] * INSTANCE_BYTES);
+        pass.drawIndirect(this.args, QUAD_ARGS + k * 16);
+      }
+      pass.setVertexBuffer(0, this.instances, this.bases[k * 2 + 1] * INSTANCE_BYTES, CAPS[k * 2 + 1] * INSTANCE_BYTES);
+      pass.drawIndirect(this.args, (k * 2 + 1) * 20);
     }
   }
 
@@ -565,4 +596,33 @@ function pageUv(out: Float32Array, o: number, x: number, y: number, page: { z: n
   if (!page) return void out.set([0, 0, 1, 0], o);
   const k = 2 ** (SCATTER_ZOOM - page.z);
   out.set([(x - page.x * k) / k, (y - page.y * k) / k, 1 / k, 0], o);
+}
+
+// How far a tree's shadow reaches over the ground per metre of its height (ECEF, along the ground away from the sun),
+// for the scatter to keep the trees out of view whose shadows fall into it; zero without shadows. `up` is the target's.
+function shadowReach(engine: Engine, up: Vec3): Vec3 {
+  if (engine.shadow.fade <= 0) return [0, 0, 0];
+  const sun = engine.light(engine.state).sun;
+  const sinEl = sun[0] * up[0] + sun[1] * up[1] + sun[2] * up[2];
+  const flat: Vec3 = [sun[0] - up[0] * sinEl, sun[1] - up[1] * sinEl, sun[2] - up[2] * sinEl];
+  const cosEl = Math.hypot(flat[0], flat[1], flat[2]);
+  if (sinEl <= 0.02 || cosEl < 1e-6) return [0, 0, 0];
+  const k = -Math.min(MAX_SHADOW_REACH, cosEl / sinEl) / cosEl;
+  return [flat[0] * k, flat[1] * k, flat[2] * k];
+}
+
+// Instances per slot. The far slots hold whatever the thinning lets through, and an append over a slot's capacity
+// drops whichever trees the GPU's threads reached last, a different set every frame: far trees that flicker. So each
+// far slot holds all its kind can take of the expected count: a tree kind at most its largest share of the trees
+// (the scatter's pick in forestScatter.wgsl: conifer under c, birch under c + b(1 - c), broadleaf above), a detail kind
+// the whole detail budget. The margin covers the scatter's randomness around the expectation.
+function slotCaps(): number[] {
+  const share = [0, 0, 0];
+  for (let lat = 0; lat <= 90; lat += 0.25) {
+    const c = coniferShare(lat);
+    const b = birchShare(lat);
+    [c, (1 - c) * (1 - b), (1 - c) * b].forEach((s, k) => (share[k] = Math.max(share[k], s)));
+  }
+  const far = (n: number) => Math.ceil((n * 1.1) / 4096) * 4096;
+  return [...share.flatMap((s) => [24576, far(s * MAX_TREES)]), ...DETAIL_KINDS.flatMap(() => [12288, far(MAX_DETAILS)])];
 }

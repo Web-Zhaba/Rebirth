@@ -11,6 +11,7 @@ import { Mesh, PATTERN, prepareRing, rgb, triangulate, type Model, type XY } fro
 
 const PLINTH_BELOW = 0.4; // m below the lowest ground under the lot
 const MIN_STEP = 0.05; // m; flatter lots get no plinth
+const PILE_FOOT = 0.3; // m a pier's piles go into the ground
 const BASE_Z = 0.01; // m; vertices this low are on the ground (bridge feet)
 export const ROAD_LIFT = 0.08; // m; ground roads ride this far above the terrain mesh, which our samples follow closely
 
@@ -49,6 +50,13 @@ export function seatBuilding(model: Model, ring: readonly XY[], ground: Ground, 
   for (const [p, q, s] of tris) mesh.flat([p[0], p[1], top], [q[0], q[1], top], [s[0], s[1], top], col);
   const seated = merge(out, { ...mesh.m, lift: new Array<number>(mesh.m.positions.length / 3).fill(top) }); // its facade height is below 0: plain stone
   return out.smoke ? { ...seated, smoke: out.smoke } : seated;
+}
+
+// A pier stands on piles, so it gets no plinth: the deck goes up to the highest ground under it and every pile reaches
+// down to the ground under itself (what stands at z = 0, like a bridge's feet), a little into it.
+export function seatPier(model: Model, ring: readonly XY[], ground: Ground): Model {
+  const top = Math.max(...[...ring, centroid(ring)].map(([x, y]) => ground(x, y)));
+  return shifted(model, (x, y, z) => (z <= BASE_Z ? Math.min(top, ground(x, y)) - PILE_FOOT : z + top));
 }
 
 export function drapeRoad(model: Model, ground: Ground): Model {

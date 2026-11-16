@@ -5,10 +5,10 @@ import { TOWN_COLORS } from "../ui/palette";
 import { buildHeritageModel } from "./heritageModels";
 import type { Light } from "./life";
 import { buildScaffold, type Model, type XY } from "./modelGeometry";
-import { drapeRoad, seatBridge, seatBuilding, type Ground } from "./groundSeat";
+import { drapeRoad, seatBridge, seatBuilding, seatPier, type Ground } from "./groundSeat";
 import { buildRoadModel } from "./roadModels";
 import { buildJunctionModel, type RoadJunction } from "./roadJunctions";
-import { buildTownModel } from "./townModels";
+import { buildTownModel, townSeat } from "./townModels";
 
 // The town's models (view/engine/models.ts draws them): what to
 // draw (ModelItem), the model of each item on flat ground or seated on the relief, the cache key of everything that
@@ -19,7 +19,7 @@ const PROGRESS_STEPS = 24; // progress < 1 is quantised, so a slowly growing sit
 // A building to draw: ring in town-local metres, height in metres, progress 0..1 (below 1 the building-site look: log
 // walls as high as the progress allows, corner posts at full height).
 // - heritage: a restored old building; kind is its OSM class (the `cls` of src/sim/heritage.ts), height its eaves.
-// - town: one of the town's own; kind is the template (src/sim/buildings.ts), height the template's (after an upgrade).
+// - town: one of the town's own; kind is the template (src/buildings/<id>/), height the template's (after an upgrade).
 // - road: a built road chain; ring is its centre line (not closed), kind its RoadKind, height unused.
 // - junction: the apron where built chains meet (roadJunctions.ts); ring is the node, `junction` its arms, kind the
 //   dominant arm's RoadKind.
@@ -58,6 +58,9 @@ export function coverOf(items: readonly { ring: readonly XY[] }[]): XY[] {
 }
 
 const BRIDGES = new Set(["footbridge", "bridge", "stonebridge"]);
+// Flat roads and aprons lie on the ground and are drawn without depth writes; bridges stand up (deck over piles, arches,
+// parapets) and need depth like buildings do (townMesh.ts).
+export const isFlatRoad = (it: ModelItem): boolean => it.style === "junction" || (it.style === "road" && !BRIDGES.has(it.kind));
 const PLINTH = TOWN_COLORS.stone[1];
 
 // An item's model on the relief (ground: town metres -> exaggerated ground height; null: flat ground).
@@ -65,7 +68,7 @@ export function seatedModelOf(it: ModelItem, ground: Ground | null): Model {
   const m = modelOf(it);
   if (!ground) return m;
   if (it.style === "junction") return drapeRoad(m, ground);
-  if (it.style !== "road") return seatBuilding(m, it.ring, ground, PLINTH);
+  if (it.style !== "road") return it.style === "town" && townSeat(it.kind) === "piles" ? seatPier(m, it.ring, ground) : seatBuilding(m, it.ring, ground, PLINTH);
   return BRIDGES.has(it.kind) ? seatBridge(m, it.ring, ground) : drapeRoad(m, ground);
 }
 
@@ -135,7 +138,7 @@ export function demoModelItems(): ModelItem[] {
   const out: ModelItem[] = [];
   let id = 1;
   // town templates: the street runs along y = 0 between the two rows, doors face it
-  const templates = Object.values(BUILDINGS).filter((t) => t.id !== "restored");
+  const templates = Object.values(BUILDINGS).filter((t) => !t.monument); // a monument is drawn as the old building it was
   templates.forEach((t, i) => {
     const row = i % 2 === 0 ? 1 : -1;
     const x = -100 + Math.floor(i / 2) * 16;

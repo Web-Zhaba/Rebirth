@@ -57,6 +57,7 @@ export function AdminPanel() {
         <Button onClick={() => void run({ k: "stock" })}>+{ADMIN.grant} {L("ресурсов", "resources")}</Button>
         <Button onClick={() => void run({ k: "unlock" })}>{L("Изучить всё", "Research everything")}</Button>
         <Button onClick={() => void run({ k: "era" })}>{L("Следующая эпоха", "Next era")}</Button>
+        <Button onClick={() => void run({ k: "form" })}>{L("Сменить форму правления", "Switch the form of rule")}</Button>
         <Button onClick={() => setSpeed(speed.value === 4 ? 1 : 4)}>{L("Скорость", "Speed")} {speed.value === 4 ? "×1" : "×4"}</Button>
       </div>
       <div class="admin-sub">{L("Исследовать кликом по карте, радиус:", "Reveal by clicking the map, radius:")}</div>

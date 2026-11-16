@@ -2,7 +2,7 @@ import { play } from "../ui/sound";
 import { roomText } from "../ui/buildMenu";
 import { mppAtZoom, type View, type ViewPointer } from "../view/view";
 import { effect, untracked } from "@preact/signals";
-import { BUILDINGS, materialsOf, scaledJobs, storeRoom, type BuildingTemplate } from "../sim/buildings";
+import { BUILDINGS, isFarm, materialsOf, scaledJobs, storeRoom, type BuildingTemplate } from "../sim/buildings";
 import { centroid, DIG } from "../sim/excavation";
 import { FIELD, fieldCentroid, haOf } from "../sim/fields";
 import { foundationBuilding, foundationIndex, foundationKindText, lotCheck, lotRing, usesFoundation } from "../sim/foundationLots";
@@ -17,7 +17,7 @@ import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, isStrokeTool, BUILD_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, SITE_RADIUS, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, isStrokeTool, BUILD_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, siteRadius, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be
@@ -123,10 +123,9 @@ export function attachPlaceTool(view: View): void {
 
   // ----- evaluation -----
   const siteText = (id: PlaceTool, site: Site, t: BuildingTemplate, center: Pt): string => {
-    if (id === "woodcutter") return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
-    if (id === "fisher") return L(`Вода рядом: ${pct(site.water)}`, `Water nearby: ${pct(site.water)}`);
-    if (id === "forager") return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
-    if (id === "gumno") {
+    if (t.needs?.forest !== undefined) return L(`Лес вокруг: ${pct(site.forest)}`, `Forest around: ${pct(site.forest)}`);
+    if (t.needs?.water !== undefined) return L(`Вода рядом: ${pct(site.water)}`, `Water nearby: ${pct(site.water)}`);
+    if (isFarm(t.id)) {
       let n = 0;
       let ha = 0;
       for (const f of zones.value?.fields ?? []) {
@@ -188,7 +187,7 @@ export function attachPlaceTool(view: View): void {
       footprint = cellCorners(c0);
       center = [c0.cx, c0.cy];
     }
-    const radius = SITE_RADIUS[id];
+    const radius = siteRadius(id);
     let site: Site = NO_SITE;
     let pending = false;
     if (radius !== undefined) {
@@ -241,8 +240,9 @@ export function attachPlaceTool(view: View): void {
         },
       ],
     });
-    // Circle of the site: woodcutter and fisher reach, and the fields a farmstead can work.
-    const r = id === "gumno" ? FIELD.radius : id === "woodcutter" || id === "fisher" || id === "forager" ? v.radius : id === "dig" ? DIG.startRadius : undefined;
+    // Circle of the site: the land a woodcutter or a fisher samples (none on an old foundation), the fields a farm can work.
+    const rules = BUILDINGS[id];
+    const r = id === DIG.template ? DIG.startRadius : rules?.needs ? v.radius : rules?.reach;
     if (r === undefined) {
       view.overlay("place-radius").setData(empty());
       return;

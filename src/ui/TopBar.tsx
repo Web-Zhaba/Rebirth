@@ -24,6 +24,7 @@ import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, p
 import { weatherChip } from "./weatherModel";
 import { useGameMinutes } from "./useGameMinutes";
 import { signedDaily } from "./resourceModel";
+import { OUTPUT } from "./inspectorModel";
 import { freshWarnings, serviceWarningText, warningAction } from "./warningModel";
 import { screenshotMode } from "./screenshotMode";
 import { SEMANTIC_IDS } from "./semanticIds";
@@ -52,9 +53,12 @@ function onSpeedKey(e: KeyboardEvent): void {
   e.preventDefault();
 }
 
-const Row = ({ label, value, tone }: { label: string; value: ComponentChildren; tone?: "ok" | "warn" | "bad" }) => (
+const Row = ({ label, value, tone, icon }: { label: string; value: ComponentChildren; tone?: "ok" | "warn" | "bad"; icon?: IconName }) => (
   <span class={`tip-row${tone ? ` tip-${tone}` : ""}`}>
-    <span>{label}</span>
+    <span class={icon ? "tip-label-icon" : undefined}>
+      {icon && <Icon name={icon} size={14} />}
+      {label}
+    </span>
     <span>{value}</span>
   </span>
 );
@@ -257,7 +261,7 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
                     {g.id === "wares" &&
                       st &&
                       GOOD_LIST.map((k) => (
-                        <Row key={k} label={GOOD_NAMES[k]} value={`${Math.floor(st[k])} ${L("шт", "pcs")}${eco.yesterday[k] > 0 ? ` (+${amount(eco.yesterday[k])})` : ""}`} tone={st[k] < 1 ? "warn" : undefined} />
+                        <Row key={k} icon={OUTPUT[k].icon} label={GOOD_NAMES[k]} value={`${Math.floor(st[k])} ${L("шт", "pcs")}${eco.yesterday[k] > 0 ? ` (+${amount(eco.yesterday[k])})` : ""}`} tone={st[k] < 1 ? "warn" : undefined} />
                       ))}
                     {g.id === "wares" && eco.eveningWares > 0 && <Row label={L("Вечерние ремёсла (одежда), 19–22 ч", "Evening crafts (clothing), 19–22 h")} value={`+${decimal(eco.eveningWares.toFixed(2))} ${L("шт/ч", "pcs/h")}`} />}
                   </>

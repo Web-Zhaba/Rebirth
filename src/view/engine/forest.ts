@@ -1,6 +1,7 @@
 import { computed, effect, type ReadonlySignal } from "@preact/signals";
 import { calendar } from "../../sim/clock";
 import { ROAD_KINDS } from "../../sim/roads";
+import { CELL_SIZE } from "../../sim/zones";
 import type { WeatherState } from "../../sim/weather";
 import { buildings, buildingSet, frame, roads, state, zones } from "../../simClient";
 import { TREE_COLORS } from "../../ui/palette";
@@ -29,6 +30,7 @@ const WIND_FULL = 14;
 const MASK_M = 2; // m per mask texel
 const MASK_MAX = 2048;
 const MARGIN = 10; // m around the mask's content
+const LOT_MARGIN = 2; // m the forest keeps off a lot
 const PROGRESS_STEPS = 10;
 const FALLBACK_LIGHT: Vec3 = [-0.45, -0.55, 0.7]; // view/engine/models.ts: the light as the sun sets
 
@@ -144,7 +146,14 @@ function buildMask(tf: Frame, ruins: readonly { ring: [number, number][] }[] | n
     box[2] = Math.max(box[2], x + r);
     box[3] = Math.max(box[3], y + r);
   };
-  const lots = Object.values(buildings.peek() ?? {}).map((b) => ({ x: b.lot.cx, y: b.lot.cy, r: Math.hypot(b.lot.w, b.lot.d) / 2 + 2 }));
+  // each lot as its rotated rectangle (w along the road, d across; both in cells) and a margin, in town metres
+  const lots = Object.values(buildings.peek() ?? {}).map(({ lot }) => {
+    const hw = (lot.w * CELL_SIZE) / 2 + LOT_MARGIN;
+    const hd = (lot.d * CELL_SIZE) / 2 + LOT_MARGIN;
+    const co = Math.cos(lot.angle);
+    const si = Math.sin(lot.angle);
+    return ([[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]] as const).map(([u, v]): [number, number] => [lot.cx + u * co - v * si, lot.cy + u * si + v * co]);
+  });
   const g = roads.peek();
   const lines: { a: [number, number]; b: [number, number]; w: number }[] = [];
   if (g)
@@ -159,9 +168,8 @@ function buildMask(tf: Frame, ruins: readonly { ring: [number, number][] }[] | n
     ...(state.peek()?.clearings ?? []).map((c) => ({ pts: c.pts, share: Math.floor((c.done / Math.max(c.labor, 1e-9)) * PROGRESS_STEPS) / PROGRESS_STEPS })),
   ].filter((p) => p.share > 0 && p.pts.length > 2);
   const rings = (ruins ?? []).map((f) => f.ring).filter((r) => r.length > 2);
-  for (const c of lots) grow(c.x, c.y, c.r);
   for (const l of lines) (grow(l.a[0], l.a[1], l.w / 2), grow(l.b[0], l.b[1], l.w / 2));
-  for (const p of [...polys.map((q) => q.pts), ...rings]) for (const [x, y] of p) grow(x, y, 0);
+  for (const p of [...lots, ...polys.map((q) => q.pts), ...rings]) for (const [x, y] of p) grow(x, y, 0);
   if (!(box[0] <= box[2])) return null;
   box[0] -= MARGIN;
   box[1] -= MARGIN;
@@ -178,12 +186,6 @@ function buildMask(tf: Frame, ruins: readonly { ring: [number, number][] }[] | n
   const px = (x: number) => (x - box[0]) * k;
   const py = (y: number) => (box[3] - y) * k;
   const red = (share: number) => `rgb(${Math.round(share * 255)},0,0)`;
-  ctx.fillStyle = red(1);
-  for (const c of lots) {
-    ctx.beginPath();
-    ctx.arc(px(c.x), py(c.y), c.r * k, 0, Math.PI * 2);
-    ctx.fill();
-  }
   ctx.strokeStyle = red(1);
   ctx.lineCap = "round";
   for (const l of lines) {
@@ -200,6 +202,7 @@ function buildMask(tf: Frame, ruins: readonly { ring: [number, number][] }[] | n
     ctx.closePath();
     ctx.fill();
   };
+  for (const l of lots) fill(l, red(1));
   for (const p of polys) fill(p.pts, red(p.share));
   for (const r of rings) fill(r, "rgb(0,255,0)");
   const rgba = new Uint8Array(ctx.getImageData(0, 0, width, height).data.buffer);

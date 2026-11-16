@@ -4,7 +4,10 @@ import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, 
 import type { ShadowQuality } from "../engine/shadow/shadowMap";
 import { CLOUD_QUALITIES, cloudQuality, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
-import { Button, Dialog, Segmented, type SegmentOption } from "./kit";
+import { useState } from "preact/hooks";
+import { Button, Confirm, Dialog, Segmented, type SegmentOption } from "./kit";
+import { city, reset } from "../simClient";
+import { closePanel } from "./panels";
 import { play, setSoundEnabled, setSoundVolume, soundEnabled, soundVolume } from "./sound";
 import { setWeatherSound, weatherSoundOn } from "./weatherSound";
 import { L, lang, setLang, type Lang } from "../i18n";
@@ -28,9 +31,27 @@ const LANG_OPTIONS: SegmentOption<Lang>[] = [
 
 export const settingsOpen = signal(false);
 
-// «Настройки»: sound is off by default; the volume slider is a native range input, so arrow keys work.
+// «Настройки»: sound is off by default; the volume slider is a native range input, so arrow keys work. At the bottom:
+// starting the settlement over, behind a confirmation that takes the dialog's place.
 export function SettingsDialog() {
+  const [confirming, setConfirming] = useState(false);
   if (!settingsOpen.value) return null;
+  if (confirming)
+    return (
+      <Confirm
+        title={L("Начать заново?", "Start over?")}
+        okLabel={L("Удалить поселение", "Delete the settlement")}
+        onOk={() => {
+          setConfirming(false);
+          settingsOpen.value = false;
+          closePanel();
+          reset();
+        }}
+        onCancel={() => setConfirming(false)}
+      >
+        {L("Поселение и всё, что в нём построено, будет удалено. Вернуть его не получится.", "The settlement and everything built in it will be deleted. It cannot be recovered.")}
+      </Confirm>
+    );
   const cloudOptions: SegmentOption<CloudQuality>[] = CLOUD_QUALITIES.map((q) => ({ id: q, ...CLOUD_LABELS[q] }));
   const pct = Math.round(soundVolume.value * 100);
   const shadowOptions: SegmentOption<ShadowQuality>[] = SHADOW_QUALITIES.map((q) => ({ id: q, ...SHADOW_LABELS[q] }));
@@ -89,6 +110,13 @@ export function SettingsDialog() {
           <Segmented options={cloudOptions} value={cloudQuality.value} label={L("Качество облаков", "Cloud quality")} onChange={setCloudQuality} />
         </div>
         {import.meta.env.DEV && <Button onClick={() => { adminOpen.value = true; settingsOpen.value = false; }}>{L("Админ-панель", "Admin panel")}</Button>}
+        {city.value && (
+          <div class="rs-danger">
+            <Button variant="danger" icon="trash" onClick={() => setConfirming(true)}>
+              {L("Начать заново", "Start over")}
+            </Button>
+          </div>
+        )}
       </div>
     </Dialog>
   );

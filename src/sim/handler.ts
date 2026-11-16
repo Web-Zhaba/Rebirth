@@ -1,6 +1,6 @@
 import { houseGoods } from "./coverage";
 import { finishAll, grantStock, nextEra, reveal, unlockAll } from "./admin";
-import { advanceTo, type Pace, type Speed } from "./clock";
+import { advanceTo, tickMs, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
@@ -12,7 +12,8 @@ import { returnFind, useFind } from "./items";
 import { arrangeExhibitions, museumDaily, museumStaff, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
 import { lockReason } from "./tech";
-import { callBlock, callSettlers, callToloka, grantSupplies, setAdultSchool, setJobPriority, setPriority, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
+import { govView } from "./government";
+import { callBlock, callSettlers, callToloka, chooseHeadCmd, setFormCmd, setTermCmd, grantSupplies, setAdultSchool, setJobPriority, setPriority, nameStall, setRations, setSchedule, setStaff, setTrade } from "./leverCmds";
 import { jobReport } from "./jobReport";
 import { digInfos, keepRevealed, recordFinds } from "./excavation";
 import { computeLife } from "./life";
@@ -75,7 +76,7 @@ export function toSnapshot(sim: SimState): SimSnapshot {
   const ps = peopleStats(sim);
   const free = freeHomes(sim.buildings, sim.households, sim.incoming).length;
   const underway = Object.values(sim.buildings).filter((b) => b.zone === "res" && b.state !== "active").length;
-  return { ...rest, people: { ...ps, housing: { tents: ps.tents, free, underway }, jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim), museumStaff: museumStaff(sim) };
+  return { ...rest, people: { ...ps, housing: { tents: ps.tents, free, underway }, jobs: jobReport(sim) }, economy: economyStats(sim), services: serviceStats(sim), houseMood, houseGoods: houseGoodsShare, houseResidents, digs: digInfos(sim), callBlock: callBlock(sim), inflow: inflowNow(sim), research: researchView(sim), heritageMul: scarcity(sim.finds), fieldProgress: fieldProgress(sim), museumStaff: museumStaff(sim), govView: govView(sim) };
 }
 
 // The inflow the town draws right now: its free homes and the families a day they bring (attraction.ts).
@@ -127,6 +128,7 @@ export class Handler {
   // jobs, homes and classes) and the levers (work hours, toloka); a change in any of them draws it anew.
   private lifeFrom: { day: number } & Pick<SimState, "incoming" | "residents" | "levers"> | null = null;
   private speed: Speed = 1; // session setting
+  private pausedFraction = 0; // how much of the tick in progress had run when the game was paused
   private free = false; // admin: whatever is started finishes at once; session setting
   private hiddenAt: number | null = null; // wall time the tab was hidden
   private persistedAt = 0; // wall time of the last save by tick()
@@ -196,7 +198,7 @@ export class Handler {
         case "speed":
           if (!validSpeed(msg.speed) || !finite(msg.now)) return;
           this.tick(msg.now); // up to now at the old speed; a pause then owes nothing, an unpause starts from now
-          this.speed = msg.speed;
+          this.changeSpeed(msg.speed, msg.now);
           this.postSnapshot(); // carries the new wall-time anchor
           return;
         case "visibility":
@@ -272,6 +274,7 @@ export class Handler {
     this.postedArticles = save ? save.sim.articles : null;
     this.lifeFrom = null;
     this.speed = 1;
+    this.pausedFraction = 0;
     this.free = false;
     this.hiddenAt = null;
     this.persistedAt = save?.sim.realTime ?? 0;
@@ -533,7 +536,7 @@ export class Handler {
         }
         this.save = { ...this.save, sim: r.sim };
         return await this.finishCommand(id);
-      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "grantSupplies" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade") {
+      } else if (cmd.type === "setPriority" || cmd.type === "callToloka" || cmd.type === "setSchedule" || cmd.type === "setRations" || cmd.type === "setAdultSchool" || cmd.type === "callSettlers" || cmd.type === "grantSupplies" || cmd.type === "setJobPriority" || cmd.type === "setStaff" || cmd.type === "setTrade" || cmd.type === "nameStall" || cmd.type === "chooseHead" || cmd.type === "setGovForm" || cmd.type === "setTerm") {
         const r =
           cmd.type === "setPriority" ? setPriority(sim, cmd.key)
           : cmd.type === "callToloka" ? callToloka(sim, cmd.key)
@@ -542,8 +545,12 @@ export class Handler {
           : cmd.type === "setAdultSchool" ? setAdultSchool(sim, cmd.on)
           : cmd.type === "setJobPriority" ? setJobPriority(sim, cmd.group, cmd.priority)
           : cmd.type === "setStaff" ? setStaff(sim, cmd.id, cmd.staff)
-          : cmd.type === "setTrade" ? setTrade(sim, cmd.order)
+          : cmd.type === "setTrade" ? setTrade(sim, cmd.orders)
+          : cmd.type === "nameStall" ? nameStall(sim, cmd.index, cmd.name)
           : cmd.type === "grantSupplies" ? grantSupplies(sim)
+          : cmd.type === "chooseHead" ? chooseHeadCmd(sim, cmd.id)
+          : cmd.type === "setGovForm" ? setFormCmd(sim, cmd.form)
+          : cmd.type === "setTerm" ? setTermCmd(sim, cmd.term)
           : callSettlers(sim);
         if (!r.ok) return reject(r.reason);
         this.save = { ...this.save, sim: r.sim };
@@ -565,6 +572,12 @@ export class Handler {
         else if (op.k === "stock") this.save = { ...this.save, sim: grantStock(sim) };
         else if (op.k === "unlock") this.save = { ...this.save, sim: unlockAll(sim) };
         else if (op.k === "era") this.save = { ...this.save, sim: nextEra(sim) };
+        else if (op.k === "form") {
+          if (!sim.gov) return reject(L("Сначала постройте ратушу", "Build a town hall first"));
+          const r = setFormCmd(sim, sim.gov.form === "monarchy" ? "republic" : "monarchy", true);
+          if (!r.ok) return reject(r.reason);
+          this.save = { ...this.save, sim: r.sim };
+        }
         else if (op.k === "reveal") {
           const r = reveal(sim, op.x, op.y, op.r);
           if (!r.ok) return reject(r.reason);
@@ -608,6 +621,20 @@ export class Handler {
 
   private pace(now: number): Pace {
     return { speed: this.speed, offline: this.hiddenAt !== null && now - this.hiddenAt > HIDDEN_SLOW_MS };
+  }
+
+  // A pause keeps how far into the tick the clock was, and the unpause goes on from there: the time neither rolls back
+  // nor jumps ahead to a whole tick.
+  private changeSpeed(speed: Speed, now: number): void {
+    const was = this.speed;
+    const sim = this.save?.sim;
+    if (sim && was !== 0 && speed === 0) this.pausedFraction = Math.min(1, Math.max(0, (now - sim.realTime) / tickMs(sim.gameMinutes, this.pace(now))));
+    this.speed = speed;
+    if (sim && was === 0 && speed !== 0) {
+      const realTime = now - this.pausedFraction * tickMs(sim.gameMinutes, this.pace(now));
+      this.save = { ...this.save!, sim: { ...sim, realTime } };
+      this.pausedFraction = 0;
+    }
   }
 
   // Called by the worker timer every 250 ms.

@@ -1,34 +1,21 @@
 import type { WeatherState } from "./weather";
+import { BUILDINGS } from "./buildings";
+import { heavy, rainy, SIGNS, stormy } from "./weatherSigns";
 
-// What the weather does to work, food and people. Pure factor functions; every
-// number is in EFFECTS. The calm state (no site: tests, old saves) gives exactly 1 everywhere and no fuel, no spoilage.
+export { fieldWork } from "./weatherSigns";
+
+// What the weather does to work, food and people. Pure factor functions; every number is in EFFECTS (the plain signs
+// of the weather come from sim/weatherSigns.ts; each workplace's own weather is in its rules,
+// src/buildings/<id>/rules.ts). The calm state (no site: tests, old saves) gives exactly 1 everywhere and no fuel, no
+// spoilage.
 
 export const EFFECTS = {
-  rainLight: 0.2, // mm/h, above this it rains
-  rainHeavy: 1, // mm/h
-  storm: 13, // m/s
-  hot: 33, // °C
-  waterlogged: 0.95, // soil moisture
-  drought: 0.25, // soil moisture
-  deepSnow: 0.3, // m of snow that stops quarries and slows logging
-  groundSnow: 0.05, // m of snow that stops the plough
-  field: { heavy: 0.2, light: 0.6, storm: 0.7, hot: 0.8, mud: 0.5, frozen: 0.5 },
-  woodcutter: { storm: 0.3, deepSnow: 0.8, haul: 1.15, thaw: 0.6 },
-  sawpit: { cold: 0.85, coldBelow: -20, rain: 0.9 },
-  quarry: { heavy: 0.35, light: 0.7, cold: 0.5, coldBelow: -15, deepSnow: 0.4 },
-  fisher: { storm: 0.2, ice: 0.35, iceAbove: 0.5 },
-  garden: { frostBelow: -1, drought: 0.4, mud: 0.7 },
-  hunter: { storm: 0.4, tracks: 1.3 },
-  forager: { rain: 0.5, storm: 0.3 }, // wet forest, fewer pickers; snow cover (groundSnow) stops it
-  orchard: { rain: 0.7, storm: 0.5 }, // picking in the wet
-  apiary: { coldBelow: 10, wind: 8 }, // bees fly only on warm, dry, calm days
+  ...SIGNS,
   // the year of an orchard: frost nights in spring (blossom), a dry or hot summer
   orchardYear: { frostBelow: -1, frostNights: 3, cutMin: 0.4, cutMax: 0.8, cutPerNight: 0.1, droughtCut: 0.5, droughtSoil: 0.35, hotCut: 0.05, hotCutMax: 0.3 },
   // brushwood: m3 a day per idle adult, the share of it under snow
   brush: { m3: 0.03, snow: 0.4 },
   cellarHeat: 0.9, // share of the heat spoilage a cellar removes (a barn: 0.5)
-  dig: { frozen: 0.3, frozenBelow: -5, rain: 0.7 },
-  shop: { cold: 0.8, coldBelow: -10, hot: 0.85 }, // pottery, weaving, carpentry, smithy
   build: { rain: 0.6, heavy: 0.3, snow: 0.5, storm: 0.3, cold: 0.4, coldBelow: -15, hot: 0.8, thaw: 0.7 },
   // firewood: m³ per household per real year, spread over the heating degree-days of a real year (base 12 °C)
   firewoodYear: 10,
@@ -52,70 +39,11 @@ export const EFFECTS = {
 
 const E = EFFECTS;
 const meanOf = (w: WeatherState) => (w.yesterday.min + w.yesterday.max) / 2;
-const rainy = (w: WeatherState) => !w.now.snow && w.now.precip > E.rainLight;
-const heavy = (w: WeatherState) => !w.now.snow && w.now.precip > E.rainHeavy;
-const stormy = (w: WeatherState) => w.now.wind > E.storm;
-
-// Share of the field work done (gumno hours): 0 on frozen or snowy ground.
-export function fieldWork(w: WeatherState): number {
-  if (!w.site) return 1;
-  const F = E.field;
-  if (w.snowpack > E.groundSnow || w.frozen > 0.5) return 0;
-  let f = 1;
-  if (heavy(w)) f *= F.heavy;
-  else if (rainy(w)) f *= F.light;
-  if (stormy(w)) f *= F.storm;
-  if (w.now.temp > E.hot) f *= F.hot;
-  if (w.soil > E.waterlogged) f *= F.mud;
-  return f;
-}
 
 // Share of the hours a workplace of `template` works today (multiplies the season tables).
 export function workFactor(template: string, w: WeatherState): number {
   if (!w.site) return 1;
-  const t = w.now.temp;
-  switch (template) {
-    case "gumno":
-      return fieldWork(w);
-    case "woodcutter": {
-      const W = E.woodcutter;
-      let f = 1;
-      if (stormy(w)) f *= W.storm;
-      if (w.snowpack > E.deepSnow) f *= W.deepSnow;
-      else if (w.frozen > 0.5 && w.snowpack > E.groundSnow) f *= W.haul;
-      if (t > 0 && t < 4 && rainy(w)) f *= W.thaw;
-      return f;
-    }
-    case "sawpit":
-      return (t < E.sawpit.coldBelow ? E.sawpit.cold : 1) * (rainy(w) ? E.sawpit.rain : 1);
-    case "quarry": {
-      const Q = E.quarry;
-      return (heavy(w) ? Q.heavy : rainy(w) ? Q.light : 1) * (t < Q.coldBelow ? Q.cold : 1) * (w.snowpack > E.deepSnow ? Q.deepSnow : 1);
-    }
-    case "fisher":
-      return (stormy(w) ? E.fisher.storm : 1) * (w.ice > E.fisher.iceAbove ? E.fisher.ice : 1);
-    case "garden":
-      if (t < E.garden.frostBelow) return 0;
-      return (w.soil < E.drought ? E.garden.drought : 1) * (w.soil > E.waterlogged ? E.garden.mud : 1);
-    case "hunter":
-      return (stormy(w) ? E.hunter.storm : 1) * (w.now.snow ? E.hunter.tracks : 1);
-    case "forager":
-      if (w.snowpack > E.groundSnow) return 0;
-      return (stormy(w) ? E.forager.storm : rainy(w) ? E.forager.rain : 1);
-    case "orchard":
-      return (stormy(w) ? E.orchard.storm : 1) * (rainy(w) ? E.orchard.rain : 1);
-    case "apiary":
-      return t < E.apiary.coldBelow || rainy(w) || w.now.snow || stormy(w) || w.now.wind > E.apiary.wind ? 0 : 1;
-    case "dig":
-      return (w.frozen > 0.5 && t < E.dig.frozenBelow ? E.dig.frozen : 1) * (rainy(w) ? E.dig.rain : 1);
-    case "pottery":
-    case "weaver":
-    case "carpentry":
-    case "smithy":
-      return t < E.shop.coldBelow ? E.shop.cold : t > E.hot ? E.shop.hot : 1;
-    default:
-      return 1;
-  }
+  return BUILDINGS[template]?.weather?.(w) ?? 1;
 }
 
 // Share of the artel's person-hours and of its crew size that rain, cold and storms leave.

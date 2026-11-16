@@ -2,8 +2,9 @@ import { BUILDINGS, floorsOf, type Materials } from "../sim/buildings";
 import { domainName, type DomainId } from "../sim/domains";
 import { foundationScale, sizeBlocker } from "../sim/foundationLots";
 import { canPlaceOnFoundation } from "../sim/growth";
-import { digBlocker, streetDigs, streetOf } from "../sim/digging";
-import { asItWasTemplate, earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreWeightOf, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE, type Tier } from "../sim/heritage";
+import { digBlocker, EXCAVATION, streetDigs, streetOf } from "../sim/digging";
+import type { TemplateId } from "../buildings/rules";
+import { asItWasTemplate, MONUMENT_TEMPLATE, earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreWeightOf, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE, type Tier } from "../sim/heritage";
 import { SPEED } from "../sim/research";
 import { TYPICAL_LOCAL } from "../sim/monuments";
 import { SERVICES, isService } from "../sim/services";
@@ -74,7 +75,7 @@ export function speedGain(restored: number, w: number): number {
 
 function purposeEffects(id: string): string[] {
   const t = BUILDINGS[id];
-  if (id === "restored")
+  if (t?.monument)
     return [L("Без жителей и рабочих мест", "No residents or jobs"), L(`Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.mood}, стоимость земли +${MONUMENT.land} (до +${MONUMENT.landCap} от всех памятников)`, `Houses within ${MONUMENT.radius} m: mood +${MONUMENT.mood}, land value +${MONUMENT.land} (up to +${MONUMENT.landCap} from all monuments)`)];
   const out = [L(`Работает как «${t.name}»`, `Works as: ${t.name}`)];
   if (t.jobs > 0) out.push(`${t.jobs} ${plural(t.jobs, "рабочее место", "рабочих места", "рабочих мест", "job")}`);
@@ -86,7 +87,7 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   const domain = siteDomain(site.cls);
   const earlier = earlierOfKind(sim, site.cls, site.id);
   const recorded = sim.finds.foundations.some((f) => f.id === site.id);
-  const template = asItWasTemplate(site.cls) ?? "restored";
+  const template = asItWasTemplate(site.cls) ?? MONUMENT_TEMPLATE;
   const t = BUILDINGS[template];
   const floors = floorsOf(site.height);
   // "As it was" builds every old floor at once: the cost of the ring's area times the floors.
@@ -135,9 +136,9 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     template,
     purpose: t.name,
     effects:
-      unique && template !== "restored"
+      unique && !BUILDINGS[template]?.monument
         ? [...purposeEffects(template), L(`Дома в ${MONUMENT.radius} м: настроение +${MONUMENT.landmarkMood}`, `Houses within ${MONUMENT.radius} m: mood +${MONUMENT.landmarkMood}`)]
-        : !unique && template !== "restored"
+        : !unique && !BUILDINGS[template]?.monument
           ? [...purposeEffects(template), L(`Дома в ${TYPICAL_LOCAL.radius} м: стоимость земли +${TYPICAL_LOCAL.land}`, `Houses within ${TYPICAL_LOCAL.radius} m: land value +${TYPICAL_LOCAL.land}`)]
           : purposeEffects(template),
     research: `+${fmt(domain ? speedGain(base, w) : 0)}${L(" % к скорости", "% speed")}: ${domain ? domainName(domain) : "—"}`,
@@ -166,15 +167,15 @@ export interface OutlineView {
 }
 
 // One representative purpose of each size class (sim/foundationLots.ts STAGES).
-const LIMIT_CLASSES: { what: string; template: string }[] = [
+const LIMIT_CLASSES: { what: string; template: TemplateId }[] = [
   { what: L("Жильё и мастерские", "Houses and workshops"), template: "izba" },
   { what: L("Залы: храм, школа, ратуша, музей", "Halls: temple, school, town hall, museum"), template: "school" },
   { what: L("Склады и рынок", "Stores and the market"), template: "barn" },
 ];
 
 export function buildOutlineView(f: FoundFoundation, sim: Pick<SimState, "finds" | "buildings" | "progress">): OutlineView {
-  const t = BUILDINGS.excavation;
-  const site = Object.values(sim.buildings).find((b) => b.foundationId === f.id && b.template === "excavation");
+  const t = BUILDINGS[EXCAVATION];
+  const site = Object.values(sim.buildings).find((b) => b.foundationId === f.id && BUILDINGS[b.template]?.workSite);
   const street = f.ghost ? streetOf(sim, f.id) : null;
   return {
     id: f.id,

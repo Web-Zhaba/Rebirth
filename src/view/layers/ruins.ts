@@ -1,4 +1,5 @@
 import { computed, type ReadonlySignal } from "@preact/signals";
+import { BUILDINGS } from "../../sim/buildings";
 import type { Feature, FeatureCollection } from "geojson";
 import { doneKinds } from "../../sim/heritage";
 import { isBridge, oldStreetKind } from "../../sim/roads";
@@ -55,7 +56,7 @@ export const ruinGhosts: ReadonlySignal<FeatureCollection> = computed(() => {
     out.push({ type: "Feature", properties: { dig: 0 }, geometry: { type: "LineString", coordinates: close(fd.ring.map(([x, y]) => f.toLngLat(x, y))) } });
   }
   for (const b of Object.values(buildings.value ?? {})) {
-    if (b.template !== "excavation" || b.state === "planned") continue;
+    if (!BUILDINGS[b.template]?.workSite || b.state === "planned") continue;
     const part = partialRing(b.footprint, b.labor > 0 ? b.done / b.labor : 0);
     if (part.length >= 2) out.push({ type: "Feature", properties: { dig: 1 }, geometry: { type: "LineString", coordinates: part.map(([x, y]) => f.toLngLat(x, y)) } });
   }

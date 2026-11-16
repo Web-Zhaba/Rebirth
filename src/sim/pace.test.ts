@@ -90,6 +90,23 @@ describe("handler pace", () => {
     h.tick(NOW + 3_600_000 + 2500);
     expect(gm()).toBe(BASE_TICK);
   });
+  it("a pause in the middle of a tick neither rolls the time back nor rounds it up: the unpause finishes that tick", async () => {
+    const { h, out, gm } = setup();
+    await h.handle({ t: "found", city, now: NOW });
+    h.tick(NOW + 2500);
+    await h.handle({ t: "speed", speed: 0, now: NOW + 3500 }); // 1 s into the next tick: 40% of it
+    expect(gm()).toBe(BASE_TICK);
+    out.length = 0;
+    h.tick(NOW + 60_000);
+    expect(out).toEqual([]); // still the same tick
+    await h.handle({ t: "speed", speed: 1, now: NOW + 10_000 });
+    const snap = out.filter((m) => m.t === "snapshot").pop() as Extract<FromWorker, { t: "snapshot" }>;
+    expect(snap.sim.realTime).toBe(NOW + 10_000 - 1000); // the clock goes on from the same point
+    h.tick(NOW + 10_000 + 1499);
+    expect(gm()).toBe(BASE_TICK);
+    h.tick(NOW + 10_000 + 1500); // the remaining 60% of the tick
+    expect(gm()).toBe(2 * BASE_TICK);
+  });
   it("the saved realTime never runs ahead of the clock, also after a pause", async () => {
     const { h, stored } = setup();
     await h.handle({ t: "found", city, now: NOW });

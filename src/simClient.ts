@@ -42,9 +42,13 @@ export const lifeLights = signal<Light[]>([]);
 export const speed = signal<Speed>(1);
 // Game minutes, interpolated between snapshots and refreshed every 2 s for the life layer.
 export const gameClock = signal(0);
+// The clock at the moment of a pause, partway through the tick that `at` started: held while paused, so the time
+// neither rolls back to the last whole tick nor jumps ahead; the unpause goes on from it.
+let frozen: { at: number; clock: number } | null = null;
+const clockOf = (s: ClientState): number => (speed.peek() === 0 && frozen?.at === s.gameMinutes ? frozen.clock : clockAt(s.gameMinutes, s.realTime, Date.now(), speed.peek()));
 const syncClock = () => {
   const s = state.peek();
-  if (s) gameClock.value = clockAt(s.gameMinutes, s.realTime, Date.now(), speed.peek());
+  if (s) gameClock.value = clockOf(s);
 };
 effect(() => {
   void state.value;
@@ -61,7 +65,7 @@ export const gameMinPerSec = (): number => {
 // The game clock interpolated to this instant: smooth enough to follow a walker dot.
 export const gameNow = (): number => {
   const s = state.peek();
-  return s ? clockAt(s.gameMinutes, s.realTime, Date.now(), speed.peek()) : gameClock.peek();
+  return s ? clockOf(s) : gameClock.peek();
 };
 
 const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module", name: lang }); // the worker reads its language from its name (i18n.ts)
@@ -162,6 +166,14 @@ export const found = (c: City) => send({ t: "found", city: c, now: Date.now() })
 export const reset = () => send({ t: "reset" });
 
 export function setSpeed(v: Speed): void {
+  const s = state.peek();
+  const was = speed.peek();
+  if (s && was !== 0 && v === 0) frozen = { at: s.gameMinutes, clock: clockOf(s) };
+  else if (s && was === 0 && v !== 0 && frozen?.at === s.gameMinutes) {
+    // the worker re-anchors the same way; doing it here too keeps the clock from flickering until its snapshot arrives
+    const done = Math.min(1, Math.max(0, (frozen.clock - s.gameMinutes) / BASE_TICK));
+    state.value = { ...s, realTime: Date.now() - done * tickMs(s.gameMinutes, { speed: v, offline: false }) };
+  }
   speed.value = v;
   send({ t: "speed", speed: v, now: Date.now() });
 }

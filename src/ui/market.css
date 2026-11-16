@@ -1,0 +1,914 @@
+/* The market window: the market row drawn as stalls standing on the ground, each built its own way (a striped awning,
+   a peaked tent, a plank shed), the counter holding the crate given and the crate got; a shut stall stands grey with a
+   plaque. Under the row hang the scales of the opened stall, and beside them (under them on a phone) the stall's ledger
+   on bark. The sheet has a fixed height and the ledger keeps one shape, so nothing jumps while goods are chosen. Laid
+   out for a phone held upright first. */
+
+.mk-screen {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  background: radial-gradient(120% 100% at 50% 40%, rgba(20, 26, 17, 0.86), var(--moss-deep) 90%);
+  pointer-events: auto;
+}
+
+.mk-sheet {
+  width: min(1120px, 100%);
+  height: min(780px, calc(100dvh - 16px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  color: var(--ink);
+  background: linear-gradient(178deg, var(--paper-raised), var(--paper) 70%, var(--paper-shade));
+  border: var(--bw) solid var(--rule);
+  box-shadow: var(--shadow-panel);
+}
+
+.mk-cap {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.mk-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.mk-note.is-warn {
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--bw-hair) dashed var(--warn);
+  background: var(--warn-fill);
+  color: var(--warn-text);
+}
+
+.mk-dim {
+  color: var(--pencil-faint);
+}
+
+/* ---- head ---- */
+
+.mk-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 2px solid var(--rule);
+}
+
+.mk-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mk-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.mk-sub {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  color: var(--pencil);
+}
+
+.mk-head > .icon-btn {
+  flex: none;
+  margin-left: auto;
+}
+
+/* ---- body: one scroll on a phone, two columns on a wide screen ---- */
+
+.mk-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--ink) var(--paper-shade);
+}
+
+.mk-square {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+}
+
+/* ---- the row of stalls, standing on a strip of trodden ground ---- */
+
+.mk-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  align-items: end;
+  padding: 0 var(--sp-2) 10px;
+  background: linear-gradient(0deg, var(--bark-edge) 0 4px, var(--ink-2) 4px 5px, transparent 5px);
+}
+
+.mk-stall {
+  --roof-h: 44px;
+  --tone: var(--domain-trade);
+  --post: 5px solid var(--ink-2);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* The roof: an SVG stretched to the stall's width (MarketPanel.tsx Roof), so its stripes come out whole. */
+.mk-roof {
+  display: block;
+  width: 100%;
+  height: var(--roof-h);
+  overflow: visible;
+}
+
+.mk-roof .rf-a {
+  fill: var(--tone);
+}
+
+.mk-roof .rf-b {
+  fill: var(--paper-raised);
+}
+
+.mk-roof .rf-plank {
+  fill: var(--bark-edge);
+}
+
+.mk-roof .rf-seam {
+  fill: var(--ink-2);
+}
+
+.mk-roof .rf-post {
+  fill: var(--ink-2);
+}
+
+.mk-stall.st-tent {
+  --tone: var(--domain-farm);
+  --roof-h: 54px;
+  --post: 3px solid var(--ink-2);
+}
+
+.mk-stall.st-shed {
+  --tone: var(--domain-build);
+  --roof-h: 46px;
+  --post: 7px solid var(--ink-2);
+}
+
+/* The board hung under the roof, with the stall's name. */
+.mk-sign {
+  align-self: center;
+  position: relative;
+  z-index: 1;
+  max-width: calc(100% - 16px);
+  margin-top: 4px;
+  padding: 2px 8px;
+  overflow: hidden;
+  border: var(--bw-hair) solid var(--rule);
+  background: var(--paper-raised);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform-origin: 50% -6px;
+}
+
+/* Two posts hold the roof; the counter stands between them. */
+.mk-booth {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 104px;
+  margin: -8px 8px 0;
+  padding-top: var(--sp-3);
+  border-left: var(--post);
+  border-right: var(--post);
+}
+
+.mk-counter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-height: 72px;
+  padding: var(--sp-2) var(--sp-1);
+  border-top: 6px solid var(--bark-edge);
+  border-bottom: var(--bw) solid var(--rule);
+  background: var(--paper-raised);
+}
+
+.mk-stall.st-tent .mk-counter {
+  border-top-color: var(--tone);
+  border-bottom: 5px dotted var(--tone);
+}
+
+.mk-stall.st-shed .mk-counter {
+  border-top-color: var(--ink-2);
+  background: repeating-linear-gradient(0deg, var(--paper-raised) 0 11px, var(--paper-shade) 11px 12px);
+}
+
+.mk-crate {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-1);
+  border: var(--bw-hair) solid var(--rule);
+  background: var(--paper);
+}
+
+.mk-crate-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.mk-crate-role {
+  font-size: var(--fs-xs);
+  color: var(--pencil);
+}
+
+.mk-way {
+  flex: none;
+  color: var(--ink-2);
+}
+
+.mk-counter.is-bare,
+.mk-counter.is-shut {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mk-chalk {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--pencil);
+}
+
+.mk-stall.is-free .mk-counter {
+  background: transparent;
+  border-top-style: dashed;
+}
+
+/* A shut stall: the same build in grey, its counter boarded up, the plaque of its tech. */
+.mk-stall.is-locked {
+  --tone: var(--rule-soft);
+}
+
+.mk-stall.is-locked .mk-roof .rf-b,
+.mk-stall.is-locked .mk-roof .rf-plank {
+  fill: var(--paper-shade);
+}
+
+.mk-stall.is-locked .mk-roof .rf-seam {
+  fill: var(--rule-soft);
+}
+
+.mk-stall.is-locked .mk-sign {
+  color: var(--pencil);
+}
+
+.mk-stall.is-locked .mk-counter {
+  color: var(--pencil);
+  border-top-color: var(--rule-soft);
+  background: repeating-linear-gradient(-12deg, var(--paper-shade) 0 14px, var(--rule-soft) 14px 15px);
+}
+
+.mk-plaque {
+  max-width: 100%;
+  padding: 1px 8px;
+  overflow: hidden;
+  border: var(--bw-hair) solid var(--rule);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Yesterday's tally on the ground under the counter. */
+.mk-tally {
+  min-height: 1.4em;
+  margin-top: var(--sp-1);
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.mk-stall.sel .mk-booth {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.mk-stall:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 4px;
+}
+
+/* ---- the scales of the opened stall ---- */
+
+.mk-scales {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.mk-scales svg {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  overflow: visible;
+}
+
+.mk-stand {
+  fill: var(--ink-2);
+}
+
+.mk-pivot {
+  fill: var(--resin);
+  stroke: var(--ink);
+  stroke-width: 2px;
+}
+
+.mk-needle {
+  stroke: var(--ink);
+  stroke-width: 3px;
+  stroke-linecap: square;
+}
+
+.mk-beam,
+.mk-needle {
+  transform-box: view-box;
+  transform-origin: 180px 44px;
+}
+
+.mk-chain {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 1.5px;
+  stroke-dasharray: 3 2;
+}
+
+.mk-dish {
+  fill: var(--bark-edge);
+  stroke: var(--ink);
+  stroke-width: 1.5px;
+}
+
+.mk-load {
+  color: var(--ink);
+}
+
+.mk-pan text {
+  fill: var(--ink);
+  text-anchor: middle;
+}
+
+.mk-pan .mk-pan-cap {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  fill: var(--pencil);
+}
+
+.mk-pan-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mk-pan-amount {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mk-scales figcaption {
+  max-width: 420px;
+  text-align: center;
+}
+
+/* ---- the ledger of the opened stall ---- */
+
+.mk-ledger {
+  border-top: var(--bw) solid var(--rule);
+  background: var(--paper-raised);
+}
+
+.mk-ledger-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+
+/* The name: a title written in place, with a pencil mark; dashed underline until it is being written. */
+.mk-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border-bottom: var(--bw-hair) dashed var(--rule);
+}
+
+.mk-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0 var(--sp-1);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+}
+
+.mk-name-input::placeholder {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.mk-name-input:focus {
+  outline: none;
+}
+
+.mk-name:focus-within {
+  border-bottom: 2px solid var(--ink);
+}
+
+.mk-name-mark {
+  flex: none;
+  color: var(--pencil);
+}
+
+.mk-ledger .goods-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.goods-pick.is-off .mk-cap {
+  color: var(--pencil-faint);
+}
+
+.mk-rate,
+.mk-limits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-height: 3.4em;
+  font-size: var(--fs-sm);
+}
+
+.mk-rate b {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.mk-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.mk-clear {
+  align-self: flex-start;
+}
+
+/* ---- foot ---- */
+
+.mk-foot {
+  display: grid;
+  grid-template-columns: auto minmax(100px, 260px) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 2px solid var(--rule);
+}
+
+.mk-foot b {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.mk-foot-note {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* ---- wide: the row and the scales on the left, the ledger beside them, each column its own scroll ---- */
+
+@media (min-width: 1100px) {
+  .mk-screen {
+    padding: 22px;
+  }
+
+  .mk-sheet {
+    height: min(720px, calc(100dvh - 44px));
+  }
+
+  .mk-head {
+    padding: var(--sp-4) var(--sp-6) var(--sp-3);
+  }
+
+  .mk-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 420px;
+    overflow: hidden;
+  }
+
+  .mk-square {
+    min-height: 0;
+    justify-content: space-evenly;
+    gap: var(--sp-4);
+    padding: var(--sp-5) var(--sp-6);
+    overflow-y: auto;
+  }
+
+  .mk-ledger {
+    min-height: 0;
+    border-top: 0;
+    border-left: var(--bw) solid var(--rule);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--ink) var(--paper-shade);
+  }
+
+  .mk-foot {
+    padding: var(--sp-3) var(--sp-6);
+  }
+}
+
+/* ---- a phone held upright: the whole screen, a compact row of stalls, everything in one scroll ---- */
+
+@media (max-width: 640px) {
+  .mk-screen {
+    padding: 0;
+  }
+
+  .mk-sheet {
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .mk-head {
+    padding: max(10px, env(safe-area-inset-top)) var(--sp-4) var(--sp-2);
+  }
+
+  .mk-title {
+    font-size: var(--fs-xl);
+  }
+
+  .mk-sub {
+    font-size: var(--fs-xs);
+  }
+
+  .mk-square {
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  }
+
+  .mk-row {
+    gap: var(--sp-2);
+    padding: 0 0 8px;
+  }
+
+  .mk-stall {
+    --roof-h: 28px;
+  }
+
+  .mk-stall.st-tent {
+    --roof-h: 36px;
+    --post: 3px solid var(--ink-2);
+  }
+
+  .mk-stall.st-shed {
+    --roof-h: 30px;
+    --post: 5px solid var(--ink-2);
+  }
+
+  .mk-stall.st-awning {
+    --post: 3px solid var(--ink-2);
+  }
+
+  .mk-sign {
+    max-width: calc(100% - 4px);
+    padding: 1px 4px;
+    font-size: 10.5px;
+    letter-spacing: 0;
+  }
+
+  .mk-booth {
+    min-height: 62px;
+    margin: -6px 4px 0;
+    padding-top: var(--sp-2);
+  }
+
+  .mk-counter {
+    min-height: 42px;
+    padding: var(--sp-1) 2px;
+    gap: 2px;
+    border-top-width: 4px;
+  }
+
+  /* only the goods' marks on the counter: the names are on the scales and in the ledger below */
+  .mk-crate {
+    padding: 3px 2px;
+  }
+
+  .mk-crate-name,
+  .mk-crate-role {
+    display: none;
+  }
+
+  .mk-chalk {
+    font-size: var(--fs-xs);
+  }
+
+  .mk-plaque {
+    padding: 1px 4px;
+    font-size: 10.5px;
+  }
+
+  .mk-tally {
+    font-size: 10.5px;
+  }
+
+  .mk-scales svg {
+    max-width: 330px;
+  }
+
+  .mk-scales figcaption {
+    font-size: var(--fs-xs);
+  }
+
+  .mk-ledger-body {
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  }
+
+  .mk-name-input {
+    font-size: var(--fs-lg); /* 17px: no zoom on focus on a phone */
+  }
+
+  .mk-ledger .goods-btn {
+    min-height: 58px;
+  }
+
+  .mk-foot {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: var(--sp-2) var(--sp-4) max(var(--sp-2), env(safe-area-inset-bottom));
+  }
+
+  .mk-foot-note {
+    display: none;
+  }
+}
+
+/* ---- motion ---- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .mk-screen {
+    animation: mk-dim var(--dur-3) var(--ease-out);
+  }
+
+  .mk-sheet {
+    animation: mk-settle var(--dur-3) var(--ease-out);
+  }
+
+  /* the stalls go up one after another */
+  .mk-stall {
+    animation: mk-rise 320ms var(--ease-out) backwards;
+    animation-delay: calc(var(--i, 0) * 70ms + 80ms);
+    transition: transform var(--dur-2) var(--ease-out);
+  }
+
+  .mk-stall:hover:not(.sel) {
+    transform: translateY(-2px);
+  }
+
+  .mk-stall.sel {
+    transform: translateY(-4px);
+  }
+
+  /* the sign of the stall just opened swings on its hooks */
+  .mk-stall.sel .mk-sign {
+    animation: mk-swing 900ms ease-out;
+  }
+
+  /* new goods are set on the counter: the given crate first, then the got */
+  .mk-counter .mk-crate {
+    animation: mk-drop 280ms var(--ease-out) backwards;
+  }
+
+  .mk-counter .mk-crate:last-child {
+    animation-delay: 70ms;
+  }
+
+  /* the beam and the pans settle with a little overshoot, as scales do */
+  .mk-beam,
+  .mk-needle,
+  .mk-pan {
+    transition: transform 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .mk-load {
+    animation: mk-drop 280ms var(--ease-out) backwards;
+  }
+
+  .mk-ledger-body {
+    animation: mk-fade var(--dur-2) var(--ease-out);
+  }
+
+  .goods-btn {
+    transition:
+      background-color var(--dur-1) var(--ease-out),
+      color var(--dur-1) var(--ease-out),
+      transform var(--dur-1) var(--ease-out);
+  }
+
+  .goods-btn:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  .goods-btn.on .icon {
+    animation: mk-pop 220ms var(--ease-out);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (max-width: 640px) {
+  .mk-sheet {
+    animation: mk-up var(--dur-3) var(--ease-out);
+  }
+}
+
+@keyframes mk-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes mk-settle {
+  from {
+    transform: translateY(10px);
+  }
+}
+
+@keyframes mk-up {
+  from {
+    transform: translateY(32px);
+  }
+}
+
+@keyframes mk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes mk-swing {
+  0% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(6deg);
+  }
+  45% {
+    transform: rotate(-4deg);
+  }
+  70% {
+    transform: rotate(2deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+@keyframes mk-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes mk-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes mk-pop {
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+/* ---- the summary in the market's inspector ---- */
+
+.mk-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--sp-1) 0 var(--sp-2);
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.mk-sum li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: var(--sp-2);
+  row-gap: 1px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: var(--bw-hair) dotted var(--rule);
+}
+
+.mk-sum-n {
+  grid-row: span 2;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: var(--bw-hair) solid var(--rule);
+  background: var(--domain-trade);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.mk-sum li.is-free .mk-sum-n,
+.mk-sum li.is-locked .mk-sum-n {
+  border-style: dashed;
+  background: transparent;
+}
+
+.mk-sum-name {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mk-sum-t {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+}
+
+.mk-sum li.is-free .mk-sum-t,
+.mk-sum li.is-locked .mk-sum-t,
+.mk-sum li.is-locked .mk-sum-name {
+  color: var(--pencil);
+}

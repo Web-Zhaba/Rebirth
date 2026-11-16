@@ -1,30 +1,38 @@
 import { cross, dot, normalize, type Vec3 } from "../geo/ellipsoid";
 import type { Mat4 } from "../camera/projection";
 
-// The sun's orthographic shadow camera: one local map around the camera target,
-// texel-snapped in absolute ECEF so it does not shimmer while the camera moves. The map's content depends only on the
-// snapped frame below; the matrix the GPU uses is rebuilt from it every frame against the eye, so positions stay
-// camera-relative (f64 here, f32 on the GPU) like everything else in the engine.
+// The sun's shadow as cascades: orthographic maps around slices of the view's depth, the
+// nearest finest (shadow/shadowMap.ts). Each cascade is a sphere around its slice, so turning the camera does not
+// change its size; the radius moves in coarse steps and the centre snaps to whole texels in absolute ECEF, so panning
+// and zooming do not make the edges shimmer either. A map's content depends only on its snapped frame; the matrix the
+// GPU uses is rebuilt from it every frame against the eye, so positions stay camera-relative (f64 here, f32 on the
+// GPU) like everything else in the engine.
 
+export const MAX_CASCADES = 4;
 export const SHADOW_FADE = { near: 900, far: 2600 }; // m above the ground on a 2048 map: full shadows below, none above
 const FULL_SIZE = 2048; // a smaller map carries its texels half as far
-export const SUN_STEP = 0.002; // rad the sun may wander before the map is re-rendered (a 10 m wall's shadow: < 10 cm)
+const CASTER_REACH = 600; // m the map's depth reaches towards the sun beyond its sphere: a tree or a roof there casts in
+const LAMBDA = 0.9; // the splits' mix of logarithmic (1, even texels on screen) and even depth (0)
+const MIN_START = 20; // m: where the first cascade starts at the nearest
+const TALLEST = 60; // m: what stands on the ground can come this much nearer the eye than the ground itself
+const RADIUS_STEPS = 8; // radius steps per doubling
+const SHIFT_TEXELS = 0.25; // texels a 20 m caster's shadow may slide with the sun before its cascade is re-rendered
+const CASTER_HEIGHT = 20;
+const LOW_SUN = Math.sin((3 * Math.PI) / 180) ** 2;
 
 export interface ShadowFrame {
   right: Vec3; // light axes (ECEF): right, up, and fwd from the sun towards the ground
   up: Vec3;
   fwd: Vec3;
-  origin: Vec3; // the snapped centre (absolute ECEF, m)
+  origin: Vec3; // the snapped centre of the box (absolute ECEF, m)
   radius: number; // half-extent of the map (m)
   depth: number; // metres of depth the map covers, centred on the origin
   texel: number; // metres per texel
 }
 
-// The map's half-extent by the eye's distance to the target (a tilted view sees ground well beyond its height): steps,
-// not a smooth curve, so texels keep their size (and the snapping its grid) while the camera zooms. The widest step
-// is only for a full-size map: on a smaller one its texels would be wider than a house's shadow.
-export function shadowRadius(distance: number, size = FULL_SIZE): number {
-  return distance < 180 ? 200 : distance < 450 ? 400 : distance < 1000 || size < FULL_SIZE ? 800 : 1600;
+export interface Slice {
+  depth: number; // the sphere's centre, along the view axis (m)
+  radius: number;
 }
 
 // Shadows dissolve as the camera rises, handing over to the cloud shading, and as the sun reaches the horizon (where
@@ -40,24 +48,58 @@ function smoothstep(a: number, b: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-// The sun direction the map is rendered with: the previous one until the real sun has moved more than SUN_STEP, so a
-// running game clock re-renders the map every few frames rather than every frame.
-export function steppedSun(prev: Vec3 | null, sun: Vec3): Vec3 {
-  return prev && dot(prev, sun) > Math.cos(SUN_STEP) ? prev : sun;
+// Where the first cascade starts (view depth, m): the nearest ground the bottom of the view can see, less what stands
+// on it, so no map is spent on the air between the eye and the ground. `down` is how steeply the bottom edge of the
+// view looks down: the drop per metre of depth along it.
+export function shadowStart(eyeAboveGround: number, down: number, near: number, far: number): number {
+  const ground = down > 1e-3 ? (0.7 * Math.max(0, eyeAboveGround - TALLEST)) / down : 0;
+  return Math.min(far * 0.4, Math.max(MIN_START, near, ground));
 }
 
-// The light frame for `sun` (unit ECEF towards the sun) around `target`, snapped to whole texels of a `size` map.
-export function shadowFrame(sun: Vec3, target: Vec3, radius: number, size: number): ShadowFrame {
+// The view depths the cascades split at, from `start` to `far`: count + 1 of them.
+export function cascadeSplits(start: number, far: number, count: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i <= count; i++) {
+    const t = i / count;
+    out.push(LAMBDA * start * (far / start) ** t + (1 - LAMBDA) * (start + (far - start) * t));
+  }
+  return out;
+}
+
+// The smallest sphere around the slice of the view between depths a and b (tanX, tanY: the half fields of view).
+export function sliceSphere(a: number, b: number, tanX: number, tanY: number): Slice {
+  const k2 = tanX * tanX + tanY * tanY;
+  const depth = Math.min(b, ((a + b) * (1 + k2)) / 2);
+  return { depth, radius: Math.sqrt((b - depth) ** 2 + b * b * k2) };
+}
+
+// The radius a cascade keeps: whole steps of RADIUS_STEPS per doubling, and the one it had while that still covers the
+// slice and is not more than a step too big. A camera that moves a little keeps its texels as they are.
+export function steadyRadius(want: number, prev: number): number {
+  if (prev >= want && prev <= want * 2 ** (1.5 / RADIUS_STEPS)) return prev;
+  return 2 ** (Math.ceil(Math.log2(want) * RADIUS_STEPS) / RADIUS_STEPS);
+}
+
+// How far (rad) the sun may move before a cascade with `texel` (m) must be re-rendered: a CASTER_HEIGHT caster's shadow
+// moves by about h / sin^2(elevation) per radian, so the tolerance shrinks as the sun gets low. `sunUp` is the sine of
+// the sun's elevation.
+export function sunTolerance(texel: number, sunUp: number): number {
+  return (SHIFT_TEXELS * texel * Math.max(sunUp * sunUp, LOW_SUN)) / CASTER_HEIGHT;
+}
+
+// The light frame for `sun` (unit ECEF towards the sun) around `centre`, snapped to whole texels of a `size` map. Its
+// depth covers the sphere and CASTER_REACH more towards the sun.
+export function shadowFrame(sun: Vec3, centre: Vec3, radius: number, size: number): ShadowFrame {
   const fwd: Vec3 = [-sun[0], -sun[1], -sun[2]];
   const ref: Vec3 = Math.abs(fwd[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0];
   const right = normalize(cross(ref, fwd));
   const up = cross(fwd, right);
   const texel = (2 * radius) / size;
-  const su = Math.round(dot(target, right) / texel) * texel;
-  const sv = Math.round(dot(target, up) / texel) * texel;
-  const sf = Math.round(dot(target, fwd) / (16 * texel)) * 16 * texel; // depth: coarser steps, it only shifts the range
+  const su = Math.round(dot(centre, right) / texel) * texel;
+  const sv = Math.round(dot(centre, up) / texel) * texel;
+  const sf = Math.round(dot(centre, fwd) / (16 * texel)) * 16 * texel - CASTER_REACH / 2; // depth: coarser steps, it only shifts the range
   const origin: Vec3 = [0, 1, 2].map((i) => right[i] * su + up[i] * sv + fwd[i] * sf) as Vec3;
-  return { right, up, fwd, origin, radius, depth: 4 * radius, texel };
+  return { right, up, fwd, origin, radius, depth: 2 * radius + CASTER_REACH, texel };
 }
 
 // Camera-relative ECEF (m) -> shadow clip: x, y in -1..1 across the map, z 0 nearest the sun .. 1 farthest. Plain
@@ -89,20 +131,20 @@ export function shadowCovers(f: ShadowFrame, center: Vec3, radius: number): bool
   return Math.abs(dot(d, f.right)) <= f.radius + radius && Math.abs(dot(d, f.up)) <= f.radius + radius && Math.abs(dot(d, f.fwd)) <= f.depth / 2 + radius;
 }
 
-// The map's version: it is re-rendered only when what it was baked from changed —
-// the stepped sun, the snapped frame, the casters' versions or the view the casters were culled for. A still camera
-// costs nothing.
+// What a cascade was last rendered from: the frame, the sun, the casters' versions and the view the casters were
+// culled for. A still camera and a still (or slow enough) sun cost nothing.
 export class ShadowCache {
   private last: number[] = [];
   version = 0;
 
-  // True (and bumps the version) when `inputs` differ from those of the last render.
-  stale(inputs: readonly number[]): boolean {
+  matches(inputs: readonly number[]): boolean {
     const l = this.last;
-    if (l.length === inputs.length && inputs.every((v, i) => v === l[i])) return false;
+    return l.length === inputs.length && inputs.every((v, i) => v === l[i]);
+  }
+
+  store(inputs: readonly number[]): void {
     this.last = [...inputs];
     this.version++;
-    return true;
   }
 
   // Forget the last render (the map's texture was replaced): the next frame re-renders.

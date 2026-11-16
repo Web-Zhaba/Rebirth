@@ -161,14 +161,14 @@ describe("gatherings", () => {
     const tent = (s: SimState) => ({ ...s, residents: { ...s.residents, 2: { ...s.residents[2], needs: { food: 100, rest: 100, social: 50, warmth: 100 } } } });
     expect(social(tent(camp(100))) - social(tent(camp(1800)))).toBeCloseTo(NEEDS.socialGather);
   });
-  it("a chapel and a staffed market cover the camp", () => {
+  it("a chapel and a staffed shop cover the camp", () => {
     const s = gather();
     const base = { ...s, households: { ...s.households, 9: { ...s.households[1], id: 9, home: null, members: [] } } };
     const chapel = refreshServices({ ...base, buildings: { ...base.buildings, 5: bld(5, "chapel", 500) }, residents: { ...base.residents, 99: { ...base.residents[1], id: 99, job: 5 } } });
     expect(covers(chapel.coverage[CAMP], "chapel")).toBe(true);
     expect(gatherHouses({ ...chapel, buildings: { ...chapel.buildings, 1: bld(1, "tavern", 100, "planned") } }).has(CAMP)).toBe(true);
-    const market = refreshServices({ ...base, buildings: { ...base.buildings, 6: bld(6, "market", 400) }, residents: { ...base.residents, 98: { ...base.residents[1], id: 98, job: 6 } } });
-    expect(covers(market.coverage[CAMP], "market")).toBe(true);
+    const shop = refreshServices({ ...base, buildings: { ...base.buildings, 6: bld(6, "shop", 400) }, residents: { ...base.residents, 98: { ...base.residents[1], id: 98, job: 6 } } });
+    expect(covers(shop.coverage[CAMP], "shop")).toBe(true);
   });
 });
 

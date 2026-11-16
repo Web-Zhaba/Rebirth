@@ -1,22 +1,23 @@
 import { GOODS, WARES_SPLIT } from "./goods";
 import { LANDS } from "../world/landcover";
-import { BUILDINGS, FLOOR, homesOf, isPriority, JOB_KEYS, levelHeight, maxLevel, startLevel } from "./buildings";
+import { BUILDINGS, FLOOR, homesOf, isPriority, JOB_KEYS, levelHeight, maxLevel, recipeOf, startLevel } from "./buildings";
 import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { EXCAVATION } from "./digging";
 import { DIG, parseFinds } from "./excavation";
 import { emptyGrowth, seedOf } from "./growth";
 import { parseProgress } from "./research";
-import { migrateProgress } from "./tech";
+import { MAX_TRADE_SLOTS, migrateProgress } from "./tech";
 import { emptyLevers, type Levers } from "./levers";
 import { migrateText } from "./legacyText";
+import { parseGov, parseHistory } from "./government";
 import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } from "./people";
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
 import { spreadStores, type Stores } from "./storage";
 import { NO_ATTRACTION, type Attraction } from "./attraction";
 import { SERVICE } from "./services";
-import { isTradeOrder } from "./trade";
+import { cleanOrder, isTradeOrder, STALL_NAME_MAX, type TradeSwap } from "./trade";
 import { YEAR_MIN, YEAR_SCALE } from "./time";
 import type {
   Building,
@@ -251,7 +252,7 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
     } else if (out[id].zone === "res") out[id].level = Math.min(maxLevel(out[id]), Math.max(startLevel(out[id].template), level));
     if (isNum(raw.hand) && raw.hand > 0) out[id].hand = raw.hand;
     if (isNum(raw.haul) && raw.haul > 0) out[id].haul = raw.haul;
-    if (raw.template === "orchard" && isNum(raw.ripe)) out[id].ripe = raw.ripe;
+    if (recipeOf(out[id].template)?.ripens && isNum(raw.ripe)) out[id].ripe = raw.ripe; // planted trees
     if (nonNegInt(raw.staff)) out[id].staff = Math.min(raw.staff, 99); // hiring limit of a workplace
     const up = raw.upgrade;
     if (up !== undefined && raw.state === "active" && isRecord(up) && isNum(up.labor) && up.labor > 0 && isNum(up.done) && up.done >= 0 && up.done <= up.labor) {
@@ -271,7 +272,7 @@ function parseNeeds(v: unknown): Needs | undefined {
   if (!keys.every((k) => isNum(v[k]) && (v[k] as number) >= 0 && (v[k] as number) <= 100)) return undefined;
   return { food: v.food as number, rest: v.rest as number, social: v.social as number, warmth: v.warmth as number };
 }
-const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "discovery"];
+const EVENT_KINDS = ["birth", "death", "marriage", "arrival", "departure", "movein", "farm", "food", "clearing", "built", "shortage", "order", "goal", "unlock", "tech", "era", "heritage", "discovery", "head"];
 
 // A position of two finite numbers, else undefined (the event is kept without it).
 const parsePos = (v: unknown): [number, number] | undefined => (Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1]) ? [v[0], v[1]] : undefined);
@@ -314,6 +315,8 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
       school: isNum(r.school) ? Math.min(100, Math.max(0, r.school)) : 0,
       ...(r.inClass === true ? { inClass: true } : {}),
       ...(needs ? { needs } : {}),
+      ...(Number.isInteger(r.mother) && (r.mother as number) > 0 ? { mother: r.mother as number } : {}),
+      ...(Number.isInteger(r.father) && (r.father as number) > 0 ? { father: r.father as number } : {}),
     };
   }
   const households: Record<number, Household> = {};
@@ -369,6 +372,17 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     if (r.job !== null && !isWorkplace(buildings[r.job])) {
       r.job = null;
       r.commute = null;
+    }
+  }
+  // Saves from before parents: a household's younger members are the children of its married couple.
+  for (const h of Object.values(households)) {
+    const pa = h.members.map((m) => residents[m]).find((r) => r.spouse !== null && h.members.includes(r.spouse) && r.sex === "f");
+    if (!pa) continue;
+    const pb = residents[pa.spouse!];
+    for (const m of h.members) {
+      const r = residents[m];
+      if (r === pa || r === pb || r.mother !== undefined || r.father !== undefined) continue;
+      if (r.born >= Math.max(pa.born, pb.born) + 15 * YEAR_MIN) Object.assign(r, { mother: pa.id, father: pb.id });
     }
   }
   const events: TownEvent[] = [];
@@ -459,8 +473,9 @@ function parseProd(v: unknown): ProdState {
   // Saves from before the orchard: a year with nothing counted.
   const o = v.orchard;
   if (isRecord(o) && Number.isInteger(o.year)) out.orchard = { year: o.year as number, frost: num(o.frost, 0, 400, 0), stress: num(o.stress, 0, 400, 0), days: num(o.days, 0, 400, 0), hot: num(o.hot, 0, 400, 0) };
-  const t = oldTrade(v.trade);
-  if (isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0) out.trade = { give: t.give, get: t.get, gave: t.gave, got: t.got };
+  // saves from before several trade orders carry one swap
+  const swaps = (Array.isArray(v.trade) ? v.trade : [v.trade]).map(oldTrade).filter((t): t is TradeSwap => isRecord(t) && isTradeOrder(t) && isNum(t.gave) && isNum(t.got) && t.gave >= 0 && t.got >= 0);
+  if (swaps.length > 0) out.trade = swaps.map((t) => ({ give: t.give, get: t.get, gave: t.gave, got: t.got }));
   return out;
 }
 
@@ -479,8 +494,15 @@ function parseLevers(v: unknown): Levers {
   if (v.rations === "reduced" || v.rations === "generous") out.rations = v.rations;
   const j = v.jobs;
   if (isRecord(j)) for (const k of JOB_KEYS) if (isPriority(j[k])) out.jobs[k] = j[k];
-  const order = oldTrade(v.trade);
-  if (isTradeOrder(order)) out.trade = { give: order.give, get: order.get };
+  // saves from before several trade orders carry one order or null; a broken order is dropped, the rest kept
+  const orders = Array.isArray(v.trade) ? v.trade : v.trade ? [v.trade] : [];
+  const pairs = new Set<string>();
+  for (const o of orders.slice(0, MAX_TRADE_SLOTS).map(oldTrade)) {
+    if (!isTradeOrder(o) || pairs.has(`${o.give}>${o.get}`)) continue;
+    pairs.add(`${o.give}>${o.get}`);
+    out.trade.push(cleanOrder(o));
+  }
+  if (Array.isArray(v.stallNames)) out.stallNames = v.stallNames.slice(0, MAX_TRADE_SLOTS).map((n) => (typeof n === "string" ? n.slice(0, STALL_NAME_MAX) : ""));
   return out;
 }
 
@@ -609,6 +631,8 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   g.finds = parseFinds(sim.finds);
   g.articles = parseArticles(sim.articles);
   g.weather = parseWeather(sim.weather);
+  g.gov = parseGov(sim.gov);
+  g.history = g.gov ? parseHistory(sim.history) : [];
   return g;
 }
 

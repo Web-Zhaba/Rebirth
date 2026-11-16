@@ -8,7 +8,7 @@ import { TOWN_VERTEX_FLOATS, TownMesh, type TownMeshData } from "../../engine/sc
 import { EXAGGERATION } from "../../engine/terrain/terrain";
 import { lightOpacity } from "../../map/life";
 import type { Model } from "../../map/modelGeometry";
-import { coverOf, demoModelItems, keyOf, lampOf, modelEmitters, quantise, seatedModelOf, type Emitter, type ModelItem } from "../../map/modelItems";
+import { coverOf, demoModelItems, isFlatRoad, keyOf, lampOf, modelEmitters, quantise, seatedModelOf, type Emitter, type ModelItem } from "../../map/modelItems";
 import { ruinWallModel } from "../../map/ruinsGeometry";
 import { buildingItems } from "../layers/buildings";
 import { roadItems } from "../layers/roads";
@@ -127,13 +127,12 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
     const smoke: Emitter[] = [];
     const seatAt = (x: number, y: number) => ground(x, y) ?? 0;
     for (const it of list) {
-      const onRoad = it.style === "road" || it.style === "junction";
       const p = it.style === "road" ? 1 : quantise(it.progress);
       const k = keyOf(it, p, EXAGGERATION);
       used.add(k);
       let pack = cache.get(k);
       if (!pack) cache.set(k, (pack = project(seatedModelOf({ ...it, progress: p }, seatAt), p >= 1 ? lampOf(it) : 0))), built++;
-      (onRoad ? roads : buildings).push(pack);
+      (isFlatRoad(it) ? roads : buildings).push(pack);
       for (const [x, y, z] of pack.smoke) smoke.push({ id: it.id, kind: it.kind, style: it.style, lamp: it.lamp, x, y, z });
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);

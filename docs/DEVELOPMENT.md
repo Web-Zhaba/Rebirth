@@ -85,7 +85,8 @@ summary lists the manual steps with links to the zips and consoles:
 
 1. Yandex Games: console → the game → new version → upload `rebirth-yandex.zip`, version = the release number → send
    for moderation (3–5 working days; one moderation at a time).
-2. CrazyGames: developer portal → the game → upload `rebirth-crazygames.zip`.
+2. CrazyGames: developer portal → the game → new build → upload the files of `rebirth-crazygames.zip` unzipped (the
+   portal takes no archives; locally they are `release/crazygames/`), index.html at the top level.
 3. GameDistribution: developer portal → the game → upload `rebirth-gamedistribution.zip`.
 4. GamePix: partners portal → the game → upload `rebirth-gamepix.zip`.
 

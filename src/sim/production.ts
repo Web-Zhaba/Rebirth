@@ -1,17 +1,18 @@
-import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_USERS, TOOL_WEAR, TOOLLESS } from "./goods";
+import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_WEAR, TOOLLESS, zeroStock } from "./goods";
 import { leverMood, workHours } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
-import { allocateLabor, BUILDINGS, floorArea, FOUNDING_STOCK, foodCapacity, groupOf, homesOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
-import { assignedHa, assignFields, bears, expectedKg, FIELD, foodKgHour, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
+import { allocateLabor, BUILDINGS, floorArea, isFarm, recipeOf, FOUNDING_STOCK, foodCapacity, groupOf, homesOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
+import { assignedHa, assignFields, bears, expectedKg, FIELD, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, lotFront, MAX_EVENTS, productionScales } from "./people";
 import { haulHours, Ledger } from "./storage";
 import { adminOf, adminFactor } from "./governance";
+import { govEffect } from "./government";
 import { buildingPriority } from "./jobs";
 import { cropOf, fieldYieldMul, workshopMul } from "./tech";
 import { massText } from "./units";
 import { EVENING, eveningRate, gatherHouses } from "./evening";
-import { covers, dwelling, SERVICE, serviceMood } from "./services";
+import { dwelling, SERVICE, serviceMood } from "./services";
 import { tradeDay } from "./trade";
 import { finishedMonuments, monumentMoodAt } from "./monuments";
 import { districtMood } from "./recognition";
@@ -24,18 +25,8 @@ import { L } from "../i18n";
 // Building materials come PACE times faster than in history; food and goods do not.
 export const PACE = 4;
 
-// Rates are per worker-hour during work hours.
+// What each workplace makes per worker-hour is its recipe (src/buildings/<id>/rules.ts `produce`).
 export const RATE = {
-  logs: 0.4, // m3, times PACE and the forest share
-  planks: 0.02, // m3, times PACE
-  logsPerPlank: 1.6, // m3 of logs per m3 of planks
-  stone: 0.15, // t, times PACE; a quarry works on any land (rock nearby changes nothing)
-  pottery: 0.025, // pieces of dishes
-  weaver: 0.02, // pieces of clothing
-  smithy: 0.015, // pieces of tools
-  smithyLogs: 0.05, // m3 per piece (charcoal)
-  carpentry: 0.015, // pieces of furnishings
-  carpentryPlanks: 0.03, // m3 per piece
   householdsPerTrader: 12,
   moodStep: 0.25,
 };
@@ -215,7 +206,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
   let events = s.events;
   let buildings = s.buildings;
   const shopMul = workshopMul(s.progress);
-  const admin = adminFactor(s); // past what the offices can manage every work goes slower
+  const admin = adminFactor(s); // past what the offices can manage every work goes slower; the head's hand too
   // food that finds no room in the stores rots
   const addFood = (kg: number, at: [number, number]) => {
     const { stored } = ledger.put("food", kg, at);
@@ -265,64 +256,34 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
     const wf = workFactor(b.template, s.weather); // rain, frost, storms
     if (wf <= 0) continue;
     let h = eff * dt * wf * admin * (b.zone === "craft" ? shopMul : 1) * (typeof scale === "number" ? scale : scale[buildingPriority(b, s.levers)]);
-    if (TOOL_USERS.has(b.template)) {
+    if (BUILDINGS[b.template]?.usesTools) {
       // tools wear out with the work; what has none works at TOOLLESS of its rate
       const wear = h * TOOL_WEAR;
       const got = ledger.take("tools", Math.min(stock.tools, wear), lotFront(b)).taken;
       if (got < wear - EPS) toolless = true;
       h *= TOOLLESS + (1 - TOOLLESS) * (wear > 0 ? got / wear : 1);
     }
-    switch (b.template) {
-      case "woodcutter": {
-        made(b.id, store(b, "logs", carted(b, "logs", RATE.logs * PACE * (b.site?.forest ?? 0), h)));
-        break;
-      }
-      case "sawpit": {
-        // taking the logs frees more room in the timber stores than the planks need
-        const q = Math.min(carted(b, "planks", RATE.planks * PACE, h, { g: "logs", per: RATE.logsPerPlank }), stock.logs / RATE.logsPerPlank);
-        if (q <= 0) break;
-        ledger.take("logs", q * RATE.logsPerPlank, lotFront(b));
-        made(b.id, store(b, "planks", q));
-        break;
-      }
-      case "quarry": {
-        made(b.id, store(b, "stone", carted(b, "stone", RATE.stone * PACE, h)));
-        break;
-      }
-      case "fisher":
-      case "garden":
-      case "hunter":
-      case "forager":
-      case "apiary":
-      case "orchard": {
+    const recipe = recipeOf(b.template);
+    switch (recipe ? "recipe" : b.template === DIG.template ? "digging" : isFarm(b.template) ? "harvest" : null) {
+      case "recipe": {
+        const p = recipe!;
+        let rate = p.perHour * (p.pace ? PACE : 1) * (p.forest ? (b.site?.forest ?? 0) : 1) * (p.season ? p.season[cal.season] : 1);
         // fruit trees bear a year after they were planted, and the year decides how much
-        const bear = b.template !== "orchard" ? 1 : bears(b, s.gameMinutes) ? orchardQuality(s.prod.orchard) : 0;
-        made(b.id, store(b, "food", carted(b, "food", foodKgHour(b.template, cal.season) * bear, h)));
-        break;
-      }
-      case "pottery": {
-        made(b.id, store(b, "dishes", carted(b, "dishes", RATE.pottery, h)));
-        break;
-      }
-      case "weaver": {
-        made(b.id, store(b, "clothes", carted(b, "clothes", RATE.weaver, h)));
-        break;
-      }
-      case "smithy": {
-        const q = Math.min(carted(b, "tools", RATE.smithy, h, { g: "logs", per: RATE.smithyLogs }), stock.logs / RATE.smithyLogs, ledger.roomFor("tools"));
+        if (p.ripens) rate *= bears(b, s.gameMinutes) ? orchardQuality(s.prod.orchard) : 0;
+        if (!p.input) {
+          made(b.id, store(b, p.good, carted(b, p.good, rate, h)));
+          break;
+        }
+        const { good: g, per } = p.input;
+        let q = Math.min(carted(b, p.good, rate, h, { g, per }), stock[g] / per);
+        // taking the input frees room in its store: when the output goes to the same store it fits
+        if (groupOf(g) !== groupOf(p.good)) q = Math.min(q, ledger.roomFor(p.good));
         if (q <= 0) break;
-        ledger.take("logs", q * RATE.smithyLogs, lotFront(b));
-        made(b.id, store(b, "tools", q));
+        ledger.take(g, q * per, lotFront(b));
+        made(b.id, store(b, p.good, q));
         break;
       }
-      case "carpentry": {
-        const q = Math.min(carted(b, "furniture", RATE.carpentry, h, { g: "planks", per: RATE.carpentryPlanks }), stock.planks / RATE.carpentryPlanks, ledger.roomFor("furniture"));
-        if (q <= 0) break;
-        ledger.take("planks", q * RATE.carpentryPlanks, lotFront(b));
-        made(b.id, store(b, "furniture", q));
-        break;
-      }
-      case "dig": {
+      case "digging": {
         const r0 = radiusOf(b);
         const r = growDig(r0, h);
         if (r === r0) break;
@@ -330,7 +291,7 @@ export function produceStep(s: SimState, dt: number, scale: number | readonly nu
         buildings[b.id] = { ...b, radius: r };
         break;
       }
-      case "gumno": {
+      case "harvest": {
         if (win === null) break;
         assign ??= assignFields(s.zones.fields, s.buildings);
         const mine = s.zones.fields.filter((f) => assign!.get(f.id) === b.id);
@@ -450,7 +411,7 @@ export function dailyEconomy(s: SimState): SimState {
   events = frost.events;
   let buildings = s.buildings;
   for (const b of Object.values(s.buildings)) {
-    if (b.template !== "orchard" || b.state !== "active" || b.ripe !== undefined) continue;
+    if (!recipeOf(b.template)?.ripens || b.state !== "active" || b.ripe !== undefined) continue;
     if (buildings === s.buildings) buildings = { ...buildings };
     buildings[b.id] = { ...b, ripe: now + ORCHARD_YEARS * YEAR_MIN }; // finished: the trees take a year to bear
   }
@@ -472,8 +433,8 @@ export function dailyEconomy(s: SimState): SimState {
   } else if (fed >= 1 - EPS && flags.hungry) flags = { ...flags, hungry: false };
   // heat and damp spoil the stock; what lies in cellars and barns suffers less (cellars hold the best), at the camp most
   for (const p of ledger.points) {
-    const kind = s.buildings[p.id]?.template;
-    const spoiled = ledger.held(p.id, "food") * spoilage(s.weather, kind === "barn" ? 1 : 0, kind === "cellar" ? 1 : 0);
+    const keeps = BUILDINGS[s.buildings[p.id]?.template ?? ""]?.keeps;
+    const spoiled = ledger.held(p.id, "food") * spoilage(s.weather, keeps === "dry" ? 1 : 0, keeps === "cool" ? 1 : 0);
     ledger.lose(p.id, "food", spoiled);
     flags = { ...flags, rot: flags.rot + spoiled };
   }
@@ -485,23 +446,17 @@ export function dailyEconomy(s: SimState): SimState {
   }
 
   // goods: each employed trade worker serves 12 households a day (a literate one 20 % more, a learning one part of it), starting
-  // from a different one each day; each market worker then hands out to 20 households the market covers
+  // from a different one each day (the market's workers do not hand out: they swap goods, see trade.ts)
   let shopSlots = 0;
-  let marketSlots = 0;
-  let traders = 0; // working strength of the market workers
   for (const r of Object.values(s.residents)) {
     if (r.job === null) continue;
     const b = s.buildings[r.job];
     if (!b || b.state !== "active") continue;
     const strength = residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
     if (b.zone === "trade") shopSlots += RATE.householdsPerTrader * (1 + (SERVICE.literateBoost * r.school) / 100) * strength;
-    else if (b.template === "market") {
-      marketSlots += SERVICE.marketHouseholds * strength;
-      traders += strength;
-    }
   }
-  // the markets swap the ordered goods before the day's goods are handed out
-  const swap = tradeDay(stock, s.levers.trade, traders, ledger.roomFor("food"));
+  // the markets swap the ordered goods before the day's goods are handed out (setTrade keeps the orders within the researched slots)
+  const swap = tradeDay(stock, s.levers.trade, marketTraders(s), ledger.roomFor("food"));
   if (swap) {
     Object.assign(stock, swap.stock);
     ledger.sync(); // the traded goods come to and go from the stores nearest to the camp
@@ -524,13 +479,6 @@ export function dailyEconomy(s: SimState): SimState {
   let slots = Math.floor(shopSlots + EPS);
   for (let k = 0; k < ids.length && slots > 0 && homeGoods(stock) > EPS; k++) {
     hand(s.households[ids[(k + dayOf(now)) % ids.length]]);
-    slots--;
-  }
-  slots = Math.floor(marketSlots + EPS);
-  for (let k = 0; k < ids.length && slots > 0 && homeGoods(stock) > EPS; k++) {
-    const h = s.households[ids[(k + dayOf(now)) % ids.length]];
-    if (served.has(h.id) || !covers(s.coverage[dwelling(h)], "market")) continue;
-    hand(h);
     slots--;
   }
 
@@ -580,6 +528,7 @@ export function dailyEconomy(s: SimState): SimState {
   // mood
   const households: Record<number, Household> = {};
   const weatherMood = moodShift(s.weather);
+  const govMood = govEffect(s).mood; // the head of the town, or the want of one (sim/government.ts)
   const idle = idleResidents(s);
   const monuments = finishedMonuments(s.buildings);
   for (const h of Object.values(s.households)) {
@@ -601,7 +550,7 @@ export function dailyEconomy(s: SimState): SimState {
     const home = h.home !== null ? s.buildings[h.home] : undefined;
     const bonus = h.home !== null ? serviceMood(s.coverage[h.home], kids) + (gather.has(h.home) ? EVENING.gatherMood : 0) + (home ? monumentMoodAt(monuments, home.lot.cx, home.lot.cy) + districtMood(s.progress, s.finds, home.lot.cx, home.lot.cy) : 0) : 0;
     const needMood = needMoodTerm(householdSatisfaction(h.members, s.residents));
-    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0) + needMood));
+    const target = Math.min(100, Math.max(0, 10 + 45 * fed + 10 * (served.get(h.id) ?? 0) + 10 * (h.home !== null ? 1 : 0) + bonus - jobless + leverMood(s.levers) + govMood + weatherMood + (cold.has(h.id) ? EFFECTS.unheatedMood : 0) + needMood));
     const next: Household = { ...h, mood: h.mood + (target - h.mood) * RATE.moodStep, served: served.get(h.id) ?? 0 };
     if (cold.has(h.id)) next.cold = true;
     else delete next.cold;
@@ -637,7 +586,7 @@ export function dailyEconomy(s: SimState): SimState {
     delete fields[Number(key)];
   }
 
-  return { ...s, stock: { ...ledger.stock }, stores: ledger.stores, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard, ...(s.prod.haul ? { haul: s.prod.haul } : {}), ...(swap && s.levers.trade ? { trade: { ...s.levers.trade, gave: swap.gave, got: swap.got } } : {}) } };
+  return { ...s, stock: { ...ledger.stock }, stores: ledger.stores, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard, ...(s.prod.haul ? { haul: s.prod.haul } : {}), ...(swap ? { trade: swap.swaps } : {}) } };
 }
 
 // m3 of brushwood the idle adults gather in a day: only when a household is cold or the stock is below the day's
@@ -649,26 +598,23 @@ export function brushwood(s: SimState, demand: number): number {
 
 // ---------- aggregates and inspector ----------
 
-export const GOOD: Record<string, keyof Stock> = {
-  woodcutter: "logs",
-  sawpit: "planks",
-  quarry: "stone",
-  fisher: "food",
-  garden: "food",
-  hunter: "food",
-  forager: "food",
-  orchard: "food",
-  apiary: "food",
-  gumno: "food",
-  pottery: "dishes",
-  weaver: "clothes",
-  smithy: "tools",
-  carpentry: "furniture",
-};
+// The good each workplace makes, by template.
+export const GOOD: Record<string, keyof Stock> = Object.fromEntries(Object.values(BUILDINGS).flatMap((t) => (t.produce ? [[t.id, t.produce.good]] : [])));
+
+// Working strength of the town's market workers: what drives the day's trade volume (trade.ts tradeDay).
+export function marketTraders(s: Pick<SimState, "residents" | "buildings" | "households">): number {
+  let n = 0;
+  for (const r of Object.values(s.residents)) {
+    if (r.job === null) continue;
+    const b = s.buildings[r.job];
+    if (b?.state === "active" && BUILDINGS[b.template]?.trades) n += residentWorkFactor(r, s.households[r.household]?.mood ?? MOOD_NEUTRAL);
+  }
+  return n;
+}
 
 export function economyStats(s: SimState): EconomyStats {
   const need = foodPerDay(s.residents, s.gameMinutes, s.levers, s.weather);
-  const yesterday: Stock = { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 };
+  const yesterday: Stock = zeroStock();
   for (const [key, n] of Object.entries(s.prod.yesterday)) {
     const b = s.buildings[Number(key)];
     const g = b && GOOD[b.template];
@@ -716,6 +662,7 @@ export function economyStats(s: SimState): EconomyStats {
     outlook: foodOutlook(s),
     eveningWares: eveningRate(s),
     ...(s.prod.trade ? { trade: s.prod.trade } : {}),
+    traders: marketTraders(s),
     fieldWork: fieldWork(s.weather),
     buildFactor: buildFactor(s.weather),
     firewood: heatDemand(s),
@@ -734,17 +681,16 @@ export function productionInfo(s: SimState, b: Building): ProductionInfo | undef
   if (b.site) info.site = b.site;
   if (storageOf(b)) info.storage = storageOf(b);
   if (isStore && b.state === "active") info.store = { held: { ...(s.stores[b.id] ?? {}) }, room };
-  if (good && b.state === "active" && b.template !== "gumno") {
+  if (good && b.state === "active" && !isFarm(b.template)) {
     const ledger = new Ledger(s);
     const to = ledger.near(good, lotFront(b), "room")[0];
     if (to) info.haul = { metres: to.metres, share: s.prod.haul?.[b.id] ?? 0 };
     else if (good !== "food") info.full = true;
   }
-  if (b.template === "orchard") info.orchard = { ripeDays: b.ripe === undefined ? ORCHARD_YEARS * YEAR_DAYS : Math.max(0, Math.ceil((b.ripe - s.gameMinutes) / DAY_MIN)), quality: orchardQuality(s.prod.orchard) };
-  if (b.template === "sawpit" && s.stock.logs <= EPS) info.missing = L("брёвна", "logs");
-  if (b.template === "smithy" && s.stock.logs <= EPS) info.missing = L("брёвна (на уголь)", "logs (for charcoal)");
-  if (b.template === "carpentry" && s.stock.planks <= EPS) info.missing = L("доски", "planks");
-  if (b.template === "gumno") {
+  const recipe = recipeOf(b.template);
+  if (recipe?.ripens) info.orchard = { ripeDays: b.ripe === undefined ? ORCHARD_YEARS * YEAR_DAYS : Math.max(0, Math.ceil((b.ripe - s.gameMinutes) / DAY_MIN)), quality: orchardQuality(s.prod.orchard) };
+  if (recipe?.input && s.stock[recipe.input.good] <= EPS) info.missing = recipe.input.missing;
+  if (isFarm(b.template)) {
     const year = calendar(s.gameMinutes).year;
     const assign = assignFields(s.zones.fields, s.buildings);
     const mine: Field[] = s.zones.fields.filter((f) => assign.get(f.id) === b.id);

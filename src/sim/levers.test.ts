@@ -32,6 +32,7 @@ const site = (id: number, labor = 1e6): Building => {
   return { id, template: "izba", zone: "res", lot: { cx: 0, cy: 0, angle: 0, w: t.w, d: t.d }, side: 1, footprint: [[0, 0], [1, 0], [1, 1], [0, 1]], height: t.height, state: "building", labor, done: 0, created: 0, paid: true, level: 1, streak: 0 };
 };
 const house = (id: number): Building => ({ ...site(id, 100), state: "active", done: 100 });
+const hall = (id: number): Building => ({ ...house(id), template: "townhall", zone: "placed" }); // the orders are given from it
 const clearing = (id: number): Clearing => ({ id, pts: [[0, 0], [10, 0], [10, 10]], area: 5000, forest: 0.8, labor: clearingLabor(5000, 0.8), done: 0 });
 const world = (bs: Building[], gm = NOON, cs: Clearing[] = []): SimState => ({
   realTime: NOW,
@@ -122,7 +123,7 @@ describe("toloka", () => {
 
 describe("strada", () => {
   it("work hours follow the schedule", () => {
-    const s = ok(setSchedule(world([site(1)]), true));
+    const s = ok(setSchedule(world([site(1), hall(9)]), true));
     expect(workHours(world([]))).toEqual({ start: 7, end: 19 });
     expect(workHours(s)).toEqual({ start: 5, end: 21 });
     expect(workHours(s.levers)).toEqual({ start: 5, end: 21 });
@@ -177,8 +178,11 @@ describe("rations", () => {
     expect(out("reduced")).toBeGreaterThan(out("normal"));
     expect(out("normal")).toBeGreaterThan(out("generous"));
   });
-  it("the command validates and logs", () => {
-    const s = ok(setRations(base, "reduced"));
+  it("the command validates and logs; without a town hall only the normal rations go through", () => {
+    expect(setRations(base, "reduced")).toMatchObject({ ok: false });
+    expect(setSchedule(base, true)).toMatchObject({ ok: false });
+    const s = ok(setRations({ ...base, buildings: { ...base.buildings, 9: hall(9) } }, "reduced"));
+    expect(ok(setRations(s, "normal")).levers.rations).toBe("normal");
     expect(s.levers.rations).toBe("reduced");
     expect(s.chronicle.at(-1)?.text).toContain("урезанные");
     expect(setRations(base, "huge" as never)).toMatchObject({ ok: false });
@@ -241,22 +245,26 @@ describe("supplies for a watched ad", () => {
 describe("saving", () => {
   const save = (sim: Record<string, unknown>) => ({ version: 4, city, sim: JSON.parse(JSON.stringify(sim)) });
   it("levers survive a round trip", () => {
-    let s = world([site(1)]);
+    let s = world([site(1), hall(9)]);
     s = ok(callToloka(ok(setPriority(ok(setSchedule(ok(setRations(s, "generous")), true)), 1)), 1));
     const back = parseSave(save({ ...s, realTime: NOW }), NOW + 1000);
     expect(back?.sim.levers).toEqual(s.levers);
   });
-  it("the market's trade order and yesterday's trade survive a round trip; a broken one is dropped", () => {
+  it("the market's trade orders and yesterday's trade survive a round trip; a broken one is dropped", () => {
     const s = world([site(1)]);
-    const trade = { give: "stone", get: "tools", gave: 25, got: 4.5 };
-    const back = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "tools" } }, prod: { ...s.prod, trade }, realTime: NOW }), NOW + 1000);
-    expect(back?.sim.levers.trade).toEqual({ give: "stone", get: "tools" });
+    const trade = [{ give: "stone", get: "tools", gave: 25, got: 4.5 }];
+    const orders = [{ give: "stone", get: "tools", keep: 40 }, { give: "logs", get: "food", until: 2000 }];
+    const back = parseSave(save({ ...s, levers: { ...s.levers, trade: orders, stallNames: ["", "Угол"] }, prod: { ...s.prod, trade }, realTime: NOW }), NOW + 1000);
+    expect(back?.sim.levers.trade).toEqual(orders);
+    expect(back?.sim.levers.stallNames).toEqual(["", "Угол"]);
     expect(back?.sim.prod.trade).toEqual(trade);
-    // saves from before goods groups trade wares: clothing now
-    const old = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "wares" } as never }, realTime: NOW }), NOW + 1000);
-    expect(old?.sim.levers.trade).toEqual({ give: "stone", get: "clothes" });
-    const bad = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "stone" } }, prod: { ...s.prod, trade: { ...trade, get: "gold" } }, realTime: NOW }), NOW + 1000);
-    expect(bad?.sim.levers.trade).toBeNull();
+    // saves from before several orders keep one order and one swap; from before goods groups trade wares: clothing now
+    const old = parseSave(save({ ...s, levers: { ...s.levers, trade: { give: "stone", get: "wares" } as never }, prod: { ...s.prod, trade: trade[0] as never }, realTime: NOW }), NOW + 1000);
+    expect(old?.sim.levers.trade).toEqual([{ give: "stone", get: "clothes" }]);
+    expect(old?.sim.prod.trade).toEqual(trade);
+    expect(parseSave(save({ ...s, levers: { ...s.levers, trade: null as never }, realTime: NOW }), NOW + 1000)?.sim.levers.trade).toEqual([]);
+    const bad = parseSave(save({ ...s, levers: { ...s.levers, trade: [{ give: "stone", get: "stone" }, orders[1], orders[1]] }, prod: { ...s.prod, trade: [{ ...trade[0], get: "gold" }] }, realTime: NOW }), NOW + 1000);
+    expect(bad?.sim.levers.trade).toEqual([orders[1]]);
     expect(bad?.sim.prod.trade).toBeUndefined();
   });
   it("old saves load with every lever off", () => {

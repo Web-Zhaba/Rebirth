@@ -1,0 +1,20 @@
+import { L } from "../../i18n";
+import type { BuildingRules } from "../types";
+import { workshopWeather } from "../workshop";
+
+export const weaver: BuildingRules = {
+  id: "weaver",
+  name: L("Ткацкая мастерская", "Weaving workshop"),
+  zone: "craft",
+  group: "crafts",
+  lot: { w: 2, d: 2 },
+  size: { along: 10, deep: 8, height: 5 },
+  labor: 120,
+  crew: 6,
+  materials: { logs: 20, planks: 3, stone: 1 },
+  job: L("ткач — Ткацкая мастерская", "weaver — Weaving workshop"),
+  firstBuilt: L("Построена первая ткацкая мастерская", "The first weaving workshop is built"),
+  usesTools: true,
+  produce: { good: "clothes", perHour: 0.02 }, // pieces
+  weather: workshopWeather,
+};

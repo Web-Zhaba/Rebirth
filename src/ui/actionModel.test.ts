@@ -5,7 +5,7 @@ describe("quick actions", () => {
   it("builds another with the tool and kind of the building, not of a site restored as it was", () => {
     expect(duplicateTool("well", undefined)).toEqual({ tool: "well" });
     expect(duplicateTool("izba5", undefined)).toEqual({ tool: "house", variant: "izba5" });
-    expect(duplicateTool("tavern", undefined)).toEqual({ tool: "shop", variant: "tavern" });
+    expect(duplicateTool("tavern", undefined)).toEqual({ tool: "tavern" });
     expect(duplicateTool("logyard", undefined)).toEqual({ tool: "barn", variant: "logyard" });
     expect(duplicateTool("excavation", undefined)).toBeNull();
     expect(duplicateTool("well", "old:1")).toBeNull();

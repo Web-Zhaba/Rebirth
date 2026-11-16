@@ -30,7 +30,7 @@ struct Job {
 
 struct Scatter {
   planes: array<vec4f, 5>, // view frustum (sides and near), eye-relative: inside when dot(n, p) + w >= -radius
-  up: vec4f,               // w candidates in all
+  up: vec4f,               // xyz a tree's shadow on the ground per metre of its height (0: no shadows), w candidates in all
   dims: vec4u,             // x jobs, y threads per dispatch row
   far: vec4f,              // reach per group (m)
   reach: vec4f,            // x full-density reach of trees, y of details, z grow 0..1, w terrain exaggeration
@@ -110,6 +110,17 @@ fn visible(c: vec3f, r: f32) -> bool {
     }
   }
   return true;
+}
+
+// A tree out of view whose shadow still falls into it (a low sun behind the camera, a tree just below the screen): kept,
+// so its shadow does not go missing along the view's edge. The sphere around the tree and its shadow on the ground.
+fn castsIntoView(p: vec3f, up: vec3f, size: f32) -> bool {
+  let reach = sc.up.xyz * size;
+  let len = length(reach);
+  if (len < 0.5) {
+    return false;
+  }
+  return visible(p + up * (0.25 * size) + reach * 0.5, 0.5 * len + 0.75 * size);
 }
 
 // Hidden behind this frame's occluders: the sphere's nearest depth is farther than the farthest depth the Hi-Z holds
@@ -259,9 +270,10 @@ fn candidate(idx: u32) -> u32 {
   }
   let centre = p + up * (0.5 * size);
   if (!visible(centre, 0.75 * size)) {
-    return FRUSTUM;
-  }
-  if (occluded(centre, 0.75 * size)) {
+    if (g != 0u || !castsIntoView(p, up, size)) {
+      return FRUSTUM;
+    }
+  } else if (occluded(centre, 0.75 * size)) {
     return OCCLUDED;
   }
   let lod = select(1u, 0u, d < select(sc.near.y, sc.near.x, g == 0u));
@@ -280,6 +292,10 @@ fn candidate(idx: u32) -> u32 {
 @compute @workgroup_size(16)
 fn finalize(@builtin(local_invocation_index) i: u32) {
   if (i < 12u) {
-    args[i * 5u + 1u] = min(atomicLoad(&counts[i]), sc.slots[i].y);
+    let n = min(atomicLoad(&counts[i]), sc.slots[i].y);
+    args[i * 5u + 1u] = n;
+    if (i % 2u == 0u) {
+      args[60u + (i / 2u) * 4u + 1u] = n; // the models as impostor quads (scene/forest.ts QUAD_ARGS)
+    }
   }
 }

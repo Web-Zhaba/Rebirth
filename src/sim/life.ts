@@ -2,7 +2,7 @@ import { unit, type Light, type Rest, type Trip } from "../map/life";
 import { BUILDINGS, CREW, FOCUS_CREWS, siteCrew } from "./buildings";
 import { EVENING } from "./evening";
 import { tolokaActive, workHours } from "./levers";
-import { idleWorkplaces, WORKSHOP_INPUT } from "./fields";
+import { idleWorkplaces, inputOf } from "./fields";
 import { polyLength, walkTo, type Walk } from "./paths";
 import { ageOf, buildingCentre, buildNet, constructionWork, isAdultAge, isFinishedHouse, isWorkplace, lotFront, MAX_COMMUTE, snapToRoad, spotTree, treeFrom, WALK_SPEED, type Spot } from "./people";
 import { residentMoveFactor } from "./needs";
@@ -12,6 +12,7 @@ import { roadCrew, workableEdges } from "./roads";
 import { CAMP_STORE_ID, Ledger } from "./storage";
 import { pointInPolygon } from "./zones";
 import { START_MINUTE_OF_DAY } from "./time";
+import { byGood } from "./goods";
 import type { Building, Resident, SimState, Stock } from "./types";
 
 // Visual life: derived from the state once per game day and never stored in it.
@@ -27,13 +28,11 @@ export const MAX_WALKERS = 300;
 export const MAX_CARTS = 6; // per producer per day
 export const CART_SPEED = 3000 / 60; // m per game minute, 3 km/h
 export const CART_RANGE = 6000; // m of road from the camp
-export const LOAD: Record<keyof Stock, number> = { logs: 5, planks: 2, stone: 3, food: 500, clothes: 20, dishes: 20, furniture: 6, tools: 15 };
+export const LOAD: Record<keyof Stock, number> = byGood((g) => g.load); // units in one cart load
 export const MAX_GUESTS = 12; // evening walkers to one tavern
 const DAY_MIN = 1440;
 export const CAMP_CLEAR = 3; // m around the founding point the tent folk leave free
 export const CAMP_PER = 1.6; // m of camp radius per square root of its people
-// Workplaces worked in the open, where the workers show on the plot: the rest work indoors, out of sight.
-export const OPEN_AIR: ReadonlySet<string> = new Set(["garden", "orchard", "apiary", "forager", "quarry", "dig", "woodcutter", "sawpit", "fisher", "market"]);
 const CART_ID0 = 2 ** 30;
 const EVENING_ID0 = 2 ** 29;
 
@@ -84,10 +83,10 @@ export function computeLife(s: SimState, day = 0): LifeData {
   }
   for (const b of Object.values(s.buildings)) {
     if (!isWorkplace(b) || !worked.has(b.id)) continue;
-    const input = WORKSHOP_INPUT[b.template];
+    const input = inputOf(b.template);
     if (input && s.stock[input] <= 1e-9) continue;
     const [x, y] = centre(b);
-    lights.push({ id: b.id, x, y, kind: b.template === "tavern" ? "tavern" : "work" });
+    lights.push({ id: b.id, x, y, kind: BUILDINGS[b.template]?.evenings ? "tavern" : "work" });
   }
   const rests = restsOf(s, sch);
   if (net.adj.size === 0) return { day, trips, rests, traffic, lights };
@@ -185,7 +184,7 @@ export function computeLife(s: SimState, day = 0): LifeData {
   // evenings: up to MAX_GUESTS households from the homes within reach of each staffed tavern send one adult there
   // within 90 minutes of the end of work (once back from it), who stays 45-90 minutes and walks home
   let guest = 0;
-  const taverns = Object.values(s.buildings).filter((b) => b.template === "tavern" && isWorkplace(b) && worked.has(b.id));
+  const taverns = Object.values(s.buildings).filter((b) => BUILDINGS[b.template]?.evenings && isWorkplace(b) && worked.has(b.id));
   const homes = new Map<number, number>(); // house id -> an adult of its household: the guest, and the hash
   for (const h of Object.values(s.households)) {
     if (h.home === null || homes.has(h.home)) continue;
@@ -302,7 +301,7 @@ function restsOf(s: SimState, sch: Schedule): Rest[] {
     const artel = sites.length > 0 && isAdultAge(age) && !r.inClass && (toloka || r.job === null || idle.has(r.job));
     const spot = artel ? crewSpot(r.id) : null;
     const builder = spot !== null;
-    const at = builder ? spot : artel ? undefined : isWorkplace(job) ? (OPEN_AIR.has(job.template) ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
+    const at = builder ? spot : artel ? undefined : isWorkplace(job) ? (BUILDINGS[job.template]?.outdoors ? spotOn(job.footprint, r.id, centre(job)) : null) : undefined;
     const work = at !== undefined ? { at, from: sch.workFrom, to: sch.workTo, ...(builder && { build: true }) } : undefined;
     return { who: r.id, sex: r.sex, age, home, ...(work && { work }) };
   });

@@ -1,12 +1,13 @@
 import { BUILDINGS, scaledJobs } from "./buildings";
+import { manageMul, workMul, type Government } from "./government";
 import type { Building, Resident } from "./types";
 
 // Administration. The founding elders manage a hamlet; a town hall and district offices
 // manage more, each by the share of its clerks at work. Past what the town can manage every work rate (production,
-// field work, construction) drops gently: «перегрузка управления».
+// field work, construction) drops gently: «перегрузка управления». The head of the town (sim/government.ts) widens or
+// narrows what the town can manage and speeds or slows every work.
 export const ADMIN = {
   elders: 150, // residents the town manages without any office
-  room: { townhall: 600, office: 350 } as Record<string, number>, // residents a fully staffed office adds
   slope: 0.4, // work rate 1 / (1 + slope x (load - 1)) past the capacity
   floor: 0.5, // the rate never drops below this
 };
@@ -17,7 +18,8 @@ export interface AdminState {
   factor: number; // 0.5..1, every work rate is multiplied by it
 }
 
-export const isOffice = (template: string): boolean => Object.hasOwn(ADMIN.room, template);
+// An office of the administration (its rules' `manages`: the residents a fully staffed one adds).
+export const isOffice = (template: string): boolean => !!BUILDINGS[template]?.manages;
 
 // The work rate at `pop` residents with `capacity` managed.
 export function overload(pop: number, capacity: number): number {
@@ -28,7 +30,16 @@ export function overload(pop: number, capacity: number): number {
 // Jobs change at the daily step and when a workplace opens, so this holds as long as both objects do.
 const cache = new WeakMap<object, WeakMap<object, AdminState>>();
 
-export function adminOf(s: { residents: Record<number, Resident>; buildings: Record<number, Building> }): AdminState {
+type AdminSource = { residents: Record<number, Resident>; buildings: Record<number, Building>; gov?: Government | null; gameMinutes?: number };
+
+export function adminOf(s: AdminSource): AdminState {
+  const base = officesOf(s);
+  if (!s.gov || s.gameMinutes === undefined) return base;
+  const capacity = base.capacity * manageMul({ ...s, gameMinutes: s.gameMinutes });
+  return { pop: base.pop, capacity, factor: overload(base.pop, capacity) };
+}
+
+function officesOf(s: AdminSource): AdminState {
   let byBuildings = cache.get(s.residents);
   if (!byBuildings) {
     byBuildings = new WeakMap();
@@ -46,11 +57,12 @@ export function adminOf(s: { residents: Record<number, Resident>; buildings: Rec
   for (const b of Object.values(s.buildings)) {
     if (b.state !== "active" || !isOffice(b.template)) continue;
     const jobs = scaledJobs(BUILDINGS[b.template].jobs, b);
-    capacity += scaledJobs(ADMIN.room[b.template], b) * (jobs > 0 ? Math.min(1, (clerks.get(b.id) ?? 0) / jobs) : 1);
+    capacity += scaledJobs(BUILDINGS[b.template].manages!, b) * (jobs > 0 ? Math.min(1, (clerks.get(b.id) ?? 0) / jobs) : 1);
   }
   const out = { pop, capacity, factor: overload(pop, capacity) };
   byBuildings.set(s.buildings, out);
   return out;
 }
 
-export const adminFactor = (s: Parameters<typeof adminOf>[0]): number => adminOf(s).factor;
+// The rate every work runs at: the administration's load times the head's hand.
+export const adminFactor = (s: AdminSource): number => adminOf(s).factor * (s.gov && s.gameMinutes !== undefined ? workMul({ ...s, gameMinutes: s.gameMinutes }) : 1);

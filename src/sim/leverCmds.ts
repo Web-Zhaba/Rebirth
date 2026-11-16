@@ -9,8 +9,10 @@ import { massText } from "./units";
 import { say } from "./production";
 import { classPupils } from "./school";
 import { nextRandom } from "./rng";
-import { isTradeOrder, TRADE_NAME, type TradeOrder } from "./trade";
+import { cleanOrder, isTradeOrder, STALL_NAME_MAX, TRADE_NAME, type TradeOrder } from "./trade";
+import { MAX_TRADE_SLOTS, tradeLimits, tradeSlots } from "./tech";
 import { calendar } from "./time";
+import { chooseHead, seatActive, setForm, setTerm, type Form, type GovResult, type Term } from "./government";
 import type { SimState } from "./types";
 import { L } from "../i18n";
 
@@ -59,9 +61,13 @@ export function callToloka(s: SimState, key: number): LeverResult {
   return done(set(s, { toloka: { site: key, until: workEndAt(s.gameMinutes, s.levers) }, tolokaReady: s.gameMinutes + TOLOKA_COOLDOWN }), L(`Общий сбор: все взрослые идут на ${site.name}, остальные дела стоят до вечера`, `All hands: every adult goes to ${site.name}, other work waits until evening`));
 }
 
+// The orders are given from the town hall: without one only an order back to the default goes through.
+export const ORDERS_CLOSED = L("Приказы отдаются из ратуши: сначала постройте её", "Orders are given from the town hall: build one first");
+
 export function setSchedule(s: SimState, strada: boolean): LeverResult {
   if (typeof strada !== "boolean") return fail(L("Некорректный распорядок", "Invalid schedule"));
   if (s.levers.strada === strada) return { ok: true, sim: s };
+  if (strada && !seatActive(s.buildings)) return fail(ORDERS_CLOSED);
   const next = set(s, { strada });
   const w = workHours(next);
   return done(next, strada ? L(`Долгий день: работают с ${w.start} до ${w.end} часов, люди устают`, `Long day: work from ${w.start}:00 to ${w.end}:00, people get tired`) : L(`Обычный распорядок: работа с ${w.start} до ${w.end} часов`, `Normal schedule: work from ${w.start}:00 to ${w.end}:00`));
@@ -71,6 +77,7 @@ export function setSchedule(s: SimState, strada: boolean): LeverResult {
 export function setAdultSchool(s: SimState, on: boolean): LeverResult {
   if (typeof on !== "boolean") return fail(L("Некорректный приказ", "Invalid order"));
   if (s.levers.adultSchool === on) return { ok: true, sim: s };
+  if (on && !seatActive(s.buildings)) return fail(ORDERS_CLOSED);
   const withLever = set(s, { adultSchool: on });
   const inClass = classPupils(withLever);
   const residents = { ...s.residents };
@@ -82,15 +89,38 @@ export function setAdultSchool(s: SimState, on: boolean): LeverResult {
 export function setRations(s: SimState, rations: Rations): LeverResult {
   if (typeof rations !== "string" || !Object.hasOwn(RATIONS, rations)) return fail(L("Неизвестные нормы еды", "Unknown rations"));
   if (s.levers.rations === rations) return { ok: true, sim: s };
+  if (rations !== "normal" && !seatActive(s.buildings)) return fail(ORDERS_CLOSED);
   return done(set(s, { rations }), `${L("Нормы еды", "Rations")}: ${RATIONS[rations].name.toLowerCase()}`);
 }
 
-// What the markets swap every day; null stops the trade.
-export function setTrade(s: SimState, order: TradeOrder | null): LeverResult {
-  if (order !== null && !isTradeOrder(order)) return fail(L("Некорректный обмен", "Invalid trade"));
+// What the markets swap every day, in order; an empty list stops the trade. No more orders than the research opens, no
+// pair twice; the reserve and the cap are kept only with stock keeping researched. A change of the reserve or the cap
+// alone is quiet: no chronicle line.
+export function setTrade(s: SimState, orders: TradeOrder[]): LeverResult {
+  if (!Array.isArray(orders) || !orders.every(isTradeOrder)) return fail(L("Некорректный обмен", "Invalid trade"));
+  const slots = tradeSlots(s.progress);
+  if (orders.length > slots) return fail(L(`Рынок ведёт не больше ${slots} обм.`, `The market keeps at most ${slots} orders`));
+  const pairs = new Set(orders.map((o) => `${o.give}>${o.get}`));
+  if (pairs.size < orders.length) return fail(L("Такой обмен уже есть", "This trade is already set"));
+  const next = orders.map((o) => cleanOrder(o, tradeLimits(s.progress)));
   const was = s.levers.trade;
-  if (was?.give === order?.give && was?.get === order?.get) return { ok: true, sim: s };
-  return done(set(s, { trade: order ? { give: order.give, get: order.get } : null }), order ? L(`Рынок меняет ${TRADE_NAME[order.give]} на ${TRADE_NAME[order.get]}`, `The market trades ${TRADE_NAME[order.give]} for ${TRADE_NAME[order.get]}`) : L("Обмен на рынке остановлен", "Market trade stopped"));
+  if (JSON.stringify(was) === JSON.stringify(next)) return { ok: true, sim: s };
+  const pairsOf = (list: TradeOrder[]) => list.map((o) => `${o.give}>${o.get}`).join(",");
+  if (pairsOf(was) === pairsOf(next)) return { ok: true, sim: set(s, { trade: next }) };
+  const list = next.map((o) => L(`${TRADE_NAME[o.give]} на ${TRADE_NAME[o.get]}`, `${TRADE_NAME[o.give]} for ${TRADE_NAME[o.get]}`)).join("; ");
+  return done(set(s, { trade: next }), next.length > 0 ? L(`Рынок меняет ${list}`, `The market trades ${list}`) : L("Обмен на рынке остановлен", "Market trade stopped"));
+}
+
+// The player's name for a market stall, quiet (no chronicle line); blank gives the generated name back.
+export function nameStall(s: SimState, index: number, name: string): LeverResult {
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_TRADE_SLOTS) return fail(L("Нет такого прилавка", "No such stall"));
+  if (typeof name !== "string") return fail(L("Некорректное название", "Invalid name"));
+  const clean = name.replace(/\s+/g, " ").trim().slice(0, STALL_NAME_MAX);
+  const names = Array.from({ length: MAX_TRADE_SLOTS }, (_, i) => s.levers.stallNames[i] ?? "");
+  if (names[index] === clean) return { ok: true, sim: s };
+  names[index] = clean;
+  while (names.length > 0 && names[names.length - 1] === "") names.pop();
+  return { ok: true, sim: set(s, { stallNames: names }) };
 }
 
 // Hiring priority of a job group (or of construction); the people are reassigned at once.
@@ -114,6 +144,16 @@ export function setStaff(s: SimState, id: number, staff: number): LeverResult {
   const nb = staff >= jobs ? rest : { ...rest, staff };
   return { ok: true, sim: rebalanceJobs({ ...s, buildings: { ...s.buildings, [id]: nb } }) };
 }
+
+// The government (sim/government.ts): the head, the form of rule and the term, each said in the feed and the chronicle.
+const governed = (r: GovResult): LeverResult => (!r.ok ? fail(r.reason) : r.text ? done(r.sim, r.text) : { ok: true, sim: r.sim });
+// the new head takes their seat among the clerks at once
+export const chooseHeadCmd = (s: SimState, id: number): LeverResult => {
+  const r = governed(chooseHead(s, id));
+  return r.ok ? { ok: true, sim: rebalanceJobs(r.sim) } : r;
+};
+export const setFormCmd = (s: SimState, form: Form, force = false): LeverResult => governed(setForm(s, form, force));
+export const setTermCmd = (s: SimState, term: Term): LeverResult => governed(setTerm(s, term));
 
 // Why a call for settlers cannot be made now, or null.
 export function callBlock(s: Pick<SimState, "stock" | "buildings" | "households" | "incoming">): string | null {

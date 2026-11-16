@@ -1,4 +1,5 @@
 import type { ServiceId } from "../sim/types";
+import { SERVICE_IDS } from "../sim/services";
 import { L, plural } from "../i18n";
 
 export interface WarningLike {
@@ -8,7 +9,7 @@ export interface WarningLike {
 
 export type WarningAction = "town" | { overlay: ServiceId } | null;
 
-const SERVICE_IDS = new Set<ServiceId>(["well", "market", "chapel", "school", "healer"]);
+const SERVICES_SET = new Set<string>(SERVICE_IDS);
 
 export function freshWarnings(previous: ReadonlySet<string>, current: readonly WarningLike[]): WarningLike[] {
   return current.filter((w) => !previous.has(w.id));
@@ -17,7 +18,7 @@ export function freshWarnings(previous: ReadonlySet<string>, current: readonly W
 export function warningAction(id: string): WarningAction {
   if (id.startsWith("service:")) {
     const service = id.slice("service:".length) as ServiceId;
-    if (SERVICE_IDS.has(service)) return { overlay: service };
+    if (SERVICES_SET.has(service)) return { overlay: service };
   }
   return id === "famine" || id === "lowfood" || id === "outlook" || id === "nohands" || id === "nologs" || id === "admin" || id === "starving" || id === "tired" || id === "lonely" || id === "freezing" ? "town" : null;
 }

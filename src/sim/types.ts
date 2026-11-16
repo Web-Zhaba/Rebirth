@@ -1,3 +1,4 @@
+import type { Government, GovView, HistoryRow } from "./government";
 import type { JobGroup, Materials } from "./buildings";
 import type { Levers } from "./levers";
 import type { DomainId } from "./domains";
@@ -5,6 +6,7 @@ import type { Land } from "../world/landcover";
 import type { WeatherState } from "./weather";
 import type { OrchardYear } from "./weatherEffects";
 import type { Attraction } from "./attraction";
+import type { TradeSwap } from "./trade";
 
 export interface City {
   name: string;
@@ -169,6 +171,8 @@ export interface Resident {
   school: number; // literacy progress 0..100: grows on school days, see learnPerDay
   inClass?: boolean; // in class today: children 7-14 and, when ordered, illiterate grown-ups; they do no work
   needs?: Needs; // absent in saves from before the needs system: treated as full
+  mother?: number; // resident ids of the parents (they may be gone); absent for the founders' parents and old saves' grown-ups
+  father?: number;
 }
 
 export interface Household {
@@ -183,7 +187,7 @@ export interface Household {
   served?: number; // share of its goods the household got at the last midnight, 0..1 (none yet: not counted)
 }
 
-export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage" | "discovery"; // goal and unlock are no longer made: old saves still carry them
+export type EventKind = "birth" | "death" | "marriage" | "arrival" | "departure" | "movein" | "farm" | "food" | "clearing" | "built" | "shortage" | "order" | "goal" | "unlock" | "tech" | "era" | "heritage" | "discovery" | "head"; // goal and unlock are no longer made: old saves still carry them
 
 export interface TownEvent {
   at: number; // gameMinutes
@@ -332,7 +336,7 @@ export interface ProdState {
   today: Record<number, number>; // building id -> units made since 00:00 (kg of grain for a gumno)
   yesterday: Record<number, number>;
   orchard: OrchardYear; // what this year has done to the fruit trees (frost at the blossom, drought, heat)
-  trade?: { give: keyof Stock; get: keyof Stock; gave: number; got: number }; // what the markets swapped in the day that ended; absent when nothing moved
+  trade?: TradeSwap[]; // what each trade order swapped in the day that ended; absent when nothing moved
   haul?: Record<number, number>; // producer id -> share of its work hours that went to carting at the last work tick (sim/storage.ts)
 }
 
@@ -388,6 +392,8 @@ export interface SimState extends PeopleState {
   levers: Levers; // player levers
   progress: ProgressState; // researched techs, the research under way, eras
   weather: WeatherState; // climate at the town
+  gov: Government | null; // the head of the town and the form of rule, once a town hall stands (sim/government.ts)
+  history: HistoryRow[]; // the town's records at every midnight since the town hall opened
 }
 
 // One line of the day summary; `pos` (local meters) is where the HUD flies the map when it is clicked.
@@ -416,6 +422,7 @@ export interface EconomyStats {
   outlook: number; // 0..1, can the food last to the end of the next harvest window
   eveningWares: number; // pieces of clothing an hour the adults at home make at 19-22 (doubles in winter)
   trade?: ProdState["trade"]; // what the markets swapped yesterday
+  traders: number; // working strength of the market workers: the day's trade volume (trade.ts)
   fieldWork: number; // share of the field work the weather allows right now (1 = calm)
   buildFactor: number; // share of the artel's hours the weather allows right now
   firewood: number; // m3 a day the households burn at today's cold
@@ -423,7 +430,7 @@ export interface EconomyStats {
   admin: { pop: number; capacity: number; factor: number }; // residents, what the offices manage, the work rate it leaves (sim/governance.ts)
 }
 
-export type ServiceId = "well" | "market" | "chapel" | "school" | "healer";
+export type ServiceId = "well" | "shop" | "chapel" | "school" | "healer";
 
 export interface ServiceStats {
   houses: number; // finished houses
@@ -502,6 +509,7 @@ export type SimSnapshot = Omit<SimState, "zones" | "chronicle" | "residents" | "
   museumStaff: Record<number, number>; // finished museum id -> share of its jobs filled: the strength of its halls (sim/museum.ts)
   callBlock: string | null; // why a call for settlers cannot be made now, or null
   inflow: { free: number; perDay: number }; // free homes and the families a day the town draws now (sim/attraction.ts)
+  govView: GovView | null; // the head, the choice and the government's effect (sim/government.ts)
 };
 
 // What the main thread keeps.

@@ -2,6 +2,10 @@ import { BUILDINGS, CREW, FOCUS_CREWS, remainingLabor } from "../sim/buildings";
 import type { Building, BuildingQuery, Clearing, Stock } from "../sim/types";
 import { clearingLogs } from "../sim/clearing";
 import type { IconName } from "./icons";
+import { UI } from "../buildings/ui";
+import { DIG } from "../sim/excavation";
+import { byGood } from "../sim/goods";
+import type { BuildingUi } from "../buildings/uiKit";
 import { decimal, L } from "../i18n";
 
 // Pure helpers behind the inspector: the status chip, icons and clearing numbers.
@@ -25,35 +29,16 @@ export function buildingStatus(b: Building, info: BuildingQuery | null, shortfal
   }
   if (info?.kind === "house" && info.households.length === 0) return { label: L("пустует", "empty"), tone: "warn" };
   if (info?.kind === "house") return { label: L("заселён", "occupied"), tone: "ok" };
-  if (b.template === "restored") return { label: L("памятник", "monument"), tone: "ok" };
-  return { label: b.template === "dig" ? L("раскоп готов", "dig finished") : L("работает", "working"), tone: "ok" };
+  if (BUILDINGS[b.template]?.monument) return { label: L("памятник", "monument"), tone: "ok" };
+  return { label: b.template === DIG.template ? L("раскоп готов", "dig finished") : L("работает", "working"), tone: "ok" };
 }
 
-const CRAFT = new Set(["smithy", "carpentry", "pottery", "weaver"]);
-const TRADE = new Set(["shop", "tavern"]);
-
-// Icon of a building template: houses, workshops and shops share their class's icon, other ones have their own.
-export function templateIcon(template: string): IconName {
-  if (BUILDINGS[template]?.zone === "res") return "res";
-  if (template === "restored") return "foundations";
-  if (CRAFT.has(template)) return "craft";
-  if (TRADE.has(template)) return "trade";
-  if (template === "logyard" || template === "stoneyard" || template === "warehouse") return "barn"; // kinds of the storehouse
-  if (template === "office") return "townhall"; // a kind of the administration
-  return template in BUILDINGS ? (template as IconName) : "res";
-}
+// Icon of a building template (src/buildings/<id>/ui.ts): houses, workshops and shops share their class's icon.
+export const templateIcon = (template: string): IconName => (UI as Record<string, BuildingUi | undefined>)[template]?.icon ?? "res";
 
 // What a workplace makes, in the nominative, with the icon of the good.
-export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: IconName }> = {
-  food: { name: L("еда", "food"), unit: L("кг", "kg"), icon: "food" },
-  logs: { name: L("брёвна", "logs"), unit: L("м³", "m³"), icon: "log" },
-  planks: { name: L("доски", "planks"), unit: L("м³", "m³"), icon: "planks" },
-  stone: { name: L("камень", "stone"), unit: L("т", "t"), icon: "stone" },
-  clothes: { name: L("одежда", "clothing"), unit: L("шт", "pcs"), icon: "wares" },
-  dishes: { name: L("посуда", "dishes"), unit: L("шт", "pcs"), icon: "wares" },
-  furniture: { name: L("утварь", "furnishings"), unit: L("шт", "pcs"), icon: "wares" },
-  tools: { name: L("инструменты", "tools"), unit: L("шт", "pcs"), icon: "wares" },
-};
+const GOOD_ICON: Record<keyof Stock, IconName> = { food: "food", logs: "log", planks: "planks", stone: "stone", clothes: "shirt", dishes: "wares", furniture: "chair", tools: "toolbox" };
+export const OUTPUT: Record<keyof Stock, { name: string; unit: string; icon: IconName }> = byGood((g, k) => ({ name: g.name, unit: g.unit, icon: GOOD_ICON[k] }));
 
 // Hands one site can use at once: its crew (`crew`, siteCrew of a building, CREW of a clearing), two crews in a толока.
 export const siteHands = (artel: number, toloka: boolean, crew = CREW): number => Math.min(artel, toloka ? crew * FOCUS_CREWS : crew);

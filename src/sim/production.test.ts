@@ -10,7 +10,8 @@ import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { applyDelta } from "./delta";
 import { Handler, type Storage } from "./handler";
 import { builderCount, dailyStep, foodPerDay, immigrationStep, lotFront, peopleStats, queryBuilding, RATES } from "./people";
-import { dailyEconomy, economyStats, FULL_TEXT, HAND_HOURS, handHours, PACE, payMaterials, produceStep, RATE } from "./production";
+import { dailyEconomy, economyStats, FULL_TEXT, HAND_HOURS, handHours, PACE, payMaterials, produceStep } from "./production";
+import { recipeOf } from "./buildings";
 import type { FromWorker } from "./protocol";
 import { massText } from "./units";
 import { addRoad, emptyRoads } from "./roads";
@@ -19,6 +20,8 @@ import { haulHours, haulMetres, Ledger, settleStores, spreadStores, withStock } 
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, City, Field, Household, Resident, RoadGraph, SaveV4, SimState, Site, TerrainInfo } from "./types";
 import { emptyZones, qkey, regenerateCells } from "./zones";
+
+const LOGS = recipeOf("woodcutter")!.perHour; // m3 per worker-hour
 
 const NOW = 1_800_000_000_000;
 const meadow: TerrainInfo = { land: "meadow", slope: 0 };
@@ -211,17 +214,17 @@ describe("food", () => {
     s = work(s);
     const d = dailyEconomy({ ...s, gameMinutes: at(13) });
     expect(d.prod.today).toEqual({});
-    const k = carted(s, 1, "logs", RATE.logs * PACE);
-    expect(d.prod.yesterday[1]).toBeCloseTo(2 * RATE.logs * PACE * k);
-    expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * RATE.logs * PACE * k);
+    const k = carted(s, 1, "logs", LOGS * PACE);
+    expect(d.prod.yesterday[1]).toBeCloseTo(2 * LOGS * PACE * k);
+    expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * LOGS * PACE * k);
   });
 });
 
 describe("producers", () => {
   const staffed = (template: string, n: number, site?: Site, gm = NOON) => folk(town([bld(1, template, 50, "active", site)], { gm }), [{ home: null, adults: n, job: 1 }]);
-  it("woodcutter: RATE.logs m3 per hour x PACE x forest share", () => {
+  it("woodcutter: its rate in m3 per hour x PACE x forest share", () => {
     const s = staffed("woodcutter", 2, { forest: 0.6, water: 0, rock: 0 });
-    expect(work(s).stock.logs).toBeCloseTo(2 * RATE.logs * PACE * 0.6 * carted(s, 1, "logs", RATE.logs * PACE * 0.6));
+    expect(work(s).stock.logs).toBeCloseTo(2 * LOGS * PACE * 0.6 * carted(s, 1, "logs", LOGS * PACE * 0.6));
     expect(work(staffed("woodcutter", 2, NO_SITE)).stock.logs).toBe(0);
   });
   it("quarry: 0.15 t per hour x PACE, with or without rock nearby", () => {
@@ -896,8 +899,8 @@ describe("logistics", () => {
   it("a producer far from the stores loses hours to carting; a store beside it brings the rate back", () => {
     const far = work(woods());
     const near = work(woods([bld(2, "logyard", 1460)]));
-    const full = 2 * RATE.logs * PACE;
-    expect(far.stock.logs).toBeCloseTo(full * carted(woods(), 1, "logs", RATE.logs * PACE));
+    const full = 2 * LOGS * PACE;
+    expect(far.stock.logs).toBeCloseTo(full * carted(woods(), 1, "logs", LOGS * PACE));
     expect(far.stock.logs).toBeLessThan(full * 0.75); // 1.5 km of road to the camp
     expect(near.stock.logs).toBeGreaterThan(full * 0.95);
     expect(near.stores[2].logs).toBeCloseTo(near.stock.logs); // the logs lie in the yard
@@ -954,7 +957,7 @@ describe("administration", () => {
     expect(adminOf(hall).capacity).toBe(ADMIN.elders);
     const two = Object.values(hall.residents).filter((r) => r.job === null).slice(0, 2);
     const staffed = { ...hall, residents: { ...hall.residents, ...Object.fromEntries(two.map((r) => [r.id, { ...r, job: 2 }])) } };
-    expect(adminOf(staffed).capacity).toBeCloseTo(ADMIN.elders + ADMIN.room.townhall / 2); // 2 of 4 clerks
+    expect(adminOf(staffed).capacity).toBeCloseTo(ADMIN.elders + BUILDINGS.townhall.manages! / 2); // 2 of 4 clerks
     expect(adminOf(crowd(10, [bld(2, "townhall", 120, "building")])).capacity).toBe(ADMIN.elders);
   });
   it("an overloaded town works slower and is told so once a day", () => {

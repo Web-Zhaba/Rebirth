@@ -83,6 +83,8 @@ export function modifierLines(m: TechModifiers | undefined): string[] {
   if (m.fieldYield) out.push(L(`урожай полей +${pct(m.fieldYield)}`, `field yield +${pct(m.fieldYield)}`));
   if (m.workshopOutput) out.push(L(`выработка мастерских +${pct(m.workshopOutput)}`, `workshop output +${pct(m.workshopOutput)}`));
   if (m.buildSpeed) out.push(L(`стройка быстрее на ${pct(m.buildSpeed)}`, `building ${pct(m.buildSpeed)} faster`));
+  if (m.tradeOrders) out.push(L(`обменов на рынке +${m.tradeOrders}`, `market trade orders +${m.tradeOrders}`));
+  if (m.tradeLimits) out.push(L("запас и предел обмена", "trade reserve and cap"));
   for (const [k, v] of Object.entries(m.bridgeSpan ?? {})) if (v) out.push(`${SPAN_NAME[k as RoadKind] ?? k}: ${L("пролёт", "span")} +${v} ${L("м", "m")}`);
   return out;
 }

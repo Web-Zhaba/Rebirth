@@ -1,24 +1,18 @@
-import { BUILDINGS, capacityOf, groupOf, scaledJobs, STORE_GROUPS, type StoreGroup } from "./buildings";
+import { BUILDINGS, capacityOf, groupOf, isFarm, recipeOf, scaledJobs, STORE_GROUPS, type StoreGroup } from "./buildings";
 import { memoLast } from "./memo";
 import { calendar, DAYS_PER_SEASON, YEAR_SCALE } from "./time";
 import { cropOf } from "./tech";
 import { fieldWork } from "./weatherEffects";
 import type { Building, Field, FieldWork, Resident, SimState, Stock, Window } from "./types";
 
-// Food from work that needs no field: kg per worker-hour and the factor of each season (0 spring .. 3 winter).
-// The fisher is buffed on purpose (P-food); the hunter and the kitchen garden are the other ways to feed the town.
-export const FOOD_RATE: Record<string, { kgHour: number; season: [number, number, number, number] }> = {
-  fisher: { kgHour: 0.6, season: [1, 1, 1, 0.5] },
-  garden: { kgHour: 0.2, season: [1, 1, 1, 0] }, // the beds lie fallow in winter
-  hunter: { kgHour: 0.15, season: [0.5, 0.5, 1, 2] }, // game comes down to the izba in the cold
-  // Alternative food: berries, mushrooms and nuts (a staffed forager feeds about 4 adults a year; an orchard 5-7 once it bears; an apiary 1-2); fruit trees (production.ts: a
-  // bearing orchard, scaled by the year's quality); honey (kg of food equivalent, weather decides most of it).
-  forager: { kgHour: 0.13, season: [0.3, 1, 1.4, 0] },
-  orchard: { kgHour: 0.8, season: [0, 0, 1, 0] },
-  apiary: { kgHour: 0.3, season: [0.3, 1, 0.7, 0] },
-};
-// Gathering in the forest asks for this share of forest around the site (growth.ts checks it).
-export const FORAGER_FOREST = 0.2;
+// Food from work that needs no field, by template: kg per worker-hour and the factor of each season (0 spring ..
+// 3 winter), from the recipes of the food producers (src/buildings/<id>/rules.ts).
+export const FOOD_RATE: Record<string, { kgHour: number; season: readonly [number, number, number, number] }> = Object.fromEntries(
+  Object.values(BUILDINGS).flatMap((t) => {
+    const p = recipeOf(t.id);
+    return p?.good === "food" && p.season ? [[t.id, { kgHour: p.perHour, season: p.season }]] : [];
+  }),
+);
 // Years before planted trees bear.
 export const ORCHARD_YEARS = 1;
 export const foodKgHour = (template: string, season: number): number => {
@@ -34,7 +28,7 @@ export const FIELD = {
   reapKgHour: 2,
   haPerJob: 2.5,
   maxJobs: 16,
-  radius: 400, // m, from the lot centre of a gumno to the centroid of a field
+  radius: BUILDINGS.gumno.reach!, // m, from the lot centre of a gumno to the centroid of a field
   harvestDays: DAYS_PER_SEASON / 2, // first half of autumn
 };
 // Day of the year on which the harvest window closes (autumn is the third season).
@@ -74,7 +68,7 @@ export function assignFields(fields: readonly Field[], buildings: Record<number,
 }
 
 function nearestGumnos(fields: readonly Field[], buildings: Record<number, Building>): Map<number, number> {
-  const gumnos = Object.values(buildings).filter((b) => b.template === "gumno" && b.state === "active");
+  const gumnos = Object.values(buildings).filter((b) => isFarm(b.template) && b.state === "active");
   const out = new Map<number, number>();
   if (gumnos.length === 0) return out;
   for (const f of fields) {
@@ -101,7 +95,7 @@ export function assignedHa(gumno: number, fields: readonly Field[], assign: Read
 
 // Job capacity of a building: fixed by the template (or its own, scaled by an old foundation), except a gumno, which needs one hand per 2.5 ha.
 export function jobsOf(b: Building, s: Pick<SimState, "buildings" | "zones">, assign?: ReadonlyMap<number, number>): number {
-  if (b.template !== "gumno") return scaledJobs(BUILDINGS[b.template]?.jobs ?? 0, b);
+  if (!isFarm(b.template)) return scaledJobs(BUILDINGS[b.template]?.jobs ?? 0, b);
   const a = assign ?? assignFields(s.zones.fields, s.buildings);
   return Math.max(0, Math.min(FIELD.maxJobs, Math.ceil(assignedHa(b.id, s.zones.fields, a) / FIELD.haPerJob - 1e-9)));
 }
@@ -136,7 +130,7 @@ export const idleGumnos = (s: Idle): ReadonlySet<number> => gumnosIdle(s.gameMin
 const gumnosIdle = memoLast((gameMinutes: number, buildings: Idle["buildings"], fields: readonly Field[], work: Record<number, FieldWork>, weather: Idle["weather"], progress: Idle["progress"]): ReadonlySet<number> => {
   const out = new Set<number>();
   const win = windowAt(gameMinutes);
-  const gumnos = Object.values(buildings).filter((b) => b.template === "gumno" && b.state === "active");
+  const gumnos = Object.values(buildings).filter((b) => isFarm(b.template) && b.state === "active");
   if (gumnos.length === 0) return out;
   if (win === null || (weather && fieldWork(weather) <= 0)) { // frozen, snowed in: the farmers join the artel
     for (const b of gumnos) out.add(b.id);
@@ -155,10 +149,13 @@ const gumnosIdle = memoLast((gameMinutes: number, buildings: Idle["buildings"], 
 });
 
 // The stock good a workshop needs to work at all.
-export const WORKSHOP_INPUT: Record<string, keyof Stock> = { sawpit: "logs", smithy: "logs", carpentry: "planks" };
+export const inputOf = (template: string): keyof Stock | undefined => recipeOf(template)?.input?.good;
 
 // What the producers make that stop when no store has room for it (food rots instead; a sawmill frees room by taking logs).
-const STOPS_WHEN_FULL: Record<string, keyof Stock> = { woodcutter: "logs", quarry: "stone", pottery: "dishes", weaver: "clothes", smithy: "tools", carpentry: "furniture" };
+const stopsWhenFull = (template: string): keyof Stock | undefined => {
+  const p = recipeOf(template);
+  return !p || p.good === "food" || (p.input && groupOf(p.input.good) === groupOf(p.good)) ? undefined : p.good;
+};
 
 // Workshops that made nothing yesterday and find their input missing, or no room for their output, now: their workers have nothing to do.
 function blockedWorkshops(buildings: Idle["buildings"], stock: Stock, yesterday: Record<number, number>): Set<number> {
@@ -171,8 +168,8 @@ function blockedWorkshops(buildings: Idle["buildings"], stock: Stock, yesterday:
   };
   for (const b of Object.values(buildings)) {
     if (b.state !== "active" || (yesterday[b.id] ?? 0) > 1e-9) continue;
-    const input = WORKSHOP_INPUT[b.template];
-    const output = STOPS_WHEN_FULL[b.template];
+    const input = inputOf(b.template);
+    const output = stopsWhenFull(b.template);
     if ((input && stock[input] <= 1e-9) || (output && isFull(output))) out.add(b.id);
   }
   return out;
@@ -184,7 +181,7 @@ export const idleOrchards = (s: Idle): ReadonlySet<number> => orchardsIdle(s.gam
 const orchardsIdle = memoLast((gameMinutes: number, buildings: Idle["buildings"]): ReadonlySet<number> => {
   const out = new Set<number>();
   const autumn = calendar(gameMinutes).season === 2;
-  for (const b of Object.values(buildings)) if (b.template === "orchard" && b.state === "active" && !(autumn && bears(b, gameMinutes))) out.add(b.id);
+  for (const b of Object.values(buildings)) if (recipeOf(b.template)?.ripens && b.state === "active" && !(autumn && bears(b, gameMinutes))) out.add(b.id);
   return out;
 });
 

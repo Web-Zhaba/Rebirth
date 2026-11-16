@@ -135,7 +135,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut
 // The sun's shadow map pass (shadow/shadowMap.ts): the same surface, projected from the sun.
 @vertex
 fn shadowVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
-  return frame.shadowProj * vec4f(vertex(vi, ii).rel, 1.0);
+  return frame.shadowCast * vec4f(vertex(vi, ii).rel, 1.0);
 }
 
 fn vertex(vi: u32, ii: u32) -> VsOut {

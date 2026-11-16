@@ -1,4 +1,6 @@
 import { precipDensity } from "./weatherMath";
+import { MODELS } from "../buildings/models";
+import type { TownModel } from "./townKit";
 
 // Which chimneys smoke and how hard. Pure maths: view/engine/smoke.ts draws it.
 //
@@ -11,7 +13,11 @@ export type SmokeKind = "home" | "furnace" | "tavern";
 
 export const COLD = 5; // °C: heating at full below
 export const WARM = 18; // °C: no heating from here
-const FURNACE = new Set(["smithy", "pottery", "bakery"]); // town templates with a furnace or kiln
+// The smoke a town template's model declares (a furnace or kiln, the tavern's kitchen), none for the others.
+const ownSmoke = (kind: string): "furnace" | "tavern" | undefined => {
+  const m = (MODELS as Record<string, TownModel | null | undefined>)[kind];
+  return m && "build" in m ? m.smoke : undefined;
+};
 
 const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 const smooth = (a: number, b: number, x: number) => {
@@ -22,8 +28,9 @@ const smooth = (a: number, b: number, x: number) => {
 // What a chimney of the model layer's emitter list is: null when it does not smoke at all (empty, ruined, a road).
 export function smokeKindOf(e: { kind: string; style: string; lamp?: string }): SmokeKind | null {
   if (!e.lamp || e.style === "road") return null;
-  if (e.style === "town" && FURNACE.has(e.kind)) return e.lamp === "work" ? "furnace" : null;
-  if (e.lamp === "tavern" || (e.style === "town" && e.kind === "tavern")) return "tavern";
+  const own = e.style === "town" ? ownSmoke(e.kind) : undefined;
+  if (own === "furnace") return e.lamp === "work" ? "furnace" : null;
+  if (e.lamp === "tavern" || own === "tavern") return "tavern";
   return "home";
 }
 

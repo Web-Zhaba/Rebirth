@@ -88,7 +88,7 @@ jobs:
           By hand, in each portal's console:
 
           - **Yandex Games**: [rebirth-yandex.zip]($ASSETS/rebirth-yandex.zip) → [console](https://games.yandex.ru/console/) → the game → new version $VERSION → upload → send for moderation.
-          - **CrazyGames**: [rebirth-crazygames.zip]($ASSETS/rebirth-crazygames.zip) → [developer portal](https://developer.crazygames.com/) → the game → new build.
+          - **CrazyGames**: [rebirth-crazygames.zip]($ASSETS/rebirth-crazygames.zip) → unzip → [developer portal](https://developer.crazygames.com/) → the game → new build → upload the unzipped files (index.html at the top, not a folder around it).
           - **GamePix**: [rebirth-gamepix.zip]($ASSETS/rebirth-gamepix.zip) → [partners portal](https://partners.gamepix.com/) → the game → new build.
           EOF
           if [ -f release/rebirth-gamedistribution.zip ]; then

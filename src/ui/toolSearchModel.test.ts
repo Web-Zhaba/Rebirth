@@ -12,7 +12,7 @@ describe("tool search", () => {
   });
   it("finds a kind by its name, start of the name first, ё as е", () => {
     expect(searchTools("кузн")[0]).toMatchObject({ tool: "workshop", kind: "smithy" });
-    expect(searchTools("таверн")[0]).toMatchObject({ tool: "shop", kind: "tavern" });
+    expect(searchTools("таверн")[0]).toMatchObject({ tool: "tavern" });
     expect(searchTools("дом")[0]).toMatchObject({ tool: "house" });
     expect(searchTools("каменн").map((h) => h.kind)).toEqual(expect.arrayContaining(["stone", "stonebridge"]));
     expect(searchTools("пасек")[0]).toMatchObject({ tool: "apiary" });
