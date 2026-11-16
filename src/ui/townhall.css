@@ -1,8 +1,10 @@
 /* The town hall window: the market's sheet (market.css: .mk-screen, .mk-sheet, .mk-head, .mk-cap, .mk-note, .mk-foot)
-   with tabs under the head: the rule (form, head, the choice), the orders and the records as a chart. */
+   with tabs under the head. «Правление» stays on the sheet's bark: the two forms of rule as cards, then the head and
+   the choice. «Приказы» and «Записи» lay their records on moss: charters torn from bark, each sealed in resin while
+   it is in force, and a ruled census report. A torn edge is a clip-path on a ::before layer, so focus rings and the
+   seal are never cut; the shadow is a drop-shadow on the sheet itself and follows the tear. */
 
 .th-sheet {
-  --tone: var(--domain-care);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
@@ -12,22 +14,208 @@
 }
 
 .th-body {
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-5);
+}
+
+.th-dim {
+  color: var(--pencil);
+  font-size: var(--fs-sm);
+}
+
+.th-h {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
 }
 
 .th-block {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   min-width: 0;
 }
 
-/* ---- the rule: form and head side by side on a wide screen, the choice under them ---- */
+/* The bark of a torn sheet, shared by the form cards, the charters and the report. */
+.th-form::before,
+.th-charter::before,
+.th-report::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    repeating-linear-gradient(0deg, rgba(31, 26, 19, 0.07) 0 1px, transparent 1px 23px),
+    repeating-linear-gradient(0deg, rgba(31, 26, 19, 0.035) 0 1px, transparent 1px 9px),
+    linear-gradient(180deg, rgba(31, 26, 19, 0.08), transparent 24px),
+    radial-gradient(90% 70% at 96% 104%, rgba(31, 26, 19, 0.09), transparent 58%),
+    linear-gradient(178deg, var(--paper-raised), var(--paper-shade) 70%, var(--paper-sunk));
+  clip-path: polygon(0 2.4%, 2.8% 0, 100% 0, 100% 97.4%, 97.2% 100%, 0 100%);
+}
+
+/* ---- the form of rule: two cards, then «Продолжить» ---- */
+
+.th-forms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 880px;
+}
+
+.th-form-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+
+.th-form {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  filter: drop-shadow(0 5px 10px rgba(12, 16, 10, 0.28));
+  transition:
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.th-form:hover {
+  transform: translateY(-2px);
+  filter: drop-shadow(0 9px 14px rgba(12, 16, 10, 0.34));
+}
+
+/* the chosen card is ruled round in tar along its tear */
+.th-form.on::before {
+  box-shadow:
+    inset 0 0 0 2px var(--ink),
+    inset 0 0 0 5px var(--paper-raised);
+}
+
+.th-form.on::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 22px;
+  height: 22px;
+  background: var(--ink);
+  clip-path: polygon(0 52%, 14% 38%, 40% 62%, 86% 12%, 100% 26%, 40% 90%);
+}
+
+.th-form:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+
+.th-figure {
+  width: 96px;
+  height: 64px;
+  margin-bottom: var(--sp-1, 4px);
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: square;
+}
+
+.th-figure .is-held {
+  fill: var(--ink);
+}
+
+.th-figure .is-mark {
+  stroke-width: 4;
+}
+
+.th-form-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.th-form-lead {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+}
+
+.th-form-points {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.th-form-points li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: 7px 0 8px;
+  color: var(--ink-2);
+  background: var(--lenticel) bottom / 100% 1px no-repeat;
+}
+
+.th-form-points li:last-child {
+  background: none;
+}
+
+.th-form-points .is-ok svg {
+  color: var(--ok-text);
+}
+
+.th-form-points .is-bad svg {
+  color: var(--bad);
+}
+
+.th-form-tag {
+  position: absolute;
+  top: 16px;
+  right: 48px;
+  padding: 2px 6px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-raised);
+  background: var(--ink);
+}
+
+.th-continue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+}
+
+.th-continue .btn {
+  min-width: 220px;
+  min-height: 48px;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 800;
+}
+
+/* ---- the rule once chosen: the form in one line, the head, the choice ---- */
 
 .th-rule {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-5);
+  gap: var(--sp-6);
 }
 
 @media (min-width: 900px) {
@@ -40,41 +228,69 @@
   }
 }
 
+.th-form-now {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+  align-self: start;
+  padding-bottom: var(--sp-4);
+  background: var(--lenticel) bottom / 100% 1.5px no-repeat;
+}
+
+.th-form-now .th-figure {
+  width: 72px;
+  height: 48px;
+  margin: 0;
+}
+
+.th-form-now .mk-note {
+  margin-top: 2px;
+}
+
+.th-term {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
 .th-people {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--sp-4);
 }
 
 .th-person {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
   background: var(--paper-raised);
-  border: var(--bw) solid var(--rule);
-  border-left: 6px solid var(--tone);
+  border: 1.5px solid var(--ink);
+  box-shadow: var(--shadow-hard-sm);
 }
 
 .th-person-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--sp-2);
 }
 
 .th-person-head b {
   font-family: var(--font-display);
   font-size: var(--fs-lg);
+  font-weight: 800;
 }
 
 .th-person-head .icon-btn {
+  align-self: center;
   margin-left: auto;
 }
 
 .th-parts {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -87,13 +303,12 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 4px var(--sp-2);
-  padding-bottom: 6px;
-  border-bottom: var(--bw-hair) dotted var(--rule-dotted);
+  padding: 6px 0 7px;
+  background: var(--lenticel) bottom / 100% 1px no-repeat;
 }
 
 .th-parts li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+  background: none;
 }
 
 .th-chips {
@@ -123,116 +338,357 @@
 
 .th-pick {
   align-self: flex-start;
+  margin-top: var(--sp-1, 4px);
 }
 
-/* ---- the orders ---- */
+/* ---- the desk: moss under the charters and the report ---- */
 
-.th-orders {
+.th-body.is-orders,
+.th-body.is-records {
+  background:
+    radial-gradient(120% 90% at 30% 0%, var(--moss-light), transparent 70%),
+    var(--moss);
+  scrollbar-color: var(--paper-shade) var(--moss-deep);
+}
+
+.th-desk {
+  min-height: 100%;
+}
+
+/* ---- the orders: charters on bark ---- */
+
+.th-charters {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--sp-5);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-6) var(--sp-5);
   align-items: start;
+  padding: var(--sp-2) var(--sp-1, 4px) var(--sp-5);
 }
 
-.th-orders .btn {
-  align-self: flex-start;
-}
-
-/* ---- the records ---- */
-
-.th-records {
+.th-charter {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.th-series {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.th-series-btn {
-  padding: 4px 10px;
-  font: inherit;
-  font-size: var(--fs-sm);
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
   color: var(--ink);
-  background: var(--paper-raised);
-  border: var(--bw-hair) solid var(--rule-soft);
+  transform: rotate(var(--tilt, 0deg));
+  filter: drop-shadow(0 10px 16px rgba(12, 16, 10, 0.45));
+  animation: th-lay 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.th-charter:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.th-charter:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+@keyframes th-lay {
+  from {
+    opacity: 0;
+    transform: translateY(10px) rotate(var(--tilt, 0deg));
+  }
+}
+
+.th-charter-title {
+  margin: 0;
+  padding-right: 52px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+  line-height: 1.12;
+}
+
+.th-charter-purpose {
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--ink-2);
+  background: linear-gradient(var(--ink), var(--ink)) bottom / 100% 2px no-repeat;
+}
+
+.th-clauses {
+  display: flex;
+  flex-direction: column;
+}
+
+.th-clause {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  width: 100%;
+  padding: 9px 2px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--ink-2);
+  background: var(--lenticel) bottom / 100% 1px no-repeat;
+  border: 0;
   cursor: pointer;
 }
 
-.th-series-btn:hover {
-  border-color: var(--rule);
+.th-clause:last-child {
+  background: none;
 }
 
-.th-series-btn.on {
-  color: var(--paper-raised);
-  background: var(--ink);
-  border-color: var(--ink);
+.th-clause:hover .th-tick {
+  background: var(--paper-shade);
 }
 
-.th-series-btn:focus-visible {
-  outline: 2px solid var(--tone);
+.th-clause:focus-visible {
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
-.th-figures {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3) var(--sp-6, 32px);
-}
-
-.th-figures > span {
+.th-clause-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
 }
 
-.th-figures b {
+.th-clause-text small {
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  color: var(--pencil);
+}
+
+.th-clause.on {
+  color: var(--ink);
+}
+
+.th-clause.on .th-clause-text {
+  font-weight: 800;
+}
+
+/* the box of a clause; the chosen one is struck through with a tar tick, drawn, never a glyph */
+.th-tick {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1.5px solid var(--ink);
+}
+
+.th-clause.on .th-tick {
+  background: var(--ink);
+}
+
+.th-clause.on .th-tick::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: var(--paper-raised);
+  clip-path: polygon(0 52%, 16% 37%, 40% 60%, 84% 10%, 100% 25%, 40% 92%);
+}
+
+.th-sign {
+  margin-top: var(--sp-1, 4px);
+  padding-top: var(--sp-3);
   font-family: var(--font-display);
-  font-size: var(--fs-xl);
+  font-size: var(--fs-sm);
+  font-style: italic;
+  color: var(--pencil);
+  background: var(--lenticel) top / 100% 1px no-repeat;
+}
+
+/* The resin seal: the only warm colour on the sheet, and only while the order is in force. */
+.th-seal {
+  position: absolute;
+  right: 18px;
+  top: 16px;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--resin-deep);
+  border-radius: 50%;
+  color: var(--resin-deep);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1.15;
+  text-align: center;
+  transform: rotate(-12deg);
+  animation: th-stamp 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.th-seal::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--resin-deep);
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+@keyframes th-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-12deg) scale(1.35);
+  }
+}
+
+.th-seal.is-flat {
+  position: relative;
+  right: auto;
+  top: auto;
+  flex: none;
+  animation: none;
+}
+
+/* ---- the records: the census and stock report ---- */
+
+.th-report {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 920px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-6) var(--sp-5);
+  color: var(--ink);
+  filter: drop-shadow(0 12px 20px rgba(12, 16, 10, 0.45));
+  animation: th-lay 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.th-report-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  padding-bottom: var(--sp-3);
+  background: linear-gradient(var(--ink), var(--ink)) bottom / 100% 2px no-repeat;
+}
+
+.th-report-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+.th-ledger {
+  width: 100%;
+  border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
 
-.th-figures b.is-ok {
-  color: var(--ok-text);
+.th-ledger th,
+.th-ledger td {
+  padding: 6px var(--sp-2);
+  text-align: right;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  background: var(--lenticel) bottom / 100% 1px no-repeat;
 }
 
-.th-figures b.is-bad {
-  color: var(--bad);
+.th-ledger thead th {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pencil);
+}
+
+.th-ledger th:first-child {
+  text-align: left;
+}
+
+.th-ledger td small {
+  color: var(--pencil);
+}
+
+.th-ledger tbody th button {
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.th-ledger tbody th button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.th-ledger tbody tr:hover {
+  background: rgba(31, 26, 19, 0.06);
+}
+
+.th-ledger tbody tr.on th,
+.th-ledger tbody tr.on td,
+.th-ledger tbody tr.on small {
+  color: var(--paper-raised);
+  background: var(--ink);
+}
+
+.th-ledger tbody tr.on th button:focus-visible {
+  outline-color: var(--paper-raised);
 }
 
 .th-chart {
-  position: relative;
   margin: 0;
-  padding: 0 0 0 56px;
 }
 
-.th-chart svg {
+.th-chart-title {
+  margin-bottom: var(--sp-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 800;
+}
+
+.th-plot {
+  position: relative;
+  padding-left: 56px;
+}
+
+.th-plot svg {
   display: block;
   width: 100%;
   height: 220px;
-  background: var(--paper-raised);
-  border-left: var(--bw) solid var(--rule);
-  border-bottom: var(--bw) solid var(--rule);
+  overflow: visible;
   touch-action: none;
 }
 
-.th-grid {
-  stroke: var(--rule-soft);
-  stroke-dasharray: 3 4;
+.th-level {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-dasharray: 3 7;
+  opacity: 0.45;
   vector-effect: non-scaling-stroke;
 }
 
+.th-level:first-child {
+  stroke-dasharray: none;
+  stroke-width: 1.5;
+  opacity: 1;
+}
+
 .th-area {
-  fill: var(--tone);
-  opacity: 0.16;
+  fill: var(--ink);
+  opacity: 0.08;
 }
 
 .th-line {
   fill: none;
-  stroke: var(--tone);
+  stroke: var(--ink);
   stroke-width: 2.5;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -247,39 +703,46 @@
 .th-y {
   position: absolute;
   left: 0;
-  width: 50px;
+  width: 48px;
+  transform: translateY(-50%);
   text-align: right;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--pencil);
 }
 
-.th-y-max {
-  top: 0;
-}
-
-.th-y-min {
-  top: calc(220px - 1em);
-}
-
 .th-x {
   position: relative;
-  height: 1.4em;
+  height: 1.6em;
   font-size: var(--fs-xs);
   color: var(--pencil);
 }
 
 .th-x span {
   position: absolute;
-  top: 2px;
-  transform: translateX(-50%);
+  top: 4px;
+  padding-left: 4px;
   white-space: nowrap;
+  border-left: 1.5px solid var(--ink);
 }
 
 .th-readout {
-  margin-top: var(--sp-2);
+  margin: var(--sp-2) 0 0;
   font-size: var(--fs-sm);
   color: var(--ink-2);
+}
+
+.th-report-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding-top: var(--sp-3);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-style: italic;
+  color: var(--pencil);
+  background: var(--lenticel) top / 100% 1px no-repeat;
 }
 
 /* ---- the foot: the whole effect on the town ---- */
@@ -295,11 +758,45 @@
     padding-right: var(--sp-4);
   }
 
-  .th-chart {
+  .th-form-cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+
+  .th-continue .btn {
+    width: 100%;
+  }
+
+  .th-report {
+    padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  }
+
+  .th-ledger th,
+  .th-ledger td {
+    padding: 6px 4px;
+  }
+
+  .th-plot {
     padding-left: 44px;
   }
 
   .th-y {
     width: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .th-charter,
+  .th-report,
+  .th-seal {
+    animation: none;
+  }
+
+  .th-form {
+    transition: none;
+  }
+
+  .th-form:hover {
+    transform: none;
   }
 }

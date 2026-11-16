@@ -17,7 +17,8 @@ export type Term = (typeof TERMS)[number];
 export interface Government {
   since: number; // gameMinutes the town hall first opened; the town's records start with it
   form: Form;
-  formSince: number; // gameMinutes the form was last set; it may change again a year later
+  settled: boolean; // the player has confirmed the form: until then no head can be chosen
+  formSince: number; // gameMinutes the form was last set; it may change again five years later
   head: number | null; // resident id
   headSince: number;
   trade: JobGroup | null; // what the head worked at when chosen
@@ -178,7 +179,7 @@ export type ChoiceKind = "heir" | "open" | "none";
 
 export function choices(s: Pick<SimState, "residents" | "gameMinutes"> & { gov?: Government | null }): { kind: ChoiceKind; ids: number[] } {
   const g = s.gov;
-  if (!g) return { kind: "none", ids: [] };
+  if (!g || !g.settled) return { kind: "none", ids: [] };
   const live = (ids: number[]) => ids.filter((id) => s.residents[id]);
   const head = g.head !== null && s.residents[g.head] ? g.head : null;
   if (g.form === "monarchy") {
@@ -193,6 +194,7 @@ export function choices(s: Pick<SimState, "residents" | "gameMinutes"> & { gov?:
 // Does the government need an open list of candidates now?
 const needsCandidates = (s: Pick<SimState, "residents" | "gameMinutes"> & { gov: Government }): boolean => {
   const g = s.gov;
+  if (!g.settled) return false;
   const head = g.head !== null && s.residents[g.head] ? g.head : null;
   if (g.form === "monarchy") return head === null && heirsOf(s.residents, g.last, s.gameMinutes).length === 0;
   return head === null || g.terms > 1;
@@ -227,8 +229,8 @@ export function govStep(s: SimState): { sim: SimState; said: Said[] } {
   let g = s.gov;
   if (!g) {
     if (!seatActive(s.buildings)) return { sim: s, said };
-    g = { since: s.gameMinutes, form: "monarchy", formSince: s.gameMinutes - GOV.formCooldown, head: null, headSince: s.gameMinutes, trade: null, last: null, term: 4, termStart: s.gameMinutes, terms: 1, candidates: [] };
-    said.push({ kind: "head", text: L("Ратуша открыта: выберите форму правления и главу поселения", "The town hall is open: choose the form of rule and the head of the town") });
+    g = { since: s.gameMinutes, form: "monarchy", settled: false, formSince: s.gameMinutes - GOV.formCooldown, head: null, headSince: s.gameMinutes, trade: null, last: null, term: 4, termStart: s.gameMinutes, terms: 1, candidates: [] };
+    said.push({ kind: "head", text: L("Ратуша открыта: выберите форму правления, затем главу поселения", "The town hall is open: choose the form of rule, then the head of the town") });
   }
   if (g.head !== null && !s.residents[g.head]) {
     g = { ...g, last: g.head, head: null, terms: 1 };
@@ -250,6 +252,7 @@ const fail = (reason: string): GovResult => ({ ok: false, reason });
 export function chooseHead(s: SimState, id: number): GovResult {
   const g = s.gov;
   if (!g || !seatActive(s.buildings)) return fail(L("Сначала постройте ратушу", "Build a town hall first"));
+  if (!g.settled) return fail(L("Сначала выберите форму правления", "Choose the form of rule first"));
   if (!Number.isInteger(id) || !choices(s).ids.includes(id)) return fail(L("Этого жителя сейчас выбрать нельзя", "This resident cannot be chosen now"));
   const r = s.residents[id];
   const head = g.head !== null && s.residents[g.head] ? g.head : null;
@@ -265,6 +268,11 @@ export function setForm(s: SimState, form: Form, force = false): GovResult {
   const g = s.gov;
   if (!g || !seatActive(s.buildings)) return fail(L("Сначала постройте ратушу", "Build a town hall first"));
   if (!isForm(form)) return fail(L("Неизвестная форма правления", "Unknown form of rule"));
+  if (!g.settled) {
+    // the first choice: free, and it opens the choice of the head
+    const f = fillCandidates(s, { ...g, form, settled: true, formSince: s.gameMinutes, termStart: s.gameMinutes, terms: 1, candidates: [] });
+    return { ok: true, sim: { ...s, gov: f.gov, rng: f.rng }, text: form === "monarchy" ? L("Поселение стало монархией: выберите, кто начнёт династию", "The town became a monarchy: choose who founds the dynasty") : L("Поселение стало республикой: выберите главу на срок", "The town became a republic: choose the head for a term") };
+  }
   if (g.form === form) return { ok: true, sim: s, text: "" };
   if (!force && s.gameMinutes < g.formSince + GOV.formCooldown) return fail(L("Форму правления меняют не чаще раза в пять лет", "The form of rule changes at most once in five years"));
   const next: Government = { ...g, form, formSince: s.gameMinutes, termStart: s.gameMinutes, terms: 1, candidates: [] };
@@ -335,6 +343,7 @@ export interface PersonView {
 
 export interface GovView {
   form: Form;
+  settled: boolean;
   formReady: number; // gameMinutes from which the form may change
   term: Term;
   termEnd: number; // republic: gameMinutes the current term ends
@@ -358,6 +367,7 @@ export function govView(s: SimState): GovView | null {
   const parts = effectParts(s);
   return {
     form: g.form,
+    settled: g.settled,
     formReady: g.formSince + GOV.formCooldown,
     term: g.term,
     termEnd: g.termStart + termMinutes(g.term),
@@ -380,6 +390,7 @@ export function parseGov(v: unknown): Government | null {
   return {
     since: o.since,
     form: o.form,
+    settled: o.settled !== false, // saves from before the flag had chosen already
     formSince: o.formSince,
     head: id(o.head),
     headSince: o.headSince,

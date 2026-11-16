@@ -27,16 +27,22 @@ const world = (bs: Building[] = [hall()]): SimState => ({
   ...emptyGrowth(seedOf(city.foundedAt), T0),
   buildings: Object.fromEntries(bs.map((b) => [b.id, b])),
 });
-const opened = (s = world()): SimState => govStep(s).sim;
 const ok = (r: ReturnType<typeof chooseHead>): SimState => {
   if (!r.ok) throw new Error(r.reason);
   return r.sim;
 };
+// the town hall opened and the monarchy confirmed
+const opened = (s = world()): SimState => ok(setForm(govStep(s).sim, "monarchy"));
 const adults = (s: SimState): Resident[] => Object.values(s.residents).filter((r) => (s.gameMinutes - r.born) / YEAR_MIN >= 20);
 
 describe("the government", () => {
   it("opens with the town hall, and the town suffers until a head is chosen", () => {
     expect(govStep(world([hall("building")])).sim.gov).toBeNull();
+    const fresh = govStep(world()).sim;
+    expect(fresh.gov?.settled).toBe(false);
+    expect(govEffect(fresh)).toEqual(GOV.noHead);
+    expect(choices(fresh).kind).toBe("none"); // the form comes first
+    expect(chooseHead(fresh, Object.keys(fresh.residents).map(Number)[0])).toMatchObject({ ok: false });
     const s = opened();
     expect(s.gov?.form).toBe("monarchy");
     expect(govEffect(s)).toEqual(GOV.noHead);
@@ -74,7 +80,7 @@ describe("the government", () => {
   });
 
   it("a republican term that runs out goes on with the same head, at a cost, and opens the choice", () => {
-    let s = ok(setForm(opened(), "republic"));
+    let s = ok(setForm(govStep(world()).sim, "republic"));
     s = ok(setTerm(s, 2));
     expect(govEffect({ ...s, gov: { ...s.gov!, head: null } })).toEqual(GOV.noHead);
     const id = choices(s).ids[0];
@@ -94,7 +100,8 @@ describe("the government", () => {
   });
 
   it("the form changes at most once in five years, unless forced from the developer panel", () => {
-    const s = ok(setForm(opened(), "republic"));
+    const s = ok(setForm(ok(setForm(govStep(world()).sim, "republic")), "republic"));
+    expect(s.gov?.form).toBe("republic");
     expect(setForm(s, "monarchy")).toMatchObject({ ok: false });
     expect(setForm({ ...s, gameMinutes: s.gameMinutes + 4 * YEAR_MIN }, "monarchy")).toMatchObject({ ok: false });
     expect(setForm({ ...s, gameMinutes: s.gameMinutes + 5 * YEAR_MIN }, "monarchy")).toMatchObject({ ok: true });
