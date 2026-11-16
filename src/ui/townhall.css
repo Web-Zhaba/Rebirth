@@ -471,13 +471,118 @@ button.th-form:focus-visible {
   background: var(--lenticel) top / 100% 1px no-repeat;
 }
 
-.th-sign {
+.th-sign,
+.th-hint {
   min-height: 1.4em;
-  padding-right: 64px;
+  padding-right: 84px;
   font-family: var(--font-display);
   font-size: var(--fs-sm);
+}
+
+.th-sign {
   font-style: italic;
   color: var(--pencil);
+}
+
+/* what a click will do, in place of the signature while the sheet is pointed at */
+.th-hint {
+  display: none;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.th-hit {
+  display: none;
+}
+
+/* the pale seal is never shown without a pointer */
+.th-seal.is-ghost {
+  opacity: 0;
+  animation: none;
+}
+
+/* the seal struck through with two strokes of tar: what lifting it will do */
+.th-strike {
+  position: absolute;
+  inset: -8px;
+  background:
+    linear-gradient(45deg, transparent calc(50% - 2px), var(--ink) calc(50% - 2px) calc(50% + 2px), transparent calc(50% + 2px)),
+    linear-gradient(-45deg, transparent calc(50% - 2px), var(--ink) calc(50% - 2px) calc(50% + 2px), transparent calc(50% + 2px));
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* With a mouse the sheet itself is the control: the button at the foot goes, the seal sits by the signature. */
+@media (hover: hover) and (pointer: fine) {
+  .th-touch {
+    display: none;
+  }
+
+  .th-hit {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    padding: 0;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  /* the global button hover fill would cover the sheet */
+  .th-charter .th-hit:hover:not(:disabled) {
+    background: none;
+  }
+
+  .th-hit:focus-visible {
+    outline: 2px solid var(--paper-raised);
+    outline-offset: 5px;
+  }
+
+  .th-charter {
+    transition:
+      transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      filter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .th-charter:hover,
+  .th-charter:has(.th-hit:focus-visible) {
+    transform: rotate(var(--tilt, 0deg)) translateY(-4px);
+    filter: drop-shadow(0 16px 22px rgba(12, 16, 10, 0.5));
+  }
+
+  .th-charter .th-seal {
+    bottom: 14px;
+  }
+
+  .th-charter:hover .th-sign,
+  .th-charter:has(.th-hit:focus-visible) .th-sign {
+    display: none;
+  }
+
+  .th-charter:hover .th-hint,
+  .th-charter:has(.th-hit:focus-visible) .th-hint {
+    display: block;
+  }
+
+  .th-seal.is-ghost {
+    transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .th-charter:hover .th-seal.is-ghost,
+  .th-charter:has(.th-hit:focus-visible) .th-seal.is-ghost {
+    opacity: 0.35;
+  }
+
+  .th-charter.is-on:hover .th-seal,
+  .th-charter.is-on:has(.th-hit:focus-visible) .th-seal {
+    opacity: 0.55;
+  }
+
+  .th-charter.is-on:hover .th-strike,
+  .th-charter.is-on:has(.th-hit:focus-visible) .th-strike {
+    opacity: 0.85;
+  }
 }
 
 /* The resin seal: the only warm colour on the sheet, and only while the order is in force. It sits by the signature. */

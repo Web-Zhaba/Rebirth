@@ -359,31 +359,41 @@ const ORDERS: Order[] = [
 
 const TILTS = [-0.8, 0.6, -0.4, 0.7];
 
+// One charter. With a mouse the whole sheet is the control: pointing at it shows a pale seal where the seal will go,
+// or, on a sealed one, the seal struck through; a click seals it or lifts the seal. A touch screen has no pointing,
+// so it keeps a plain button at the foot (the CSS shows one or the other).
 function Charter({ o, lv, signed, tilt }: { o: Order; lv: Levers; signed: string | null; tilt: number }) {
   const on = o.on(lv);
   const note = !on && o.replaces?.(lv);
+  const act = () => (on ? send(o.cancel, "page") : send(o.seal, "stamp"));
+  const label = on ? L(`Снять печать: ${o.title}`, `Lift the seal: ${o.title}`) : L(`Поставить печать: ${o.title}`, `Seal: ${o.title}`);
   return (
-    <article class={on ? "th-charter is-on" : "th-charter"} style={{ "--tilt": `${tilt}deg` }} aria-label={`${o.title}: ${on ? L("в силе", "in force") : L("не издан", "not issued")}`}>
+    <article class={on ? "th-charter is-on" : "th-charter"} style={{ "--tilt": `${tilt}deg` }}>
       <h3 class="th-charter-title">{o.title}</h3>
       <p class="th-charter-text">{o.text}</p>
       <span class="th-chips">
         <Chips chips={o.effect} />
       </span>
       <footer class="th-charter-foot">
-        <span class="th-sign">{on ? (signed ? L(`Подписал ${signed}`, `Signed by ${signed}`) : L("Издан без главы", "Issued without a head")) : (note ?? L("Не издан", "Not issued"))}</span>
-        {on ? (
-          <Button onClick={() => send(o.cancel, "page")}>{L("Отменить указ", "Cancel the order")}</Button>
-        ) : (
-          <Button variant="primary" onClick={() => send(o.seal, "stamp")}>
-            {L("Поставить печать", "Seal it")}
-          </Button>
-        )}
+        <span class="th-sign">{on ? (signed ? L(`Подписал ${signed}`, `Signed by ${signed}`) : L("Издан без главы", "Issued without a head")) : note || L("Не издан", "Not issued")}</span>
+        <span class="th-hint" aria-hidden="true">
+          {on ? L("Нажмите, чтобы снять печать", "Click to lift the seal") : L("Нажмите, чтобы поставить печать", "Click to seal")}
+        </span>
+        <Button class="th-touch" variant={on ? "default" : "primary"} onClick={act}>
+          {on ? L("Отменить указ", "Cancel the order") : L("Поставить печать", "Seal it")}
+        </Button>
       </footer>
-      {on && (
-        <span class="th-seal" aria-hidden="true">
+      {on ? (
+        <span key="seal" class="th-seal" aria-hidden="true">
+          {L("В СИЛЕ", "IN FORCE")}
+          <span class="th-strike" />
+        </span>
+      ) : (
+        <span key="ghost" class="th-seal is-ghost" aria-hidden="true">
           {L("В СИЛЕ", "IN FORCE")}
         </span>
       )}
+      <button type="button" class="th-hit" aria-label={label} aria-pressed={on} onClick={act} />
     </article>
   );
 }
