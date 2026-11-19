@@ -1,3 +1,4 @@
+import { TILE_TIMEOUT_MS } from "../../world/nature";
 import { decodePng } from "../../world/pngDecoder";
 import { decodeToPage, DEM_SIZE, terrariumUrl } from "./terrarium";
 
@@ -32,7 +33,8 @@ async function load(id: number, z: number, x: number, y: number): Promise<void> 
   const abort = new AbortController();
   jobs.set(id, abort);
   try {
-    const res = await fetch(terrariumUrl(z, x, y), { signal: abort.signal });
+    const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(TILE_TIMEOUT_MS)]);
+    const res = await fetch(terrariumUrl(z, x, y), { signal });
     if (!res.ok) {
       scope.postMessage({ id, ok: false, status: res.status, error: res.statusText } satisfies DemResponse);
       return;

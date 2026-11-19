@@ -2,7 +2,7 @@ import { GOODS_UPGRADE } from "./goods";
 import { BUILDINGS, upgradable, upgradeLabor } from "./buildings";
 import { isUnlocked } from "./tech";
 import { floorBlocker } from "./foundationLots";
-import { ageOf, countResidents, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
+import { ageOf, countResidents, isAdultAge, isFinishedHouse, lotFront, rebalanceJobs, snapToRoad, spotTree, walkMetres, type Net, type Spot } from "./people";
 import { roadNet } from "./roadNetCache";
 import { servicePreviewIndex } from "./servicePreviewIndex";
 import { CAMP, countServices, covers, isService, learnPerDay, SERVICE, SERVICE_IDS, SERVICE_LIST, SERVICES, withService } from "./services";
@@ -182,9 +182,11 @@ export function dailyServices(s: SimState): SimState {
   const attending = classPupils({ ...s, coverage });
 
   let residents = s.residents;
+  let adultAttendanceChanged = false;
   for (const r of Object.values(s.residents)) {
     const age = ageOf(r.born, now);
     const inClass = attending.has(r.id);
+    if (isAdultAge(age) && (inClass !== !!r.inClass || (inClass && r.job !== null))) adultAttendanceChanged = true;
     // A hungry, tired or unhappy pupil learns slower.
     const pace = learnPerDay(age >= SERVICE.schoolTo) * learningFactor(s.households[r.household]?.mood ?? MOOD_NEUTRAL, needsOf(r));
     const school = inClass ? Math.min(100, r.school + pace) : r.school;
@@ -212,7 +214,8 @@ export function dailyServices(s: SimState): SimState {
       buildings[b.id] = next;
     }
   }
-  return { ...s, residents, buildings, coverage, landValue };
+  const next = { ...s, residents, buildings, coverage, landValue };
+  return adultAttendanceChanged ? refreshServices(rebalanceJobs(next)) : next;
 }
 
 // ---------- aggregates ----------

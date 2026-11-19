@@ -28,22 +28,37 @@ export let platform: Platform = NO_PLATFORM;
 const INIT_WAIT_MS = 15_000;
 
 export async function initPlatform(): Promise<void> {
-  const init = await portalInit();
-  if (!init) return;
+  const abort = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer")), INIT_WAIT_MS));
-    platform = await Promise.race([init(), timeout]);
+    const loading = portalInit(abort.signal);
+    if (!loading) return;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error("no answer");
+        abort.abort(error);
+        reject(error);
+      }, INIT_WAIT_MS);
+    });
+    platform = await Promise.race([loading, timeout]);
   } catch (e) {
     console.warn(`${import.meta.env.VITE_PLATFORM} SDK failed, running without it:`, e);
+  } finally {
+    clearTimeout(timer);
+    abort.abort();
   }
 }
 
-async function portalInit(): Promise<(() => Promise<Platform>) | null> {
-  if (import.meta.env.VITE_PLATFORM === "yandex") return (await import("./yandex")).initYandex;
-  if (import.meta.env.VITE_PLATFORM === "crazygames") return (await import("./crazygames")).initCrazyGames;
-  if (import.meta.env.VITE_PLATFORM === "poki") return (await import("./poki")).initPoki;
-  if (import.meta.env.VITE_PLATFORM === "vk") return (await import("./vk")).initVk;
-  if (import.meta.env.VITE_PLATFORM === "gamedistribution") return (await import("./gamedistribution")).initGameDistribution;
-  if (import.meta.env.VITE_PLATFORM === "gamepix") return (await import("./gamepix")).initGamePix;
+function portalInit(signal: AbortSignal): Promise<Platform> | null {
+  const start = (init: (signal: AbortSignal) => Promise<Platform>) => {
+    signal.throwIfAborted();
+    return init(signal);
+  };
+  if (import.meta.env.VITE_PLATFORM === "yandex") return import("./yandex").then((m) => start(m.initYandex));
+  if (import.meta.env.VITE_PLATFORM === "crazygames") return import("./crazygames").then((m) => start(m.initCrazyGames));
+  if (import.meta.env.VITE_PLATFORM === "poki") return import("./poki").then((m) => start(m.initPoki));
+  if (import.meta.env.VITE_PLATFORM === "vk") return import("./vk").then((m) => start(m.initVk));
+  if (import.meta.env.VITE_PLATFORM === "gamedistribution") return import("./gamedistribution").then((m) => start(m.initGameDistribution));
+  if (import.meta.env.VITE_PLATFORM === "gamepix") return import("./gamepix").then((m) => start(m.initGamePix));
   return null;
 }

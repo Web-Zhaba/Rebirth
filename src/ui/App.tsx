@@ -1,7 +1,8 @@
 import { computed } from "@preact/signals";
 import type { View } from "../view/view";
 import { useEffect } from "preact/hooks";
-import { city, state } from "../simClient";
+import { city, downloadUnreadableSave, loaded, loadFailure, state } from "../simClient";
+import { L } from "../i18n";
 import { AboutDialog } from "./AboutDialog";
 import { AdminPanel } from "./AdminPanel";
 import { BuildBar } from "./BuildBar";
@@ -28,6 +29,13 @@ import { TechPanel } from "./TechPanel";
 import { TownPanel } from "./TownPanel";
 import { installScreenshotMode } from "./screenshotMode";
 import { RoadDemolishConfirm } from "./RoadDemolishConfirm";
+import { Button } from "./kit";
+
+const LOAD_ERRORS = {
+  locked: L("Игра уже открыта в другой вкладке. Закройте её и повторите попытку здесь.", "The game is open in another tab. Close that tab and retry here."),
+  unavailable: L("Не удалось загрузить поселение. Проверьте, разрешено ли сайту сохранять данные, и повторите попытку.", "Could not load the settlement. Check that the site can store data and retry."),
+  invalid: L("Не удалось прочитать сохранение. Вы можете скачать его копию.", "Could not read the save. You can download a copy."),
+};
 
 export function App({ view }: { view: View }) {
   const c = city.value;
@@ -35,6 +43,20 @@ export function App({ view }: { view: View }) {
   useEffect(installClickSound, []);
   useEffect(installScreenshotMode, []);
   useEffect(() => attachWeatherSound(computed(() => state.value?.weather ?? null)), []);
+  const failure = loadFailure.value;
+  if (failure) {
+    return (
+      <section class="found" aria-labelledby="save-load-title">
+        <div class="found-sheet">
+          <h2 id="save-load-title">{L("Поселение недоступно", "Settlement unavailable")}</h2>
+          <p role="alert">{LOAD_ERRORS[failure]}</p>
+          {failure === "invalid" && <Button onClick={downloadUnreadableSave}>{L("Скачать сохранение", "Download save")}</Button>}
+          <Button variant="primary" onClick={() => location.reload()}>{L("Повторить", "Retry")}</Button>
+        </div>
+      </section>
+    );
+  }
+  if (!loaded.value) return <div class="found-task" role="status">{L("Загружаем поселение…", "Loading the settlement…")}</div>;
   return (
     <>
       {c ? <Hud city={c} view={view} /> : <FoundCity view={view} />}

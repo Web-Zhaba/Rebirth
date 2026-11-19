@@ -9,7 +9,7 @@ import { attachRoadTool } from "./map/roadTool";
 import { attachLandTool } from "./map/landTool";
 import { previewClock, previewNow, previewWeather } from "./map/seasonPreview";
 import * as simClient from "./simClient";
-import { city, frame, state, gameClock, gameMinPerSec, gameNow, lifeRests, lifeTrips, load, loaded, setSpeed, speed } from "./simClient";
+import { city, frame, state, gameClock, gameMinPerSec, gameNow, lifeRests, lifeTrips, load, loaded, loadFailure, setSpeed, speed } from "./simClient";
 import type { Speed } from "./sim/clock";
 import { platform } from "./platform";
 import { soundPaused } from "./ui/sound";
@@ -98,12 +98,16 @@ function start(view: View): void {
   });
 
   render(h(App, { view }), document.getElementById("ui")!);
+  let ready = false;
   load();
   effect(() => {
-    if (loaded.value) platform.ready();
+    if (!ready && (loaded.value || loadFailure.value)) {
+      ready = true;
+      platform.ready();
+    }
   });
   // The clock running is what the portal counts as play: a paused town (by the player or the portal) is not.
-  const playing = computed(() => loaded.value && speed.value > 0);
+  const playing = computed(() => loaded.value && !loadFailure.value && speed.value > 0);
   effect(() => platform.gameplay(playing.value));
 
   // Handles for poking at the map and the sim from devtools during development. Use these instead of importing

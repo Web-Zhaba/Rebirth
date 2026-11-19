@@ -2,7 +2,7 @@ import { allUnlocked } from "./tech";
 import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
-import { allocateLabor, BUILDINGS, CREW, homesOf } from "./buildings";
+import { allocateLabor, BUILDINGS, CREW } from "./buildings";
 import { advanceBuildings, emptyGrowth, nextRandom, reconcile, seedOf } from "./growth";
 import { builderCount } from "./people";
 import { addRoad, emptyRoads, removeEdge, roadCrew } from "./roads";

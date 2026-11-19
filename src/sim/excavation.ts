@@ -1,7 +1,7 @@
 import { floorsOf } from "./buildings";
 import { addChronicle } from "./chronicle";
 import type { Building, DigInfo, FeatureKind, FoundFeature, FoundFoundation, FoundPlace, Finds, SimState } from "./types";
-import { decimal, L, plural } from "../i18n";
+import { L, plural } from "../i18n";
 
 // Excavation in two stages. A dig site is the survey: wide, fast
 // and cheap, it reveals a growing disc of the buried old city's plan, its streets and the ghost outlines of its buildings.
@@ -149,8 +149,6 @@ const typeOf = (f: { cls?: string; name?: string; height?: number }): Pick<Found
   if (f.height !== undefined) t.height = f.height;
   return t;
 };
-
-const tonnes = (t: number): string => decimal((Math.round(t * 10) / 10).toString());
 
 export const salvagedStone = (area: number): number => Math.min(DIG.stoneCap, DIG.stonePerM2 * area);
 

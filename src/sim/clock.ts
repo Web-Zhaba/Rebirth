@@ -18,7 +18,7 @@ import { daySummary } from "./summary";
 import { dailyEconomy, payMaterials, produceStep, reportShortages, say } from "./production";
 import { isWorkHour, tolokaActive, workHours, type Levers } from "./levers";
 import { crewEfficiency } from "./needs";
-import { spendOnRoads } from "./roads";
+import { finishedRoadsChanged, spendOnRoads } from "./roads";
 import { Ledger, settleStores } from "./storage";
 import { adminFactor } from "./governance";
 import { calendar, dayOf, START_MINUTE_OF_DAY } from "./time";
@@ -59,6 +59,9 @@ export function tickMs(gameMinutes: number, pace: Pace): number {
   if (pace.offline) return TICK_MS;
   return (BASE_TICK * LIVE_MS_PER_GAME_MINUTE) / (pace.speed * (isNight(gameMinutes) ? NIGHT_BOOST : 1));
 }
+
+export const tickFraction = (gameMinutes: number, realTime: number, now: number, pace: Pace): number =>
+  Math.min(1, Math.max(0, (now - realTime) / tickMs(gameMinutes, pace)));
 
 // The game clock interpolated between snapshots (live play). A snapshot's realTime is when its tick fell due, so the
 // next one can come up to a tick plus a worker poll (and some message latency) later; the clock runs on through that
@@ -128,8 +131,10 @@ export function step(s: SimState): SimState {
   else if (isEvening(hour, s.levers)) cur = eveningStep(cur, BASE_TICK / 60);
   cur = completeRestorations(completeExcavations(retireDigs(cur)));
   let next: SimState = researchStep(weatherStep({ ...cur, gameMinutes: s.gameMinutes + BASE_TICK }), BASE_TICK);
-  // A workplace finished in this tick hires at once, not at the next midnight.
-  if (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b))) next = rebalanceJobs(next);
+  // New roads and workplaces open jobs immediately, including existing workplaces reached for the first time.
+  if (finishedRoadsChanged(s.roads, cur.roads) || (cur.buildings !== s.buildings && Object.values(cur.buildings).some((b) => b.state === "active" && s.buildings[b.id]?.state !== "active" && isWorkplace(b)))) {
+    next = refreshServices(rebalanceJobs(next));
+  }
   if (calendar(next.gameMinutes).hour === EVENING.to && hour !== EVENING.to) next = { ...next, summary: daySummary(next) }; // a tick crossed 22:00
   const midnight = dayOf(next.gameMinutes) !== dayOf(s.gameMinutes);
   if (midnight) next = eraStep(museumDaily(restoreStreets(recognise(dailyServices(dailyStep(dailyEconomy(next))))))); // a tick crossed 00:00

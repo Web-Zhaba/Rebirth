@@ -218,7 +218,7 @@ Rebirth needs a desktop browser with **WebGPU**: a current Chrome, Edge or Yande
 
 ## Build from source
 
-Requires **Node.js 20.19+** and npm.
+Requires **Node.js 24** and npm.
 
 ```bash
 git clone https://github.com/Web-Zhaba/rebirth.git

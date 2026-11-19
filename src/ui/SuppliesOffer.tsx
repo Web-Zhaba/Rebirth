@@ -15,9 +15,14 @@ export function SuppliesOffer() {
   if (phase === "done") return <p class="supplies-note" role="status">{L("Припасы прибыли в поселение.", "The supplies have arrived in the settlement.")}</p>;
   const watch = async () => {
     setPhase("showing");
-    const earned = await show();
-    if (earned) act({ type: "grantSupplies" });
-    setPhase(earned ? "done" : "missed");
+    try {
+      const earned = await show();
+      if (earned) act({ type: "grantSupplies" });
+      setPhase(earned ? "done" : "missed");
+    } catch (e) {
+      console.warn("Rewarded ad failed:", e);
+      setPhase("missed");
+    }
   };
   return (
     <div class="supplies-offer">

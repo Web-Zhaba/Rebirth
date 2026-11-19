@@ -11,6 +11,7 @@ export interface PlaceHit {
 }
 
 const API = "https://photon.komoot.io/api/";
+const SEARCH_TIMEOUT_MS = 10_000;
 export const MIN_QUERY = 2;
 
 // Biased to the map centre so nearby namesakes come first.
@@ -72,7 +73,8 @@ export function parseSearch(json: unknown): PlaceHit[] {
 }
 
 export async function searchPlaces(q: string, near?: { lng: number; lat: number }, signal?: AbortSignal): Promise<PlaceHit[]> {
-  const r = await fetch(searchUrl(q, near), { signal });
+  const deadline = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
+  const r = await fetch(searchUrl(q, near), { signal: signal ? AbortSignal.any([signal, deadline]) : deadline });
   if (!r.ok) throw new Error(`photon ${r.status}`);
   return parseSearch(await r.json());
 }

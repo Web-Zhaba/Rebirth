@@ -115,6 +115,18 @@ describe("handler pace", () => {
     await h.handle({ t: "flush" });
     expect(parseSave(stored(), NOW + 5000)).not.toBeNull();
   });
+  it.each([[1, 4, 1000, 250, 375], [4, 1, 250, 1000, 1500]] as const)("keeps 40%% of the tick when switching from %sx to %sx", async (from, to, elapsed, spent, remaining) => {
+    const { h, out, gm } = setup();
+    await h.handle({ t: "found", city, now: NOW });
+    await h.handle({ t: "speed", speed: from, now: NOW });
+    const now = NOW + elapsed;
+    await h.handle({ t: "speed", speed: to, now });
+    expect(out.at(-1)).toMatchObject({ t: "snapshot", sim: { gameMinutes: DAY, realTime: now - spent } });
+    h.tick(now + remaining - 1);
+    expect(gm()).toBe(DAY);
+    h.tick(now + remaining);
+    expect(gm()).toBe(BASE_TICK);
+  });
   it("hidden for more than 5 minutes runs at the offline rate until the tab is visible again", async () => {
     const { h, gm } = setup();
     await h.handle({ t: "found", city, now: NOW });

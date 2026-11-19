@@ -46,6 +46,8 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
   const items: ReadonlySignal<ModelItem[]> = opts.debug ? signal(demoModelItems()) : computed(() => [...buildingItems.value, ...roadItems.value]);
   if (opts.debug && import.meta.env.DEV) Object.assign(window, { modelItems: items });
   const cache = new Map<string, Pack>();
+  let seatedRoads: Pack[] = [];
+  let seatedBuildings: Pack[] = [];
   let originKey = "";
   let dirty = true;
   let wait = 0;
@@ -136,7 +138,14 @@ export function attachModels(engine: Engine, opts: ModelOptions): TownMesh {
       for (const [x, y, z] of pack.smoke) smoke.push({ id: it.id, kind: it.kind, style: it.style, lamp: it.lamp, x, y, z });
     }
     for (const k of [...cache.keys()]) if (!used.has(k)) cache.delete(k);
-    mesh.setMeshes(merge(roads), merge(buildings));
+    if (!samePacks(seatedRoads, roads)) {
+      mesh.setRoads(merge(roads));
+      seatedRoads = roads;
+    }
+    if (!samePacks(seatedBuildings, buildings)) {
+      mesh.setBuildings(merge(buildings));
+      seatedBuildings = buildings;
+    }
     modelEmitters.value = smoke;
     const ms = performance.now() - t0;
     if (import.meta.env.DEV && ms > 100) console.info(`[models] rebuilt ${built} of ${list.length} in ${Math.round(ms)} ms${finer ? " (finer ground)" : ""}`);
@@ -212,6 +221,8 @@ function latLng(tf: Frame, x: number, y: number): [number, number] {
   const [lng, lat] = tf.toLngLat(x, y);
   return [lat, lng];
 }
+
+const samePacks = (a: readonly Pack[], b: readonly Pack[]): boolean => a.length === b.length && a.every((p, i) => p === b[i]);
 
 function merge(list: readonly Pack[]): TownMeshData {
   let nv = 0;

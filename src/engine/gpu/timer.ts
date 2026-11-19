@@ -12,7 +12,7 @@ export class GpuTimer {
   last = 0; // ms, latest result
   onSample: ((ms: number) => void) | null = null;
 
-  constructor(private readonly device: GPUDevice) {
+  constructor(device: GPUDevice) {
     this.querySet = device.createQuerySet({ type: "timestamp", count: 2 });
     this.resolve = device.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
     for (let i = 0; i < RING; i++)

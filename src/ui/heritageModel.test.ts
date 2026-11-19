@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emptyGrowth } from "../sim/growth";
 import { addRoad, emptyRoads } from "../sim/roads";
 import { allResearched, initialProgress } from "../sim/tech";
-import type { FoundFoundation, SimState, StoredArticle } from "../sim/types";
+import type { FoundFoundation, StoredArticle } from "../sim/types";
 import { emptyZones } from "../sim/zones";
 import { articleFor, buildHeritageView, speedGain } from "./heritageModel";
 

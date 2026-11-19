@@ -250,6 +250,13 @@ describe("construction", () => {
     const a = advanceConstruction(g, 5);
     expect(edges(a).every((e) => e.done === e.labor)).toBe(true);
   });
+  it("opening an older edge lets it go ahead of newer workable edges", () => {
+    let g = add(emptyRoads(), [[60, 0], [100, 0]], [10]);
+    g = add(g, [[0, 0], [60, 0]], [1]);
+    g = add(g, [[0, 0], [0, 60]], [10]);
+    const [old, link, newer] = edges(advanceConstruction(g, 3));
+    expect([old.done, link.done, newer.done]).toEqual([2, 1, 0]);
+  });
   it("returns the same graph when there is nothing to do", () => {
     const g = add(emptyRoads(), [[500, 500], [550, 500]], [5]);
     expect(advanceConstruction(g, 5)).toBe(g);

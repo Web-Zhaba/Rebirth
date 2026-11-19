@@ -387,9 +387,20 @@ describe("school and literacy", () => {
   it("a grown-up in class is neither jobless nor a builder: no work at all", () => {
     const s = dailyServices({ ...classroom(9), levers: { ...classroom(9).levers, adultSchool: true } });
     const c = countResidents(s.residents, s.gameMinutes);
-    expect(c.inClass).toBe(1); // resident 2; the teacher (1) works, the far adults (4, 5) are jobless
-    expect(c.jobless).toBe(2);
+    expect(c.inClass).toBe(1); // resident 2, neither employed nor jobless
+    expect(c.employed).toBe(2); // the second teaching position was filled at the same time
+    expect(c.jobless).toBe(1);
     expect(idleResidents(s).has(2)).toBe(false);
+  });
+  it("newly admitted adults immediately stop working at their old jobs", () => {
+    const cutter = { ...bld(3, "woodcutter", 160), site: { forest: 1, rock: 0, water: 0 } };
+    const s = folk(town([bld(1, "school", 0), bld(2, "izba", 100), cutter]), [{ home: 2, adults: 2, job: 1 }]);
+    s.residents[2] = { ...s.residents[2], job: 3, commute: 5 };
+    s.levers = { ...s.levers, adultSchool: true };
+    expect(produceStep(s, 1).stock.logs).toBeGreaterThan(0);
+    const next = dailyServices(s);
+    expect(next.residents[2]).toMatchObject({ inClass: true, job: null, commute: null });
+    expect(produceStep(next, 1).stock.logs).toBe(0);
   });
   it("a grown-up learns in one year of school days, a child in two", () => {
     let s: SimState = { ...classroom(9), levers: { ...classroom(9).levers, adultSchool: true } };

@@ -3,6 +3,7 @@
 
 export const OMT_TILEJSON_URL = "https://tiles.openfreemap.org/planet";
 export const TERRAIN_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+export const TILE_TIMEOUT_MS = 10_000;
 
 // Terrain DEM zoom: higher zooms carry building/canopy heights.
 export const TERRAIN_ZOOM = 11;

@@ -1,5 +1,5 @@
 import { DAYS_PER_SEASON, YEAR_DAYS } from "./time";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { advanceTo, BASE_TICK, calendar, daylight, OFFLINE_CAP, TICK_MS } from "./clock";
 import { applyDelta, snapshotDelta } from "./delta";
 import { Handler, toSnapshot, type Storage } from "./handler";
@@ -9,6 +9,7 @@ import { emptyRoads } from "./roads";
 import { emptyZones } from "./zones";
 import { migrateLegacy, parseSave } from "./save";
 import type { City, RoadGraph, SaveV4, SimState } from "./types";
+import { startWeather } from "./weather";
 
 const NOW = 1_800_000_000_000;
 const city: City = { name: "Череповец", lat: 59.12, lng: 37.9, foundedAt: NOW - 1000 };
@@ -100,9 +101,12 @@ describe("save", () => {
     expect(parseSave({ ...valid, city: { ...city, name: "" } }, NOW)).toBeNull();
     expect(parseSave({ ...valid, city: { ...city, name: "x".repeat(41) } }, NOW)).toBeNull();
     expect(parseSave({ ...valid, city: { ...city, lat: 91 } }, NOW)).toBeNull();
-    expect(parseSave({ ...valid, sim: { realTime: NOW + 120_000, gameMinutes: 0 } }, NOW)).toBeNull();
     expect(parseSave({ ...valid, sim: { realTime: NOW, gameMinutes: -1 } }, NOW)).toBeNull();
     expect(parseSave({ ...valid, sim: { realTime: NaN, gameMinutes: 0 } }, NOW)).toBeNull();
+  });
+  it("keeps the town when the device clock moves backwards", () => {
+    const earlier = NOW - 120_000;
+    expect(parseSave(valid, earlier)).toEqual({ ...valid, sim: { ...valid.sim, realTime: earlier } });
   });
   it("migrates v1 and v2", () => {
     const legacyCity = { ...city, cell: "891234" };
@@ -193,6 +197,19 @@ function setup(initial: unknown = undefined) {
 }
 
 describe("handler", () => {
+  const saveForLoad = (): SaveV4 => ({
+    version: 4,
+    city,
+    sim: {
+      realTime: NOW,
+      gameMinutes: 100,
+      roads: emptyRoads(),
+      zones: emptyZones(),
+      ...growth(),
+      weather: startWeather({ lat: city.lat, lng: city.lng, elev: 0, seed: seedOf(city.foundedAt), phase: 0 }, 100),
+    },
+  });
+
   it("load with nothing", async () => {
     const { h, out } = setup();
     await h.handle({ t: "load", legacy: null, now: NOW });
@@ -217,6 +234,104 @@ describe("handler", () => {
     expect(m.save?.sim.realTime).toBe(NOW);
     expect((get() as SaveV4).sim.gameMinutes).toBe(100);
     expect(out.map((x) => x.t)).toEqual(["loaded", "life"]);
+  });
+  it("rejects founding queued while an existing town is loading", async () => {
+    const saved = saveForLoad();
+    const { h, out, get, puts } = setup(saved);
+    const loading = h.handle({ t: "load", legacy: null, now: NOW });
+    await h.handle({ t: "found", city: { ...city, name: "Другой город" }, now: NOW });
+    await loading;
+    expect(out.map((m) => m.t)).toEqual(["loaded", "life", "foundFailed"]);
+    expect(get()).toBe(saved);
+    expect(puts()).toBe(0);
+  });
+  it("preserves an unreadable save and rejects founding even when a legacy town exists", async () => {
+    const raw = { version: 5, city };
+    const { h, out, get, puts } = setup(raw);
+    await h.handle({ t: "load", legacy: JSON.stringify({ version: 2, city }), now: NOW });
+    await h.handle({ t: "found", city, now: NOW });
+    expect(out).toEqual([{ t: "loadFailed", reason: "invalid", raw }, { t: "foundFailed" }]);
+    expect(get()).toBe(raw);
+    expect(puts()).toBe(0);
+  });
+  it("reports an unavailable save slot as a load failure and blocks founding", async () => {
+    const out: FromWorker[] = [];
+    const put = vi.fn(async () => {});
+    const storage: Storage = { get: async () => { throw new Error("IndexedDB unavailable"); }, put, clear: async () => {} };
+    const h = new Handler(storage, (m) => out.push(m));
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    await h.handle({ t: "found", city, now: NOW });
+    expect(out.slice(-2)).toEqual([{ t: "loadFailed", reason: "unavailable" }, { t: "foundFailed" }]);
+    expect(put).not.toHaveBeenCalled();
+  });
+  it("reports a failed write and clears the failure after saving the latest state", async () => {
+    const out: FromWorker[] = [];
+    let writable = false;
+    const put = vi.fn(async (_save: SaveV4) => {
+      if (!writable) throw new Error("quota exceeded");
+    });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const h = new Handler({ get: async () => saveForLoad(), put, clear: async () => {} }, (m) => out.push(m));
+      await h.handle({ t: "load", legacy: null, now: NOW });
+      expect(put).not.toHaveBeenCalled();
+      await h.handle({ t: "cmd", id: 7, cmd: { type: "addRoad", kind: "path", pts: [[0, 0], [50, 0]], snapTol: 5, labor: [10] } });
+      expect(out).toContainEqual({ t: "saveStatus", failed: true });
+      expect(out).toContainEqual({ t: "cmdResult", id: 7, ok: true });
+      writable = true;
+      await h.handle({ t: "flush" });
+      expect(out.at(-1)).toEqual({ t: "saveStatus", failed: false });
+      expect(Object.keys(put.mock.calls.at(-1)![0].sim.roads.edges)).toHaveLength(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it("waits for outstanding writes before clearing and keeps the town playable if clearing fails", async () => {
+    const out: FromWorker[] = [];
+    let finishWrite: () => void = () => {};
+    const writing = new Promise<void>((resolve) => { finishWrite = resolve; });
+    const put = vi.fn(async () => writing);
+    const clear = vi.fn(async () => { throw new Error("IndexedDB unavailable"); });
+    const h = new Handler({ get: async () => saveForLoad(), put, clear }, (m) => out.push(m));
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    const flush = h.handle({ t: "flush" });
+    const reset = h.handle({ t: "reset" });
+    await Promise.resolve();
+    expect(put).toHaveBeenCalledOnce();
+    expect(clear).not.toHaveBeenCalled();
+    finishWrite();
+    await Promise.all([flush, reset]);
+    expect(clear).toHaveBeenCalledOnce();
+    expect(out.at(-1)).toEqual({ t: "resetFailed" });
+    out.length = 0;
+    h.tick(NOW + 5000);
+    expect(out[0]?.t).toBe("snapshot");
+  });
+  it("keeps a portal pause during founding and uses the surveyed elevation", async () => {
+    const out: FromWorker[] = [];
+    const elevation = vi.fn(async () => 900);
+    const h = new Handler({ get: async () => null, put: async () => {}, clear: async () => {} }, (m) => out.push(m), undefined, elevation);
+    await h.handle({ t: "speed", speed: 0, now: NOW });
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    await h.handle({ t: "found", city, now: NOW, elevation: 120 });
+    expect(elevation).not.toHaveBeenCalled();
+    expect(out.at(-1)).toMatchObject({ t: "loaded", save: { sim: { gameMinutes: 0, weather: { site: { elev: 120 } } } } });
+    const before = out.length;
+    h.tick(NOW + 10_000);
+    expect(out).toHaveLength(before);
+  });
+  it("can found a town when the elevation request never returns", async () => {
+    vi.useFakeTimers();
+    try {
+      const out: FromWorker[] = [];
+      const h = new Handler({ get: async () => null, put: async () => {}, clear: async () => {} }, (m) => out.push(m), undefined, () => new Promise(() => {}));
+      const founding = h.handle({ t: "found", city, now: NOW });
+      await vi.advanceTimersByTimeAsync(3000);
+      await founding;
+      expect(out.at(-1)).toMatchObject({ t: "loaded", save: { sim: { weather: { site: { elev: 0 } } } } });
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("found", async () => {
     const { h, out, get } = setup();

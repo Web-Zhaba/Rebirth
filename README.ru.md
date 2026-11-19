@@ -218,7 +218,7 @@ Harness фиксирует первый дом, первую технологи�
 
 ## Запуск из исходников
 
-Нужны **Node.js 20.19+** и npm.
+Нужны **Node.js 24** и npm.
 
 ```bash
 git clone https://github.com/Web-Zhaba/rebirth.git

@@ -19,7 +19,7 @@ import { parseSave } from "./save";
 import { haulHours, haulMetres, Ledger, settleStores, spreadStores, withStock } from "./storage";
 import { YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, City, Field, Household, Resident, RoadGraph, SaveV4, SimState, Site, TerrainInfo } from "./types";
-import { emptyZones, qkey, regenerateCells } from "./zones";
+import { qkey, regenerateCells } from "./zones";
 
 const LOGS = recipeOf("woodcutter")!.perHour; // m3 per worker-hour
 
@@ -785,6 +785,7 @@ describe("save", () => {
   });
   it("round-trips stock, mood, progress and placed buildings", () => {
     const s = { ...full(), stock: { food: 5, logs: 6, planks: 7, stone: 8, clothes: 9, dishes: 9, furniture: 9, tools: 9 } };
+    s.zones = { ...s.zones, fields: [FIELD10()] };
     s.buildings[1].site = { forest: 0.3, water: 0.2, rock: 0.1 };
     s.prod = { ...s.prod, fields: { 1: { year: 1, sowH: 3, harvH: 0, reaped: 0 } }, today: { 1: 2 }, yesterday: { 1: 3 } };
     const parsed = parseSave(JSON.parse(JSON.stringify({ version: 4, city, sim: s })), NOW)!;
@@ -792,6 +793,11 @@ describe("save", () => {
     expect(parsed.sim.prod).toEqual(s.prod);
     expect(parsed.sim.households[1].mood).toBe(73);
     expect(parsed.sim.buildings[1]).toEqual(s.buildings[1]);
+  });
+  it("drops crop progress for fields removed from an old save", () => {
+    const s = full();
+    s.prod = { ...s.prod, fields: { 1: { year: 1, sowH: 3, harvH: 0, reaped: 0 } } };
+    expect(parseSave(wrap(s), NOW)!.sim.prod.fields).toEqual({});
   });
   it("round-trips the families on their way and the hand-made hours; older saves have none", () => {
     const s = full();

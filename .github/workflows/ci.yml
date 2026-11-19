@@ -43,8 +43,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Every portal build, checked against its portal's archive rules and for other portals' SDKs (publish.yml
-      # makes the release zips). The Yandex one is uploaded as an artifact ready for the developer console.
+      # Check each portal against its archive rules and for other portals' SDKs. Keep the checked Yandex zip.
       - name: Build for the portals
         run: npm run build:portals
 
@@ -52,6 +51,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rebirth-yandex-${{ github.sha }}
-          path: release/yandex/
+          path: release/rebirth-yandex.zip
           if-no-files-found: error
           retention-days: 14

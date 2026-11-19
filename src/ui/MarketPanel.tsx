@@ -182,7 +182,6 @@ function Scales({ s }: { s: Stall }) {
   const end = (side: -1 | 1): [number, number] => [PIVOT[0] + side * ARM * Math.cos(rad), PIVOT[1] + side * ARM * Math.sin(rad)];
   const give = !o ? "" : s.swap ? `${num(s.swap.gave)} ${unit(o.give)}` : `1 ${unit(o.give)}`;
   const get = !o ? "" : s.swap ? `${num(s.swap.got)} ${unit(o.get)}` : `${num(tradeRate(o))} ${unit(o.get)}`;
-  const kept = Math.round((1 - TRADE.margin) * 100);
   const fee = L(``, ``);
   const note = !o
     ? s.state === "locked"

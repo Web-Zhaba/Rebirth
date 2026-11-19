@@ -5,7 +5,7 @@ import { defineConfig, type Plugin } from "vite";
 const { version } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
 
 // Portal SDKs loaded by a script tag in index.html rather than by their adapter: CrazyGames' QA tool reports the SDK
-// missing unless the tag is there (src/platform/crazygames.ts takes the loaded SDK from the page).
+// missing unless the tag is there (src/platform/crazygames.ts waits for the async script).
 const HEAD_SDK: Record<string, string> = {
   crazygames: "https://sdk.crazygames.com/crazygames-sdk-v3.js",
 };
@@ -13,7 +13,7 @@ const HEAD_SDK: Record<string, string> = {
 function portalSdkTag(mode: string): Plugin {
   return {
     name: "portal-sdk-tag",
-    transformIndexHtml: () => (HEAD_SDK[mode] ? [{ tag: "script", attrs: { src: HEAD_SDK[mode] }, injectTo: "head-prepend" }] : []),
+    transformIndexHtml: () => (HEAD_SDK[mode] ? [{ tag: "script", attrs: { id: `${mode}-sdk`, async: true, src: HEAD_SDK[mode] }, injectTo: "head-prepend" }] : []),
   };
 }
 
