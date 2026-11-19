@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.6.1...rebirth-v0.6.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* harden saves, simulation and portal builds ([2eaa9c0](https://github.com/Web-Zhaba/Rebirth/commit/2eaa9c0f6a8f499cb055e69081c27b76368d70a2))
+* harden saves, simulation and portal builds ([668ceba](https://github.com/Web-Zhaba/Rebirth/commit/668cebac5bdfd6a29bb0f41409f8503de6adb961))
+
 ## [0.6.1](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.6.0...rebirth-v0.6.1) (2026-11-16)
 
 
