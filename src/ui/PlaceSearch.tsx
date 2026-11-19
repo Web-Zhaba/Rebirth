@@ -22,30 +22,38 @@ function flyTo(view: View, h: PlaceHit) {
 
 // Finding a spot before founding: search by name, the player's own location, old place names on the map.
 export function PlaceSearch({ view }: { view: View }) {
-  const [q, setQ] = useState("");
+  const [query, setQuery] = useState({ text: "", selected: false });
   const [hits, setHits] = useState<PlaceHit[]>([]);
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const request = useRef<AbortController>(null);
+
+  const setText = (text: string, selected = false) => {
+    request.current?.abort();
+    setQuery({ text, selected });
+    setHits([]);
+    setActive(0);
+    setMsg("");
+    setBusy(false);
+  };
 
   useEffect(() => {
-    const text = q.trim();
-    if (text.length < MIN_QUERY) {
-      setHits([]);
-      setMsg("");
-      return;
-    }
+    const text = query.text.trim();
+    if (query.selected || text.length < MIN_QUERY) return;
     const ctl = new AbortController();
+    request.current = ctl;
     const t = setTimeout(() => {
+      if (ctl.signal.aborted) return;
       const [clng, clat] = view.camera().center;
       setBusy(true);
       searchPlaces(text, { lng: clng, lat: clat }, ctl.signal).then(
         (h) => {
+          if (ctl.signal.aborted) return;
           setHits(h);
           setActive(0);
-          setOpen(true);
           setMsg(h.length ? "" : L("Ничего не нашлось", "Nothing found"));
           setBusy(false);
         },
@@ -62,11 +70,12 @@ export function PlaceSearch({ view }: { view: View }) {
       clearTimeout(t);
       ctl.abort();
     };
-  }, [q, view]);
+  }, [query, view]);
 
   const pick = (h: PlaceHit) => {
+    if (request.current?.signal.aborted) return;
     flyTo(view, h);
-    setQ(h.name);
+    setText(h.name, true);
     setOpen(false);
     input.current?.blur();
   };
@@ -84,7 +93,9 @@ export function PlaceSearch({ view }: { view: View }) {
     );
   };
 
+  const showList = open && hits.length > 0;
   const onKey = (e: KeyboardEvent) => {
+    if (e.isComposing) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!hits.length) return;
@@ -92,14 +103,13 @@ export function PlaceSearch({ view }: { view: View }) {
       setActive((i) => (i + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (hits[active]) pick(hits[active]);
+      if (showList && hits[active]) pick(hits[active]);
     } else if (e.key === "Escape") {
-      if (open) setOpen(false);
-      else setQ("");
+      if (showList) setOpen(false);
+      else setText("");
     }
   };
 
-  const showList = open && hits.length > 0;
   return (
     <div class="place-search" role="search">
       <div class="place-search-row">
@@ -116,8 +126,11 @@ export function PlaceSearch({ view }: { view: View }) {
             aria-activedescendant={showList ? `place-hit-${active}` : undefined}
             aria-autocomplete="list"
             placeholder={L("Найти город или село", "Find a town or village")}
-            value={q}
-            onInput={(e) => setQ((e.target as HTMLInputElement).value)}
+            value={query.text}
+            onInput={(e) => {
+              setText(e.currentTarget.value);
+              setOpen(true);
+            }}
             onKeyDown={onKey}
             onFocus={() => setOpen(true)}
             onBlur={() => setOpen(false)}

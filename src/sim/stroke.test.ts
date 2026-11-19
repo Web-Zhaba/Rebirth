@@ -3,7 +3,7 @@ import { finishAll } from "./admin";
 import { allocateLabor, BUILDINGS } from "./buildings";
 import { canPlace, emptyGrowth, reconcile, releaseSites } from "./growth";
 import { addRoad, emptyRoads } from "./roads";
-import { applyStroke, cancelPlans, newRoadEdges, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
+import { applyStroke, cancelPlans, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
 import { allResearched } from "./tech";
 import type { FoundFoundation, RoadGraph, SimState } from "./types";
 import { emptyZones, regenerateCells } from "./zones";
@@ -40,7 +40,7 @@ const mk = (foundations: FoundFoundation[] = [], techs = allResearched().techs):
 
 const edgeOf = (s: SimState) => Number(Object.keys(s.roads.edges)[0]);
 const span = (s: SimState, x0: number, x1: number, side: 1 | -1 = 1): StrokeSpan => ({ edge: edgeOf(s), side, from: x0 + 200, to: x1 + 200 });
-const xs = (s: SimState, plan: ReturnType<typeof planStroke>) => plan.items.map((it) => Math.round(it.building.lot.cx));
+const xs = (plan: ReturnType<typeof planStroke>) => plan.items.map((it) => Math.round(it.building.lot.cx));
 
 describe("a stroke", () => {
   it("lays only the templates zones grew", () => {
@@ -55,10 +55,10 @@ describe("a stroke", () => {
     const fwd = planStroke(s, BUILDINGS.izba, [span(s, -100, -20)]);
     expect(fwd.items.length).toBe(5); // 80 m, 16 m a house
     expect(fwd.items.every((it) => it.kind === "lot" && it.building.template === "izba")).toBe(true);
-    const at = xs(s, fwd);
+    const at = xs(fwd);
     expect(at).toEqual([...at].sort((p, q) => p - q));
     const back = planStroke(s, BUILDINGS.izba, [span(s, -20, -100)]);
-    expect(xs(s, back)).toEqual([...xs(s, back)].sort((p, q) => q - p));
+    expect(xs(back)).toEqual([...xs(back)].sort((p, q) => q - p));
   });
 
   it("places what it planned: houses on their lots, kept while their road stands", () => {
@@ -83,7 +83,7 @@ describe("a stroke", () => {
     expect(old).toMatchObject({ kind: "foundation", foundationId: "old" });
     expect(old.building.footprint.length).toBeGreaterThanOrEqual(4);
     expect(plan.items.some((it) => it.key === "f:far" || it.key === "f:other")).toBe(false); // out of reach / other side
-    const at = xs(s, plan);
+    const at = xs(plan);
     expect(at).toEqual([...at].sort((p, q) => p - q)); // the foundation sits in stroke order among the lots
     const r = applyStroke(s, plan.items);
     expect(r.placed).toBe(plan.items.length);
@@ -158,7 +158,7 @@ describe("a stroke", () => {
     const cross: [number, number][] = [[0, -60], [0, 120]];
     const r = addRoad(s.roads, cross, "dirt", 1, [10]);
     if (!r.ok) throw new Error(r.reason);
-    const fresh = newRoadEdges(s.roads, r.graph);
+    const fresh = r.added;
     expect(fresh.length).toBe(2); // the crossing road, cut at the old one
     for (const id of fresh) {
       const e = r.graph.edges[id];

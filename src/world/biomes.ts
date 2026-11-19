@@ -1,4 +1,5 @@
 import { C } from "./biome";
+import { TILE_TIMEOUT_MS } from "./nature";
 import { decodePng } from "./pngDecoder";
 
 // Biomes of the rewilded Earth: which one covers a place, and the colour the drape bake paints
@@ -53,7 +54,7 @@ export async function decodeBiomeMap(png: ArrayBuffer | Uint8Array): Promise<Bio
 
 let loading: Promise<BiomeMap> | null = null;
 export function loadBiomeMap(): Promise<BiomeMap> {
-  loading ??= fetch(new URL("./biomes.png", import.meta.url))
+  loading ??= fetch(new URL("./biomes.png", import.meta.url), { signal: AbortSignal.timeout(TILE_TIMEOUT_MS) })
     .then((r) => {
       if (!r.ok) throw new Error(`biome map: HTTP ${r.status}`);
       return r.arrayBuffer();

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { FOUND_MPP } from "../view/scale";
 import type { View, ViewMarker, ViewPointer } from "../view/view";
-import { found as foundCity } from "../simClient";
+import { found as foundCity, foundFailed, foundPending } from "../simClient";
 import { sampleSite } from "../world/site";
 import { landAt, nearRiver, type Land } from "../world/landcover";
 import { terrainAt } from "../world/terrain";
 import type { Site } from "../sim/types";
 import { Button } from "./kit";
-import { siteNotes, suggestNames } from "./foundModel";
+import { canFoundOn, siteNotes, suggestNames } from "./foundModel";
 import { PlaceSearch } from "./PlaceSearch";
 import "./journal.css";
 import { SEMANTIC_IDS } from "./semanticIds";
@@ -21,8 +21,8 @@ interface Point {
 interface Info {
   land: Land;
   site: Site;
-  elevation: number;
-  slope: number;
+  elevation: number | null;
+  slope: number | null;
   river: boolean;
 }
 
@@ -44,14 +44,19 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 async function survey({ lat, lng }: Point): Promise<Info> {
   const kx = M_PER_DEG * Math.cos((lat * Math.PI) / 180);
   const sampler = (x: number, y: number) => landAt(lng + x / kx, lat + y / M_PER_DEG);
-  const [land, t, river, site] = await Promise.all([landAt(lng, lat), terrainAt(lng, lat), nearRiver(lng, lat), sampleSite(0, 0, SITE_RADIUS, sampler)]);
-  return { land, site, elevation: t.elevation, slope: t.slope, river };
+  const [land, t, river, site] = await Promise.all([
+    landAt(lng, lat),
+    terrainAt(lng, lat).catch(() => null),
+    nearRiver(lng, lat),
+    sampleSite(0, 0, SITE_RADIUS, sampler),
+  ]);
+  return { land, site, elevation: t?.elevation ?? null, slope: t?.slope ?? null, river };
 }
 
 export function FoundCity({ view }: { view: View }) {
   const [point, setPoint] = useState<Point | null>(null);
-  const [info, setInfo] = useState<Info | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [surveyed, setSurveyed] = useState<{ point: Point; info: Info | null } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
   const marker = useRef<ViewMarker | null>(null);
@@ -59,7 +64,11 @@ export function FoundCity({ view }: { view: View }) {
 
   useEffect(() => {
     const onClick = (e: ViewPointer) => {
+      if (foundPending.peek()) return;
       if (view.isWaterAt(e.point)) {
+        setPoint(null);
+        marker.current?.remove();
+        marker.current = null;
         setMsg(L("Здесь вода — выберите сушу", "This is water — pick dry land"));
         return;
       }
@@ -82,16 +91,14 @@ export function FoundCity({ view }: { view: View }) {
   useEffect(() => {
     if (!point) return;
     let stale = false;
-    setInfo(null);
-    setFailed(false);
     survey(point).then(
-      (i) => !stale && setInfo(i),
-      () => !stale && setFailed(true),
+      (info) => !stale && setSurveyed({ point, info }),
+      () => !stale && setSurveyed({ point, info: null }),
     );
     return () => {
       stale = true;
     };
-  }, [point]);
+  }, [point, attempt]);
 
   const hasPoint = point !== null;
   useEffect(() => {
@@ -99,15 +106,16 @@ export function FoundCity({ view }: { view: View }) {
   }, [hasPoint]);
 
   const trimmed = name.trim();
-  const valid = trimmed.length >= 1 && trimmed.length <= 40;
+  const result = surveyed?.point === point ? surveyed : null;
+  const info = result?.info ?? null;
+  const pending = foundPending.value;
+  const valid = canFoundOn(trimmed, info?.land ?? null);
   const names = point ? suggestNames(point.lat, point.lng) : [];
   const notes = info ? siteNotes(info.site, info.slope, info.river) : [];
 
   const found = () => {
-    if (!point || !valid) return;
-    marker.current?.remove();
-    marker.current = null;
-    foundCity({ name: trimmed, lat: point.lat, lng: point.lng, foundedAt: Date.now() });
+    if (!point || !info || !valid || pending) return;
+    foundCity({ name: trimmed, lat: point.lat, lng: point.lng, foundedAt: Date.now() }, info.elevation ?? 0);
   };
 
   return (
@@ -137,17 +145,23 @@ export function FoundCity({ view }: { view: View }) {
               </div>
               <div class="found-rule" aria-hidden="true" />
               <div class="found-land" aria-live="polite">
-                {failed && <div class="found-note">{L("Не удалось осмотреть землю: карта ещё грузится.", "Could not survey the land: the map is still loading.")}</div>}
-                {!info && !failed && <div class="found-note">{L("Осматриваем землю…", "Surveying the land…")}</div>}
+                {result && !info && (
+                  <div class="found-note">
+                    <p>{L("Не удалось осмотреть землю.", "Could not survey the land.")}</p>
+                    <Button onClick={() => { setSurveyed(null); setAttempt((n) => n + 1); }}>{L("Повторить", "Retry")}</Button>
+                  </div>
+                )}
+                {!result && <div class="found-note">{L("Осматриваем землю…", "Surveying the land…")}</div>}
+                {info?.land === "water" && <div class="found-note">{L("Здесь вода — выберите сушу", "This is water — pick dry land")}</div>}
                 {info && (
                   <>
                     <dl class="found-facts">
                       <dt>{L("Под лагерем", "Under the camp")}</dt>
                       <dd>{LAND_RU[info.land]}</dd>
                       <dt>{L("Высота", "Elevation")}</dt>
-                      <dd>{Math.round(info.elevation)} {L("м", "m")}</dd>
+                      <dd>{info.elevation === null ? "—" : `${Math.round(info.elevation)} ${L("м", "m")}`}</dd>
                       <dt>{L("Уклон", "Slope")}</dt>
-                      <dd>{Math.round(info.slope)}°</dd>
+                      <dd>{info.slope === null ? "—" : `${Math.round(info.slope)}°`}</dd>
                       <dt>{L("Лес вокруг", "Forest around")}</dt>
                       <dd>{pct(info.site.forest)}</dd>
                       <dt>{L("Вода вокруг", "Water around")}</dt>
@@ -190,8 +204,9 @@ export function FoundCity({ view }: { view: View }) {
                 value={name}
                 onInput={(e) => setName((e.target as HTMLInputElement).value)}
               />
-              <Button type="submit" variant="primary" disabled={!valid}>
-                {L("Основать", "Found")}
+              {foundFailed.value && <p role="alert">{L("Не удалось основать поселение. Повторите попытку.", "Could not found the settlement. Try again.")}</p>}
+              <Button type="submit" variant="primary" disabled={!valid || pending}>
+                {pending ? L("Основываем…", "Founding…") : L("Основать", "Found")}
               </Button>
             </form>
           </div>

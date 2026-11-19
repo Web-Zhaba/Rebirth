@@ -1,13 +1,13 @@
 import { houseGoods } from "./coverage";
 import { finishAll, grantStock, nextEra, reveal, unlockAll } from "./admin";
-import { advanceTo, tickMs, type Pace, type Speed } from "./clock";
+import { advanceTo, tickFraction, tickMs, type Pace, type Speed } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { addArticles } from "./articles";
 import { isCleared, nextClearingId, overTerrain, validateClearing } from "./clearing";
 import { scarcity } from "./heritage";
 import { loseSite } from "./restore";
 import { orderDig, orderStreetDig } from "./digging";
-import { applyStroke, cancelPlans, newRoadEdges, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
+import { applyStroke, cancelPlans, planStroke, roadSpans, strokeTemplate, type StrokeSpan } from "./stroke";
 import { returnFind, useFind } from "./items";
 import { arrangeExhibitions, museumDaily, museumStaff, setExhibition } from "./museum";
 import { cancelResearch, queueResearch, researchView, startResearch } from "./research";
@@ -20,28 +20,20 @@ import { computeLife } from "./life";
 import { snapshotDelta, type Posted } from "./delta";
 import { refreshServices, serviceStats } from "./coverage";
 import { canPlace, canPlaceOnFoundation, placeOnFoundation, emptyGrowth, placeBuilding, reconcile, seedOf } from "./growth";
-import { freeHomes, peopleStats, queryBuilding, queryResident, syncPeople } from "./people";
+import { freeHomes, peopleStats, queryBuilding, queryResident, rebalanceJobs, syncPeople } from "./people";
 import { inflowPerDay } from "./attraction";
 import type { Cmd, FromWorker, ToWorker } from "./protocol";
 import { economyStats, productionInfo } from "./production";
 import { SERVICES, isService } from "./services";
-import { addRoad, effectiveSpans, emptyRoads, kindsChanged, removeEdge, ROAD_KINDS, spanReason, upgradeRoads } from "./roads";
-import { migrateLegacy, parseSave } from "./save";
+import { addRoad, effectiveSpans, emptyRoads, finishedRoadsChanged, kindsChanged, removeEdge, ROAD_KINDS, spanReason, upgradeRoads } from "./roads";
+import { migrateLegacy, parseCity, parseSave } from "./save";
 import { dayOf } from "./time";
 import { startWeather, type WeatherState } from "./weather";
-import { fieldProgress } from "./fields";
-import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
-import { emptyZones, nextFieldId, pendingKeys, qkey, qpoint, regenerateCells, validateField } from "./zones";
+import { fieldProgress, pruneFieldWork } from "./fields";
+import type { BuildingQuery, ChronicleEntry, Clearing, ClientSave, Field, Finds, RoadGraph, RoadHouses, SaveV4, Site, SimSnapshot, SimState, StoredArticle, TerrainInfo, ZoneState } from "./types";
+import { emptyZones, nextFieldId, pendingKeys, qpoint, regenerateCells, validateField } from "./zones";
 import { makeFrame, type Frame } from "../world/frame";
 import { L } from "../i18n";
-
-// A road drawn «с домами»: the template to lay along both sides of its edges once their cells are surveyed.
-interface RoadHouses {
-  city: unknown; // the town it was drawn in
-  edges: number[];
-  template: string;
-  only: boolean; // only foundations
-}
 
 export interface Storage {
   get(): Promise<unknown>;
@@ -52,6 +44,7 @@ export interface Storage {
 }
 
 const PERSIST_MS = 10_000; // wall ms between saves while ticking
+const WEATHER_SITE_WAIT_MS = 3000;
 const MAX_GAP_MS = 70_000; // a longer gap between ticks (a sleeping device) is dropped: time away is never played back
 const HIDDEN_SLOW_MS = 5 * 60_000; // a tab hidden this long runs at the slower hidden-tab rate
 
@@ -118,11 +111,13 @@ export class Handler {
   private postedChronicle: ChronicleEntry[] | null = null; // the chronicle array the main thread already has
   private postedFinds: Finds | null = null;
   private postedArticles: StoredArticle[] | null = null;
-  private busy = false; // loading: other messages wait in `queue`
+  private busy = false; // loading, founding or resetting: other messages wait in `queue`
   private queue: ToWorker[] = [];
+  private allowFound = true; // the worker only opens a session after acquiring the save lock
+  private writes = Promise.resolve();
+  private saveFailed = false;
   private enriching: Promise<void> | null = null;
   private failed = new Set<string>(); // qkeys that could not be sampled; retried later
-  private roadHouses: RoadHouses[] = []; // roads drawn «с домами» waiting for their ground to be surveyed
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   // What the main thread's visual life was drawn from: the game day, the families on their way, the residents (their
   // jobs, homes and classes) and the levers (work hours, toloka); a change in any of them draws it anew.
@@ -141,13 +136,21 @@ export class Handler {
   ) {}
 
   // The weather of a town: its site (elevation sampled once; 0 m when that fails) and the spin-up before `t`.
-  private async weatherFor(city: SaveV4["city"], t: number): Promise<WeatherState> {
-    let elev = 0;
-    try {
-      const e = await this.elevation?.(city.lng, city.lat);
-      if (typeof e === "number" && Number.isFinite(e)) elev = e;
-    } catch {
-      // founding never waits for the DEM
+  private async weatherFor(city: SaveV4["city"], t: number, sampled?: number): Promise<WeatherState> {
+    let elev = finite(sampled) ? sampled : 0;
+    if (!finite(sampled) && this.elevation) {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const fallback = new Promise<number>((resolve) => {
+          timeout = setTimeout(() => resolve(0), WEATHER_SITE_WAIT_MS);
+        });
+        const e = await Promise.race([this.elevation(city.lng, city.lat), fallback]);
+        if (finite(e)) elev = e;
+      } catch {
+        // Use the default elevation when the terrain cannot be read.
+      } finally {
+        clearTimeout(timeout);
+      }
     }
     return startWeather({ lat: city.lat, lng: city.lng, elev, seed: seedOf(city.foundedAt), phase: city.lat < 0 ? 0.5 : 0 }, t);
   }
@@ -173,15 +176,25 @@ export class Handler {
           }
           return;
         case "found": {
+          const city = parseCity(msg.city);
+          if (this.save || !this.allowFound || !city || !finite(msg.now) || msg.now <= 0) {
+            this.post({ t: "foundFailed" });
+            return;
+          }
+          this.busy = true;
           const save: SaveV4 = {
             version: 4,
-            city: msg.city,
-            sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(msg.city.foundedAt)) },
+            city,
+            sim: { realTime: msg.now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(city.foundedAt)) },
           };
-          save.sim.weather = await this.weatherFor(msg.city, 0);
-          this.setSave(save);
-          await this.storage.put(save);
-          this.postLoaded(save, false);
+          try {
+            save.sim.weather = await this.weatherFor(city, 0, msg.elevation);
+            this.setSave(save);
+            await this.persist(save);
+            this.postLoaded(save, false);
+          } finally {
+            await this.release();
+          }
           return;
         }
         case "query": {
@@ -193,7 +206,7 @@ export class Handler {
         case "cmd":
           return await this.command(msg.id, msg.cmd);
         case "flush":
-          if (this.save) await this.storage.put(this.save);
+          if (this.save) await this.persist(this.save);
           return;
         case "speed":
           if (!validSpeed(msg.speed) || !finite(msg.now)) return;
@@ -207,13 +220,23 @@ export class Handler {
           else this.hiddenAt = null;
           return;
         case "reset":
-          this.setSave(null);
-          await this.storage.clear();
-          this.post({ t: "resetDone" });
+          this.busy = true;
+          try {
+            await this.writes;
+            await this.storage.clear();
+            this.setSave(null);
+            this.allowFound = false; // reset reloads the page before a new town is founded
+            this.post({ t: "resetDone" });
+          } finally {
+            await this.release();
+          }
           return;
       }
     } catch (e) {
       this.post({ t: "error", message: errorText(e) });
+      if (msg.t === "load") this.post({ t: "loadFailed", reason: "unavailable" });
+      if (msg.t === "found") this.post({ t: "foundFailed" });
+      if (msg.t === "reset") this.post({ t: "resetFailed" });
     }
   }
 
@@ -227,33 +250,39 @@ export class Handler {
   private settle(sim: SimState): SimState {
     const z = sim.zones;
     const cells = regenerateCells(sim.roads, z.fields, z.terrain);
-    return refreshServices(syncPeople({ ...sim, zones: { ...z, cells, rev: z.rev + 1 }, buildings: reconcile(sim.buildings, sim.roads) }));
+    return refreshServices(rebalanceJobs(syncPeople({ ...sim, zones: { ...z, cells, rev: z.rev + 1 }, buildings: reconcile(sim.buildings, sim.roads) })));
   }
 
   private async load(legacy: string | null, now: number): Promise<void> {
+    this.allowFound = false;
+    await this.writes;
     const raw = await this.storage.get();
-    // An older save is kept as it was before its first migrated copy overwrites it (a way back).
     const version = typeof raw === "object" && raw !== null ? (raw as { version?: unknown }).version : undefined;
-    if (version === 3) await this.storage.keepOld?.(raw, 3);
-    let save = parseSave(raw, now);
-    let migrated = false;
-    if (!save && legacy) {
-      save = migrateLegacy(legacy, now);
-      if (save) {
-        await this.storage.put(save);
-        migrated = true;
-      }
-    }
+    const empty = raw === undefined || raw === null;
+    const migrated = empty && legacy !== null;
+    let save = migrated ? migrateLegacy(legacy, now) : parseSave(raw, now);
     if (!save) {
+      if (!empty || migrated) {
+        this.post({ t: "loadFailed", reason: "invalid", raw: migrated ? legacy : raw });
+        return;
+      }
+      this.allowFound = true;
       this.post({ t: "loaded", save: null, migrated: false });
       return;
     }
-    if (!save.sim.weather.site) save = { ...save, sim: { ...save.sim, weather: await this.weatherFor(save.city, save.sim.gameMinutes) } };
+    const needsWeather = !save.sim.weather.site;
+    if (needsWeather) save = { ...save, sim: { ...save.sim, weather: await this.weatherFor(save.city, save.sim.gameMinutes) } };
     // The town waits where it was left: the time since the last save is not played back.
     save = { ...save, sim: this.settle({ ...save.sim, realTime: now }) };
+    // Keep the old format until the replacement has been written successfully.
+    if (version === 3) await this.storage.keepOld?.(raw, 3);
+    const writesMigration = version === 3 || migrated;
+    if (writesMigration) await this.storage.put(save);
     this.setSave(save);
-    await this.storage.put(save);
-    this.postLoaded(save, migrated);
+    this.layRoadHouses();
+    const ready = this.save!;
+    if (ready !== save || (needsWeather && !writesMigration)) await this.persist(ready);
+    this.postLoaded(ready, migrated);
     this.postLife();
     this.enrich();
   }
@@ -273,10 +302,8 @@ export class Handler {
     this.postedFinds = save ? save.sim.finds : null;
     this.postedArticles = save ? save.sim.articles : null;
     this.lifeFrom = null;
-    this.speed = 1;
     this.pausedFraction = 0;
     this.free = false;
-    this.hiddenAt = null;
     this.persistedAt = save?.sim.realTime ?? 0;
     this.failed.clear();
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -353,19 +380,21 @@ export class Handler {
         const frame = makeFrame(city.lat, city.lng);
         for (let n = 0; n < keys.length; n += ENRICH_BATCH) {
           const got: Record<string, TerrainInfo> = {};
+          const failed: string[] = [];
           await Promise.all(
             keys.slice(n, n + ENRICH_BATCH).map(async (k) => {
               const [x, y] = qpoint(k);
               try {
                 got[k] = overTerrain(await sampler(frame, x, y), x, y, this.save?.sim.clearings ?? []); // cleared forest is meadow
               } catch {
-                this.failed.add(k);
+                failed.push(k);
               }
             }),
           );
           while (this.busy) await new Promise((r) => setTimeout(r, 20)); // not while a load owns the state
           const cur = this.save;
           if (!cur || cur.city !== city) return; // reset or re-founded meanwhile
+          for (const k of failed) this.failed.add(k);
           if (Object.keys(got).length === 0) continue;
           const z = cur.sim.zones;
           const zones = this.rezone({ ...z, terrain: { ...z.terrain, ...got } }, cur.sim.roads, z.fields);
@@ -373,11 +402,7 @@ export class Handler {
           this.save = { ...cur, sim: syncPeople({ ...cur.sim, zones, buildings }) };
           this.layRoadHouses();
           this.postSnapshot();
-          try {
-            await this.storage.put(this.save);
-          } catch (e) {
-            this.post({ t: "error", message: String(e) });
-          }
+          await this.persist(this.save);
         }
       }
     } catch (e) {
@@ -388,21 +413,25 @@ export class Handler {
   // Lays the houses of the roads drawn «с домами» whose ground is surveyed: a stroke along both sides of the new edges.
   // A request waits while a cell of its edges waits for terrain; it is dropped once laid, or when its town or edges went.
   private layRoadHouses(): void {
-    if (!this.save || this.roadHouses.length === 0) return;
-    let sim = this.save.sim;
+    const save = this.save;
+    const queued = save?.roadHouses;
+    if (!save || !queued?.length) return;
+    let sim = save.sim;
     const keep: RoadHouses[] = [];
-    for (const r of this.roadHouses) {
+    for (const r of queued) {
       const edges = r.edges.filter((e) => Object.hasOwn(sim.roads.edges, e));
-      if (r.city !== this.save.city || edges.length === 0) continue;
+      if (edges.length === 0) continue;
       const on = new Set(edges);
-      if (sim.zones.cells.some((c) => on.has(c.edge) && c.block === "pending" && !this.failed.has(qkey(c.cx, c.cy)))) {
-        keep.push({ ...r, edges });
+      if (sim.zones.cells.some((c) => on.has(c.edge) && c.block === "pending")) {
+        keep.push(edges.length === r.edges.length ? r : { ...r, edges });
         continue;
       }
       sim = applyStroke(sim, planStroke(sim, BUILDINGS[r.template], roadSpans(sim.roads, edges), r.only).items).sim;
     }
-    this.roadHouses = keep;
-    if (sim !== this.save.sim) this.save = { ...this.save, sim: refreshServices(syncPeople(sim)) };
+    if (sim !== save.sim) sim = refreshServices(syncPeople(sim));
+    if (sim !== save.sim || keep.length !== queued.length || keep.some((r, i) => r !== queued[i])) {
+      this.save = { ...save, sim, roadHouses: keep.length ? keep : undefined };
+    }
   }
 
   private async command(id: number, cmd: Cmd): Promise<void> {
@@ -413,7 +442,8 @@ export class Handler {
       const roads = sim.roads;
       const z = sim.zones;
       let next: RoadGraph = roads;
-      let houses: RoadHouses | null = null;
+      let roadHouses = this.save.roadHouses;
+      let prod = sim.prod;
       let zones: ZoneState;
       if (cmd.type === "addRoad") {
         const bad = validateAddRoad(cmd);
@@ -426,10 +456,11 @@ export class Handler {
         if (!r.ok) return reject(r.reason);
         next = r.graph;
         zones = this.rezone(z, next, z.fields);
+        if (roadHouses && r.splits.size) roadHouses = roadHouses.map((h) => ({ ...h, edges: h.edges.flatMap((id) => r.splits.get(id) ?? [id]) }));
         const t = cmd.houses ? strokeTemplate(cmd.houses.template) : null;
         // a house template the town cannot build yet leaves the road without them
         if (t && !(lockReason(sim, t.zone) ?? lockReason(sim, t.id))) {
-          houses = { city: this.save.city, edges: newRoadEdges(roads, next), template: t.id, only: cmd.houses?.onlyFoundations === true };
+          roadHouses = [...(roadHouses ?? []), { edges: r.added, template: t.id, only: cmd.houses?.onlyFoundations === true }];
         }
       } else if (cmd.type === "upgradeRoad") {
         const bad = validateUpgradeRoad(cmd);
@@ -453,6 +484,8 @@ export class Handler {
       } else if (cmd.type === "removeField") {
         if (!z.fields.some((f) => f.id === cmd.id)) return reject(L("Поле уже убрано", "The field is already removed"));
         zones = this.rezone(z, roads, z.fields.filter((f) => f.id !== cmd.id));
+        const fields = pruneFieldWork(zones.fields, prod.fields);
+        if (fields !== prod.fields) prod = { ...prod, fields };
       } else if (cmd.type === "addClearing") {
         const v = validateClearing(cmd.pts, cmd.forest, roads, z.fields, sim.clearings);
         if (!v.ok) return reject(v.reason);
@@ -595,11 +628,9 @@ export class Handler {
         return reject(L("Неизвестная команда", "Unknown command"));
       }
       const buildings = reconcile(sim.buildings, next);
-      this.save = { ...this.save, sim: refreshServices(syncPeople({ ...sim, roads: next, zones, buildings })) };
-      if (houses) {
-        this.roadHouses.push(houses);
-        this.layRoadHouses();
-      }
+      const updated = syncPeople({ ...sim, roads: next, zones, buildings, prod });
+      this.save = { ...this.save, sim: refreshServices(finishedRoadsChanged(roads, next) ? rebalanceJobs(updated) : updated), roadHouses };
+      this.layRoadHouses();
       await this.finishCommand(id);
     } catch (e) {
       reject(e instanceof Error ? e.message : String(e));
@@ -610,29 +641,44 @@ export class Handler {
   private async finishCommand(id: number, ids?: number[]): Promise<void> {
     if (this.free) this.save = { ...this.save!, sim: finishAll(this.save!.sim) };
     this.postSnapshot();
-    try {
-      await this.storage.put(this.save!);
-    } catch (e) {
-      this.post({ t: "error", message: String(e) });
-    }
+    await this.persist(this.save!);
     this.post(ids ? { t: "cmdResult", id, ok: true, ids } : { t: "cmdResult", id, ok: true });
     this.enrich();
+  }
+
+  private persist(save: SaveV4): Promise<void> {
+    // Opening separate IndexedDB transactions can reorder writes. Commit snapshots in the order they were taken.
+    this.writes = this.writes.then(async () => {
+      let failed = false;
+      try {
+        await this.storage.put(save);
+      } catch (e) {
+        failed = true;
+        console.error("save:", e);
+      }
+      if (failed !== this.saveFailed) {
+        this.saveFailed = failed;
+        this.post({ t: "saveStatus", failed });
+      }
+    });
+    return this.writes;
   }
 
   private pace(now: number): Pace {
     return { speed: this.speed, offline: this.hiddenAt !== null && now - this.hiddenAt > HIDDEN_SLOW_MS };
   }
 
-  // A pause keeps how far into the tick the clock was, and the unpause goes on from there: the time neither rolls back
-  // nor jumps ahead to a whole tick.
+  // A change of pace preserves how far the current tick had already run.
   private changeSpeed(speed: Speed, now: number): void {
     const was = this.speed;
-    const sim = this.save?.sim;
-    if (sim && was !== 0 && speed === 0) this.pausedFraction = Math.min(1, Math.max(0, (now - sim.realTime) / tickMs(sim.gameMinutes, this.pace(now))));
+    if (was === speed) return;
+    const save = this.save;
+    const fraction = save && was !== 0 ? tickFraction(save.sim.gameMinutes, save.sim.realTime, now, this.pace(now)) : this.pausedFraction;
     this.speed = speed;
-    if (sim && was === 0 && speed !== 0) {
-      const realTime = now - this.pausedFraction * tickMs(sim.gameMinutes, this.pace(now));
-      this.save = { ...this.save!, sim: { ...sim, realTime } };
+    if (speed === 0) this.pausedFraction = fraction;
+    else if (save) {
+      const realTime = now - fraction * tickMs(save.sim.gameMinutes, this.pace(now));
+      this.save = { ...save, sim: { ...save.sim, realTime } };
       this.pausedFraction = 0;
     }
   }
@@ -659,7 +705,7 @@ export class Handler {
     // Persist every few wall seconds, not every tick (commands and flush save as well).
     if (now - this.persistedAt >= PERSIST_MS) {
       this.persistedAt = now;
-      this.storage.put(this.save).catch((e) => this.post({ t: "error", message: String(e) }));
+      void this.persist(this.save);
     }
   }
 }

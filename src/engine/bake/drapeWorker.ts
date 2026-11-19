@@ -1,6 +1,7 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { loadBiomeMap, type BiomeMap } from "../../world/biomes";
+import { TILE_TIMEOUT_MS } from "../../world/nature";
 import { vectorTileUrl } from "../../world/tiles";
 import { biomeBase, coverBlocks, DRAPE_SIZE, packDrape, paintDrape, parseSource, rasterCover, sourceOf, type DrapeSource } from "./drape";
 
@@ -45,7 +46,8 @@ function source(z: number, x: number, y: number): Promise<DrapeSource> {
     return p;
   }
   p = (async () => {
-    const res = await fetch(await vectorTileUrl(z, x, y));
+    const url = await vectorTileUrl(z, x, y);
+    const res = await fetch(url, { signal: AbortSignal.timeout(TILE_TIMEOUT_MS) });
     // No tile (204/404): open ocean far from any coast. Reported as missing, so the ancestor page (which has the ocean
     // polygon) stands in instead of a meadow-coloured sea.
     if (res.status === 204) throw new HttpError(404);

@@ -61,7 +61,8 @@ jobs:
       - name: Attach archives to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" release/rebirth-*.zip --clobber
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release upload --clobber -- "$RELEASE_TAG" release/rebirth-*.zip
 
       - name: Keep the builds the next jobs push
         uses: actions/upload-artifact@v4
@@ -120,7 +121,9 @@ jobs:
       - name: Push to itch.io
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-        run: butler/butler push release/itch "${{ vars.ITCH_GAME }}:html5" --userversion "${{ needs.build.outputs.version }}"
+          ITCH_GAME: ${{ vars.ITCH_GAME }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: butler/butler push release/itch "$ITCH_GAME:html5" --userversion "$VERSION"
 
   poki:
     needs: build
@@ -144,7 +147,10 @@ jobs:
       - name: Upload to Poki
         env:
           POKI_UPLOAD_TOKEN: ${{ secrets.POKI_UPLOAD_TOKEN }}
-        run: npx --yes @poki/cli@0.1.19 upload --game "${{ vars.POKI_GAME }}" --build-dir release/poki --name "${{ needs.build.outputs.version }}" --notes "${{ inputs.tag }}"
+          POKI_GAME: ${{ vars.POKI_GAME }}
+          VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: npx --yes @poki/cli@0.1.19 upload --game "$POKI_GAME" --build-dir release/poki --name "$VERSION" --notes "$RELEASE_TAG"
 
   vk:
     needs: build
@@ -169,8 +175,13 @@ jobs:
         env:
           MINI_APPS_ACCESS_TOKEN: ${{ secrets.VK_DEPLOY_TOKEN }}
           MINI_APPS_ENVIRONMENT: production
+          VK_APP_ID: ${{ vars.VK_APP_ID }}
         run: |
+          if [[ ! "$VK_APP_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "VK_APP_ID must be a positive integer" >&2
+            exit 1
+          fi
           cat > vk-hosting-config.json <<EOF
-          { "static_path": "release/vk", "app_id": ${{ vars.VK_APP_ID }}, "noprompt": true, "update_prod": true, "update_dev": true, "endpoints": { "mobile": "index.html", "mvk": "index.html", "web": "index.html" } }
+          { "static_path": "release/vk", "app_id": $VK_APP_ID, "noprompt": true, "update_prod": true, "update_dev": true, "endpoints": { "mobile": "index.html", "mvk": "index.html", "web": "index.html" } }
           EOF
           npx --yes @vkontakte/vk-miniapps-deploy@1.0.3

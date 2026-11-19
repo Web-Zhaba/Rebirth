@@ -2,7 +2,7 @@ import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_WEAR, TOOLLESS, zeroStock } f
 import { leverMood, workHours } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
 import { allocateLabor, BUILDINGS, floorArea, isFarm, recipeOf, FOUNDING_STOCK, foodCapacity, groupOf, homesOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
-import { assignedHa, assignFields, bears, expectedKg, FIELD, haOf, HARVEST_END_DAY, ORCHARD_YEARS, remainingHours, sowCredit, windowAt, workOf } from "./fields";
+import { assignedHa, assignFields, bears, expectedKg, FIELD, haOf, HARVEST_END_DAY, ORCHARD_YEARS, pruneFieldWork, remainingHours, sowCredit, windowAt, workOf } from "./fields";
 import { DIG, growDig, radiusOf } from "./excavation";
 import { ageOf, foodOutlook, foodPerDay, forageKg, idleResidents, lotFront, MAX_EVENTS, productionScales } from "./people";
 import { haulHours, Ledger } from "./storage";
@@ -578,13 +578,7 @@ export function dailyEconomy(s: SimState): SimState {
     }
     if (lost >= 1) events = say(events, now, "farm", L(`Зерно осталось в поле и пропало: ${massText(lost)}`, `Grain left in the field and was lost: ${massText(lost)}`));
   }
-  // progress of fields that are gone or of earlier years is dropped
-  const live = new Set(s.zones.fields.map((f) => f.id));
-  for (const [key, w] of Object.entries(fields)) {
-    if (live.has(Number(key)) && w.year === cal.year) continue;
-    if (fields === s.prod.fields) fields = { ...fields };
-    delete fields[Number(key)];
-  }
+  fields = pruneFieldWork(s.zones.fields, fields, cal.year);
 
   return { ...s, stock: { ...ledger.stock }, stores: ledger.stores, events, buildings, residents, households, weather: frost.weather, prod: { fields, flags, today: {}, yesterday: s.prod.today, orchard, ...(s.prod.haul ? { haul: s.prod.haul } : {}), ...(swap ? { trade: swap.swaps } : {}) } };
 }

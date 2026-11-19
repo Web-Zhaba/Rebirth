@@ -85,7 +85,7 @@ export type Cmd =
 
 export type ToWorker =
   | { t: "load"; legacy: string | null; now: number }
-  | { t: "found"; city: City; now: number }
+  | { t: "found"; city: City; now: number; elevation?: number }
   | { t: "cmd"; id: number; cmd: Cmd }
   | { t: "query"; id: number; q: { type: "building"; id: number } | { type: "resident"; id: number } }
   | { t: "flush" }
@@ -103,6 +103,11 @@ export interface CmdResult {
 
 export type FromWorker =
   | { t: "loaded"; save: ClientSave | null; migrated: boolean }
+  | { t: "loadFailed"; reason: "locked" | "unavailable" }
+  | { t: "loadFailed"; reason: "invalid"; raw: unknown }
+  | { t: "foundFailed" }
+  | { t: "saveStatus"; failed: boolean }
+  | { t: "resetFailed" }
   // what changed since the previous state the main thread got ("loaded" carries all of it; see delta.ts): zones only
   // when their rev changed; the chronicle, finds and articles only when they changed
   | { t: "snapshot"; sim: SimDelta; zones?: ZoneState; chronicle?: ChronicleEntry[]; finds?: Finds; articles?: StoredArticle[] }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addChronicle, CHRONICLE_CAP, recordChronicle } from "./chronicle";
-import { advanceTo, BASE_TICK, OFFLINE, step, TICK_MS } from "./clock";
+import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
 import { BUILDINGS } from "./buildings";
 import { emptyGrowth, seedOf } from "./growth";
 import { Handler, type Storage } from "./handler";
@@ -10,7 +10,6 @@ import { parseSave } from "./save";
 import { applyStroke, planStroke } from "./stroke";
 import { YEAR_MIN } from "./time";
 import type { Building, City, Resident, SaveV4, SimState, TerrainInfo } from "./types";
-import { startWeather } from "./weather";
 import { emptyZones, qkey, regenerateCells } from "./zones";
 
 const NOW = 1_800_000_000_000;

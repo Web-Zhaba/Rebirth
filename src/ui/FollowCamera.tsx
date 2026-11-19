@@ -6,7 +6,6 @@ import { frame, gameNow, lifeRests, lifeTrips, queryResident, state } from "../s
 import { tool } from "../map/tools";
 import { followed, followInfo, stopFollowing } from "./follow";
 import { residentPlace, residentPoint } from "./followModel";
-import { PALETTE } from "./palette";
 
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 

@@ -1,6 +1,6 @@
 import { play } from "../ui/sound";
 import { roomText } from "../ui/buildMenu";
-import { mppAtZoom, type View, type ViewPointer } from "../view/view";
+import type { View, ViewPointer } from "../view/view";
 import { effect, untracked } from "@preact/signals";
 import { BUILDINGS, isFarm, materialsOf, scaledJobs, storeRoom, type BuildingTemplate } from "../sim/buildings";
 import { centroid, DIG } from "../sim/excavation";
@@ -17,7 +17,7 @@ import { cachedSite, NO_SITE, siteAt } from "../world/site";
 import { costText } from "./buildCost";
 import { placementCursor } from "./contextModel";
 import { coveragePreviewText } from "./coveragePreviewModel";
-import { flash, isPlaceTool, isStrokeTool, BUILD_MAX_MPP, PLACED_COLORS, placeReach, placeTemplate, siteRadius, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
+import { flash, isPlaceTool, isStrokeTool, BUILD_MAX_MPP, placeReach, placeTemplate, siteRadius, setSpacePan, syncPan, tool, type PlaceTool } from "./tools";
 import { decimal, L, plural } from "../i18n";
 
 const MAX_SNAP_M = 24; // how far from the cursor the first cell of the lot may be

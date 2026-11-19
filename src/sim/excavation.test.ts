@@ -8,7 +8,7 @@ import { Handler, type Storage } from "./handler";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
-import { PACE, payMaterials, produceStep } from "./production";
+import { PACE, produceStep } from "./production";
 import type { Building, City, Resident, SaveV4, SimState, LotCell } from "./types";
 import { emptyZones } from "./zones";
 

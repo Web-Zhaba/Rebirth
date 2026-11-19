@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { fieldProgress } from "./fields";
 import { Handler, type Storage, type TerrainSampler } from "./handler";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
@@ -216,6 +217,52 @@ describe("zones in the worker", () => {
     await h.idle();
     expect(Object.values(get().sim.buildings)).toHaveLength(houses.length);
   });
+  it("keeps both halves of a house order split before surveying, including across a reload", async () => {
+    let surveyed!: () => void;
+    const held = new Promise<void>((resolve) => (surveyed = resolve));
+    const old = setup(undefined, async () => {
+      await held;
+      return meadow;
+    });
+    await old.h.handle({ t: "found", city, now: NOW });
+    await old.h.handle({ t: "cmd", id: 1, cmd: { type: "addRoad", kind: "dirt", pts: [[0, 0], [192, 0]], snapTol: 1, labor: [40], houses: { template: "izba" } } });
+    await add(old.h, 2, [[96, -80], [96, 80]]);
+    const stored = structuredClone(old.get());
+    surveyed();
+    await old.h.idle();
+    expect(stored.roadHouses).toHaveLength(1);
+    expect(stored.roadHouses![0].edges).toHaveLength(2);
+
+    const reopened = setup(stored, fake);
+    await reopened.h.handle({ t: "load", legacy: null, now: NOW });
+    await reopened.h.idle();
+    const houses = Object.values(reopened.get().sim.buildings);
+    expect(houses.some((b) => b.lot.cx < 80)).toBe(true);
+    expect(houses.some((b) => b.lot.cx > 112)).toBe(true);
+    expect(reopened.get().roadHouses).toBeUndefined();
+  });
+  it("waits for successful terrain retry before consuming the house order", async () => {
+    vi.useFakeTimers();
+    try {
+      let online = false;
+      const { h, get } = setup(undefined, async (_frame, x) => {
+        if (!online && x > 80 && x < 112) throw new Error("offline");
+        return meadow;
+      });
+      await h.handle({ t: "found", city, now: NOW });
+      await h.handle({ t: "cmd", id: 1, cmd: { type: "addRoad", kind: "dirt", pts: [[0, 0], [192, 0]], snapTol: 1, labor: [40], houses: { template: "izba" } } });
+      await h.idle();
+      expect(get().roadHouses).toHaveLength(1);
+      expect(get().sim.buildings).toEqual({});
+      online = true;
+      await vi.advanceTimersByTimeAsync(30_000);
+      await h.idle();
+      expect(Object.values(get().sim.buildings).some((b) => Math.abs(b.lot.cx - 96) <= 8)).toBe(true);
+      expect(get().roadHouses).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("cells ride only on snapshots after they changed", async () => {
     const { h, out, get } = setup(undefined, fake);
     await h.handle({ t: "found", city, now: NOW });
@@ -224,9 +271,9 @@ describe("zones in the worker", () => {
     const rev = get().sim.zones.rev;
     out.length = 0;
     await add(h, 2, [[0, 0], [0, 80]]);
-    expect(get().sim.zones.rev).toBeGreaterThan(rev);
-    expect(lastSnap(out).zones!.rev).toBe(get().sim.zones.rev);
+    expect(lastSnap(out).zones!.rev).toBeGreaterThan(rev);
     await h.idle();
+    expect(lastSnap(out).zones!.rev).toBe(get().sim.zones.rev);
     out.length = 0;
     h.tick(NOW + 10_000);
     expect(lastSnap(out).zones).toBeUndefined();
@@ -250,6 +297,23 @@ describe("zones in the worker", () => {
     expect(get().sim.zones.fields).toHaveLength(0);
     await h.handle({ t: "cmd", id: 5, cmd: { type: "removeField", id: 1 } });
     expect(out.at(-1)).toMatchObject({ t: "cmdResult", ok: false });
+  });
+  it("a replacement field starts bare and loading purges orphaned field work", async () => {
+    const old = setup();
+    await old.h.handle({ t: "found", city, now: NOW });
+    await old.h.handle({ t: "cmd", id: 1, cmd: { type: "addField", pts: square(20, 20, 30) } });
+    const saved = structuredClone(old.get());
+    const work = { year: 1, sowH: 100, harvH: 0, reaped: 0 };
+    saved.sim.prod.fields = { 1: work, 2: work };
+    expect(parseSave(saved, NOW)?.sim.prod.fields).toEqual({ 1: work });
+
+    const { h, get } = setup(saved);
+    await h.handle({ t: "load", now: NOW, legacy: null });
+    await h.handle({ t: "cmd", id: 1, cmd: { type: "removeField", id: 1 } });
+    await h.handle({ t: "cmd", id: 2, cmd: { type: "addField", pts: square(75, 20, 30) } });
+    expect(get().sim.zones.fields.map((f) => f.id)).toEqual([1]);
+    expect(fieldProgress(get().sim)).toEqual({});
+    expect(get().sim.prod.fields).toEqual({});
   });
 });
 

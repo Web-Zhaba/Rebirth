@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { NAME_CHOICES, SETTLEMENT_NAMES, siteNotes, suggestNames } from "./foundModel";
+import { canFoundOn, NAME_CHOICES, SETTLEMENT_NAMES, siteNotes, suggestNames } from "./foundModel";
+
+it("requires a name and a survey confirming dry land before founding", () => {
+  expect(canFoundOn("Речной", null)).toBe(false);
+  expect(canFoundOn("Речной", "water")).toBe(false);
+  expect(canFoundOn("", "meadow")).toBe(false);
+  expect(canFoundOn("Речной", "meadow")).toBe(true);
+});
 
 describe("suggestNames", () => {
   it("is deterministic and distinct", () => {

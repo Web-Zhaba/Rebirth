@@ -5,6 +5,7 @@ import { CHRONICLE_CAP } from "./chronicle";
 import { parseArticles } from "./articles";
 import { EXCAVATION } from "./digging";
 import { DIG, parseFinds } from "./excavation";
+import { pruneFieldWork } from "./fields";
 import { emptyGrowth, seedOf } from "./growth";
 import { parseProgress } from "./research";
 import { MAX_TRADE_SLOTS, migrateProgress } from "./tech";
@@ -15,6 +16,7 @@ import { createFounders, isFinishedHouse, isWorkplace, MAX_EVENTS, MOOD_START } 
 import { emptyFlags, emptyProd, emptyStock } from "./production";
 import { emptyRoads, ROAD_KINDS } from "./roads";
 import { spreadStores, type Stores } from "./storage";
+import { strokeTemplate } from "./stroke";
 import { NO_ATTRACTION, type Attraction } from "./attraction";
 import { SERVICE } from "./services";
 import { cleanOrder, isTradeOrder, STALL_NAME_MAX, type TradeSwap } from "./trade";
@@ -37,6 +39,7 @@ import type {
   Resident,
   RoadEdge,
   RoadGraph,
+  RoadHouses,
   RoadNode,
   SaveV4,
   Site,
@@ -56,7 +59,7 @@ import { emptyZones } from "./zones";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-function parseCity(v: unknown): City | null {
+export function parseCity(v: unknown): City | null {
   if (typeof v !== "object" || v === null) return null;
   const c = v as Record<string, unknown>;
   if (typeof c.name !== "string") return null;
@@ -656,6 +659,19 @@ function fromV3(v: Record<string, unknown>): Record<string, unknown> {
   return { ...v, version: 4, sim: { ...sim, residents } };
 }
 
+function parseRoadHouses(raw: unknown, roads: RoadGraph): RoadHouses[] {
+  if (!Array.isArray(raw)) return [];
+  const requests: RoadHouses[] = [];
+  for (const row of raw) {
+    if (!isRecord(row) || !Array.isArray(row.edges)) continue;
+    const template = strokeTemplate(row.template);
+    if (!template) continue;
+    const edges = [...new Set(row.edges.filter((id): id is number => Number.isInteger(id) && Object.hasOwn(roads.edges, id)))];
+    if (edges.length) requests.push({ edges, template: template.id, only: row.only === true });
+  }
+  return requests;
+}
+
 export function parseSave(value: unknown, now: number): SaveV4 | null {
   if (typeof value !== "object" || value === null) return null;
   let v = value as Record<string, unknown>;
@@ -665,7 +681,7 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   if (!city) return null;
   const sim = v.sim as Record<string, unknown> | null | undefined;
   if (typeof sim !== "object" || sim === null) return null;
-  if (!isNum(sim.realTime) || sim.realTime <= 0 || sim.realTime > now + 60_000) return null;
+  if (!isNum(sim.realTime) || sim.realTime <= 0) return null;
   if (!isNum(sim.gameMinutes) || sim.gameMinutes < 0) return null;
   const roads = parseRoads(sim.roads);
   if (!roads) return null;
@@ -674,9 +690,11 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   // both are left out, and the buildings the zones grew stay where they stand.
   const zones = parseZones(sim.zones) ?? emptyZones();
   const growth = parseGrowth(sim, city, sim.gameMinutes);
+  growth.prod.fields = pruneFieldWork(zones.fields, growth.prod.fields);
   // A save without progress is an existing town: it gets the techs its old goals and buildings prove, silently.
   growth.progress = parseProgress(sim.progress) ?? migrateProgress(growth, sim.goals);
-  return { version: 4, city, sim: { realTime: sim.realTime, gameMinutes: sim.gameMinutes, roads, zones, ...growth } };
+  const roadHouses = parseRoadHouses(v.roadHouses, roads);
+  return { version: 4, city, sim: { realTime: Math.min(sim.realTime, now), gameMinutes: sim.gameMinutes, roads, zones, ...growth }, ...(roadHouses.length ? { roadHouses } : {}) };
 }
 
 // Old localStorage saves (v1, v2): keep the city, start a fresh village.

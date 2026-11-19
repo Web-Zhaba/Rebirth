@@ -124,7 +124,7 @@ export function snapPoint(g: RoadGraph, p: { x: number; y: number }, tol: number
 const cloneGraph = (g: RoadGraph): RoadGraph => ({ nodes: { ...g.nodes }, edges: { ...g.edges }, nextId: g.nextId });
 
 // Splits edge `id` at (x, y), which lies on it; labor and done are prorated by length.
-function splitEdge(g: RoadGraph, id: number, x: number, y: number): number {
+function splitEdge(g: RoadGraph, id: number, x: number, y: number, onSplit: (id: number, second: number) => void): number {
   const e = g.edges[id];
   const na = g.nodes[e.a];
   const nb = g.nodes[e.b];
@@ -151,13 +151,14 @@ function splitEdge(g: RoadGraph, id: number, x: number, y: number): number {
     g.edges[id].upgrade = u1;
     g.edges[edge].upgrade = u2;
   }
+  onSplit(id, edge);
   return node;
 }
 
-function nodeAt(g: RoadGraph, p: [number, number], tol: number): number {
+function nodeAt(g: RoadGraph, p: [number, number], tol: number, onSplit: (id: number, second: number) => void): number {
   const s = snapPoint(g, { x: p[0], y: p[1] }, tol);
   if (s.kind === "node") return s.node;
-  if (s.kind === "edge") return splitEdge(g, s.edge, s.x, s.y);
+  if (s.kind === "edge") return splitEdge(g, s.edge, s.x, s.y, onSplit);
   const id = g.nextId++;
   g.nodes[id] = { id, x: s.x, y: s.y };
   return id;
@@ -197,7 +198,8 @@ function overlapLength(ax: number, ay: number, bx: number, by: number, e: RoadEd
   return Math.max(0, Math.min(L, Math.max(s1, s2)) - Math.max(0, Math.min(s1, s2)));
 }
 
-export type AddResult = { ok: true; graph: RoadGraph } | { ok: false; reason: string };
+type RoadResult = { ok: true; graph: RoadGraph } | { ok: false; reason: string };
+type AddResult = { ok: true; graph: RoadGraph; added: number[]; splits: Map<number, number[]> } | { ok: false; reason: string };
 
 const fail = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
 const OVERLAP_REASON = tr("Здесь уже есть дорога", "There is already a road here");
@@ -212,10 +214,24 @@ export function addRoad(
 ): AddResult {
   if (pts.length < 2 || laborPerSegment.length !== pts.length - 1) return fail(tr("Некорректная линия", "Invalid line"));
   const g = cloneGraph(graph);
+  const added = new Set<number>();
+  const splits = new Map<number, number[]>();
+  const origins = new Map<number, number>();
+  const onSplit = (id: number, second: number) => {
+    if (added.has(id)) {
+      added.add(second);
+      return;
+    }
+    const original = origins.get(id) ?? id;
+    origins.set(second, original);
+    const parts = splits.get(original);
+    if (parts) parts.push(second);
+    else splits.set(original, [original, second]);
+  };
   let prev: number | null = null;
   for (let i = 0; i + 1 < pts.length; i++) {
-    const a: number = prev ?? nodeAt(g, pts[i], snapTol);
-    const b = nodeAt(g, pts[i + 1], snapTol);
+    const a: number = prev ?? nodeAt(g, pts[i], snapTol, onSplit);
+    const b = nodeAt(g, pts[i + 1], snapTol, onSplit);
     prev = b;
     const A = g.nodes[a];
     const B = g.nodes[b];
@@ -251,7 +267,7 @@ export function addRoad(
       let node: number;
       if (u * elen < NODE_EPS) node = e.a;
       else if (u * elen > elen - NODE_EPS) node = e.b;
-      else node = splitEdge(g, id, A.x + t * rx, A.y + t * ry);
+      else node = splitEdge(g, id, A.x + t * rx, A.y + t * ry, onSplit);
       if (node !== a && node !== b) hits.push({ t, node });
     }
     hits.sort((p, q) => p.t - q.t);
@@ -273,12 +289,13 @@ export function addRoad(
         if ((e.a === p && e.b === q) || (e.a === q && e.b === p)) return fail(OVERLAP_REASON);
       }
       const id = g.nextId++;
+      added.add(id);
       g.edges[id] = { id, a: p, b: q, kind, length: lens[k], labor: (laborPerSegment[i] * lens[k]) / total, done: 0 };
       const perM = ROAD_KINDS[kind].stone;
       if (perM) g.edges[id].stone = perM * lens[k];
     }
   }
-  return { ok: true, graph: g };
+  return { ok: true, graph: g, added: [...added], splits };
 }
 
 // Removes the edge and any node left without edges.
@@ -331,7 +348,7 @@ export const upgradeWork = (e: RoadEdge, full: number): number => (unfinished(e)
 // Rebuilds edges `ids` as `kind`; `full[i]` is what edge ids[i] would cost built anew as `kind` (segmentCost).
 // An unfinished edge simply becomes the new kind, keeping the work done on it; a built one stays in service and gets
 // the rebuilding as a job of its own (`upgrade`), done by the road builders like any other. All-or-nothing.
-export function upgradeRoads(graph: RoadGraph, ids: readonly number[], kind: RoadKind, full: readonly number[]): AddResult {
+export function upgradeRoads(graph: RoadGraph, ids: readonly number[], kind: RoadKind, full: readonly number[]): RoadResult {
   if (ids.length === 0 || ids.length !== full.length || new Set(ids).size !== ids.length) return fail(tr("Некорректный участок", "Invalid section"));
   const edges = { ...graph.edges };
   const perM = ROAD_KINDS[kind].stone;
@@ -473,6 +490,16 @@ export function segmentCost(p: TerrainProfile, kind: RoadKind, spans?: Spans): S
 // ---------- construction ----------
 
 const unfinished = (e: RoadEdge) => e.done < e.labor;
+
+export function finishedRoadsChanged(before: RoadGraph, after: RoadGraph): boolean {
+  if (before.edges === after.edges) return false;
+  const missing = (from: RoadGraph, to: RoadGraph) => Object.values(from.edges).some((e) => {
+    const other = to.edges[e.id];
+    return !unfinished(e) && (!other || unfinished(other) || e.a !== other.a || e.b !== other.b);
+  });
+  return missing(before, after) || missing(after, before);
+}
+
 // Work is waiting on the edge: building it, or rebuilding it as a better kind.
 export const needsWork = (e: RoadEdge): boolean => unfinished(e) || e.upgrade !== undefined;
 // The person-hours still to spend on the edge.
@@ -502,7 +529,7 @@ const lacksStone = (e: RoadEdge, stock: Pick<Stock, "stone"> | undefined): boole
 
 // The edges with work waiting a work party can reach, lowest id first, and whether any of them still owes stone.
 // Kept per graph: a tick asks many times (the artel, demand, the panels).
-const waitingEdges = makeIdentityCache((g: RoadGraph): { ids: readonly number[]; stone: boolean } => {
+const waitingEdges = makeIdentityCache((g: RoadGraph): { ids: readonly number[]; stone: boolean; reached: ReadonlySet<number> } => {
   const reached = reachedNodes(g);
   const ids: number[] = [];
   let stone = false;
@@ -511,7 +538,7 @@ const waitingEdges = makeIdentityCache((g: RoadGraph): { ids: readonly number[];
     ids.push(e.id);
     if (stoneOwed(e) > 0) stone = true;
   }
-  return { ids: ids.sort((p, q) => p - q), stone };
+  return { ids: ids.sort((p, q) => p - q), stone, reached };
 });
 
 // Edges with work waiting (unbuilt, or being rebuilt) a work party can reach, lowest id first. With a `stock`, edges
@@ -564,15 +591,19 @@ export const roadCrew = (e: Pick<RoadEdge, "length">): number => Math.min(ROAD_C
 // An edge takes the stone it owes from `stock` when work on it starts; edges short of stone wait and the hands go on to the next.
 // Returns the graph, the stock and the person-hours no edge could use.
 export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock, handHours = Infinity): { roads: RoadGraph; left: number; stock?: Stock } {
+  if (personHours <= EPS) return { roads: g, left: personHours, stock };
   let edges = g.edges;
   let copied = false;
   let left = personHours;
   let st = stock;
   const used = new Map<number, number>(); // edge id -> person-hours it took in this call
   const room = (e: RoadEdge) => handHours * roadCrew(e) - (used.get(e.id) ?? 0);
+  let waiting = waitingEdges(g);
+  let cursor = 0;
   while (left > EPS) {
-    const id = workableEdges(copied ? { ...g, edges } : g, st).find((i) => room(edges[i]) > EPS);
+    const id = waiting.ids[cursor++];
     if (id === undefined) break;
+    if (lacksStone(edges[id], st) || room(edges[id]) <= EPS) continue;
     if (!copied) {
       edges = { ...edges };
       copied = true;
@@ -606,6 +637,11 @@ export function spendOnRoads(g: RoadGraph, personHours: number, stock?: Stock, h
     edges[e.id] = { ...e, done: e.done + take >= e.labor - EPS ? e.labor : e.done + take };
     used.set(e.id, (used.get(e.id) ?? 0) + take);
     left -= take;
+    if (!unfinished(edges[e.id]) && left > EPS && (!waiting.reached.has(e.a) || !waiting.reached.has(e.b))) {
+      // A completed edge can open earlier work that was out of reach.
+      waiting = waitingEdges({ ...g, edges });
+      cursor = 0;
+    }
   }
   return { roads: copied ? { ...g, edges } : g, left, stock: st };
 }

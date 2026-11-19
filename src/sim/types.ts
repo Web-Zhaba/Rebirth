@@ -595,8 +595,15 @@ export type BuildingQuery =
       service?: { id: ServiceId; reach: number; covered: number; houses: number; pupils: number; seats: number; working: boolean };
     };
 
+export interface RoadHouses {
+  edges: number[];
+  template: string;
+  only: boolean;
+}
+
 export interface SaveV4 {
   version: 4;
   city: City;
   sim: SimState;
+  roadHouses?: RoadHouses[];
 }

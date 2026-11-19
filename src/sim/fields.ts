@@ -34,6 +34,18 @@ export const FIELD = {
 // Day of the year on which the harvest window closes (autumn is the third season).
 export const HARVEST_END_DAY = 2 * DAYS_PER_SEASON + FIELD.harvestDays;
 
+export function pruneFieldWork(fields: readonly Field[], work: Record<number, FieldWork>, year?: number): Record<number, FieldWork> {
+  const live = new Set(fields.map((f) => f.id));
+  let kept = work;
+  for (const [key, w] of Object.entries(work)) {
+    const id = Number(key);
+    if (live.has(id) && (year === undefined || w.year === year)) continue;
+    if (kept === work) kept = { ...work };
+    delete kept[id];
+  }
+  return kept;
+}
+
 // Sowing goes on into the first days of summer, but a late hour counts for half: a farm that stands a little after
 // spring still sows a part of its fields instead of losing the whole year.
 export const LATE_SOWING = { days: 4, credit: 0.5 };

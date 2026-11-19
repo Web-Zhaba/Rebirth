@@ -174,10 +174,13 @@ export class TownMesh implements Drawable {
     this.axes = enuAt(lat, lng);
   }
 
-  setMeshes(roads: TownMeshData, buildings: TownMeshData): void {
+  setRoads(roads: TownMeshData): void {
     this.free(this.roads);
-    this.free(this.buildings);
     this.roads = this.upload(roads, "town roads");
+  }
+
+  setBuildings(buildings: TownMeshData): void {
+    this.free(this.buildings);
     this.buildings = this.upload(buildings, "town buildings");
     this.meshVersion++;
   }

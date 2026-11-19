@@ -100,7 +100,6 @@ export function attachLife(engine: Engine, view: View, town: TownMesh, o: LifeOp
     if (!close && now - last < FRAME_MS) return;
     last = now;
     const minute = (base.gm + Math.min(MAX_EXTRAP, (o.gameMinPerSec() * (performance.now() - base.at)) / 1000) + START_MINUTE_OF_DAY) % DAY_MIN;
-    const hour = minute / 60;
     // The old dots grew from 1.5-2.5 px at zoom 13 to 3.5-6 px at zoom 19.
     const zoom = Math.log2((EQUATOR * Math.cos((lat0 * Math.PI) / 180)) / (512 * mpp));
     const t = Math.min(1, Math.max(0, (zoom - 13) / 6));

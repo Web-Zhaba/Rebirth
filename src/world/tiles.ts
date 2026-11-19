@@ -5,6 +5,7 @@ import {
   OMT_TILEJSON_URL,
   TERRAIN_URL,
   TERRAIN_ZOOM,
+  TILE_TIMEOUT_MS,
   WATERWAY_ZOOM,
   isNatureLandcover,
   isNatureWater,
@@ -63,7 +64,7 @@ export async function decodeDemTile(input: ArrayBuffer | Uint8Array): Promise<Fl
 export function getDemTile(x: number, y: number): Promise<Float32Array> {
   return cached(`dem/${x}/${y}`, async () => {
     const url = TERRAIN_URL.replace("{z}", String(TERRAIN_ZOOM)).replace("{x}", String(x)).replace("{y}", String(y));
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(TILE_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`${res.status} ${url}`);
     return decodeDemTile(await res.arrayBuffer());
   });
@@ -73,7 +74,7 @@ export function getDemTile(x: number, y: number): Promise<Float32Array> {
 let template: Promise<string> | undefined;
 function tileTemplate(): Promise<string> {
   if (!template) {
-    const p = fetch(OMT_TILEJSON_URL)
+    const p = fetch(OMT_TILEJSON_URL, { signal: AbortSignal.timeout(TILE_TIMEOUT_MS) })
       .then((r) => {
         if (!r.ok) throw new Error(`${r.status} ${OMT_TILEJSON_URL}`);
         return r.json() as Promise<{ tiles: string[] }>;
@@ -94,7 +95,7 @@ export async function vectorTileUrl(z: number, x: number, y: number): Promise<st
 
 export async function loadVector(z: number, x: number, y: number): Promise<VectorTile | null> {
   const url = await vectorTileUrl(z, x, y);
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(TILE_TIMEOUT_MS) });
   if (res.status === 404 || res.status === 204) return null;
   if (!res.ok) throw new Error(`${res.status} ${url}`);
   return new VectorTile(new PbfReader(await res.arrayBuffer()));

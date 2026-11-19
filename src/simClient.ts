@@ -1,7 +1,7 @@
-import { lang } from "./i18n";
-import { computed, effect, signal } from "@preact/signals";
+import { L, lang } from "./i18n";
+import { batch, computed, effect, signal } from "@preact/signals";
 import type { Light, Rest, Trip } from "./map/life";
-import { BASE_TICK, clockAt, tickMs, type Speed } from "./sim/clock";
+import { BASE_TICK, clockAt, tickFraction, tickMs, type Speed } from "./sim/clock";
 import { applyDelta } from "./sim/delta";
 import type { Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";
@@ -32,13 +32,19 @@ export const finds = computed(() => state.value?.finds ?? null);
 export const articles = computed(() => state.value?.articles ?? []);
 // The save (or its absence) has come back from the worker: the game can be played from here on.
 export const loaded = signal(false);
+export const loadFailure = signal<Extract<FromWorker, { t: "loadFailed" }>["reason"] | null>(null);
+export const foundPending = signal(false);
+export const foundFailed = signal(false);
+export const saveFailed = signal(false);
+export const resetFailed = signal(false);
+let unreadableSave: unknown;
 
 // Visual life of the current game day (cosmetic, from the worker).
 export const lifeTrips = signal<Trip[]>([]);
 export const lifeRests = signal<Rest[]>([]);
 export const lifeTraffic = signal<Record<number, number>>({});
 export const lifeLights = signal<Light[]>([]);
-// Game speed of this session (0 = paused); not saved, 1x after every load.
+// Game speed of this session (0 = paused). It stays in effect when a town first loads or is founded.
 export const speed = signal<Speed>(1);
 // Game minutes, interpolated between snapshots and refreshed every 2 s for the life layer.
 export const gameClock = signal(0);
@@ -75,6 +81,7 @@ let nextCmdId = 1;
 const pending = new Map<number, (r: CmdResult) => void>();
 
 export function sendCmd(cmd: Cmd): Promise<CmdResult> {
+  if (!loaded.peek() || loadFailure.peek()) return Promise.resolve({ ok: false, reason: L("Поселение недоступно", "Settlement unavailable") });
   return new Promise((resolve) => {
     const id = nextCmdId++;
     pending.set(id, resolve);
@@ -113,10 +120,27 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
           // storage unavailable: nothing to clean up
         }
       }
-      speed.value = 1; // the worker starts every town at 1x
-      city.value = m.save?.city ?? null;
-      state.value = m.save?.sim ?? null;
-      loaded.value = true;
+      batch(() => {
+        state.value = m.save?.sim ?? null;
+        city.value = m.save?.city ?? null;
+        foundPending.value = false;
+        foundFailed.value = false;
+        loaded.value = true;
+      });
+      break;
+    case "loadFailed":
+      unreadableSave = m.reason === "invalid" ? m.raw : undefined;
+      loadFailure.value = m.reason;
+      break;
+    case "foundFailed":
+      foundPending.value = false;
+      foundFailed.value = true;
+      break;
+    case "saveStatus":
+      saveFailed.value = m.failed;
+      break;
+    case "resetFailed":
+      resetFailed.value = true;
       break;
     case "snapshot": {
       // A snapshot carries only what changed (zones, the chronicle, finds and articles too); the rest stays as we have
@@ -152,6 +176,21 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
   }
 };
 
+worker.onerror = (error) => {
+  console.error("sim worker:", error.message);
+  worker.terminate();
+  batch(() => {
+    loadFailure.value = "unavailable";
+    speed.value = 0;
+    city.value = null;
+    state.value = null;
+  });
+  for (const done of pending.values()) done({ ok: false, reason: L("Поселение недоступно", "Settlement unavailable") });
+  for (const done of queries.values()) done(null);
+  pending.clear();
+  queries.clear();
+};
+
 export function load(): void {
   let legacy: string | null = null;
   try {
@@ -162,25 +201,54 @@ export function load(): void {
   send({ t: "load", legacy, now: Date.now() });
 }
 
-export const found = (c: City) => send({ t: "found", city: c, now: Date.now() });
-export const reset = () => send({ t: "reset" });
+export function downloadUnreadableSave(): void {
+  const data = typeof unreadableSave === "string" ? unreadableSave : JSON.stringify(unreadableSave);
+  const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "rebirth-save.json";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function found(c: City, elevation?: number): void {
+  if (!loaded.peek() || loadFailure.peek() || city.peek() || foundPending.peek()) return;
+  foundFailed.value = false;
+  foundPending.value = true;
+  send({ t: "found", city: c, now: Date.now(), elevation });
+}
+
+export const flush = () => send({ t: "flush" });
+export const reset = () => {
+  resetFailed.value = false;
+  send({ t: "reset" });
+};
 
 export function setSpeed(v: Speed): void {
   const s = state.peek();
   const was = speed.peek();
-  if (s && was !== 0 && v === 0) frozen = { at: s.gameMinutes, clock: clockOf(s) };
-  else if (s && was === 0 && v !== 0 && frozen?.at === s.gameMinutes) {
-    // the worker re-anchors the same way; doing it here too keeps the clock from flickering until its snapshot arrives
-    const done = Math.min(1, Math.max(0, (frozen.clock - s.gameMinutes) / BASE_TICK));
-    state.value = { ...s, realTime: Date.now() - done * tickMs(s.gameMinutes, { speed: v, offline: false }) };
-  }
-  speed.value = v;
-  send({ t: "speed", speed: v, now: Date.now() });
+  if (was === v) return;
+  const now = Date.now();
+  batch(() => {
+    if (s) {
+      const done = was === 0
+        ? (frozen?.at === s.gameMinutes ? (frozen.clock - s.gameMinutes) / BASE_TICK : 0)
+        : tickFraction(s.gameMinutes, s.realTime, now, { speed: was, offline: false });
+      if (v === 0) frozen = { at: s.gameMinutes, clock: s.gameMinutes + done * BASE_TICK };
+      else {
+        // Mirror the worker's anchor until its next snapshot arrives.
+        state.value = { ...s, realTime: now - done * tickMs(s.gameMinutes, { speed: v, offline: false }) };
+        frozen = null;
+      }
+    }
+    speed.value = v;
+  });
+  send({ t: "speed", speed: v, now });
 }
 
 document.addEventListener("visibilitychange", () => {
   const hidden = document.visibilityState === "hidden";
   send({ t: "visibility", hidden, now: Date.now() });
-  if (hidden) send({ t: "flush" });
+  if (hidden) flush();
 });
-addEventListener("pagehide", () => send({ t: "flush" }));
+addEventListener("pagehide", flush);

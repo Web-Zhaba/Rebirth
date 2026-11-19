@@ -1,5 +1,4 @@
 import { computed, effect, type ReadonlySignal } from "@preact/signals";
-import { calendar } from "../../sim/clock";
 import { ROAD_KINDS } from "../../sim/roads";
 import { CELL_SIZE } from "../../sim/zones";
 import type { WeatherState } from "../../sim/weather";

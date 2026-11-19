@@ -30,7 +30,7 @@ import {
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
-import { YEAR_MIN, YEAR_SCALE } from "./time";
+import { YEAR_MIN } from "./time";
 import type { Building, City, Household, Resident, RoadGraph, SaveV4, SimState, TerrainInfo } from "./types";
 import { emptyZones, qkey, regenerateCells } from "./zones";
 
@@ -749,9 +749,22 @@ describe("handler: persistence and query channel", () => {
     await h.handle({ t: "found", city, now: NOW });
     const before = puts();
     for (let k = 1; k <= 40; k++) h.tick(NOW + k * 2500); // 100 s, one tick per call
-    expect(puts() - before).toBe(10);
-    await h.handle({ t: "flush" });
+    await h.handle({ t: "flush" }); // wait for all previous queued writes and this one
     expect(puts() - before).toBe(11);
+  });
+  it("loses a job when its road is cut and returns when construction reconnects it", async () => {
+    const roads = road([[0, 0], [80, 0], [160, 0], [240, 0]]);
+    const s = custom(town([building(1, "izba", 24), building(2, "woodcutter", 184)], roads, 60), [{ home: 1, people: [{ job: 2 }] }]);
+    const { h, get } = setup({ version: 4, city, sim: s });
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    const cut = Object.values(roads.edges)[1].id;
+    await h.handle({ t: "cmd", id: 1, cmd: { type: "removeRoad", edgeId: cut } });
+    expect(get().sim.residents[1]).toMatchObject({ job: null, commute: null });
+    await h.handle({ t: "cmd", id: 2, cmd: { type: "addRoad", kind: "dirt", pts: [[80, 0], [160, 0]], snapTol: 1, labor: [0.01] } });
+    expect(get().sim.residents[1].job).toBeNull();
+    h.tick(NOW + 2500);
+    await h.handle({ t: "flush" });
+    expect(get().sim.residents[1].job).toBe(2);
   });
   it("sends aggregates, not residents, in `loaded`", async () => {
     const { h, out } = setup();

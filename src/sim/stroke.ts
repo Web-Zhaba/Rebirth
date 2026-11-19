@@ -193,23 +193,6 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
 
 // ---------- a road with houses ----------
 
-// The edges a new road added to `before`: those new to the graph that do not lie along an old edge (the pieces of an old
-// edge the road split do).
-export function newRoadEdges(before: RoadGraph, after: RoadGraph): number[] {
-  const old = Object.values(before.edges);
-  const out: number[] = [];
-  for (const e of Object.values(after.edges)) {
-    if (Object.hasOwn(before.edges, e.id)) continue;
-    const a = after.nodes[e.a];
-    const b = after.nodes[e.b];
-    if (!a || !b) continue;
-    const x = (a.x + b.x) / 2;
-    const y = (a.y + b.y) / 2;
-    if (!old.some((o) => distToEdge(before, o, x, y) <= 1)) out.push(e.id);
-  }
-  return out.sort((p, q) => p - q);
-}
-
 // Both sides of the edges, end to end: the stroke of a road with houses.
 export function roadSpans(roads: RoadGraph, edges: readonly number[]): StrokeSpan[] {
   const out: StrokeSpan[] = [];

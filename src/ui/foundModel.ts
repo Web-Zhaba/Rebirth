@@ -1,5 +1,9 @@
 import type { Site } from "../sim/types";
+import type { Land } from "../world/landcover";
 import { L } from "../i18n";
+
+export const canFoundOn = (name: string, land: Land | null): boolean =>
+  land !== null && land !== "water" && name.length >= 1 && name.length <= 40;
 
 // Neutral descriptive settlement names offered when founding a town.
 export const SETTLEMENT_NAMES = [
