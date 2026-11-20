@@ -18,9 +18,10 @@ import { emptyRoads, ROAD_KINDS } from "./roads";
 import { spreadStores, type Stores } from "./storage";
 import { strokeTemplate } from "./stroke";
 import { NO_ATTRACTION, type Attraction } from "./attraction";
-import { SERVICE } from "./services";
 import { cleanOrder, isTradeOrder, STALL_NAME_MAX, type TradeSwap } from "./trade";
-import { YEAR_MIN, YEAR_SCALE } from "./time";
+import { YEAR_MIN } from "./time";
+import { isNum, isPoint, isRecord, nonNegInt, parseCity } from "./saveChecks";
+import { fromV3, oldTrade } from "./saveMigrations";
 import type {
   Building,
   ChronicleEntry,
@@ -56,20 +57,10 @@ import type {
 import { emptyWeather, type DayStats, type Weather, type WeatherSite, type WeatherState } from "./weather";
 import { emptyZones } from "./zones";
 
-const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-
-export function parseCity(v: unknown): City | null {
-  if (typeof v !== "object" || v === null) return null;
-  const c = v as Record<string, unknown>;
-  if (typeof c.name !== "string") return null;
-  const name = c.name.trim();
-  if (name.length < 1 || name.length > 40) return null;
-  if (!isNum(c.lat) || c.lat < -90 || c.lat > 90) return null;
-  if (!isNum(c.lng) || c.lng < -180 || c.lng > 180) return null;
-  if (!isNum(c.foundedAt) || c.foundedAt <= 0) return null;
-  return { name, lat: c.lat, lng: c.lng, foundedAt: c.foundedAt };
-}
+// The city check, the old localStorage migration and the format history live in saveChecks.ts / saveMigrations.ts;
+// re-exported so the handler's imports stay in one place.
+export { parseCity } from "./saveChecks";
+export { migrateLegacy } from "./saveMigrations";
 
 // Saves from before roads existed have no `roads`: that is an empty graph, not an error.
 function parseRoads(v: unknown): RoadGraph | null {
@@ -123,8 +114,6 @@ function parseRoadUpgrade(v: unknown): RoadEdge["upgrade"] | null {
 }
 
 const BLOCKS = ["road", "overlap", "field", "water", "steep", "pending"];
-
-const isPoint = (p: unknown): p is [number, number] => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]);
 
 // Saves from before the lot cells have no `zones`: that is an empty state, not an error.
 function parseZones(v: unknown): ZoneState | null {
@@ -266,8 +255,6 @@ function parseBuildings(v: unknown, nextId: unknown): Record<number, Building> |
   return out;
 }
 
-const nonNegInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
-
 // Personal needs, 0..100. A missing or broken block (saves before the needs system) reads as fully satisfied.
 function parseNeeds(v: unknown): Needs | undefined {
   if (!isRecord(v)) return undefined;
@@ -400,13 +387,6 @@ function parsePeople(sim: Record<string, unknown>, buildings: Record<number, Bui
     }
   }
   return { residents, households, nextPersonId: nextPerson, nextHouseholdId: nextHouse, events: events.slice(-MAX_EVENTS) };
-}
-
-// Saves from before goods groups trade "wares": they trade clothing now.
-function oldTrade(v: unknown): unknown {
-  if (!isRecord(v)) return v;
-  const fix = (g: unknown) => (g === "wares" ? "clothes" : g);
-  return { ...v, give: fix(v.give), get: fix(v.get) };
 }
 
 // A stock with any broken figure gives back the founding stock. Saves from before goods groups
@@ -639,26 +619,6 @@ function parseGrowth(sim: Record<string, unknown>, city: City, gameMinutes: numb
   return g;
 }
 
-// v3 had a 360-day year. Game time and every timestamp stay as they are (the date is re-read in the
-// new calendar); `born` is rescaled so each resident keeps their age in years, school days scale with the year.
-const YEAR_MIN_V3 = 360 * 1440;
-function fromV3(v: Record<string, unknown>): Record<string, unknown> {
-  const sim = v.sim;
-  if (!isRecord(sim) || !isNum(sim.gameMinutes) || !isRecord(sim.residents)) return { ...v, version: 4 };
-  const now = sim.gameMinutes;
-  const residents: Record<string, unknown> = {};
-  for (const [k, r] of Object.entries(sim.residents)) {
-    if (!isRecord(r) || !isNum(r.born)) {
-      residents[k] = r;
-      continue;
-    }
-    // v3 kept school days (of a 360-day year); the literacy progress is a share of the child's school time now.
-    const school = isNum(r.school) ? Math.min(100, (r.school * YEAR_SCALE * 100) / SERVICE.childLiteracyDays) : r.school;
-    residents[k] = { ...r, born: now - (now - r.born) * (YEAR_MIN / YEAR_MIN_V3), school };
-  }
-  return { ...v, version: 4, sim: { ...sim, residents } };
-}
-
 function parseRoadHouses(raw: unknown, roads: RoadGraph): RoadHouses[] {
   if (!Array.isArray(raw)) return [];
   const requests: RoadHouses[] = [];
@@ -695,20 +655,4 @@ export function parseSave(value: unknown, now: number): SaveV4 | null {
   growth.progress = parseProgress(sim.progress) ?? migrateProgress(growth, sim.goals);
   const roadHouses = parseRoadHouses(v.roadHouses, roads);
   return { version: 4, city, sim: { realTime: Math.min(sim.realTime, now), gameMinutes: sim.gameMinutes, roads, zones, ...growth }, ...(roadHouses.length ? { roadHouses } : {}) };
-}
-
-// Old localStorage saves (v1, v2): keep the city, start a fresh village.
-export function migrateLegacy(raw: string, now: number): SaveV4 | null {
-  let v: unknown;
-  try {
-    v = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof v !== "object" || v === null) return null;
-  const o = v as Record<string, unknown>;
-  if (o.version !== 1 && o.version !== 2) return null;
-  const city = parseCity(o.city);
-  if (!city) return null;
-  return { version: 4, city, sim: { realTime: now, gameMinutes: 0, roads: emptyRoads(), zones: emptyZones(), ...emptyGrowth(seedOf(city.foundedAt)) } };
 }
