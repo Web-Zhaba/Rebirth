@@ -1,7 +1,6 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
-import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setShadowQuality, setSmoke3d, SHADOW_QUALITIES, shadowQuality, smoke3dOn } from "../map/graphicsSettings";
-import type { ShadowQuality } from "../engine/shadow/shadowMap";
+import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setShadowQuality, setSmoke3d, SHADOW_QUALITIES, shadowQuality, smoke3dOn, type ShadowQuality } from "../map/graphicsSettings";
 import { CLOUD_QUALITIES, cloudQuality, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
 import { useState } from "preact/hooks";

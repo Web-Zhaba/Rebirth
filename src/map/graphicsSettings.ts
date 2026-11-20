@@ -1,5 +1,6 @@
 import { signal, type Signal } from "@preact/signals";
-import type { ShadowQuality } from "../engine/shadow/shadowMap";
+
+export type ShadowQuality = "off" | "low" | "high"; // the shadow renderer (engine/shadow/shadowMap.ts) reads it from here
 
 // Graphics effects the player can turn off for a lighter map (the settings dialog).
 
