@@ -29,5 +29,6 @@ export default defineConfig(({ mode }) => ({
   plugins: [Icons({ compiler: "jsx", jsx: "preact" }), portalSdkTag(mode)],
   esbuild: { jsx: "automatic", jsxImportSource: "preact" },
   // Agent worktrees under .claude/ hold other copies of src/.
-  test: { exclude: ["**/node_modules/**", ".claude/**"] },
+  // Workers are reused across test files: the suite is pure logic with no module-mock games, so isolation buys nothing.
+  test: { exclude: ["**/node_modules/**", ".claude/**"], isolate: false },
 }));
