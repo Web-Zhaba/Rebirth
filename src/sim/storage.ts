@@ -1,7 +1,8 @@
 import { BUILDINGS, CAMP_STORE, STORE_GROUPS, groupOf, storeRoom, type StoreGroup, type StoreRoom } from "./buildings";
 import { byGood, zeroStock } from "./goods";
 import { makeIdentityCache } from "./memo";
-import { lotFront, snapToRoad, spotTree, walkMetres, type Net, type Spot, type Tree } from "./people";
+import { lotFront } from "./people";
+import { snapToRoad, spotTree, walkMetres, type Net, type Spot, type Tree } from "./walkNet";
 import { roadNet } from "./roadNetCache";
 import type { Building, RoadGraph, SimState, Stock } from "./types";
 

@@ -4,7 +4,7 @@ import { emptyGrowth } from "./growth";
 import { Handler, type Storage } from "./handler";
 import { CAMP_CLEAR, CART_SPEED, computeLife, LOAD, MAX_CARTS, MAX_WALKERS, scheduleOf } from "./life";
 import { emptyLevers } from "./levers";
-import { WALK_SPEED } from "./people";
+import { WALK_SPEED } from "./walkNet";
 import type { FromWorker } from "./protocol";
 import { addRoad, emptyRoads } from "./roads";
 import { START_MINUTE_OF_DAY, YEAR_MIN } from "./time";
