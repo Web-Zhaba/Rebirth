@@ -19,7 +19,7 @@ import { massText } from "../sim/units";
 import { familyGenitive } from "../sim/people";
 import type { ComponentChildren } from "preact";
 import type { Building, BuildingQuery, FoundFoundation, Needs, ProductionInfo, Stock } from "../sim/types";
-import { selectedBuilding } from "../view/layers/buildings";
+import { selectedBuilding } from "../view/selection";
 import { tool } from "../map/tools";
 import { buildings, digs, gameClock, queryBuilding, state, stock } from "../simClient";
 import { act, InspectorHead, Line, num, plural, Section, siteEta, SiteLevers } from "./InspectorParts";

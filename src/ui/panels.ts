@@ -1,8 +1,7 @@
 import { batch, effect, signal } from "@preact/signals";
-import { selectedBuilding } from "../view/layers/buildings";
+import { selectedBuilding, selectedClearing } from "../view/selection";
 import { selectedSite } from "../map/heritageSpots";
 import { tool } from "../map/tools";
-import { selectedClearing } from "../view/layers/land";
 import { cancelUiState } from "./inputModel";
 
 // The right-hand slot holds one panel at a time: the inspector of the selected

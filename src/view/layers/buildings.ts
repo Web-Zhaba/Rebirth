@@ -4,7 +4,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import { covers } from "../../sim/services";
 import type { Building, ClientState } from "../../sim/types";
 import { pointInPolygon } from "../../sim/zones";
-import { buildings, buildingSet, frame, lifeLights, state } from "../../simClient";
+import { buildings, buildingSet, city, frame, lifeLights, state } from "../../simClient";
 import type { Frame } from "../../world/frame";
 import { mixHex } from "../../ui/palette";
 import type { ModelItem } from "../../map/modelItems";
@@ -13,11 +13,9 @@ import { pickTool } from "../../map/toolPick";
 import { shouldRepeatTool } from "../../ui/inputModel";
 import { buildBuildingSpatialIndex, buildingSpatialCandidates, type BuildingSpatialIndex } from "../../map/buildingHitIndex";
 import type { View } from "../view";
+import { selectedBuilding } from "../selection";
 
 // Buildings on the map: the model items (finished ones and building sites, the engine's models), the footprints as GeoJSON (planned lots, outlines) and picking a building with the pointer.
-
-// Building shown in the info panel.
-export const selectedBuilding = signal<number | null>(null);
 
 const ringCache = new Map<number, [number, number][]>();
 
@@ -87,9 +85,9 @@ export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
       const site = st.finds.foundations.find((f) => f.id === b.foundationId);
       out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress, style: "heritage", lamp: lamps.get(b.id) });
     } else
-      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade, lamp: lamps.get(b.id) });
+      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade, lamp: lamps.get(b.id), flag: progress === 1 && BUILDINGS[b.template]?.seat ? city.value?.flag : undefined });
   }
-  if (out.length !== lastItems.length || out.some((it, k) => itemSig(it) !== itemSig(lastItems[k]))) lastItems = out;
+  if (out.length !== lastItems.length || out.some((it, k) => it.flag !== lastItems[k].flag || itemSig(it) !== itemSig(lastItems[k]))) lastItems = out;
   return lastItems;
 });
 
