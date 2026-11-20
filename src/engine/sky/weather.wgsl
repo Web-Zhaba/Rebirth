@@ -12,7 +12,7 @@ struct Weather {
   off0: vec4f,    // xyz tile offset of noise layer 0, w share of cube B (the next interval)
   off1: vec4f,    // xyz tile offset of noise layer 1, w cloud shadows on (1) / off or not loaded (0)
   wind: vec4f,    // x westerlies, y trades (degrees of longitude per game day), z layer period (days), w game days
-  shadow: vec4f,   // x height the shadows are cast from (m), y their drift (degrees per game day)
+  shadow: vec4f,   // x shadow height (m), y shadow drift (degrees per game day), z town climate mean (°C), w 1 = mean is set
   ground: vec4f,  // the town's ground: x snow 0..1, y wetness 0..1, z ice on water 0..1, w 1 = the cube's climate elsewhere
   town: vec4f,    // xyz eye - town origin (m, subtracted in f64), w 1 = a town exists
   townE: vec4f,   // xyz the town origin's east axis, w the ground cover's scale fade (0 on the globe views)
@@ -36,6 +36,8 @@ const SUN_FULL = ${SUN_FULL};
 const SHADOW_DUSK = ${SHADOW_DUSK}; // the old shadow layer multiplied the map towards the palette's dusk
 const TOWN_NEAR = ${TOWN_NEAR};
 const TOWN_FAR = ${TOWN_FAR};
+const SNOW_TEMP_NEAR = ${SNOW_TEMP_NEAR};
+const SNOW_TEMP_FAR = ${SNOW_TEMP_FAR};
 const SHADOW_NOISE_MEAN = 0.48; // base volume G (Worley fbm from 4 cells per tile): mean 0.48, 5..95 % = 0.29..0.68
 const SHADOW_STRETCH = 2.2;     // widen it to about 0.1..0.9 so the patches have contrast
 
@@ -107,9 +109,8 @@ fn townXY(rel: vec3f) -> vec2f {
   return vec2f(dot(p, weather.townE.xyz), dot(p, weather.townN.xyz));
 }
 
-// Weather on the ground (x snow 0..1, y wetness, z ice on water) at a camera-relative point at altM metres: the
-// town's own sim state near the town, the weather cube's climate from TOWN_FAR on (view/engine/townWeather.ts
-// climateGround mirrors it), nothing on the globe views (the clouds' stage, not a white ball of snow).
+// Weather on the ground (x snow 0..1, y wetness, z ice on water) at a camera-relative point at altM metres.
+// Snow follows the town's snowpack where the climate is similar. Wetness and ice follow the town's state nearby.
 fn groundWeather(rel: vec3f, altM: f32) -> vec3f {
   let fade = weather.townE.w;
   if (fade <= 0.0) {
@@ -123,14 +124,15 @@ fn groundWeather(rel: vec3f, altM: f32) -> vec3f {
   if (weather.town.w > 0.0) {
     k = 1.0 - smoothstep(TOWN_NEAR, TOWN_FAR, length(weather.town.xyz + rel));
   }
-  var local = own;
-  if (k < 1.0) {
-    let c = weatherAt(normalize(frame.eye.xyz + rel));
-    let t = c.a * 80.0 - 40.0 - 0.0065 * altM;
-    let falling = smoothstep(0.03, 0.4, c.b);
-    local = vec3f(1.0 - smoothstep(-6.0, 1.0, t), falling * smoothstep(0.0, 2.0, t), 1.0 - smoothstep(-10.0, -2.0, t));
+  let c = weatherAt(normalize(frame.eye.xyz + rel));
+  let t = c.a * 80.0 - 40.0 - 0.0065 * altM;
+  var snow = 1.0 - smoothstep(-6.0, 1.0, t);
+  if (weather.shadow.w > 0.0) {
+    snow = mix(own.x, snow, smoothstep(SNOW_TEMP_NEAR, SNOW_TEMP_FAR, abs(t - weather.shadow.z)));
   }
-  return mix(local, own, k) * fade;
+  let falling = smoothstep(0.03, 0.4, c.b);
+  let wetIce = vec2f(falling * smoothstep(0.0, 2.0, t), 1.0 - smoothstep(-10.0, -2.0, t));
+  return vec3f(snow, mix(wetIce, own.yz, k)) * fade;
 }
 
 fn hash2(p: vec2f) -> f32 {

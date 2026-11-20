@@ -1,5 +1,6 @@
 import { signal } from "@preact/signals";
 import { BUILDINGS } from "../sim/buildings";
+import type { FlagDesign } from "../sim/heraldry";
 import { isRoadKind } from "../sim/roads";
 import { TOWN_COLORS } from "../ui/palette";
 import { buildHeritageModel } from "./heritageModels";
@@ -31,6 +32,7 @@ export interface ModelItem {
   progress: number;
   style: "heritage" | "town" | "road" | "junction";
   level?: number; // town: 2 for a rebuilt house
+  flag?: FlagDesign; // the town hall's colours
   front?: XY | null; // town: unit vector towards the street (the door side)
   tint?: string; // town: overlay colour, "" or absent for none
   upgrading?: boolean; // town: a rebuild in progress
@@ -78,7 +80,7 @@ export function modelOf(it: ModelItem): Model {
   if (it.style === "road") return buildRoadModel(it.ring, isRoadKind(it.kind) ? it.kind : "path", { start: it.ends?.[0], end: it.ends?.[1] });
   if (it.progress < 1) return buildScaffold(it.ring, it.height, it.progress);
   if (it.style === "heritage") return buildHeritageModel(it.ring, it.height, it.kind);
-  return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading });
+  return buildTownModel(it.ring, it.height, it.kind, { level: it.level, front: it.front, tint: it.tint || null, upgrading: it.upgrading, flag: it.flag });
 }
 
 // A chimney top of a finished building (Model.smoke), town-local metres with the ground under it: where the smoke
@@ -113,7 +115,7 @@ export const keyOf = (it: ModelItem, p: number, k: number): string => {
   if (it.style === "junction") return `junction|${it.junction ? armKey(it.junction) : ""}|${ring}`;
   if (p < 1) return `site|${it.height}|${p}|${ring}`;
   const f = it.front ? `${it.front[0].toFixed(3)},${it.front[1].toFixed(3)}` : "";
-  return `${it.style}|${it.kind}|${it.height}|${it.level ?? 1}|${f}|${it.tint ?? ""}|${it.upgrading ? 1 : 0}|${lampOf(it)}|${ring}`;
+  return `${it.style}|${it.kind}|${it.height}|${it.level ?? 1}|${f}|${it.tint ?? ""}|${it.upgrading ? 1 : 0}|${lampOf(it)}|${it.flag ? JSON.stringify(it.flag) : ""}|${ring}`;
 };
 
 

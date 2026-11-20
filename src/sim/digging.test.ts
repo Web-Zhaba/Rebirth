@@ -4,8 +4,9 @@ import { BUILDINGS } from "./buildings";
 import { completeExcavations, orderDig, orderStreetDig, streetDigs, streetOf } from "./digging";
 import { salvagedStone } from "./excavation";
 import { canPlaceOnFoundation, emptyGrowth } from "./growth";
+import { workDays } from "./research";
 import { addRoad, emptyRoads } from "./roads";
-import { allResearched } from "./tech";
+import { allResearched, initialProgress, lockReason, TECH_BY_ID } from "./tech";
 import type { FoundFoundation, FoundPlace, RoadGraph, SimState } from "./types";
 import { emptyZones } from "./zones";
 import { buildOutlineView } from "../ui/heritageModel";
@@ -54,15 +55,33 @@ describe("an outline", () => {
   });
   it("a unique old building opens with a discovery: an event with its site, and a chronicle line", () => {
     const church = ghost("c", rect(0, 0, 12, 20), { cls: "place_of_worship", name: "Церковь Покрова" });
-    const s = finishAll(ok(orderDig(mk([church], [], [{ id: "p", name: "Церковь Покрова", kind: "place_of_worship", digId: 1, at: 0 }]), "c")).sim);
+    const second = ghost("d", rect(50, 0, 12, 20), { cls: church.cls, name: "Церковь Николая" });
+    const town = { ...mk([church, second]), progress: initialProgress() };
+    const s = finishAll(ok(orderDig(ok(orderDig(town, "c")).sim, "d")).sim);
     const e = s.events.find((x) => x.kind === "discovery")!;
-    expect(e).toMatchObject({ site: "c", text: "Открыто: Церковь Покрова — культовое здание" });
+    expect(e).toMatchObject({ site: "c", text: "Открыто: Церковь Покрова — культовое здание — идея «Свод»" });
     expect(e.pos).toBeDefined();
     expect(s.chronicle.some((c) => c.kind === "found:c")).toBe(true);
+    expect(s.progress.insights).toEqual(["vault"]);
   });
   it("completes only finished digs", () => {
     const s = ok(orderDig(mk([house]), "h")).sim;
     expect(completeExcavations(s)).toBe(s);
+  });
+  it.each(["hospital", "doctors"])("digging a %s grants the healing insight before the required research", (cls) => {
+    const clinic = ghost("c", rect(0, 46, 20, 20), { cls, name: "Поликлиника" });
+    const second = ghost("d", rect(50, 46, 20, 20), { cls });
+    const planned = ok(orderDig({ ...mk([clinic, second]), progress: initialProgress() }, "c")).sim;
+    const healing = TECH_BY_ID.get("healing")!;
+    expect(planned.progress.insights).toEqual([]);
+    const dug = finishAll(planned);
+    expect(lockReason(dug, "healer")).toBeTruthy();
+    expect(dug.progress.insights).toEqual(["herbal"]);
+    expect(workDays(dug.progress, healing)).toBeCloseTo(healing.days * 0.7);
+    expect(dug.events.some((e) => e.text.includes("идея «Травник»"))).toBe(true);
+    const again = finishAll(ok(orderDig(dug, "d")).sim);
+    expect(again.progress.insights).toEqual(["herbal"]);
+    expect(again.events.filter((e) => e.text.includes("идея «Травник»"))).toHaveLength(1);
   });
 });
 

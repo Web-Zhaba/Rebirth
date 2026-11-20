@@ -1,14 +1,14 @@
-import { signal } from "@preact/signals";
+import { computed, signal } from "@preact/signals";
 import { useState } from "preact/hooks";
-import { BUILDINGS } from "../sim/buildings";
-import { FORMS, GOV, HISTORY_KEYS, TERMS, type Form, type GovView, type HistoryKey, type PersonView, type Term } from "../sim/government";
+import { FORMS, GOV, HISTORY_KEYS, TERMS, seatActive, type Form, type GovView, type HistoryKey, type PersonView, type Term } from "../sim/government";
 import { RATIONS, type Levers } from "../sim/levers";
 import type { Cmd } from "../sim/protocol";
 import { DAY_MIN, YEAR_DAYS } from "../sim/time";
-import { gameClock, sendCmd, state } from "../simClient";
+import { buildings, city, gameClock, sendCmd, state } from "../simClient";
 import { flash } from "../map/tools";
 import { followResident } from "./follow";
 import { Icon } from "./Icon";
+import { HeraldryEditor } from "./HeraldryEditor";
 import { num, plural } from "./InspectorParts";
 import { Button, IconButton, Segmented, Tabs, type TabItem } from "./kit";
 import { closePanel, openPanel, rightPanel } from "./panels";
@@ -24,7 +24,7 @@ import "./townhall.css";
 // orders as charters on bark, each sealed or cancelled. «Записи»: the census and stock report, the ledger of every
 // series beside the chart of the chosen one. The charters and the report lie on moss, like records on the ground.
 
-export type HallTab = "rule" | "orders" | "records";
+export type HallTab = "rule" | "orders" | "records" | "heraldry";
 const tab = signal<HallTab>("rule");
 const series = signal<HistoryKey>("pop");
 
@@ -32,10 +32,12 @@ const TABS: TabItem<HallTab>[] = [
   { id: "rule", label: L("Правление", "Rule") },
   { id: "orders", label: L("Приказы", "Orders") },
   { id: "records", label: L("Записи", "Records") },
+  { id: "heraldry", label: L("Символика", "Heraldry") },
 ];
 
 // Is there a finished town hall: the orders and the window open with it.
-export const hallReady = (): boolean => Object.values(state.value?.buildings ?? {}).some((b) => b.state === "active" && BUILDINGS[b.template]?.seat);
+const activeHall = computed(() => !!buildings.value && seatActive(buildings.value));
+export const hallReady = (): boolean => activeHall.value;
 
 export function openTownhall(at: HallTab = "rule"): void {
   tab.value = at;
@@ -543,8 +545,9 @@ function RecordsTab() {
 export function TownhallPanel() {
   const st = state.value;
   if (rightPanel.value !== "townhall" || !st) return null;
-  const v = st.govView;
-  const sub = !v ? L("Ратуша ещё не построена", "The town hall is not built yet") : !v.settled ? L("форма правления не выбрана", "no form of rule chosen") : `${FORM_INFO[v.form].name} · ${v.head ? `${L("глава", "head")} ${v.head.name}` : L("главы нет", "no head")}`;
+  const built = hallReady();
+  const v = built ? st.govView : null;
+  const sub = !built ? L("Ратуша ещё не построена", "The town hall is not built yet") : !v?.settled ? L("форма правления не выбрана", "no form of rule chosen") : `${FORM_INFO[v.form].name} · ${v.head ? `${L("глава", "head")} ${v.head.name}` : L("главы нет", "no head")}`;
   return (
     <div class="mk-screen" role="dialog" aria-modal="false" aria-label={L("Ратуша", "Town hall")}>
       <div class="mk-sheet th-sheet">
@@ -568,7 +571,9 @@ export function TownhallPanel() {
           idPrefix="hall"
         />
         <div class={`mk-body th-body is-${tab.value}`} role="tabpanel" id={tabPanelId("hall", tab.value)} aria-labelledby={tabId("hall", tab.value)}>
-          {!v ? (
+          {tab.value === "heraldry" && built && city.value ? (
+            <HeraldryEditor city={city.value} />
+          ) : !v ? (
             <p class="mk-note">{L("Постройте ратушу: из неё отдают приказы и выбирают главу поселения.", "Build a town hall: orders are given and the head of the town is chosen there.")}</p>
           ) : tab.value === "rule" ? (
             <div class="th-rule">
@@ -581,7 +586,7 @@ export function TownhallPanel() {
             <RecordsTab />
           )}
         </div>
-        {v && (
+        {v && tab.value !== "heraldry" && (
           <footer class="mk-foot th-foot">
             <span class="mk-cap">{L("Влияние на поселение", "Effect on the town")}</span>
             <span class="th-chips">

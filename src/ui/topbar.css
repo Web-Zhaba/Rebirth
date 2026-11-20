@@ -50,18 +50,37 @@
   padding: 0 var(--sp-2) 0 var(--sp-3);
 }
 
-.tb-mark {
-  width: 22px;
-  height: 22px;
-  color: var(--frame-text);
-  opacity: 0.85;
+.tb-city {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--sp-2);
+  min-width: 0;
+  max-width: 262px;
 }
 
-.tb-city {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  max-width: 220px;
+.tb-flag {
+  display: block;
+  width: 34px;
+  height: auto;
+  outline: 1px solid var(--frame-line);
+}
+
+.tb-city > .tb-flag, .tb-flag-btn {
+  grid-row: 1 / span 2;
+}
+
+button.tb-flag-btn {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  height: 32px;
+  border: 0;
+  background: none;
+}
+
+button.tb-flag-btn:hover .tb-flag {
+  outline-color: var(--frame-text);
 }
 
 button.city-name-btn {
@@ -606,6 +625,29 @@ button.warn-chip {
 
 button.warn-chip:hover:not(:disabled) {
   background: var(--paper-raised);
+}
+
+.government-warning {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.government-warning .warn-chip {
+  align-self: stretch;
+  min-height: 34px;
+}
+
+.government-warning .icon {
+  flex: none;
+}
+
+.government-warning.is-heir .warn-chip {
+  border-color: var(--warn);
+  background: var(--warn-fill);
+}
+
+.government-warning.is-heir .icon {
+  color: var(--warn-text);
 }
 
 /* Layers: a tar tag that names the live layer; open, a bark slip with the switches and the legend. */

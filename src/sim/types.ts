@@ -7,9 +7,11 @@ import type { WeatherState } from "./weather";
 import type { OrchardYear } from "./weatherEffects";
 import type { Attraction } from "./attraction";
 import type { TradeSwap } from "./trade";
+import type { FlagDesign } from "./heraldry";
 
 export interface City {
   name: string;
+  flag?: FlagDesign;
   lat: number;
   lng: number;
   foundedAt: number; // epoch ms

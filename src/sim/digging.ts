@@ -3,12 +3,14 @@ import { addChronicle } from "./chronicle";
 import { salvagedStone } from "./excavation";
 import { foundationScale, lotRing } from "./foundationLots";
 import { canPlaceOnFoundation, placeOnFoundation } from "./growth";
-import { kindName, siteTitle, tierContext, tierOf } from "./heritage";
+import { kindName, nextInsight, siteDomain, siteTitle, tierContext, tierOf, workTemplate } from "./heritage";
 import { beyondSurvey, catalogue, foundIds } from "./items";
 import { orientedBox } from "./heritageGeo";
 import { MAX_EVENTS } from "./people";
 import { say } from "./production";
+import { grantInsight } from "./research";
 import { streetFoundations } from "./streets";
+import { INSIGHT_BY_ID } from "./tech";
 import type { Building, FoundFoundation, SimState } from "./types";
 import { CELL_SIZE } from "./zones";
 import { L, plural } from "../i18n";
@@ -112,25 +114,37 @@ export function completeExcavations(s: SimState): SimState {
   let stone = 0;
   let events = s.events;
   let chronicle = s.chronicle;
+  let cur = s;
   const ctx = tierContext(s.finds, s.articles ?? []);
+  const uncoveredKinds = new Set(foundations.filter((f) => !f.ghost && tierOf(f, ctx) === "unique").map((f) => f.cls));
   for (const b of done) {
     delete buildings[b.id];
     const i = b.foundationId ? byId.get(b.foundationId) : undefined;
-    if (i === undefined) continue;
+    if (i === undefined || !foundations[i].ghost) continue;
     const { ghost: _g, ...f } = foundations[i];
     foundations[i] = f;
     stone += salvagedStone(f.area);
     const tier = tierOf(f, ctx);
     const at: [number, number] = [b.lot.cx, b.lot.cy];
+    const domain = siteDomain(f.cls);
+    const idea = workTemplate(f.cls) === "healer"
+      ? INSIGHT_BY_ID.get("herbal")
+      : tier === "unique" && domain && !uncoveredKinds.has(f.cls) ? nextInsight(cur.progress, domain) : null;
+    if (tier === "unique") uncoveredKinds.add(f.cls);
+    let ideaText = "";
+    if (idea && !cur.progress.insights.includes(idea.id) && !(idea.tech && cur.progress.techs.includes(idea.tech))) {
+      cur = grantInsight(cur, idea.id);
+      ideaText = L(` — идея «${idea.text}»`, ` — idea “${idea.text}”`);
+    }
     if (tier === "unique") {
-      const text = L(`Открыто: ${siteTitle(f)} — ${kindName(f.cls).toLowerCase()}`, `Uncovered: ${siteTitle(f)} — ${kindName(f.cls).toLowerCase()}`);
+      const text = L(`Открыто: ${siteTitle(f)} — ${kindName(f.cls).toLowerCase()}`, `Uncovered: ${siteTitle(f)} — ${kindName(f.cls).toLowerCase()}`) + ideaText;
       events = [...events, { at: s.gameMinutes, kind: "discovery" as const, text, pos: at, site: f.id }].slice(-MAX_EVENTS);
       chronicle = addChronicle(chronicle, s.gameMinutes, `found:${f.id}`, text);
-    } else if (tier === "typical") events = say(events, s.gameMinutes, "heritage", L(`Раскопан: ${kindName(f.cls).toLowerCase()}`, `Dug out: ${kindName(f.cls).toLowerCase()}`), at);
+    } else if (tier === "typical") events = say(events, s.gameMinutes, "heritage", L(`Раскопан: ${kindName(f.cls).toLowerCase()}`, `Dug out: ${kindName(f.cls).toLowerCase()}`) + ideaText, at);
   }
   const n = done.length;
   if (n > 1) chronicle = addChronicle(chronicle, s.gameMinutes, "dig:dug", L(`Раскопано ${n} ${plural(n, "фундамент", "фундамента", "фундаментов")}`, `${n} foundations dug`));
-  let out: SimState = { ...s, buildings, events, chronicle, stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock, finds: { ...s.finds, foundations } };
+  let out: SimState = { ...cur, buildings, events, chronicle, stock: stone > 0 ? { ...s.stock, stone: s.stock.stone + stone } : s.stock, finds: { ...s.finds, foundations } };
   // A dig a stroke ordered puts its building on the ring now (sim/stroke.ts); one no longer possible leaves it free.
   for (const b of done) {
     const t = b.then ? BUILDINGS[b.then] : undefined;

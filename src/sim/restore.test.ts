@@ -3,7 +3,7 @@ import { finishAll } from "./admin";
 import { canPlace, canPlaceOnFoundation, emptyGrowth, placeBuilding, placeOnFoundation, reconcile } from "./growth";
 import { BUILDINGS, floorsOf } from "./buildings";
 import { computeCoverage, computeLandValue } from "./coverage";
-import { asItWasTemplate, distinctTyped, earlierOfKind, heritageDomain, isHeritage, nextInsight, restoreWeightOf, scarcity, siteDomain, workTemplate } from "./heritage";
+import { asItWasTemplate, distinctTyped, earlierOfKind, heritageDomain, isHeritage, restoreWeightOf, scarcity, siteDomain, workTemplate } from "./heritage";
 import { isAsItWas } from "./foundationLots";
 import { simplifyRing } from "./heritageGeo";
 import { Handler, type Storage } from "./handler";
@@ -120,12 +120,12 @@ describe("as it was", () => {
 });
 
 describe("completion", () => {
-  it("restores the site, adds the full weight and grants an insight", () => {
+  it("restores the site and adds the full weight without a new insight", () => {
     const s = finishAll(asItWas(mk([church], { ...initialProgress(), techs: ["faith"] }), "a"));
     expect(s.finds.foundations[0].state).toBe("restored");
     expect(s.progress.restored.care).toBe(restoreWeightOf(scarcity(s.finds)));
     expect(s.buildings[1].restoreWeight).toBe(s.progress.restored.care);
-    expect(s.progress.insights).toEqual(["herbal"]); // «Свод» is used up: its tech is researched
+    expect(s.progress.insights).toEqual([]);
     expect(s.chronicle.some((c) => c.kind === "heritage:a")).toBe(true);
     expect(s.events.some((e) => e.text.startsWith("Восстановлено: Объект a"))).toBe(true);
   });
@@ -136,21 +136,19 @@ describe("completion", () => {
     const s = finishAll(asItWas(sparse, "a"));
     expect(s.progress.restored.care).toBe(3);
   });
-  it("halves each further restoration of a kind and grants an insight only for the first", () => {
+  it("halves each further restoration of a kind", () => {
     const b = found("b", "place_of_worship", rect(100, 0, 20, 30));
     let s = finishAll(asItWas(mk([church, b], initialProgress()), "a"));
     const first = s.progress.restored.care!;
     expect(earlierOfKind(s, "place_of_worship", "b")).toBe(1);
     s = finishAll(asItWas(s, "b"));
     expect(s.progress.restored.care).toBeCloseTo(first * 1.5, 5);
-    expect(s.progress.insights).toHaveLength(1);
-    expect(nextInsight(s.progress, "care")).not.toBeNull();
   });
 });
 
 describe("loss", () => {
   it("loses the site and takes the weight back; insights stay", () => {
-    const s = finishAll(asItWas(mk([church], initialProgress()), "a"));
+    const s = finishAll(asItWas(mk([church], { ...initialProgress(), insights: ["vault"] }), "a"));
     const out = loseSite({ ...s, buildings: {} }, s.buildings[1]);
     expect(out.finds.foundations[0].state).toBe("lost");
     expect(out.progress.restored.care).toBeUndefined();

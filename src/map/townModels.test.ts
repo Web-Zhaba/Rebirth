@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILDINGS } from "../sim/buildings";
-import { DOOR, GATE, PATTERN, pointInRing, type Model, type XY } from "./modelGeometry";
+import type { FlagDesign } from "../sim/heraldry";
+import { DOOR, GATE, PATTERN, pointInRing, rgb, signedArea, type Model, type XY } from "./modelGeometry";
 import { buildTownModel } from "./townModels";
 
 // Footprint the way growth.ts makes it: along the road (x) by deep (y), the road below (front = -y).
@@ -157,6 +158,26 @@ describe("smoke emitters", () => {
       expect(zMax(m)).toBeLessThan(t.height * 1.95);
       expect(m.smoke ?? []).toHaveLength(0);
     }
+  });
+  it("pieces the saved design into a single 3 × 2 m flag, including overlapping and clipped charges", () => {
+    const flag: FlagDesign = { pattern: "cross", field: "#012345", division: "#bcde12", layers: [
+      { symbol: "sun", x: 75, y: 50, size: 48, color: "#345678" },
+      { symbol: "wheat", x: 72, y: 53, size: 45, color: "#456789" },
+      { symbol: "star", x: 20, y: 20, size: 50, color: "#789abc" },
+    ] };
+    const hall = BUILDINGS.townhall;
+    const mesh = buildTownModel(lot(hall.along, hall.deep), hall.height, hall.id, { flag, front: FRONT });
+    const area = new Map([flag.field, flag.division, ...flag.layers.map(l => l.color)].map(c => [rgb(c).join(), 0]));
+    for (let i = 0; i < mesh.indices.length; i += 3) {
+      const indices = mesh.indices.slice(i, i + 3).map(v => v * 3);
+      const color = mesh.colors.slice(indices[0], indices[0] + 3).join();
+      if (area.has(color)) {
+        const face = indices.map((v): XY => [mesh.positions[v], mesh.positions[v + 2]]);
+        area.set(color, area.get(color)! + Math.abs(signedArea(face)));
+      }
+    }
+    expect([...area.values()].every(a => a > 0)).toBe(true);
+    expect([...area.values()].reduce((sum, a) => sum + a, 0)).toBeCloseTo(6, 6);
   });
   it("yards and sheds have none", () => {
     for (const id of ["garden", "well", "dig", "woodcutter", "market"]) expect(buildTownModel(lot(6, 6), 3, id, { seed: 1, front: FRONT }).smoke ?? []).toHaveLength(0);

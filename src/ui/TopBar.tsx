@@ -8,6 +8,7 @@ import { SERVICE_LIST } from "../sim/services";
 import { lockReason, techOf } from "../sim/tech";
 import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
 import type { City, Stock } from "../sim/types";
+import { DEFAULT_FLAG } from "../sim/heraldry";
 import { setManualOverlay, tool } from "../map/tools";
 import { buildings, economy, incomingCount, people, roads, setSpeed, speed, state, stock } from "../simClient";
 import { Icon } from "./Icon";
@@ -30,6 +31,8 @@ import { screenshotMode } from "./screenshotMode";
 import { SEMANTIC_IDS } from "./semanticIds";
 import { decimal, L, plural } from "../i18n";
 import { SEASON_NAMES } from "../map/seasonPreview";
+import { SettlementFlag } from "./SettlementFlag";
+import { hallReady, openTownhall } from "./TownhallPanel";
 
 const families = (n: number) => plural(n, "семья", "семьи", "семей", "family", "families");
 const SPEEDS: { v: Speed; label: string; key: string }[] = [
@@ -139,8 +142,12 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
   return (
     <header class="topbar" aria-label={L("Верхняя панель управления", "Top control bar")}>
       <div class="tb-plate">
-        <span class="logo-mark tb-mark" aria-hidden="true" />
         <div class="tb-city">
+          {hallReady() ? (
+            <button type="button" class="tb-flag-btn" title={L("Символика поселения", "Settlement heraldry")} aria-label={L("Символика поселения", "Settlement heraldry")} onClick={() => openTownhall("heraldry")}>
+              <SettlementFlag flag={city.flag ?? DEFAULT_FLAG} class="tb-flag" />
+            </button>
+          ) : <SettlementFlag flag={city.flag ?? DEFAULT_FLAG} class="tb-flag" />}
           {view ? (
             <Tooltip text={L("К центру поселения (H)", "To the settlement centre (H)")}>
               <button class="city-name-btn" type="button" aria-keyshortcuts="H" onClick={() => view.flyTo({ center: [city.lng, city.lat], mpp: TOWN_VIEW_MPP })}>

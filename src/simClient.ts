@@ -5,7 +5,7 @@ import { BASE_TICK, clockAt, tickFraction, tickMs, type Speed } from "./sim/cloc
 import { applyDelta } from "./sim/delta";
 import type { Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
 import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";
-import { makeFrame } from "./world/frame";
+import { makeFrame, type Frame } from "./world/frame";
 
 const LEGACY_KEY = "rebirth.save";
 
@@ -16,7 +16,7 @@ export const zones = computed(() => state.value?.zones ?? null);
 export const buildings = computed(() => state.value?.buildings ?? null);
 // Changes only when buildings appear or vanish (lots never move), not on every construction tick.
 export const buildingSet = computed(() => Object.keys(state.value?.buildings ?? {}).join(","));
-export const frame = computed(() => (city.value ? makeFrame(city.value.lat, city.value.lng) : null));
+export const frame = signal<Frame | null>(null);
 export const people = computed(() => state.value?.people ?? null);
 export const stock = computed(() => state.value?.stock ?? null);
 export const economy = computed(() => state.value?.economy ?? null);
@@ -123,10 +123,14 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       batch(() => {
         state.value = m.save?.sim ?? null;
         city.value = m.save?.city ?? null;
+        frame.value = m.save ? makeFrame(m.save.city.lat, m.save.city.lng) : null;
         foundPending.value = false;
         foundFailed.value = false;
         loaded.value = true;
       });
+      break;
+    case "cityChanged":
+      city.value = m.city;
       break;
     case "loadFailed":
       unreadableSave = m.reason === "invalid" ? m.raw : undefined;
@@ -183,6 +187,7 @@ worker.onerror = (error) => {
     loadFailure.value = "unavailable";
     speed.value = 0;
     city.value = null;
+    frame.value = null;
     state.value = null;
   });
   for (const done of pending.values()) done({ ok: false, reason: L("Поселение недоступно", "Settlement unavailable") });

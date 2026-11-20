@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WeatherState } from "../../sim/weather";
 import { mppAtZoom, zoomAtMpp } from "../view";
-import { climateGround, townShare, townWeather, wetness } from "./townWeather";
+import { climateGround, snowAtTemp, townShare, townWeather, wetness } from "./townWeather";
 
 const state = (now: Partial<WeatherState["now"]>, rest: Partial<WeatherState> = {}): WeatherState =>
   ({ now: { temp: 5, cloud: 0.5, precip: 0, snow: false, wind: 3, ...now }, snowpack: 0, ice: 0, soil: 0.3, ...rest }) as WeatherState;
@@ -50,9 +50,25 @@ describe("climate on the ground", () => {
     expect(climateGround({ cover: 0, precip: 0, temp: 8 }, 0, 1.3).snow).toBe(0);
     expect(climateGround({ cover: 0, precip: 0, temp: 8 }, 2500, 1.3).snow).toBe(1);
   });
-  it("hands the ground over from the town to the climate between 20 and 60 km", () => {
+  it("hands wetness, ice and falling precipitation over to the climate between 20 and 60 km", () => {
     expect(townShare(10000)).toBe(1);
     expect(townShare(40000)).toBeCloseTo(0.5);
     expect(townShare(80000)).toBe(0);
+  });
+});
+
+describe("settled snow", () => {
+  it("follows the town's accumulation and melt where the seasonal mean is similar", () => {
+    const mild = climateGround({ cover: 0, precip: 0, temp: 8 }, 1000, 1.3);
+    const cold = climateGround({ cover: 0, precip: 0, temp: 8 }, 2500, 1.3);
+    expect(snowAtTemp(0.6, mild.snow, mild.temp, 1)).toBe(0.6);
+    expect(snowAtTemp(0, cold.snow, cold.temp, -8)).toBe(0);
+  });
+
+  it("gives way to colder and warmer climates across the temperature band", () => {
+    expect(snowAtTemp(0.4, 1, -9, -2)).toBe(1);
+    expect(snowAtTemp(0.4, 0, 5, -2)).toBe(0);
+    expect(snowAtTemp(0.4, 1, -5.5, -2)).toBeCloseTo(0.7);
+    expect(snowAtTemp(0.4, 0, 2, null)).toBe(0);
   });
 });

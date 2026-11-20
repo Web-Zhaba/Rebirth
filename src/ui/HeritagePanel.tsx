@@ -38,7 +38,6 @@ function Body({ v }: { v: HeritageView }) {
                 <span key={e}>{e}</span>
               ))}
               <span class="her-gain">{v.research}</span>
-              {v.insight && <span>{L("Идея", "Idea")} {v.insight}</span>}
             </span>
           </div>
           <Line label={L("Цена", "Cost")} icon="hourglass">
@@ -47,7 +46,7 @@ function Body({ v }: { v: HeritageView }) {
           {v.mul > 1 && <div class="people-note">{L("Таких построек в округе мало: вклад в науку ×", "Few buildings like this nearby: research contribution ×")}{decimal(String(v.mul))}</div>}
           {v.repeat && (
             <div class="people-note">
-              {L(`Ещё один ${v.repeat.kind.toLowerCase()}: вклад ×${decimal(String(v.repeat.factor))}, идеи не будет`, `Another ${v.repeat.kind.toLowerCase()}: contribution ×${decimal(String(v.repeat.factor))}, no idea`)}
+              {L(`Ещё один ${v.repeat.kind.toLowerCase()}: вклад ×${decimal(String(v.repeat.factor))}`, `Another ${v.repeat.kind.toLowerCase()}: contribution ×${decimal(String(v.repeat.factor))}`)}
             </div>
           )}
           {v.note && <div class="prod-warn">{v.note}</div>}
