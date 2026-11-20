@@ -18,6 +18,7 @@ last, `docs/PLAN-buildings.md`, one folder per building, was finished on 2026-11
 | `dist/` | Output of `npm run build`, the site build Vercel serves (ignored). |
 | `docs/` | This file, `DEVELOPMENT.md` (branches, releases, publishing), `ROADMAP.md` (open work). |
 | `PRODUCT.md`, `DESIGN.md` | Product brief and visual design system. |
+| `AGENTS.md` | The short guide for coding agents: commands, layer rules, conventions. This file is the detailed map. |
 | `.claude/`, `.github/agents`, `.github/skills`, `.github/hooks`, `.impeccable/` | Agent tooling: skills, agents, the dev benchmark (`.claude/bench.js`), preview servers (`.claude/launch.json`). |
 
 ## Source modules
@@ -41,7 +42,7 @@ boot.ts ─► platform/ (portal SDK) ─► main.ts
 | `boot.ts`, `main.ts` | Start-up: the portal SDK first (it sets the language), then the engine, the UI and the sim worker. |
 | `platform/` | One adapter per portal (Yandex, CrazyGames, Poki, VK, GameDistribution, GamePix), picked at build time by `VITE_PLATFORM`; the standalone build has none. |
 | `buildings/` | One folder per building (`buildings/<id>/`): its rules (`rules.ts`, run in the sim worker), its 3D model (`model.ts`) and its interface (`ui.ts`), listed by one registry per layer. See "Buildings" below. |
-| `sim/` | Every game rule: residents and households, roads, buildings, production, storages, fields, weather, research, excavation, heritage, museums, the head of the town and its records (`sim/government.ts`), saves (IndexedDB) and save migrations. Runs in `sim/worker.ts`; `sim/handler.ts` applies commands and builds snapshots; `sim/protocol.ts` is the message contract. Pure and testable: no DOM, no renderer. |
+| `sim/` | Every game rule: residents and households, roads, buildings, production, storages, fields, weather, research, excavation, heritage, museums, the head of the town and its records (`sim/government.ts`), saves (IndexedDB) and save migrations. Runs in `sim/worker.ts`; `sim/handler.ts` keeps the session (load, clock, persistence, snapshots), `sim/commands.ts` applies the player's commands through the domain's rules; `sim/protocol.ts` is the message contract. Pure and testable: no DOM, no renderer. |
 | `simClient.ts` | The main thread's side of the worker: sends commands, keeps the latest snapshot in signals for the UI and the view. |
 | `engine/` | The own WebGPU renderer: globe camera, LOD terrain, vector map streaming and baking, sky, clouds, water, shadows, overlays, picking. Knows nothing of the game's rules. `engine/debug/` holds dev-page helpers. |
 | `view/` | The game's window onto the world: `view/view.ts` is the API that UI and tools use; `view/engine/` implements it on the engine (forest, fields, models, residents, weather, labels); `view/layers/` turns sim snapshots into drawable layers. |
@@ -57,12 +58,12 @@ boot.ts ─► platform/ (portal SDK) ─► main.ts
 - UI and tools talk to `view/view.ts`, never to `engine/` directly.
 - Logic goes into pure functions next to their tests (`foo.ts` + `foo.test.ts`); components and render code stay thin.
 - Tech upgrades are variants of existing tools, not new build-bar buttons.
-- Saves must load in any later version: each format change comes with a migration in `sim/save.ts`.
+- Saves must load in any later version: each format change comes with a migration in `sim/saveMigrations.ts`.
 
 ## Buildings
 
 Everything about one building lives in `src/buildings/<id>/`, where `<id>` is its template id (a save key: `izba`,
-`gumno`, `sawpit` stay as they are; renaming one needs a migration in `sim/save.ts`).
+`gumno`, `sawpit` stay as they are; renaming one needs a migration in `sim/saveMigrations.ts`).
 
 | File | Holds | Runs in | Listed by |
 |---|---|---|---|
@@ -101,10 +102,17 @@ trade value and the household need.
 
 ## Known cross-layer imports
 
-Kept as they are for now; worth untangling when those files are touched:
+Held to short allowlists by the boundary tests (`buildings/boundaries.test.ts`, `sim/boundaries.test.ts`,
+`ui/boundaries.test.ts`); widen one only with a reason written here:
 
-- `engine/sky/*` reads constants from `map/clouds/` and colours from `ui/palette.ts`.
-- `map/` and `view/` read colours from `ui/palette.ts` (the palette is shared by UI and map rather than owned by the UI).
-- `sim/life.ts` and `sim/protocol.ts` use the trip types of `map/life.ts`.
+- `engine/sky/*` reads constants from `map/clouds/` and colours from `ui/palette.ts`; `engine/shadow/shadowMap.ts` reads
+  the `ShadowQuality` type from `map/graphicsSettings.ts`, the settings' owner.
+- `map/` and `view/` read colours from `ui/palette.ts` (the palette is shared by UI and map rather than owned by the UI);
+  `view/layers/buildings.ts` also reads the repeat-click rule of `ui/inputModel.ts`.
+- The sim worker reads pure data leaves only: `map/life` (the trip types), `map/geometryClip` (the heraldry flag clip),
+  `world/landcover`, `world/terrain` and `world/frame`. Its tests may assert through the UI's pure view models.
+- `ui/` talks to the view's root modules (`view/view.ts`, `scale`, `selection`...), never to `engine/` or the view's
+  implementation folders (`view/engine/`, `view/layers/`): the pointer-picked ids and the field draft live in
+  `view/selection.ts`.
 - `buildings/` spans the layers on purpose: a building's `model.ts` imports `map/`, its `ui.ts` `ui/` and `sim/`; only its
   `rules.ts` is held to the worker's leaf imports.
