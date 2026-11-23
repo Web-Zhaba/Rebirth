@@ -115,4 +115,20 @@ describe("a whole street", () => {
     const done = finishAll(r.sim);
     expect(done.finds.foundations.filter((f) => f.ghost).map((f) => f.id)).toEqual(["far"]);
   });
+
+  it("answers again after a dig, on the streets and buildings the state has now", () => {
+    // The street block of a card is asked for every foundation of the panel; the street of an outline and its digs
+    // still to order are kept with the lists they were made from, so a dig just ordered must show at once.
+    let s = mk(houses, [street]);
+    const view = () => buildOutlineView(s.finds.foundations.find((f) => f.id === "a")!, s);
+    expect(view().street).toEqual({ id: "st", name: "Садовая", left: 3 });
+    expect(view().blocker).toBeNull();
+    s = ok(orderDig(s, "c")).sim;
+    expect(view().street).toEqual({ id: "st", name: "Садовая", left: 2 });
+    expect(view().blocker).toBeNull(); // another outline of the street is under way: this one is free
+    s = ok(orderDig(s, "a")).sim;
+    expect(view().blocker).toBe("Здесь уже копают");
+    expect(streetOf(s, "a")).toEqual({ id: "st", name: "Садовая" });
+    expect(streetDigs(s, "st").map((f) => f.id)).toEqual(["b"]);
+  });
 });

@@ -2,7 +2,7 @@ import { BUILDINGS, type BuildingTemplate } from "./buildings";
 import { orderDig } from "./digging";
 import { centroid } from "./excavation";
 import { foundationBuilding, foundationIndex, foundationKindText, FOUNDATION_LOT, lotCheck } from "./foundationLots";
-import { canPlace, canPlaceOnFoundation, placeBuilding, placeOnFoundation, roadReady, type PlaceState } from "./growth";
+import { canPlace, canPlaceIn, canPlaceOnFoundation, cellIndex, placeBuilding, placeCtx, placedIn, placeOnFoundation, roadReady, type PlaceState } from "./growth";
 import { asItWasTemplate, isHeritage, siteTitle } from "./heritage";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import type { Building, FoundFoundation, RoadGraph, Site, SimState } from "./types";
@@ -129,6 +129,9 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
   const fr = frames(s, spans);
   const items: (StrokeItem & { order: [number, number] })[] = [];
   const skipped: StrokeSkip[] = [];
+  // The town's cells and its buildings' occupancy, prepared once: every candidate below is checked against them, and
+  // each item the plan keeps is added to them (canPlaceIn would rebuild both per candidate).
+  const ctx = placeCtx(s);
   let cur = s;
   const newest = (): Building => cur.buildings[cur.nextBuildingId - 1];
 
@@ -151,6 +154,7 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
       const building = foundationBuilding(use, dug, r.door, PREVIEW_ID, cur.gameMinutes, cur.progress);
       if (!roadReady(cur.roads, building)) building.awaitsRoad = true;
       cur = dig.sim;
+      placedIn(ctx, cur);
       items.push({ kind: "dig", key, building, foundationId: f.id, order });
       continue;
     }
@@ -160,6 +164,7 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
       continue;
     }
     cur = placeOnFoundation(cur, use, f.id, true);
+    placedIn(ctx, cur);
     items.push({ kind: "foundation", key, building: { ...newest(), id: PREVIEW_ID }, foundationId: f.id, order });
   }
 
@@ -167,8 +172,7 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
     for (const sp of fr) {
       // the free depth-0 cells of the span, by their index along the edge
       const row = new Map<number, number>(); // i -> metres along
-      for (const c of cur.zones.cells) {
-        if (c.edge !== sp.edge || c.side !== sp.side || c.depth !== 0) continue;
+      for (const c of cellIndex(cur.zones).front(sp.edge, sp.side).values()) {
         const t0 = along(sp, c.cx, c.cy);
         if (t0 >= sp.lo && t0 <= sp.hi) row.set(c.i, t0);
       }
@@ -179,8 +183,9 @@ export function planStroke<S extends PlaceState>(s: S, t: BuildingTemplate, span
         const start = sp.dir === 1 ? i : i - t.w + 1;
         let inside = true;
         for (let a = 0; a < t.w && inside; a++) inside = row.has(start + a) && !used.has(start + a);
-        if (!inside || !canPlace(cur, t, sp.edge, sp.side, start, NO_SITE, true).ok) continue;
+        if (!inside || !canPlaceIn(ctx, cur, t, sp.edge, sp.side, start, NO_SITE, true).ok) continue;
         cur = placeBuilding(cur, t, sp.edge, sp.side, start);
+        placedIn(ctx, cur);
         for (let a = 0; a < t.w; a++) used.add(start + a);
         const mid = (row.get(start)! + row.get(start + t.w - 1)!) / 2;
         items.push({ kind: "lot", key: `lot:${sp.edge}:${sp.side}:${start}`, building: { ...newest(), id: PREVIEW_ID }, edge: sp.edge, side: sp.side, i: start, order: [sp.index, sp.dir * mid] });

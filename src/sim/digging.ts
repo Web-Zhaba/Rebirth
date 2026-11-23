@@ -1,7 +1,7 @@
 import { BUILDINGS } from "./buildings";
 import { addChronicle } from "./chronicle";
 import { salvagedStone } from "./excavation";
-import { foundationScale, lotRing } from "./foundationLots";
+import { foundationScale, foundationsTaken, lotRing } from "./foundationLots";
 import { canPlaceOnFoundation, placeOnFoundation } from "./growth";
 import { kindName, nextInsight, siteDomain, siteTitle, tierContext, tierOf, workTemplate } from "./heritage";
 import { beyondSurvey, catalogue, foundIds } from "./items";
@@ -29,7 +29,7 @@ export type DigResult<S = SimState> = { ok: true; sim: S; count: number } | { ok
 export function digBlocker(s: Pick<SimState, "buildings">, f: FoundFoundation | undefined): string | null {
   if (!f) return L("Нет такой находки", "No such find");
   if (!f.ghost) return L("Фундамент уже раскопан", "The foundation is already dug");
-  for (const b of Object.values(s.buildings)) if (b.foundationId === f.id) return L("Здесь уже копают", "It is being dug already");
+  if (foundationsTaken(s.buildings).all.has(f.id)) return L("Здесь уже копают", "It is being dug already");
   return null;
 }
 

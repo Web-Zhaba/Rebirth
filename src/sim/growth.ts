@@ -5,6 +5,7 @@ import { allocateLabor, FRONT_SETBACK, levelHeight, startLevel, BUILDINGS, type 
 import { fieldCentroid } from "./fields";
 import { createFounders, FOUNDERS, MOOD_START } from "./people";
 import { clearingLogs } from "./clearing";
+import { makeIdentityCache } from "./memo";
 import { FOUNDATION_LOT, foundationBuilding, FOUNDATION_TAKEN, lotCheck, onReservedGround, OUTLINE_TAKEN } from "./foundationLots";
 import { isHeritage } from "./heritage";
 import { cellSquare, HERITAGE_TAKEN } from "./heritageGeo";
@@ -72,32 +73,107 @@ function inLot(b: Building, x: number, y: number, margin: number): boolean {
   return Math.abs(dx * c + dy * s) <= (CELL_SIZE * w) / 2 + margin && Math.abs(-dx * s + dy * c) <= (CELL_SIZE * d) / 2 + margin;
 }
 
-function hashBy<T>(items: Iterable<T>, pos: (t: T) => [number, number]): Map<number, T[]> {
-  const m = new Map<number, T[]>();
-  for (const it of items) {
-    const [x, y] = pos(it);
-    const k = bucketKey(bucketOf(x), bucketOf(y));
-    const list = m.get(k);
-    if (list) list.push(it);
-    else m.set(k, [it]);
+// The buildings' occupancy hash: is a point's cell taken by a building's lot (+1 m)? A stroke lays dozens of candidate
+// lots against one town and adds a building on each it keeps, so the hash is built once and added to, never rebuilt.
+export interface Occupancy {
+  has(x: number, y: number): boolean;
+  add(b: Building): void;
+}
+
+function emptyOccupancy(): Occupancy {
+  const h = new Map<number, Building[]>();
+  return {
+    has(x, y) {
+      const bx = bucketOf(x);
+      const by = bucketOf(y);
+      for (let ox = -1; ox <= 1; ox++)
+        for (let oy = -1; oy <= 1; oy++) {
+          const list = h.get(bucketKey(bx + ox, by + oy));
+          if (!list) continue;
+          for (const b of list) if (inLot(b, x, y, LOT_MARGIN)) return true;
+        }
+      return false;
+    },
+    add(b) {
+      const k = bucketKey(bucketOf(b.lot.cx), bucketOf(b.lot.cy));
+      const list = h.get(k);
+      if (list) list.push(b);
+      else h.set(k, [b]);
+    },
+  };
+}
+
+function occupancy(buildings: Record<number, Building>): Occupancy {
+  const occ = emptyOccupancy();
+  for (const b of Object.values(buildings)) occ.add(b);
+  return occ;
+}
+
+// A town's lot cells by road row, by depth: `at` finds the cell a lot needs without a walk over every cell of the town,
+// which is what canPlace did for each candidate. Kept by the zones record (placing buildings never changes them).
+export interface CellIndex {
+  at(edge: number, side: 1 | -1, i: number, depth: number): LotCell | undefined;
+  front(edge: number, side: 1 | -1): ReadonlyMap<number, LotCell>; // its depth-0 cells by i
+}
+
+const DEPTHS = 4; // i * DEPTHS + depth: a lot cell's depth is 0..3 (zones.ts MAX_DEPTH)
+const NO_ROW: ReadonlyMap<number, LotCell> = new Map();
+
+interface Row {
+  all: Map<number, LotCell>;
+  front: Map<number, LotCell>;
+}
+
+const cellIndexCache = makeIdentityCache((zones: ZoneState): CellIndex => {
+  const rows = new Map<number, [Row, Row]>();
+  const rowOf = (edge: number): [Row, Row] => {
+    let r = rows.get(edge);
+    if (!r) rows.set(edge, (r = [{ all: new Map(), front: new Map() }, { all: new Map(), front: new Map() }]));
+    return r;
+  };
+  for (const c of zones.cells) {
+    const row = rowOf(c.edge)[c.side === 1 ? 0 : 1];
+    row.all.set(c.i * DEPTHS + c.depth, c);
+    if (c.depth === 0) row.front.set(c.i, c);
   }
-  return m;
+  const rowAt = (edge: number, side: 1 | -1): Row | undefined => rows.get(edge)?.[side === 1 ? 0 : 1];
+  return {
+    // a depth no cell can have is no cell; without the guard it would pack onto its neighbour's index
+    at: (edge, side, i, depth) => (depth < 0 || depth >= DEPTHS ? undefined : rowAt(edge, side)?.all.get(i * DEPTHS + depth)),
+    front: (edge, side) => rowAt(edge, side)?.front ?? NO_ROW,
+  };
+});
+
+export function cellIndex(zones: ZoneState): CellIndex {
+  return cellIndexCache(zones);
 }
 
-function near<T>(h: Map<number, T[]>, x: number, y: number): T[] {
-  const out: T[] = [];
-  const bx = bucketOf(x);
-  const by = bucketOf(y);
-  for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) out.push(...(h.get(bucketKey(bx + ox, by + oy)) ?? []));
-  return out;
+// What a placement check reads of the town, prepared once: canPlace made it again for every candidate lot, which is
+// O(candidates × (cells + buildings)) in a stroke (sim/stroke.ts). The cells and the foundations are read from the state
+// each time, so only the occupancy hash is held here.
+export interface PlaceCtx {
+  occ: Occupancy;
+  buildings: Record<number, Building>; // the record `occ` was made from
 }
 
-// A cell is occupied when its centre lies in a building's lot rectangle (+1 m).
-function occupancy(buildings: Record<number, Building>): (x: number, y: number) => boolean {
-  const list = Object.values(buildings);
-  if (list.length === 0) return () => false;
-  const h = hashBy(list, (b) => [b.lot.cx, b.lot.cy]);
-  return (x, y) => near(h, x, y).some((b) => inLot(b, x, y, LOT_MARGIN));
+export function placeCtx(s: Pick<SimState, "buildings">): PlaceCtx {
+  return { occ: occupancy(s.buildings), buildings: s.buildings };
+}
+
+// A caller that did not report its placements: the hash is rebuilt from the record it hands back.
+function syncPlaceCtx(ctx: PlaceCtx, buildings: Record<number, Building>): void {
+  ctx.occ = occupancy(buildings);
+  ctx.buildings = buildings;
+}
+
+// The caller placed a building itself (the town's last id, as placeBuilding, placeOnFoundation and orderDig leave it):
+// the hash gains it. A caller that does not report it is caught up by canPlaceIn, at a walk over the buildings.
+export function placedIn(ctx: PlaceCtx, s: Pick<SimState, "buildings" | "nextBuildingId">): void {
+  if (s.buildings === ctx.buildings) return;
+  const b = s.buildings[s.nextBuildingId - 1];
+  ctx.buildings = s.buildings;
+  if (b) ctx.occ.add(b);
+  else syncPlaceCtx(ctx, s.buildings);
 }
 
 // Unit vector pointing away from the road on `side`.
@@ -148,7 +224,9 @@ const secondOne = (s: Pick<SimState, "buildings">, t: BuildingTemplate): PlaceCh
   t.onePerTown && Object.values(s.buildings).some((b) => b.template === t.id) ? NO_PLACE(t.onePerTown) : null;
 const pct = (share: number): number => Math.round(share * 100);
 
-const BLOCK_REASON: Record<string, string> = {
+// Why a cell of a lot cannot be built on, by its block (zones.ts). Exported for the placement tools and for the test
+// that pins the check to the code it replaced.
+export const BLOCK_REASON: Record<string, string> = {
   road: L("Здесь дорога", "A road is here"),
   overlap: L("Здесь дорога", "A road is here"),
   field: L("Здесь поле", "A field is here"),
@@ -169,23 +247,38 @@ export function canPlace(
   site: Site,
   planned = false,
 ): PlaceCheck {
+  return canPlaceIn(placeCtx(s), s, t, edge, side, i, site, planned);
+}
+
+// The same check against a prepared town (placeCtx): the cells and the occupancy hash are ready, so a stroke pays once
+// for the town and a few cell lookups per candidate. Never answers differently from canPlace.
+export function canPlaceIn(
+  ctx: PlaceCtx,
+  s: Pick<SimState, "roads" | "zones" | "buildings"> & { finds?: Finds },
+  t: BuildingTemplate,
+  edge: number,
+  side: 1 | -1,
+  i: number,
+  site: Site,
+  planned = false,
+): PlaceCheck {
   if (t.foundationOnly) return NO_PLACE(L(`${t.name} ставится только на старый фундамент`, `A ${t.name.toLowerCase()} stands only on an old foundation`));
   const one = secondOne(s, t);
   if (one) return one;
   const e = s.roads.edges[edge];
   if (!e) return NO_PLACE(L("Нет такой дороги", "No such road"));
   if (e.done < e.labor && !planned) return NO_PLACE(L("Дорога ещё не построена", "The road is not built yet"));
-  const byKey = new Map<string, LotCell>();
-  for (const c of s.zones.cells) if (c.edge === edge && c.side === side) byKey.set(c.key, c);
-  const occ = occupancy(s.buildings);
+  if (ctx.buildings !== s.buildings) syncPlaceCtx(ctx, s.buildings);
+  const occ = ctx.occ;
+  const idx = cellIndex(s.zones);
   const old = s.finds?.foundations ?? [];
   const cells: LotCell[] = [];
   for (let a = 0; a < t.w; a++) {
     for (let d = 0; d < t.d; d++) {
-      const c = byKey.get(`${edge}:${side}:${i + a}:${d}`);
+      const c = idx.at(edge, side, i + a, d);
       if (!c) return NO_PLACE(L("Не хватает места вдоль дороги", "Not enough room along the road"));
       if (c.block) return NO_PLACE(BLOCK_REASON[c.block] ?? L("Место занято", "The spot is taken"));
-      if (occ(c.cx, c.cy)) return NO_PLACE(L("Место занято зданием", "The spot is taken by a building"));
+      if (occ.has(c.cx, c.cy)) return NO_PLACE(L("Место занято зданием", "The spot is taken by a building"));
       const under = onReservedGround(old, cellSquare(c));
       if (under) return NO_PLACE(isHeritage(under) ? HERITAGE_TAKEN : under.ghost ? OUTLINE_TAKEN : FOUNDATION_TAKEN);
       cells.push(c);
@@ -228,9 +321,9 @@ export function placeOnFoundation<S extends PlaceState>(s: S, t: BuildingTemplat
 
 // Adds a planned building on the lot (waiting for its road while that is not built). Call canPlace first.
 export function placeBuilding<S extends Pick<SimState, "roads" | "zones" | "buildings" | "nextBuildingId" | "gameMinutes">>(s: S, t: BuildingTemplate, edge: number, side: 1 | -1, i: number, site?: Site): S {
-  const key = (a: number, d: number) => `${edge}:${side}:${i + a}:${d}`;
-  const c0 = s.zones.cells.find((c) => c.key === key(0, 0))!;
-  const far = s.zones.cells.find((c) => c.key === key(t.w - 1, t.d - 1))!;
+  const idx = cellIndex(s.zones); // a walk over the cells it was: one lookup now, as a stroke places dozen times a frame
+  const c0 = idx.at(edge, side, i, 0)!;
+  const far = idx.at(edge, side, i + t.w - 1, t.d - 1)!;
   const id = s.nextBuildingId;
   return { ...s, nextBuildingId: id + 1, buildings: { ...s.buildings, [id]: waiting(s.roads, makeBuilding(t, c0, far, id, s.gameMinutes, site)) } };
 }

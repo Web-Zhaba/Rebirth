@@ -2,6 +2,7 @@ import { BUILDINGS, floorsOf, FLOOR, type BuildingTemplate, type Materials } fro
 import { pointInRing } from "./excavation";
 import { asItWasTemplate, isHeritage, kindName, siteTitle } from "./heritage";
 import { RESTORE, orientedBox, polysOverlap, ringDoor, simplifyRing } from "./heritageGeo";
+import { makeIdentityCache } from "./memo";
 import { distToEdge, ROAD_KINDS } from "./roads";
 import { TECH_BY_ID } from "./tech";
 import type { Building, FoundFoundation, ProgressState, RoadGraph, Site, SimState } from "./types";
@@ -213,6 +214,26 @@ export function onReservedGround(list: readonly FoundFoundation[], poly: readonl
 
 export const FOUNDATION_TAKEN = L("Здесь старый фундамент: наведите на него, чтобы строить прямо на нём", "An old foundation is here: point at it to build right on it");
 export const OUTLINE_TAKEN = L("Здесь контур старой постройки: раскопайте его, чтобы строить на нём", "An old outline is here: dig it to build on it");
+
+// ---------- which foundations buildings stand on ----------
+
+// `all` holds every foundation a building of any state stands on (a dig under way counts as its site); `built` only
+// those carrying a finished building of a purpose that takes it (a work site on it does not). Kept by the buildings
+// record, as sim states are copy-on-write: every screen that walks the finds asks this many times per render.
+const takenCache = makeIdentityCache((buildings: Record<number, Building>) => {
+  const all = new Set<string>();
+  const built = new Set<string>();
+  for (const b of Object.values(buildings)) {
+    if (!b.foundationId) continue;
+    all.add(b.foundationId);
+    if (b.state === "active" && !BUILDINGS[b.template]?.workSite) built.add(b.foundationId);
+  }
+  return { all, built };
+});
+
+export function foundationsTaken(buildings: Record<number, Building>): { all: Set<string>; built: Set<string> } {
+  return takenCache(buildings);
+}
 
 // ---------- one foundation ----------
 
