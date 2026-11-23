@@ -500,6 +500,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.settings-note {
+  color: var(--frame-dim);
+  font-size: var(--fs-xs);
+}
+
 /* Narrow screens: the slip and the sheet stack down the left side; the sheet keeps its action in view. */
 @media (max-width: 760px) {
   .place-search,

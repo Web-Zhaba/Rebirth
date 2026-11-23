@@ -1,6 +1,6 @@
 import "./journal.css";
 import { signal } from "@preact/signals";
-import { fields3dOn, forest3dOn, motionOn, setFields3d, setForest3d, setMotion, setShadowQuality, setSmoke3d, SHADOW_QUALITIES, shadowQuality, smoke3dOn, type ShadowQuality } from "../map/graphicsSettings";
+import { ANTIALIAS_MODES, antialias, fields3dOn, forest3dOn, motionOn, setAntialias, setFields3d, setForest3d, setMotion, setShadowQuality, setSmoke3d, SHADOW_QUALITIES, shadowQuality, smoke3dOn, type Antialias, type ShadowQuality } from "../map/graphicsSettings";
 import { CLOUD_QUALITIES, cloudQuality, setCloudQuality, type CloudQuality } from "../map/clouds/settings";
 import { adminOpen } from "./AdminPanel";
 import { useState } from "preact/hooks";
@@ -21,6 +21,13 @@ const SHADOW_LABELS: Record<ShadowQuality, { label: string; title: string }> = {
   off: { label: L("Нет", "Off"), title: L("Без теней", "No shadows") },
   low: { label: L("Низкое", "Low"), title: L("Мягче и легче для слабой видеокарты", "Softer and lighter on a weak GPU") },
   high: { label: L("Высокое", "High"), title: L("Чёткие тени", "Crisp shadows") },
+};
+
+// Multisampling of the map: the count is built into the map's pipelines, so a change shows after a reload (the row says
+// so). WebGPU has four samples or none, and none is the lightest the map can be on a weak card.
+const ANTIALIAS_LABELS: Record<Antialias, { label: string; title: string }> = {
+  1: { label: L("Нет", "Off"), title: L("Без сглаживания: легче всего для слабой видеокарты", "No antialiasing: lightest on a weak GPU") },
+  4: { label: "4×", title: L("Четыре выборки: гладкие края", "Four samples: smooth edges") },
 };
 
 const LANG_OPTIONS: SegmentOption<Lang>[] = [
@@ -54,6 +61,7 @@ export function SettingsDialog() {
   const cloudOptions: SegmentOption<CloudQuality>[] = CLOUD_QUALITIES.map((q) => ({ id: q, ...CLOUD_LABELS[q] }));
   const pct = Math.round(soundVolume.value * 100);
   const shadowOptions: SegmentOption<ShadowQuality>[] = SHADOW_QUALITIES.map((q) => ({ id: q, ...SHADOW_LABELS[q] }));
+  const antialiasOptions: SegmentOption<Antialias>[] = ANTIALIAS_MODES.map((m) => ({ id: m, ...ANTIALIAS_LABELS[m] }));
   return (
     <Dialog title={L("Настройки", "Settings")} class="settings" onClose={() => (settingsOpen.value = false)}>
       <div class="settings-body">
@@ -103,6 +111,11 @@ export function SettingsDialog() {
         <div class="settings-row" title={L("Тени домов и деревьев от солнца вблизи", "Sun shadows of buildings and trees up close")}>
           <span>{L("Тени", "Shadows")}</span>
           <Segmented options={shadowOptions} value={shadowQuality.value} label={L("Тени", "Shadows")} onChange={setShadowQuality} />
+        </div>
+        <div class="settings-row" title={L("Сглаживание краёв карты; выбранное применится после перезагрузки страницы", "Edge smoothing of the map; the choice applies after the page reloads")}>
+          <span>{L("Сглаживание", "Antialiasing")}</span>
+          <span class="settings-note">{L("после перезагрузки", "after reload")}</span>
+          <Segmented options={antialiasOptions} value={antialias.value} label={L("Сглаживание", "Antialiasing")} onChange={setAntialias} />
         </div>
         <div class="settings-row">
           <span>{L("Качество облаков", "Cloud quality")}</span>

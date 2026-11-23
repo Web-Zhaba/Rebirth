@@ -17,6 +17,10 @@ import { EXAGGERATION, Terrain } from "./terrain/terrain";
 // buffer, terrain, sky and whatever else registers to draw, plus the camera questions the game asks (pick, project).
 // Content kinds add themselves as Drawables.
 
+// How long the canvas's CSS size has to hold before the MSAA targets are rebuilt for it: a window drag changes it on
+// every frame, and the targets of one size are tens of megabytes.
+const RESIZE_SETTLE_MS = 120;
+
 export interface Drawable {
   occluder?: boolean; // drawn before the Hi-Z build (terrain-like solid geometry that hides what lies behind it)
   transparent?: boolean; // blended without depth writes: drawn after the sky, which would otherwise paint over it
@@ -78,25 +82,29 @@ export class Engine {
   private color: GPUTexture | null = null;
   private depth: GPUTexture | null = null;
   private snapHeight = true;
+  private resizeAt = 0; // when the canvas's CSS size last changed: the MSAA targets wait for it to settle
   private prevNow = 0;
   private running = false;
 
-  static async create(canvas: HTMLCanvasElement): Promise<Engine> {
-    return new Engine(canvas, await initGpu(canvas));
+  static async create(canvas: HTMLCanvasElement, samples: number = SAMPLE_COUNT): Promise<Engine> {
+    return new Engine(canvas, await initGpu(canvas), samples);
   }
 
   private constructor(
     readonly canvas: HTMLCanvasElement,
     readonly gpu: Gpu,
+    samples: number = SAMPLE_COUNT, // MSAA of the main pass: the player's choice (map/graphicsSettings.ts)
   ) {
     const { device, format } = gpu;
-    this.target = { format, depthFormat: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT };
+    // WebGPU makes multisampled textures at four samples only (the other count is 1, no antialiasing): a stored value
+    // from anywhere else would be a validation error, and a frame that fails validation is a black canvas.
+    this.target = { format, depthFormat: DEPTH_FORMAT, sampleCount: samples >= 4 ? 4 : 1 };
     this.shadow = new ShadowMap(device);
     this.frameU = new FrameUniforms(device, this.shadow);
     this.overlay = new OverlayRaster(device);
     this.terrain = new Terrain(device, this.target, this.frameU.layout, device.limits.maxTextureArrayLayers, this.overlay);
     this.sky = new Sky(device, this.target, this.frameU.layout);
-    this.hiz = new HiZ(device);
+    this.hiz = new HiZ(device, this.target.sampleCount);
     this.timer = gpu.timestamps ? new GpuTimer(device) : null;
     if (this.timer) this.timer.onSample = (ms) => this.gpuListeners.forEach((f) => f(ms));
     this.width = Math.max(1, canvas.clientWidth);
@@ -110,7 +118,8 @@ export class Engine {
       if (w === this.width && h === this.height) return;
       this.width = w;
       this.height = h;
-      if (this.running) this.frame(performance.now());
+      this.resizeAt = performance.now();
+      if (this.running) this.frame(this.resizeAt);
     }).observe(canvas);
   }
 
@@ -208,12 +217,19 @@ export class Engine {
     for (const f of [...this.beforeFrameListeners]) f(now);
     const { device, context } = this.gpu;
     const canvas = this.canvas;
-    if (fitCanvas(canvas, this.width, this.height) || !this.depth) {
+    // A window drag changes the canvas size on every frame, and the two MSAA targets of that size are not cheap to make:
+    // until the size has settled the canvas keeps its backing size and the browser stretches the last frame, then the
+    // new targets are made once. A single change (fullscreen, a rotated phone) shows sharp a settle later.
+    const placeholder = this.depth !== null && (this.depth.width <= 1 || this.depth.height <= 1); // mounted before layout
+    const settled = !this.depth || placeholder || now - this.resizeAt >= RESIZE_SETTLE_MS;
+    if ((settled && fitCanvas(canvas, this.width, this.height)) || !this.depth) {
       this.color?.destroy();
       this.depth?.destroy();
       const size = [canvas.width, canvas.height];
-      this.color = device.createTexture({ label: "msaa color", size, format: this.target.format, sampleCount: SAMPLE_COUNT, usage: GPUTextureUsage.RENDER_ATTACHMENT });
-      this.depth = device.createTexture({ label: "depth", size, format: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+      const samples = this.target.sampleCount;
+      // Without antialiasing the main pass draws into the canvas itself: there is nothing to resolve.
+      this.color = samples > 1 ? device.createTexture({ label: "msaa color", size, format: this.target.format, sampleCount: samples, usage: GPUTextureUsage.RENDER_ATTACHMENT }) : null;
+      this.depth = device.createTexture({ label: "depth", size, format: DEPTH_FORMAT, sampleCount: samples, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
       this.hiz.fit(this.depth); // before the drawables' updates read its size
     }
     const s = this.state;
@@ -253,7 +269,10 @@ export class Engine {
     });
     // Occluders first, then the Hi-Z of their depth, the GPU culling passes that test against it, and everything else
     // on top of the same colour and depth.
-    const colorView = this.color!.createView();
+    // With antialiasing on, the pass draws into the multisampled colour and resolves into the canvas; off, it draws
+    // straight into the canvas, which the first pass clears and the main one loads.
+    const display = context.getCurrentTexture().createView();
+    const colorView = this.color ? this.color.createView() : display;
     const depthView = this.depth.createView();
     const occluders = encoder.beginRenderPass({
       label: "occluders",
@@ -268,9 +287,12 @@ export class Engine {
     // The pyramid is a compute pass over every level of the depth: built only for a frame something culls against it.
     if (this.drawables.some((d) => d.wantsHiZ?.())) this.hiz.build(encoder, this.depth);
     for (const d of this.drawables) d.compute?.(encoder);
+    const colorAttachment: GPURenderPassColorAttachment = this.color
+      ? { view: colorView, resolveTarget: display, loadOp: "load", storeOp: "discard" }
+      : { view: colorView, loadOp: "load", storeOp: "store" };
     const pass = encoder.beginRenderPass({
       label: "main",
-      colorAttachments: [{ view: colorView, resolveTarget: context.getCurrentTexture().createView(), loadOp: "load", storeOp: "discard" }],
+      colorAttachments: [colorAttachment],
       depthStencilAttachment: { view: depthView, depthLoadOp: "load", depthStoreOp: "discard" },
       timestampWrites: times && { querySet: times.querySet, endOfPassWriteIndex: times.endOfPassWriteIndex },
     });
