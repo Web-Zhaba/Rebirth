@@ -412,12 +412,32 @@ export interface DaySummary {
 
 export type Window = "sowing" | "harvest" | null;
 
+// What the fields give this year (sim/harvest.ts).
+export interface HarvestStats {
+  year: number;
+  gathered: number; // kg reaped from the fields this year, in the barn already
+  promised: number; // kg this year's sowing gives in all: what is reaped and what still stands
+  potential: number; // kg the fields a gumno serves can give in a full year
+  perDay: number; // kg a day the fields give this year on average: what the food balance counts
+}
+
+// The town's food income a day, read as a year's average: the harvest lands once a year, so a single day's output is not
+// a rate (sim/production.ts foodIncome).
+export interface FoodIncome {
+  fields: number;
+  makers: number; // fishers, foragers, gardens, apiaries, hunters, orchards
+  forage: number; // the idle adults gathering
+  total: number;
+}
+
 export interface EconomyStats {
   foodCap: number;
   foodPerDay: number;
   foodDays: number; // Infinity is sent as 999
   yesterday: Stock; // production per good (food includes the harvest)
   fields: { count: number; ha: number; assignedHa: number; sown: number; reaped: number; expected: number; window: Window };
+  harvest: HarvestStats; // the year's grain: gathered, promised, and the land's potential
+  foodIn: FoodIncome; // kg of food a day the town brings in, averaged over a year
   avgMood: number;
   forage: number; // kg of food a day the idle adults gather
   brushwood: number; // m3 of firewood a day the idle adults gather (only while the town is short of fuel)

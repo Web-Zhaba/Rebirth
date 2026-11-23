@@ -15,7 +15,7 @@ import { act, Line, plural } from "./InspectorParts";
 import { jobNotes, JOB_ICON, PRIORITY_LONG, PRIORITY_SHORT } from "./jobsModel";
 import { Button, IconButton, ProgressBar, Segmented, Tabs, type TabItem } from "./kit";
 import { closePanel, rightPanel } from "./panels";
-import { amount, pad, roadQueue } from "./topbarModel";
+import { amount, harvestText, pad, roadQueue } from "./topbarModel";
 import { effectLines, weatherReason } from "./weatherModel";
 import { tabId, tabPanelId } from "./tabSemantics";
 import { SEMANTIC_IDS } from "./semanticIds";
@@ -218,6 +218,9 @@ function WorkTab({ city, view }: { city: City; view: View }) {
     if (eco.fields.window === "sowing") fieldLine = L(`Сев: ${Math.round(eco.fields.sown * 100)} %`, `Sowing: ${Math.round(eco.fields.sown * 100)}%`);
     else if (eco.fields.window === "harvest") fieldLine = L(`Уборка урожая: ${massText(eco.fields.reaped)} из ${massText(eco.fields.expected)}`, `Harvest: ${massText(eco.fields.reaped)} of ${massText(eco.fields.expected)}`);
   }
+  // The year's grain, in the barn and still standing: the figure the harvest week is measured against all year long.
+  // The harvest window has its own line above, so this one steps aside while it runs.
+  const harvestLine = eco && eco.fields.window !== "harvest" && eco.harvest.potential > 0 ? harvestText(eco.harvest) : null;
   const clearing = (state.value?.clearings ?? []).filter((c) => !isCleared(c));
   const clearLabor = clearing.reduce((a, c) => a + c.labor, 0);
   const clearLine =
@@ -244,6 +247,7 @@ function WorkTab({ city, view }: { city: City; view: View }) {
         </Line>
       )}
       {fieldLine && <Line icon="field" label={L("Поля", "Fields")}>{fieldLine}</Line>}
+      {harvestLine && <Line icon="field" label={L("Урожай этого года", "This year's harvest")}>{harvestLine}</Line>}
       {clearLine && <Line icon="clearing" label={L("Вырубка", "Clearing")}>{clearLine}</Line>}
       {cut.size > 0 && (
         <div class="hud-warn rs-warn">
