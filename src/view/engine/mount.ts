@@ -23,7 +23,7 @@ import { attachControls, credits } from "./controls";
 import { createEngineView } from "./view";
 import { mppAtZoom, zoomAtMpp } from "../view";
 import { L } from "../../i18n";
-import { shadowQuality } from "../../map/graphicsSettings";
+import { antialias, shadowQuality } from "../../map/graphicsSettings";
 
 export interface EngineMountOptions {
   container: string; // element id
@@ -53,7 +53,7 @@ export async function mountEngineView(o: EngineMountOptions): Promise<EngineMoun
   container.prepend(canvas);
   let engine: Engine;
   try {
-    engine = await Engine.create(canvas);
+    engine = await Engine.create(canvas, antialias.peek());
   } catch (e) {
     canvas.remove();
     throw e;

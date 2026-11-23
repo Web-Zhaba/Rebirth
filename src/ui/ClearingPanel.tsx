@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { isCleared } from "../sim/clearing";
 import { queuedLabel } from "../sim/clock";
-import { selectedClearing } from "../view/layers/land";
+import { selectedClearing } from "../view/selection";
 import { tool } from "../map/tools";
 import { gameClock, state } from "../simClient";
 import { act, InspectorHead, Line, num, siteEta, SiteLevers } from "./InspectorParts";

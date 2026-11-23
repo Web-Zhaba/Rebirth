@@ -200,6 +200,7 @@ export function attachRoadTool(view: View): void {
     clearTimeout(timer);
     timer = 0;
     pendingCost = null;
+    validated = null;
     verdict = null;
     hoverEdge = null;
     upgrade = null;
@@ -321,6 +322,12 @@ export function attachRoadTool(view: View): void {
     return { snap: { x: a.x, y: a.y, kind: "free" }, old: null, guide: false, deg: a.deg };
   };
 
+  // The last path validated on a given road graph: a drag that stayed within a metre asks for the very same answer,
+  // and every road moved under it is a new graph, so a built or demolished road is validated again.
+  let validated: { pts: readonly Pt[]; graph: RoadGraph } | null = null;
+  const samePath = (a: readonly Pt[], b: readonly Pt[]): boolean =>
+    a.length === b.length && a.every((p, i) => Math.hypot(p[0] - b[i][0], p[1] - b[i][1]) < 1);
+
   // Preview of the segment being drawn: validation, then the terrain cost.
   const showPath = (pts: Pt[], along: OldRef | null) => {
     const g = roads.value;
@@ -343,6 +350,8 @@ export function attachRoadTool(view: View): void {
       setLabel(verdict.text);
       return;
     }
+    if (validated && validated.graph === g && samePath(pts, validated.pts)) return; // the same segment on the same roads: the verdict and the preview stand
+    validated = { pts, graph: g };
     drawPreview(pts);
     const local = addRoad(g, pts, t, CURVE_SNAP_M, laborByLength(pts, 1));
     if (!local.ok) {
@@ -771,6 +780,22 @@ export function attachRoadTool(view: View): void {
     showPath([[start.x, start.y], [a.snap.x, a.snap.y]], sameOldStreet(startOld, a.old));
   };
 
+  // The pointer fires faster than the screen: moves are coalesced into one frame, and a repeat at the same pixel (which
+  // a high-rate mouse sends between frames) is dropped.
+  let pendingMove: ViewPointer | null = null;
+  let moveFrame = 0;
+  const queueMove = (e: ViewPointer): void => {
+    if (pendingMove && pendingMove.pointerId === e.pointerId && pendingMove.point[0] === e.point[0] && pendingMove.point[1] === e.point[1]) return;
+    pendingMove = e;
+    if (moveFrame) return;
+    moveFrame = requestAnimationFrame(() => {
+      moveFrame = 0;
+      const ev = pendingMove;
+      pendingMove = null;
+      if (ev) onMove(ev);
+    });
+  };
+
   const onClick = (e: ViewPointer) => {
     if (suppressClick) {
       suppressClick = false;
@@ -1009,7 +1034,7 @@ export function attachRoadTool(view: View): void {
     }
   };
 
-  view.on("pointermove", onMove);
+  view.on("pointermove", queueMove);
   view.on("pointerdown", onDown);
   // Track every canvas pointer, including a second finger placed over the sky.
   // The View event above only dispatches when the ray hits the planet.

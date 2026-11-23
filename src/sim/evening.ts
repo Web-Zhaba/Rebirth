@@ -1,4 +1,5 @@
-import { ADULT_MAX, ADULT_MIN, ageOf, buildNet, isFinishedHouse, lotFront, snapToRoad, spotTree, walkMetres, type Spot } from "./people";
+import { ADULT_MAX, ADULT_MIN, ageOf, isFinishedHouse, lotFront } from "./people";
+import { buildNet, snapToRoad, spotTree, walkMetres, type Spot } from "./walkNet";
 import { BUILDINGS } from "./buildings";
 import { residentWorkFactor } from "./needs";
 import { CAMP, covers } from "./services";

@@ -1,5 +1,5 @@
 import { homeGoods, NEED_PER_PERSON, needsAt, TOOL_WEAR, TOOLLESS, zeroStock } from "./goods";
-import { leverMood, workHours } from "./levers";
+import { leverMood, workHours, workLength } from "./levers";
 import { householdSatisfaction, MOOD_NEUTRAL, needMoodTerm, needsAfterDay, residentWorkFactor, starvingResidents, type NeedsDay } from "./needs";
 import { allocateLabor, BUILDINGS, floorArea, isFarm, recipeOf, FOUNDING_STOCK, foodCapacity, groupOf, homesOf, materialsOf, storageOf, storeRoom, upgradeMaterials, type Materials, type SiteLever, type StoreGroup } from "./buildings";
 import { assignedHa, assignFields, bears, expectedKg, FIELD, haOf, HARVEST_END_DAY, ORCHARD_YEARS, pruneFieldWork, remainingHours, sowCredit, windowAt, workOf } from "./fields";
@@ -16,10 +16,11 @@ import { dwelling, SERVICE, serviceMood } from "./services";
 import { tradeDay } from "./trade";
 import { finishedMonuments, monumentMoodAt } from "./monuments";
 import { districtMood } from "./recognition";
-import { calendar, DAY_MIN, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
+import { calendar, DAY_MIN, DAYS_PER_SEASON, dayOf, YEAR_DAYS, YEAR_MIN } from "./time";
 import { applyFrost } from "./weather";
 import { buildFactor, EFFECTS, emptyOrchard, fieldWork, firewoodDaily, frostNight, moodShift, orchardDay, orchardQuality, spoilage, workFactor } from "./weatherEffects";
-import type { Building, Clearing, EconomyStats, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
+import { harvestStats } from "./harvest";
+import type { Building, Clearing, EconomyStats, FoodIncome, EventKind, Field, Household, ProdFlags, ProdState, ProductionInfo, Resident, SimState, Stock, TownEvent } from "./types";
 import { L } from "../i18n";
 
 // Building materials come PACE times faster than in history; food and goods do not.
@@ -606,8 +607,42 @@ export function marketTraders(s: Pick<SimState, "residents" | "buildings" | "hou
   return n;
 }
 
+// Kg of food a year the food makers give with the hands they have now: fishers, foragers, gardens, apiaries and hunters
+// through their seasons, the orchards in their bearing autumn. The fields are the harvest's business (sim/harvest.ts).
+export function foodMakers(s: Pick<SimState, "residents" | "buildings" | "gameMinutes"> & Partial<Pick<SimState, "levers" | "prod" | "progress">>): number {
+  const length = workLength(s.levers);
+  const hands = new Map<number, number>();
+  for (const r of Object.values(s.residents)) if (r.job !== null) hands.set(r.job, (hands.get(r.job) ?? 0) + 1);
+  let kg = 0;
+  for (const [id, n] of hands) {
+    const b = s.buildings[id];
+    if (!b || b.state !== "active") continue;
+    const p = recipeOf(b.template);
+    if (p?.good !== "food" || (!p.season && !p.ripens)) continue;
+    const rate = n * p.perHour * (p.pace ? PACE : 1) * (p.forest ? (b.site?.forest ?? 0) : 1) * length;
+    if (p.ripens) {
+      // fruit trees bear once a year, and only from the year they were planted
+      if (bears(b, s.gameMinutes)) kg += rate * DAYS_PER_SEASON * orchardQuality(s.prod?.orchard ?? emptyOrchard());
+      continue;
+    }
+    if (p.season) kg += rate * DAYS_PER_SEASON * p.season.reduce((m, f) => m + f, 0);
+  }
+  return kg;
+}
+
+// The town's food a day, read as a year's average: what the fields give, what the food makers give, and what the idle
+// adults gather. A single day's output is no rate here — the harvest lands once a year and most producers stop in winter.
+export function foodIncome(s: SimState, harvest = harvestStats(s)): FoodIncome {
+  const fields = harvest.perDay;
+  const makers = foodMakers(s) / YEAR_DAYS;
+  const forage = forageKg(s);
+  return { fields, makers, forage, total: fields + makers + forage };
+}
+
 export function economyStats(s: SimState): EconomyStats {
   const need = foodPerDay(s.residents, s.gameMinutes, s.levers, s.weather);
+  const harvest = harvestStats(s);
+  const income = foodIncome(s, harvest);
   const yesterday: Stock = zeroStock();
   for (const [key, n] of Object.entries(s.prod.yesterday)) {
     const b = s.buildings[Number(key)];
@@ -650,8 +685,10 @@ export function economyStats(s: SimState): EconomyStats {
     foodDays: need > 0 ? Math.min(999, s.stock.food / need) : 999,
     yesterday,
     fields: { count: s.zones.fields.length, ha, assignedHa: aHa, sown: sowNeed > 0 ? sownH / sowNeed : 0, reaped, expected, window: windowAt(s.gameMinutes) },
+    harvest,
+    foodIn: income,
     avgMood: hs > 0 ? moods / hs : 0,
-    forage: forageKg(s),
+    forage: income.forage,
     brushwood: brushwood(s, heatDemand(s)),
     outlook: foodOutlook(s),
     eveningWares: eveningRate(s),

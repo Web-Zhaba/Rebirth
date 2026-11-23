@@ -1,23 +1,24 @@
 import { needsAt, TOOL_WEAR, TOOLLESS } from "./goods";
 import { ADMIN, adminOf, overload } from "./governance";
 import { goodsTotal } from "./goods";
-import { allUnlocked } from "./tech";
+import { allUnlocked, cropOf } from "./tech";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, calendar, step } from "./clock";
 import { BARN_CAP, BUILDINGS, CAMP_STORE, foodCapacity, FOOD_CAMP_CAP, FOUNDING_STOCK } from "./buildings";
-import { assignFields, FIELD, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
+import { assignFields, FIELD, FOOD_RATE, HARVEST_END_DAY, jobsOf, windowAt } from "./fields";
 import { canPlace, emptyGrowth, placeBuilding, reconcile } from "./growth";
 import { applyDelta } from "./delta";
 import { Handler, type Storage } from "./handler";
 import { builderCount, dailyStep, foodPerDay, immigrationStep, lotFront, peopleStats, queryBuilding, RATES } from "./people";
-import { dailyEconomy, economyStats, FULL_TEXT, HAND_HOURS, handHours, PACE, payMaterials, produceStep } from "./production";
+import { workLength } from "./levers";
+import { dailyEconomy, economyStats, foodIncome, foodMakers, FULL_TEXT, HAND_HOURS, handHours, PACE, payMaterials, produceStep } from "./production";
 import { recipeOf } from "./buildings";
 import type { FromWorker } from "./protocol";
 import { massText } from "./units";
 import { addRoad, emptyRoads } from "./roads";
 import { parseSave } from "./save";
 import { haulHours, haulMetres, Ledger, settleStores, spreadStores, withStock } from "./storage";
-import { YEAR_DAYS, YEAR_MIN } from "./time";
+import { DAYS_PER_SEASON, YEAR_DAYS, YEAR_MIN } from "./time";
 import type { Building, City, Field, Household, Resident, RoadGraph, SaveV4, SimState, Site, TerrainInfo } from "./types";
 import { qkey, regenerateCells } from "./zones";
 
@@ -217,6 +218,58 @@ describe("food", () => {
     const k = carted(s, 1, "logs", LOGS * PACE);
     expect(d.prod.yesterday[1]).toBeCloseTo(2 * LOGS * PACE * k);
     expect(economyStats(d).yesterday.logs).toBeCloseTo(2 * LOGS * PACE * k);
+  });
+});
+
+describe("food balance", () => {
+  const SOWN10 = FIELD.sowHoursHa * 10; // the hours a field of 10 ha takes in spring
+  // 10 ha under one gumno (4 farmers) and the fishers given, on a spring noon
+  const settle = (fishers: number, gm = SPRING_NOON) =>
+    folk(town([bld(1, "gumno", 200), bld(2, "fisher", 400)], { gm, fields: [FIELD10()] }), [
+      { home: null, adults: 4, job: 1 },
+      ...(fishers > 0 ? [{ home: null, adults: fishers, job: 2 }] : []),
+    ]);
+  const sown = (s: SimState, gm: number) => ({ ...s, gameMinutes: gm, prod: { ...s.prod, fields: { 1: { year: 1, sowH: SOWN10, harvH: 0, reaped: 0 } } } });
+
+  it("counts a maker's year, not the day it happens to be", () => {
+    const rate = FOOD_RATE.fisher;
+    const yearly = 2 * rate.kgHour * workLength() * DAYS_PER_SEASON * rate.season.reduce((m, f) => m + f, 0);
+    const s = settle(2);
+    expect(foodMakers(s)).toBeCloseTo(yearly);
+    expect(foodIncome(s).makers).toBeCloseTo(yearly / YEAR_DAYS);
+    // nothing made on the plain day the balance is read: the figure does not depend on the hour, nor on the season
+    const winter = { ...s, gameMinutes: WINTER_NOON };
+    expect(foodIncome(winter).makers).toBeCloseTo(yearly / YEAR_DAYS);
+  });
+
+  it("counts the fields by what the year gives a day: the land in spring, the sowing afterwards", () => {
+    const s = settle(0);
+    const year = FIELD.yieldKgHa * 10 * cropOf(s);
+    expect(foodIncome(s).fields).toBeCloseTo(year / YEAR_DAYS); // spring: the land is still to be sown
+    expect(foodIncome(sown(s, at(13, 12))).fields).toBeCloseTo(year / YEAR_DAYS);
+    // a spring missed: at midsummer the fields promise nothing, and the balance says so
+    expect(foodIncome({ ...s, gameMinutes: at(13, 12) }).fields).toBe(0);
+    // half sown: half the grain a day
+    const half = { ...s, gameMinutes: at(13, 12), prod: { ...s.prod, fields: { 1: { year: 1, sowH: SOWN10 / 2, harvH: 0, reaped: 0 } } } };
+    expect(foodIncome(half).fields).toBeCloseTo(year / 2 / YEAR_DAYS);
+  });
+
+  it("a town that sows and fishes shows a gain every day of the year", () => {
+    const s = sown(settle(2), SPRING_NOON);
+    for (let day = 1; day <= YEAR_DAYS; day++) {
+      const eco = economyStats({ ...s, gameMinutes: at(day, 12) });
+      expect(eco.foodPerDay).toBeGreaterThan(0);
+      expect(eco.foodIn.total - eco.foodPerDay).toBeGreaterThan(0);
+    }
+  });
+
+  it("counts the idle adults' foraging, and nothing else, when there are no fields and no makers", () => {
+    const s = folk(town([]), [{ home: null, adults: 3 }]);
+    const eco = economyStats(s);
+    expect(eco.foodIn).toMatchObject({ fields: 0, makers: 0 });
+    expect(eco.foodIn.forage).toBeCloseTo(3 * 1.2); // FORAGE.day a hand
+    expect(eco.foodIn.total).toBeCloseTo(eco.foodIn.forage);
+    expect(eco.forage).toBeCloseTo(eco.foodIn.forage);
   });
 });
 

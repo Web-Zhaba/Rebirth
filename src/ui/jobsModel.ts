@@ -1,5 +1,5 @@
 import type { JobKey } from "../sim/buildings";
-import { MAX_COMMUTE } from "../sim/people";
+import { MAX_COMMUTE } from "../sim/walkNet";
 import type { JobReport } from "../sim/types";
 import type { IconName } from "./icons";
 import { L, plural } from "../i18n";

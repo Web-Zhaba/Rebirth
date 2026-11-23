@@ -6,17 +6,12 @@ import type { ClientState } from "../../sim/types";
 import { pointInPolygon } from "../../sim/zones";
 import { frame, state, zones } from "../../simClient";
 import type { Frame } from "../../world/frame";
-import { selectedBuilding } from "./buildings";
+import { fieldDraft, selectedBuilding, selectedClearing } from "../selection";
 import { tool } from "../../map/tools";
 import type { View } from "../view";
 
 // The land the player works: fields, clearings and the field being drawn, as GeoJSON in lng/lat. The engine
 // (view/engine/gameLayers.ts) only decides how it looks.
-
-// Unfinished clearing shown in the inspector.
-export const selectedClearing = signal<number | null>(null);
-// Field being drawn: placed vertices plus the moving one, in local meters.
-export const fieldDraft = signal<{ pts: [number, number][]; ok: boolean } | null>(null);
 
 const collection = (features: Feature[]): FeatureCollection => ({ type: "FeatureCollection", features });
 const EMPTY = collection([]);

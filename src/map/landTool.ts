@@ -8,7 +8,7 @@ import { pointInPolygon, validateField } from "../sim/zones";
 import { frame, roads, sendCmd, state, zones } from "../simClient";
 import type { Frame } from "../world/frame";
 import { landAt } from "../world/landcover";
-import { fieldDraft } from "../view/layers/land";
+import { fieldDraft } from "../view/selection";
 import { etaText } from "./buildCost";
 import { flash, setSpacePan, syncPan, tool } from "./tools";
 import { decimal, L } from "../i18n";

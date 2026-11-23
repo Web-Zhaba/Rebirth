@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_RETRY, isMissing, RequestScheduler, retryDelay } from "./scheduler";
 
-function setup(opt: { maxInFlight?: number; cancelAfterFrames?: number } = {}) {
+function setup(opt: { maxInFlight?: number; cancelAfterFrames?: number; retry?: typeof DEFAULT_RETRY; rememberedCap?: number } = {}) {
   let now = 0;
   const started: [number, number][] = []; // [id, key]
   const cancelled: number[] = [];
@@ -101,5 +101,29 @@ describe("request scheduler", () => {
     expect(s.succeeded(id)).toBeUndefined();
     expect(s.failed(id, 500)).toBeUndefined();
     expect(s.state(7)).toBe("idle"); // wanted again later: fetched again
+  });
+
+  // A flight over the world asks for thousands of tiles, none of which is worth remembering for the session: the
+  // answers are capped and the oldest forgotten first, so a tile far behind the camera is simply asked again.
+  it("forgets the oldest missing answers instead of keeping every tile of a long flight", () => {
+    const { s, frame, idOf } = setup({ maxInFlight: 1, cancelAfterFrames: 0, rememberedCap: 8 });
+    for (let k = 1; k <= 20; k++) {
+      frame([[k, 0]]);
+      expect(s.failed(idOf(k), 404)).toBe("missing");
+    }
+    expect(s.missingCount).toBe(8);
+    expect(s.state(20)).toBe("missing"); // the newest is still an answer
+    expect(s.state(1)).toBe("idle"); // the oldest was forgotten: asked again if the view returns
+  });
+
+  it("forgets the oldest given-up tiles the same way", () => {
+    const { s, frame, idOf } = setup({ maxInFlight: 1, cancelAfterFrames: 0, rememberedCap: 8, retry: { baseMs: 1000, maxMs: 5000, maxAttempts: 1 } });
+    for (let k = 1; k <= 20; k++) {
+      frame([[k, 0]]);
+      expect(s.failed(idOf(k), 500)).toBe("failed");
+    }
+    expect(s.failedCount).toBe(8);
+    expect(s.state(20)).toBe("failed");
+    expect(s.state(1)).toBe("idle");
   });
 });

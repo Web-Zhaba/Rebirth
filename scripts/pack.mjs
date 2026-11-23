@@ -28,6 +28,10 @@ const TARGETS = {
   gamedistribution: { sdk: "html5.api.gamedistribution.com", own: [/(^|\.)gamedistribution\.com$/] },
   // https://partners.gamepix.com/sdk/doc/javascript
   gamepix: { sdk: "integration.gamepix.com", own: [/(^|\.)gamepix\.com$/] },
+  // https://gamemonetize.com/sdk
+  gamemonetize: { sdk: "api.gamemonetize.com/sdk.js", own: [/(^|\.)gamemonetize\.com$/] },
+  // https://docs.y8.com/sdk/intro/
+  y8: { sdk: "cdn.y8.com/minimal-sdk/2-0/y8.min.js", own: [/(^|\.)y8\.com$/] },
   // https://itch.io/docs/creators/html5 (the standalone build: no SDK)
   itch: { maxBytes: 500 * MB, maxFiles: 1000, maxFileBytes: 200 * MB, maxPath: 240, own: [] },
 };

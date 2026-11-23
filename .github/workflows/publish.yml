@@ -3,7 +3,7 @@ name: Publish
 # One release, every portal. Called by release-please.yml once a release is cut, or run by hand for a tag:
 # builds each portal's archive, attaches the zips to the GitHub release and pushes the portals that have an upload
 # API: itch.io (butler), Poki (its CLI), VK (its hosting CLI). Each push runs only once its variables are set. Yandex
-# Games, CrazyGames, GameDistribution and GamePix have none: their zips go up in the developer consoles (the run
+# Games, CrazyGames, GameDistribution, GamePix, GameMonetize and Y8 go up in the developer consoles (the run
 # summary links them). The site on Vercel deploys itself from main. Setup: docs/DEVELOPMENT.md, "Publishing".
 on:
   workflow_call:
@@ -33,6 +33,9 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     env:
       VITE_GD_GAME_ID: ${{ vars.GD_GAME_ID }}
+      VITE_GM_GAME_ID: ${{ vars.GM_GAME_ID }}
+      VITE_Y8_APP_ID: ${{ vars.Y8_APP_ID }}
+      VITE_Y8_GAME_ID: ${{ vars.Y8_GAME_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,12 +93,23 @@ jobs:
 
           - **Yandex Games**: [rebirth-yandex.zip]($ASSETS/rebirth-yandex.zip) → [console](https://games.yandex.ru/console/) → the game → new version $VERSION → upload → send for moderation.
           - **CrazyGames**: [rebirth-crazygames.zip]($ASSETS/rebirth-crazygames.zip) → unzip → [developer portal](https://developer.crazygames.com/) → the game → new build → upload the unzipped files (index.html at the top, not a folder around it).
+          - **CrazyGames Full Launch**: after invitation, upload the unzipped [rebirth-crazygames-full.zip]($ASSETS/rebirth-crazygames-full.zip). In both phases set **Progress Save** to **Yes, using the Data Module from the CrazyGames SDK**.
           - **GamePix**: [rebirth-gamepix.zip]($ASSETS/rebirth-gamepix.zip) → [partners portal](https://partners.gamepix.com/) → the game → new build.
           EOF
           if [ -f release/rebirth-gamedistribution.zip ]; then
             echo "- **GameDistribution**: [rebirth-gamedistribution.zip]($ASSETS/rebirth-gamedistribution.zip) → [developer portal](https://developer.gamedistribution.com/) → the game → upload." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "- **GameDistribution**: not built, the \`GD_GAME_ID\` variable is not set." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f release/rebirth-gamemonetize.zip ]; then
+            echo "- **GameMonetize**: [rebirth-gamemonetize.zip]($ASSETS/rebirth-gamemonetize.zip) → [dashboard](https://gamemonetize.com/account) → upload → Verify Game → Request Activation." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '- **GameMonetize**: build requires the `GM_GAME_ID` variable.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f release/rebirth-y8.zip ]; then
+            echo "- **Y8**: [rebirth-y8.zip]($ASSETS/rebirth-y8.zip) → [developer portal](https://developer.y8.com/) → Builds → upload." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '- **Y8**: build requires the `Y8_APP_ID` variable.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # Add a required reviewer to an environment (repository settings) to approve its pushes by hand.

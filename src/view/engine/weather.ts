@@ -16,11 +16,11 @@ import { precipDensity, precipSlant, precipVisibility, snowOpacity, weatherCover
 import { weatherMapOn } from "../../map/weatherSettings";
 import { rgb } from "../../map/modelGeometry";
 import { DAY_MIN } from "../../sim/time";
-import { TUNING, type WeatherState } from "../../sim/weather";
+import { climate, TUNING, yearFrac, type WeatherState } from "../../sim/weather";
 import { frame } from "../../simClient";
 import { MAP_ONLY, PALETTE, TREE_COLORS } from "../../ui/palette";
 import { zoomAtMpp } from "../view";
-import { climateGround, townShare, townWeather, wetness, type CubeWeather, type TownWeather, type WeatherOverride } from "./townWeather";
+import { climateGround, snowAtTemp, townShare, townWeather, wetness, type CubeWeather, type TownWeather, type WeatherOverride } from "./townWeather";
 
 // The sky and weather of the game on the engine: the weather cube pair and the noise volumes
 // from the cloud worker (map/clouds/cloudData.ts) into the engine's weather textures, the per-frame weather uniform
@@ -138,20 +138,19 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
     return { cover: v(0), precip: v(2), temp: v(3) * 80 - 40 };
   };
 
-  // The weather where the camera looks: the town's own near it, the cube's climate away from it (as groundWeather in
-  // sky/weather.wgsl). Rain and snow particles and the snow on the trees follow it.
-  const weatherAtTarget = (tw: TownWeather | null, town: Vec3 | null, mix: number) => {
+  // Falling precipitation blends by distance from town. Snow on the trees follows the same temperature band as the ground.
+  const weatherAtTarget = (tw: TownWeather | null, town: Vec3 | null, townTemp: number | null, mix: number) => {
     const s = engine.state;
     const ground = geodeticToEcef(s.lat, s.lng, 0);
     const k = !tw ? 0 : town ? townShare(Math.hypot(ground[0] - town[0], ground[1] - town[1], ground[2] - town[2])) : 1;
-    const c = k < 1 ? sampleCube(ground.map((x) => x / Math.hypot(...ground)) as Vec3, mix) : null;
+    const c = sampleCube(ground.map((x) => x / Math.hypot(...ground)) as Vec3, mix);
     const local = c && climateGround(c, s.h / EXAGGERATION, TUNING.precipMax);
     if (!local) return tw ? { precip: tw.precip, snowing: tw.snowing, treeSnow: Math.min(1, tw.snowpack / 0.05) } : null;
     if (!tw) return { precip: local.precip, snowing: local.snowing, treeSnow: Math.min(1, local.snow * 2) };
     return {
       precip: local.precip + (tw.precip - local.precip) * k,
       snowing: k > 0.5 ? tw.snowing : local.snowing,
-      treeSnow: Math.min(1, local.snow * 2) * (1 - k) + Math.min(1, tw.snowpack / 0.05) * k,
+      treeSnow: snowAtTemp(Math.min(1, tw.snowpack / 0.05), Math.min(1, local.snow * 2), local.temp, townTemp),
     };
   };
 
@@ -185,7 +184,10 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
     const c = site ? cubes(t, site, CUBE_SIZE[quality]) : null;
     const clouded = cloudsOn.peek() && !!c?.ready;
     const ph = driftPhases(t / DAY_MIN);
-    const own = townWeather(o.weather?.peek(), override);
+    const weather = o.weather?.peek();
+    const own = townWeather(weather, override);
+    const townSite = weather?.site;
+    const townTemp = townSite ? climate(townSite.lat, townSite.elev, yearFrac(t, townSite.phase)).mean : null;
     const shown = weatherMapOn.peek();
     const tw = shown ? own : null;
     const tf = frame.peek();
@@ -209,6 +211,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
       castHeight: shadowHeight(zoom),
       shadowDrift: DRIFT_DEG,
       snow: tw ? snowOpacity(tw.snowpack) / snowOpacity(1) : 0,
+      townTemp,
       wet: tw ? wetness(tw.precip, tw.snowing, tw.soil) : 0,
       ice: tw?.ice ?? 0,
       climate: shown && !!c?.ready,
@@ -218,7 +221,7 @@ export function attachWeather(engine: Engine, o: WeatherOptions): EngineWeather 
       iceColour,
     });
 
-    const here = weatherAtTarget(own, origin, c?.mix ?? 0);
+    const here = weatherAtTarget(own, origin, townTemp, c?.mix ?? 0);
     snowOnTrees = here?.treeSnow ?? 0;
 
     // Rain and snow where the camera looks, at town scale.

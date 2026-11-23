@@ -2,6 +2,7 @@ import type { Signal } from "@preact/signals";
 import { expect, it, vi } from "vitest";
 import type { Engine } from "../../engine/engine";
 import type { ModelItem } from "../../map/modelItems";
+import { DEFAULT_FLAG } from "../../sim/heraldry";
 import { frame } from "../../simClient";
 import { makeFrame, type Frame } from "../../world/frame";
 import { buildingItems } from "../layers/buildings";
@@ -56,4 +57,15 @@ it("uploads only the changed model group and rebuilds both after the origin chan
   draw(2);
   expect(mesh.setRoads).toHaveBeenCalledTimes(2);
   expect(mesh.setBuildings).toHaveBeenCalledTimes(3);
+
+  const hall: ModelItem = { ...house, kind: "townhall", progress: 1, flag: DEFAULT_FLAG };
+  buildings.value = [hall];
+  draw(3);
+  buildings.value = [{ ...hall, flag: { ...DEFAULT_FLAG, field: "#884422" } }];
+  draw(4);
+  expect(mesh.setBuildings).toHaveBeenCalledTimes(5);
+  expect(mesh.setRoads).toHaveBeenCalledTimes(2);
+  buildings.value = [structuredClone(buildings.value[0])];
+  draw(5);
+  expect(mesh.setBuildings).toHaveBeenCalledTimes(5);
 });

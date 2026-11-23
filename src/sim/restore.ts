@@ -1,14 +1,12 @@
 import { addChronicle } from "./chronicle";
-import { earlierOfKind, nextInsight, restoreWeightOf, scarcity, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE } from "./heritage";
+import { earlierOfKind, restoreWeightOf, scarcity, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE } from "./heritage";
 import { say } from "./production";
-import { grantInsight } from "./research";
-import { INSIGHT_BY_ID } from "./tech";
 import type { Building, FoundFoundation, SimState } from "./types";
 import { L } from "../i18n";
 
 // Restoring an old building "as it was": ordinary construction on an old foundation
 // whose purpose matches its known old kind (`Building.asItWas`). This module keeps its consequences: the site is being
-// restored once ordered, restored once finished (research, an idea, a chronicle line) and lost once demolished.
+// restored once ordered, restored once finished and lost once demolished.
 
 const withFoundation = <S extends Pick<SimState, "finds">>(s: S, id: string, patch: Partial<FoundFoundation>): S => ({
   ...s,
@@ -22,8 +20,8 @@ export function orderRestoration<S extends Pick<SimState, "finds">>(s: S, b: Bui
 }
 
 // Every building "as it was" that has just been finished counts: the foundation is restored and the domain's research
-// grows by the scarcity-weighted share. A unique one (heritage.ts tierOf) brings an idea (the first of its kind), a
-// chronicle line and the monument effect; a typical one a quarter of the share. Driven by the state (not a diff), so admin
+// grows by the scarcity-weighted share. A unique one (heritage.ts tierOf) brings a chronicle line and the monument
+// effect; a typical one a quarter of the share. Driven by the state (not a diff), so admin
 // finishing works too.
 export function completeRestorations(s: SimState): SimState {
   let cur = s;
@@ -37,12 +35,10 @@ export function completeRestorations(s: SimState): SimState {
     const weight = Math.round(restoreWeightOf(scarcity(cur.finds), earlier) * (unique ? 1 : TYPICAL_SHARE) * 100) / 100;
     let progress = cur.progress;
     if (domain) progress = { ...progress, restored: { ...progress.restored, [domain]: (progress.restored[domain] ?? 0) + weight } };
-    const ins = unique && domain && earlier === 0 ? nextInsight(progress, domain) : null; // only the first of a kind brings an idea
     const done: Building = { ...b, restoreWeight: weight, ...(unique ? { landmark: true as const } : {}) };
     cur = withFoundation({ ...cur, progress, buildings: { ...cur.buildings, [b.id]: done } }, f.id, { state: "restored" });
-    if (ins) cur = grantInsight(cur, ins.id);
     const name = siteTitle(f);
-    const text = `${L("Восстановлено", "Restored")}: ${name}${ins ? ` — ${L("идея", "idea")} «${INSIGHT_BY_ID.get(ins.id)?.text ?? ins.text}»` : ""}`;
+    const text = `${L("Восстановлено", "Restored")}: ${name}`;
     cur = { ...cur, events: say(cur.events, cur.gameMinutes, "heritage", text, [b.lot.cx, b.lot.cy]) };
     if (unique) cur = { ...cur, chronicle: addChronicle(cur.chronicle, cur.gameMinutes, `heritage:${f.id}`, text) };
   }

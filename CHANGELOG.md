@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.3](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.6.2...rebirth-v0.6.3) (2026-11-24)
+
+
+### Features
+
+* **platform:** y8 and gamemonetize builds, and a full crazygames launch ([d3ebaa2](https://github.com/Web-Zhaba/Rebirth/commit/d3ebaa2))
+* **ui:** external links only where the portal allows them ([c8155e6](https://github.com/Web-Zhaba/Rebirth/commit/c8155e6))
+* **sim,ui:** the year's harvest, in the barn and still standing ([7b1e76f](https://github.com/Web-Zhaba/Rebirth/commit/7b1e76f))
+* **ui:** the map clock as leaves of its own ([8fd2b6b](https://github.com/Web-Zhaba/Rebirth/commit/8fd2b6b))
+* **engine,settings:** antialiasing off or 4x, and targets that wait for a resize ([3bbbd73](https://github.com/Web-Zhaba/Rebirth/commit/3bbbd73))
+
+
+### Performance
+
+* **sim:** prepare the town once per stroke, and cache the street lookups ([5a0443f](https://github.com/Web-Zhaba/Rebirth/commit/5a0443f))
+* **ui:** the nearest street once per feature ([fe6745a](https://github.com/Web-Zhaba/Rebirth/commit/fe6745a))
+* **ui:** ship the woff2 faces only ([f98e202](https://github.com/Web-Zhaba/Rebirth/commit/f98e202))
+* **view:** keep each building's item by its identity ([76c4ebd](https://github.com/Web-Zhaba/Rebirth/commit/76c4ebd))
+* **engine:** an unchanged frame costs the forest nothing, and bounded caches ([e9efa03](https://github.com/Web-Zhaba/Rebirth/commit/e9efa03))
+* **map:** coalesce pointer moves and skip a repeated road preview ([e2c5d82](https://github.com/Web-Zhaba/Rebirth/commit/e2c5d82))
+
 ## [0.6.2](https://github.com/Web-Zhaba/Rebirth/compare/rebirth-v0.6.1...rebirth-v0.6.2) (2026-11-19)
 
 

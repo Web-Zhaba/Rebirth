@@ -1,6 +1,6 @@
 import { smoothstep } from "../../map/clouds/cloudQuality";
 import type { WeatherState } from "../../sim/weather";
-import { TOWN_FAR_M, TOWN_NEAR_M } from "../../engine/sky/weather";
+import { SNOW_TEMP_FAR, SNOW_TEMP_NEAR, TOWN_FAR_M, TOWN_NEAR_M } from "../../engine/sky/weather";
 
 // The town's weather as the engine draws it (view/engine/weather.ts): pure, so tests need no worker or GPU.
 
@@ -43,8 +43,15 @@ export function wetness(precip: number, snowing: boolean, soil: number): number 
 
 const LAPSE = 0.0065; // °C per m
 
-// Share of the town's own weather at a distance (m) from its origin (sky/weather.wgsl groundWeather mirrors it).
+// Share of the town's falling precipitation, wetness and ice at a distance (m) from its origin.
 export const townShare = (dist: number): number => 1 - smoothstep(TOWN_NEAR_M, TOWN_FAR_M, dist);
+
+// Blend settled snow by difference in seasonal mean at ground height, as in sky/weather.wgsl.
+export function snowAtTemp(own: number, local: number, temp: number, townTemp: number | null): number {
+  if (townTemp === null) return local;
+  const k = smoothstep(SNOW_TEMP_NEAR, SNOW_TEMP_FAR, Math.abs(temp - townTemp));
+  return own + (local - own) * k;
+}
 
 // A texel of the weather cube (map/clouds/weatherCube.ts): cover, precipitation share of precipMax, sea-level
 // climate mean temperature (°C) of the season.
@@ -57,10 +64,11 @@ export interface CubeWeather {
 // Weather on the ground away from the town, from the cube alone: snow 0..1 where the season's mean at this height is
 // below freezing (the snow cover follows the climate, not a snowpack), wet ground under rain, ice on water in the
 // cold. precipMax turns the share back into mm/h.
-export function climateGround(c: CubeWeather, altM: number, precipMax: number): { snow: number; wet: number; ice: number; precip: number; snowing: boolean } {
+export function climateGround(c: CubeWeather, altM: number, precipMax: number): { temp: number; snow: number; wet: number; ice: number; precip: number; snowing: boolean } {
   const t = c.temp - LAPSE * altM;
   const falling = smoothstep(0.03, 0.4, c.precip);
   return {
+    temp: t,
     snow: 1 - smoothstep(-6, 1, t),
     wet: falling * smoothstep(0, 2, t),
     ice: 1 - smoothstep(-10, -2, t),

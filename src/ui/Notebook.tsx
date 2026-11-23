@@ -10,6 +10,7 @@ import { notebookArticleFocus } from "./notebookFocus";
 import { tabId, tabPanelId } from "./tabSemantics";
 import { SEMANTIC_IDS } from "./semanticIds";
 import { L } from "../i18n";
+import { externalLinksAllowed } from "../platform";
 
 export type { Article, ChronicleEntry, Find } from "./notebookLogic";
 
@@ -176,7 +177,7 @@ export function Notebook({ articles, items, onItem, chronicle, seen, onSeen, ope
                         </button>
                         <div class="notebook-text">
                           {a.extract}
-                          <a
+                          {externalLinksAllowed && <a
                             class="wiki-full-link"
                             href={a.url}
                             target="_blank"
@@ -186,7 +187,7 @@ export function Notebook({ articles, items, onItem, chronicle, seen, onSeen, ope
                             aria-label={L(`Открыть полную статью «${a.title}»`, `Open the full article “${a.title}”`)}
                           >
                             ^
-                          </a>
+                          </a>}
                         </div>
                         <div class="notebook-date">{formatDate(a.at)} · {L("Википедия", "Wikipedia")}, CC BY-SA 4.0</div>
                       </div>

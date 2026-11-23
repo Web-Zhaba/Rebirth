@@ -1,5 +1,5 @@
 import { domainName, type DomainId } from "../sim/domains";
-import { beyondSurvey, catalogue, foundIds, realName, returnBlocker, type ItemKind } from "../sim/items";
+import { beyondSurvey, foundIds, realName, returnBlocker, type ItemKind } from "../sim/items";
 import { exhibitionEffects, halls, hallsOf, hallStrength, isMuseum, MUSEUM, quality, themes, type Theme } from "../sim/museum";
 import { SPEED } from "../sim/research";
 import type { Building, SimState } from "../sim/types";
@@ -94,13 +94,14 @@ export function museumView(s: Input): MuseumView {
   const all = themes(s);
   const byKey = new Map(all.map((t) => [t.key, t]));
   const list = Object.values(s.buildings).filter(isMuseum).sort((a, b) => a.id - b.id);
+  const assigned = halls(s);
   const many = list.length > 1;
   const nameOf = (b: Building, i: number): string => realName(s, b) ?? (many ? L(`Музей ${i + 1}`, `Museum ${i + 1}`) : L("Музей", "Museum"));
   const museums: MuseumRow[] = list.map((b, i) => {
     const staff = s.museumStaff[b.id] ?? 0;
     const strength = hallStrength(b, staff);
     const name = nameOf(b, i);
-    const rows = halls(s)
+    const rows = assigned
       .filter((h) => h.museum === b.id)
       .map((h): HallRow => {
         const t = h.theme;
@@ -122,38 +123,30 @@ export function museumView(s: Input): MuseumView {
   const hallOf = new Map(museums.flatMap((m) => m.halls.flatMap((h) => (h.theme ? [[h.theme, h] as const] : []))));
 
   const found = foundIds(s);
-  const items = new Map<string, ShowcaseItem[]>();
-  for (const i of catalogue(s)) {
-    if (!byKey.has(i.theme)) continue;
-    const fate = s.finds.fates[i.id];
-    const state: ShowcaseItem["state"] = !found.has(i.id) ? "unfound" : fate === "returned" ? "returned" : fate === "used" ? "used" : "shown";
-    const t = byKey.get(i.theme)!;
-    const why = state === "shown" ? returnBlocker(s, i) : null;
-    const hasPlace = !!i.place || !!i.street || i.kind === "bucket";
-    const row: ShowcaseItem = {
-      id: i.id,
-      no: 0,
-      name: state === "unfound" ? null : i.name,
-      kind: i.kind,
-      source: i.source === "OSM" ? "OpenStreetMap" : L("Википедия", "Wikipedia"),
-      state,
-      beyond: beyondSurvey(s.finds, i),
-      at: [i.x, i.y],
-      returnWhy: hasPlace ? why : null,
-      canReturn: state === "shown" && hasPlace && why === null,
-      canUse: state === "shown" && i.usable,
-      breaks: state === "shown" && hallOf.has(t.key) && t.shown.length - 1 < MUSEUM.min,
-    };
-    const arr = items.get(i.theme);
-    if (arr) arr.push(row);
-    else items.set(i.theme, [row]);
-  }
   const order: Record<ShowcaseItem["state"], number> = { shown: 0, returned: 1, used: 2, unfound: 3 };
 
   const rows: ThemeRow[] = all.map((t) => {
     const hall = hallOf.get(t.key) ?? null;
-    const list = items.get(t.key) ?? [];
-    [...list].sort((a, b) => a.id.localeCompare(b.id)).forEach((x, k) => (x.no = k + 1)); // stable whatever is found
+    const list = [...t.items].sort((a, b) => a.id.localeCompare(b.id)).map((i, k): ShowcaseItem => {
+      const fate = s.finds.fates[i.id];
+      const state: ShowcaseItem["state"] = !found.has(i.id) ? "unfound" : fate === "returned" ? "returned" : fate === "used" ? "used" : "shown";
+      const why = state === "shown" ? returnBlocker(s, i) : null;
+      const hasPlace = !!i.place || !!i.street || i.kind === "bucket";
+      return {
+        id: i.id,
+        no: k + 1,
+        name: state === "unfound" ? null : i.name,
+        kind: i.kind,
+        source: i.source === "OSM" ? "OpenStreetMap" : L("Википедия", "Wikipedia"),
+        state,
+        beyond: beyondSurvey(s.finds, i),
+        at: [i.x, i.y],
+        returnWhy: hasPlace ? why : null,
+        canReturn: state === "shown" && hasPlace && why === null,
+        canUse: state === "shown" && i.usable,
+        breaks: state === "shown" && !!hall && t.shown.length - 1 < MUSEUM.min,
+      };
+    });
     const showcase = list.sort((a, b) => order[a.state] - order[b.state] || a.no - b.no);
     return {
       key: t.key,

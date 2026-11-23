@@ -135,7 +135,7 @@ export const researchAll = (s: SimState): SimState => {
   return withProgress(s, { ...s.progress, era: MAX_ERA, techs: [...s.progress.techs, ...TECHS.filter((t) => !have.has(t.id)).map((t) => t.id)], research: { active: null, queue: [] }, insights: [] });
 };
 
-// An insight of an old building (stage H2 grants them). Its tech researched already, it burns with a message; one held
+// An insight whose tech is researched already burns with a message; one held
 // already is not given twice.
 export function grantInsight(s: SimState, id: string): SimState {
   const i = INSIGHT_BY_ID.get(id);

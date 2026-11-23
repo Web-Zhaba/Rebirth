@@ -3,7 +3,7 @@ import { YEAR_MIN } from "./time";
 import { describe, expect, it } from "vitest";
 import { advanceTo, BASE_TICK, step, TICK_MS } from "./clock";
 import { allocateLabor, BUILDINGS, CREW } from "./buildings";
-import { advanceBuildings, emptyGrowth, nextRandom, reconcile, seedOf } from "./growth";
+import { advanceBuildings, canPlace, canPlaceIn, cellIndex, emptyGrowth, nextRandom, placeBuilding, placeCtx, placedIn, reconcile, seedOf } from "./growth";
 import { builderCount } from "./people";
 import { addRoad, emptyRoads, removeEdge, roadCrew } from "./roads";
 import { payMaterials, reportShortages } from "./production";
@@ -115,6 +115,59 @@ describe("lots", () => {
         seen.add(c.key);
       }
     }
+  });
+});
+
+describe("a prepared town for repeated placement checks", () => {
+  const NO_SITE = { forest: 0, water: 0, rock: 0 };
+  const first = (s: SimState) => Number(Object.keys(s.roads.edges)[0]);
+
+  it("answers as canPlace does, before and after the buildings a stroke places", () => {
+    const s = world(straight());
+    const edge = first(s);
+    const ctx = placeCtx(s);
+    let cur = s;
+    for (let i = 0; i < 8; i++) {
+      const free = s.zones.cells.find((c) => c.depth === 0 && c.edge === edge && c.side === 1 && c.i === i * 2);
+      if (!free) continue;
+      const now = canPlaceIn(ctx, cur, BUILDINGS.izba, edge, 1, i * 2, NO_SITE, true);
+      expect(now).toEqual(canPlace(cur, BUILDINGS.izba, edge, 1, i * 2, NO_SITE, true));
+      if (!now.ok) continue;
+      cur = placeBuilding(cur, BUILDINGS.izba, edge, 1, i * 2);
+      placedIn(ctx, cur);
+    }
+    expect(Object.keys(cur.buildings).length).toBeGreaterThan(1);
+    // the next lot sees the ones before it: the same cell is taken for both paths
+    const taken = Object.values(cur.buildings)[0];
+    expect(canPlaceIn(ctx, cur, BUILDINGS.izba, edge, 1, 0, NO_SITE, true)).toEqual(canPlace(cur, BUILDINGS.izba, edge, 1, 0, NO_SITE, true));
+    expect(canPlaceIn(ctx, cur, BUILDINGS.izba, edge, 1, 0, NO_SITE, true)).toMatchObject({ ok: false });
+    expect(taken.lot.cx).toBeGreaterThan(-200);
+  });
+
+  it("catches up with a town whose placements it was not told about", () => {
+    const s = world(straight());
+    const edge = first(s);
+    const ctx = placeCtx(s);
+    const cur = placeBuilding(placeBuilding(s, BUILDINGS.izba, edge, 1, 0), BUILDINGS.izba, edge, 1, 2);
+    expect(canPlaceIn(ctx, cur, BUILDINGS.izba, edge, 1, 0, NO_SITE, true)).toEqual(canPlace(cur, BUILDINGS.izba, edge, 1, 0, NO_SITE, true));
+    expect(canPlaceIn(ctx, cur, BUILDINGS.izba, edge, 1, 0, NO_SITE, true).ok).toBe(false);
+  });
+
+  it("finds a lot's cells by its row without walking the town", () => {
+    const s = world(straight());
+    const edge = first(s);
+    const idx = cellIndex(s.zones);
+    expect(idx).toBe(cellIndex(s.zones)); // kept with the zones record
+    const cell = s.zones.cells.find((c) => c.edge === edge && c.side === 1 && c.depth === 2 && c.i === 7)!;
+    expect(idx.at(edge, 1, 7, 2)).toBe(cell);
+    expect(idx.at(edge, 1, 7, 0)).toBe(s.zones.cells.find((c) => c.edge === edge && c.side === 1 && c.depth === 0 && c.i === 7));
+    expect(idx.at(edge, -1, 7, 2)).toBe(s.zones.cells.find((c) => c.edge === edge && c.side === -1 && c.depth === 2 && c.i === 7));
+    expect(idx.at(edge, 1, 7, 9)).toBeUndefined(); // no such depth
+    expect(idx.at(edge + 1000, 1, 0, 0)).toBeUndefined(); // no such road
+    expect(idx.front(edge, 1).get(7)).toBe(s.zones.cells.find((c) => c.edge === edge && c.side === 1 && c.depth === 0 && c.i === 7));
+    expect(idx.front(edge + 1000, 1).size).toBe(0);
+    // a new zones record is a new index
+    expect(cellIndex({ ...s.zones })).not.toBe(idx);
   });
 });
 

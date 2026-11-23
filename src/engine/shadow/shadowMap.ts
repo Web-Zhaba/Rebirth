@@ -1,3 +1,4 @@
+import type { ShadowQuality } from "../../map/graphicsSettings";
 import type { CameraView } from "../camera/camera";
 import { dot, normalize, type Vec3 } from "../geo/ellipsoid";
 import { cascadeSplits, MAX_CASCADES, ShadowCache, shadowCovers, shadowFade, shadowFrame, shadowMatrix, shadowStart, sliceSphere, steadyRadius, sunTolerance, type ShadowFrame } from "./shadowMath";
@@ -9,7 +10,6 @@ import { cascadeSplits, MAX_CASCADES, ShadowCache, shadowCovers, shadowFade, sha
 // texel, so the far, coarse cascades follow the clock far less often than the near one. The two nearest are
 // re-rendered on the frame they go stale; the farther ones take turns, one of them a frame.
 
-export type ShadowQuality = "off" | "low" | "high";
 export const SHADOW_SETUP: Record<Exclude<ShadowQuality, "off">, { size: number; cascades: number; far: number }> = {
   low: { size: 1024, cascades: 3, far: 2500 },
   high: { size: 2048, cascades: 4, far: 5000 },

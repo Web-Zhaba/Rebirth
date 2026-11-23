@@ -1,6 +1,7 @@
 import type { CameraControl } from "../../engine/camera/cameraControl";
 import type { Engine } from "../../engine/engine";
 import { L } from "../../i18n";
+import { externalLinksAllowed } from "../../platform";
 
 // The map's own controls on the engine, in the place and look of the old navigation control: zoom in and out about
 // the target, and a compass that turns with the map and turns it back to north. Plus the credits, which fold behind
@@ -48,12 +49,15 @@ export function credits(): HTMLElement {
   const el = document.createElement("details");
   el.className = "engine-attrib";
   el.open = true;
+  const source = (name: string, href: string) => externalLinksAllowed
+    ? `<a href="${href}" target="_blank" rel="noopener">${name}</a>`
+    : name;
   el.innerHTML =
     `<summary aria-label="${L("Источники данных карты", "Map data sources")}">i</summary>` +
-    `<span>${L("Рельеф", "Terrain")}: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Mapzen Terrarium, AWS Open Data</a> | ` +
-    `<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ` +
-    `<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">&copy; OpenMapTiles</a> ` +
-    `<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; ${L("участники OpenStreetMap", "OpenStreetMap contributors")}</a></span>`;
+    `<span>${L("Рельеф", "Terrain")}: ${source("Mapzen Terrarium, AWS Open Data", "https://registry.opendata.aws/terrain-tiles/")} | ` +
+    `${source("OpenFreeMap", "https://openfreemap.org")} ` +
+    `${source("&copy; OpenMapTiles", "https://www.openmaptiles.org/")} ` +
+    `${source(`&copy; ${L("участники OpenStreetMap", "OpenStreetMap contributors")}`, "https://www.openstreetmap.org/copyright")}</span>`;
   // Any touch elsewhere folds them again, so a reopened line does not stay over the map.
   const fold = (e: Event) => {
     if (el.open && !el.contains(e.target as Node)) el.open = false;

@@ -1,5 +1,6 @@
 import { signal, type Signal } from "@preact/signals";
-import type { ShadowQuality } from "../engine/shadow/shadowMap";
+
+export type ShadowQuality = "off" | "low" | "high"; // the shadow renderer (engine/shadow/shadowMap.ts) reads it from here
 
 // Graphics effects the player can turn off for a lighter map (the settings dialog).
 
@@ -84,6 +85,33 @@ export function setShadowQuality(q: ShadowQuality): void {
   shadowQuality.value = q;
   try {
     localStorage.setItem(SHADOW_KEY, q);
+  } catch {
+    /* no storage: the choice lives for the session */
+  }
+}
+
+// Multisampling of the map (the main pass of engine/, device.ts SAMPLE_COUNT). WebGPU builds multisampled textures at
+// four samples only, so the choice is four or none. The count is baked into every pipeline and into the depth texture
+// the Hi-Z pyramid reads, so it is chosen when the map is made: a change shows after a reload, and the dialog says so.
+export const ANTIALIAS_MODES = [1, 4] as const;
+export type Antialias = (typeof ANTIALIAS_MODES)[number];
+const ANTIALIAS_KEY = "rebirth.antialias";
+
+function readAntialias(): Antialias {
+  try {
+    const v = Number(localStorage.getItem(ANTIALIAS_KEY));
+    return (ANTIALIAS_MODES as readonly number[]).includes(v) ? (v as Antialias) : 4;
+  } catch {
+    return 4;
+  }
+}
+
+export const antialias = signal<Antialias>(readAntialias());
+
+export function setAntialias(v: Antialias): void {
+  antialias.value = v;
+  try {
+    localStorage.setItem(ANTIALIAS_KEY, String(v));
   } catch {
     /* no storage: the choice lives for the session */
   }

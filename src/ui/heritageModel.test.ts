@@ -29,7 +29,6 @@ describe("heritage view", () => {
     expect(v.cost.labor).toBe(Math.round(180 * k));
     expect(v.research).toBe("+10 % к скорости: Вера и здоровье");
     expect(v.effects).toContain("Работает как «Храм»");
-    expect(v.insight).toBe("«Травник»: «Врачевание» изучается быстрее на 30 %"); // «Свод» is used up: its tech is researched
   });
   it("closes a purpose whose technology is not researched; a kind without one comes back as a monument", () => {
     const f = site();
@@ -57,14 +56,13 @@ describe("heritage view", () => {
     const other = sim(site({ id: "b" }));
     expect(buildHeritageView({ site: f, sim: other, mul: 1, articles: [] }).canOrder).toBe(false);
   });
-  it("halves a further site of a kind already ordered or restored, with no new idea", () => {
+  it("halves a further site of a kind already ordered or restored", () => {
     const done = site({ id: "x", cls: "castle", state: "restored" });
     const next = site({ cls: "castle" });
     const s = { ...sim(done, allResearched()), finds: { foundations: [done, next], pois: [], streets: [], revealed: [] } } as unknown as Parameters<typeof buildHeritageView>[0]["sim"];
     const v = buildHeritageView({ site: next, sim: s, mul: 1, articles: [] });
     expect(v.repeat).toEqual({ kind: "Замок", factor: 0.5 });
     expect(v.research).toBe("+2,5 % к скорости: Строительство");
-    expect(v.insight).toBeNull();
     const lost = { ...done, state: "lost" as const };
     const free = buildHeritageView({ site: next, sim: { ...s, finds: { ...s.finds, foundations: [lost, next] } }, mul: 1, articles: [] });
     expect(free.repeat).toBeNull();
