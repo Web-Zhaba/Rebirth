@@ -130,15 +130,17 @@ describe("fates", () => {
     expect(c.stock.tools).toBe(b.stock.tools + FIND.railTools);
     expect(useFind(c, "street:st")).toEqual({ ok: false, reason: "Эту находку не пустить в дело" });
     expect(useFind(c, "feat:nope")).toEqual({ ok: false, reason: "Нет такой находки" });
-    expect(findsView(c).find((g) => g.theme === "railway")!.rows[0]).toMatchObject({ fate: "used", usable: false });
+    expect(findsView(c).flatMap((g) => g.rows).find((r) => r.id === "feat:r")).toMatchObject({ fate: "used", usable: false });
   });
 });
 
 describe("the museum", () => {
   const big = fnd("m", rect(0, 46, 20, 15)); // 300 m2: three halls
+  const shops = [poi("p1", "Лавка", "shop", -5, 44), poi("p2", "Пекарня", "bakery", 25, 42)];
+  const parts = [feat("i1", "parts", 16, 70), feat("i2", "parts", 18, 70), feat("i3", "parts", 20, 72)];
   const town = () => {
-    const feats = [feat("g1", "seeds", 10, 70), feat("g2", "seeds", 12, 72), feat("g3", "seeds", 14, 74), feat("i", "parts", 16, 70)];
-    return finishAll(put(mk([big], [], feats), "m", "museum"));
+    const feats = [feat("g1", "seeds", 10, 70), feat("g2", "seeds", 12, 72), feat("g3", "seeds", 14, 74), ...parts];
+    return finishAll(put(mk([big], shops, feats), "m", "museum"));
   };
   it("stands only on an old foundation and has halls by floor area", () => {
     const s = town();
@@ -152,26 +154,24 @@ describe("the museum", () => {
   const jobs = (s: SimState) => scaledJobs(BUILDINGS.museum.jobs, s.buildings[1]);
   it("shows one theme a hall; a complete exhibition gives research and attraction", () => {
     let s = town();
-    expect(themes(s).map((t) => [t.key, t.shown.length, t.complete])).toEqual([
-      ["gardens", 3, true],
-      ["crafts", 1, false],
-      ["street:Садовая", 1, false],
-    ]);
+    expect(themes(s).map((t) => [t.key, t.shown.length, t.complete])).toEqual(expect.arrayContaining([
+      ["gardens", 3, true], ["crafts", 3, true], ["street:Садовая", 3, true],
+    ]));
     s = ok(setExhibition(s, 1, 0, "gardens")).sim;
     expect(setExhibition(s, 1, 1, "gardens")).toEqual({ ok: false, reason: "Эта тема уже в другом зале" });
     expect(setExhibition(s, 1, 9, "crafts")).toEqual({ ok: false, reason: "Нет такого зала" });
     expect(setExhibition(s, 1, 1, "nope")).toEqual({ ok: false, reason: "Для этой темы нет находок" });
     s = staffed(ok(setExhibition(s, 1, 1, "crafts")).sim, jobs(s));
     expect(museumStaff(s)).toEqual({ 1: 1 });
-    expect(exhibitionEffects(s, museumStaff(s))).toEqual({ exhibits: { farm: MUSEUM.research }, pull: MUSEUM.pull });
+    expect(exhibitionEffects(s, museumStaff(s))).toEqual({ exhibits: { farm: MUSEUM.research, craft: MUSEUM.research }, pull: 2 * MUSEUM.pull });
     const d = museumDaily(s);
-    expect(d.progress.exhibits).toEqual({ farm: MUSEUM.research });
+    expect(d.progress.exhibits).toEqual({ farm: MUSEUM.research, craft: MUSEUM.research });
     expect(researchSpeed(d, "farm")).toBeGreaterThan(researchSpeed(s, "farm"));
     const base = { food: 1, mood: 60, unemployment: 0, services: 0.5, pop: 50 };
     expect(attractionOf({ ...base, museum: d.progress.museumPull }).score).toBeGreaterThan(attractionOf(base).score);
     // a seed put to use leaves the exhibition: the theme is still complete with what is left, if enough
     const used = museumDaily(ok(useFind(d, "feat:g1")).sim);
-    expect(used.progress.exhibits).toBeUndefined(); // two seeds left: fewer than MUSEUM.min
+    expect(used.progress.exhibits).toEqual({ craft: MUSEUM.research }); // two seeds left: fewer than MUSEUM.min
     expect(ok(setExhibition(d, 1, 0, null)).sim.buildings[1].exhibits).toEqual([null, "crafts", null]);
   });
   it("works by the share of its staff; an exhibition short of a few finds gives a part", () => {
@@ -184,7 +184,7 @@ describe("the museum", () => {
     expect(quality({ shown: [{}, {}] as never, showable: 4, complete: false })).toBe(0);
   });
   it("the window: halls, themes by group, a showcase with the empty places, what it gives", () => {
-    const far = finishAll(put(mk([big], [], [feat("g1", "seeds", 10, 70), feat("g2", "seeds", 12, 72), feat("g3", "seeds", 14, 74), feat("g4", "seeds", 150, 60), feat("i", "parts", 16, 70)]), "m", "museum"));
+    const far = finishAll(put(mk([big], shops, [feat("g1", "seeds", 10, 70), feat("g2", "seeds", 12, 72), feat("g3", "seeds", 14, 74), feat("g4", "seeds", 150, 60), ...parts.map((p, i) => i === 0 ? p : { ...p, x: 150 })]), "m", "museum"));
     let s = staffed(ok(setExhibition(far, 1, 0, "gardens")).sim, jobs(far));
     const v = museumView({ ...s, museumStaff: museumStaff(s) });
     expect(v.museums[0].halls.map((h) => h.theme)).toEqual(["gardens", null, null]);
@@ -199,9 +199,45 @@ describe("the museum", () => {
     s = ok(setExhibition(s, 1, 0, null)).sim;
     expect(museumView({ ...s, museumStaff: museumStaff(s) }).themes.find((t) => t.key === "gardens")!.group).toBe("partial");
   });
+  it("combines small collections and counts saved assignments to them only once", () => {
+    const s = finishAll(put(mk([big], [], [feat("g1", "seeds", 10, 70), feat("g2", "seeds", 12, 72)]), "m", "museum"));
+    const saved = staffed({ ...s, buildings: { 1: { ...s.buildings[1], exhibits: ["gardens", "street:Садовая", null] } } }, jobs(s));
+    const [merged] = themes(saved);
+    expect(themes(saved)).toHaveLength(1);
+    expect(merged.items.map((i) => i.id).sort()).toEqual(["feat:g1", "feat:g2", "street:st"]);
+    expect(merged.complete).toBe(true);
+    expect(halls(saved).map((h) => h.theme?.key ?? null)).toEqual([merged.key, null, null]);
+    expect(exhibitionEffects(saved, museumStaff(saved)).pull).toBe(MUSEUM.pull);
+    expect(museumView({ ...saved, museumStaff: museumStaff(saved) }).themes[0].items).toHaveLength(3);
+    expect(findsView(saved)[0]).toMatchObject({ theme: merged.key, hall: "зал 1 музея", complete: true });
+    const used = ok(useFind(saved, "feat:g1")).sim;
+    expect(themes(used)[0]).toMatchObject({ key: merged.key, items: merged.items, complete: false });
+    expect(exhibitionEffects(used, museumStaff(used)).pull).toBe(0);
+    const restored = { ...saved, finds: { ...saved.finds, streets: [{ ...street, restored: 1 }] } };
+    const returned = ok(returnFind(restored, "street:st")).sim;
+    expect(themes(returned)[0]).toMatchObject({ key: merged.key, items: merged.items, complete: false });
+    expect(halls(ok(setExhibition(saved, 1, 0, null)).sim).every((h) => h.theme === null)).toBe(true);
+  });
+  it("pools the only two recorded finds while the collection is still too small to give a bonus", () => {
+    const s = mk([big], [], [feat("g1", "seeds", 10, 70)]);
+    expect(themes(s)).toHaveLength(1);
+    const [collection] = themes(s);
+    expect(collection.shown).toHaveLength(2);
+    expect(quality(collection)).toBe(0);
+    const expanded = { ...s, finds: { ...s.finds, features: [...s.finds.features, feat("g2", "seeds", 12, 72)] } };
+    expect(themes(expanded)[0]).toMatchObject({ key: collection.key, complete: true });
+  });
+  it("keeps many small themes of one domain in distinct bonus-sized collections", () => {
+    const s = mk([big]);
+    const streets = Array.from({ length: 11 }, (_, n) => ({ ...street, id: `st${n}`, name: `Улица ${n}` }));
+    const groups = themes({ ...s, finds: { ...s.finds, streets } });
+    expect(groups.map((g) => g.items.length).sort()).toEqual([3, 3, 5]);
+    expect(new Set(groups.map((g) => g.name)).size).toBe(groups.length);
+    expect(groups.every((g) => g.domain === "build" && quality(g) === 1)).toBe(true);
+  });
   it("arranges the themes worth most into the halls", () => {
     const s = ok(arrangeExhibitions(town())).sim;
-    expect(s.buildings[1].exhibits).toEqual(["gardens", "crafts", "street:Садовая"]);
+    expect(s.buildings[1].exhibits).toEqual(["crafts", "street:Садовая", "gardens"]);
   });
 });
 

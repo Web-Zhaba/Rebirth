@@ -77,6 +77,8 @@ portals.
 | CrazyGames | By hand in the developer portal: no upload API. |
 | GameDistribution | By hand in the developer portal: no upload API. |
 | GamePix | By hand in the partners portal: no upload API. |
+| GameMonetize | Upload the ZIP in Game Management, run Verify Game, then select Request Activation. |
+| Y8 | Upload the ZIP on the game's Builds tab, add media, and submit for review. |
 
 `.github/workflows/publish.yml` runs after each release (called from `release-please.yml`; a release made with
 `GITHUB_TOKEN` fires no `release` event) or by hand from the Actions tab with a tag, e.g. to publish again. It tests,
@@ -103,14 +105,26 @@ variable is set. To approve a portal's pushes by hand, add a required reviewer t
   `ITCH_GAME` (`user/game`, as in the project URL). After the first push, tick "This file will be played in the
   browser" on the `html5` upload.
 - **Poki**: variable `POKI_GAME` (the game id from its Poki for Developers page), secret `POKI_UPLOAD_TOKEN` (an upload
-  token from Poki for Developers). Poki blocks requests to other hosts unless its support approves them: send it the
-  map, terrain, place-search and Wikipedia hosts `scripts/pack.mjs` lists, or the map stays empty.
+  token from Poki for Developers). Request approval for the exact map, terrain, place-search and Wikipedia URLs under
+  Settings → CSP. Poki also requires a published privacy policy linked in the game when using approved external services.
 - **VK Games**: variable `VK_APP_ID`, secret `VK_DEPLOY_TOKEN` (the app's service token from its settings in VK).
   Deploys go to the `production` environment of VK hosting.
 - **GameDistribution**: variable `GD_GAME_ID` (the game id from developer.gamedistribution.com; public, it ships in
   the bundle). Without it the GameDistribution build is skipped. Turn rewarded ads on in the game's settings there.
-- **CrazyGames**: `env/.env.crazygames` turns the rewarded-ad offers off for the Basic Launch, where the portal serves no
-  ads. Delete `VITE_REWARDED_ADS=off` there for the Full Launch.
+- **GameMonetize**: variable `GM_GAME_ID`, the public GameId from [Game Management](https://gamemonetize.com/account).
+  The SDK requests one ad when a town first starts running and pauses the simulation and audio during the ad.
+- **Y8**: variable `Y8_APP_ID` from SDK Initialization in the [developer portal](https://developer.y8.com/).
+  Set `Y8_GAME_ID` as well to enable rewarded ads. Both IDs are public. The review requires
+  [screenshots and a gameplay video](https://docs.y8.com/studio/media/).
+- **CrazyGames**: choose **Yes, using the Data Module from the CrazyGames SDK** under Progress Save from the first
+  submission. Build `crazygames` for Basic Launch and `crazygames-full` for Full Launch with rewarded ads.
+  Both modes use the same compressed town save in the SDK, whose data limit is 1 MiB.
+
+For local builds, put the public IDs in `env/.env.<portal>.local` or set the corresponding `VITE_*`
+environment variables. Running `npm run build:portals -- <portal>` prints the required variable if the ID is missing.
+The standalone archive `release/rebirth-itch.zip` also works as the upload format for Game Jolt and Newgrounds.
+Newgrounds requires notice and opt-out for third-party APIs, so confirm requirements for the streamed map before submitting there.
+Test WebGPU, map streaming and saves in each portal's preview before sending the build for review.
 
 ## CI
 

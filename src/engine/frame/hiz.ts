@@ -1,3 +1,4 @@
+import { SAMPLE_COUNT } from "../gpu/device";
 import { createShader } from "../gpu/wgsl";
 import hizWgsl from "./hiz.wgsl?raw";
 
@@ -5,6 +6,16 @@ import hizWgsl from "./hiz.wgsl?raw";
 // buildings), builds this from their depth, then the GPU culling passes (the forest's scatter) test bounding spheres
 // against it before the rest of the frame is drawn: occluders and the culled are different things, so one phase on this
 // frame's depth is exact, with no reprojection and no pop-in when the camera moves.
+
+// The same pass over a depth texture that is not multisampled (antialiasing off): WebGPU builds multisampled textures at
+// four samples only, so those are the two cases there are. A transform rather than a second file, so the two cannot
+// drift; hiz.test.ts pins the three lines it changes and that nothing else moves.
+export function singleSample(source: string): string {
+  return source
+    .replace("var depth: texture_depth_multisampled_2d;", "var depth: texture_depth_2d;")
+    .replace("let samples = textureNumSamples(depth);", "let samples = 1u;")
+    .replace("textureLoad(depth, p, s)", "textureLoad(depth, p, 0)");
+}
 
 export class HiZ {
   texture: GPUTexture | null = null;
@@ -14,8 +25,11 @@ export class HiZ {
   private groups: GPUBindGroup[] = [];
   private depth: GPUTexture | null = null;
 
-  constructor(private readonly device: GPUDevice) {
-    const module = createShader(device, "hiz", hizWgsl);
+  constructor(
+    private readonly device: GPUDevice,
+    samples: number = SAMPLE_COUNT,
+  ) {
+    const module = createShader(device, "hiz", samples > 1 ? hizWgsl : singleSample(hizWgsl));
     this.first = device.createComputePipeline({ label: "hiz first", layout: "auto", compute: { module, entryPoint: "first" } });
     this.down = device.createComputePipeline({ label: "hiz down", layout: "auto", compute: { module, entryPoint: "down" } });
   }
@@ -24,7 +38,7 @@ export class HiZ {
     return this.texture?.mipLevelCount ?? 0;
   }
 
-  // Build from this frame's multisampled depth.
+  // Build from this frame's depth (multisampled, or plain when the antialiasing is off).
   build(encoder: GPUCommandEncoder, depth: GPUTexture): void {
     this.fit(depth);
     const t = this.texture!;

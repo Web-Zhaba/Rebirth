@@ -1,11 +1,13 @@
 import { band, cornerPosts, cylinder, DOOR, Mesh, offsetRing, PATTERN, planeRoof, pointInRing, prism, revolve, rgb, ROOF_FAC, roofOf, roofSurface, shade, shiftRoof, signedArea, square, triangulate, type Model, type RGB, type Roof, type RoofShape, type Tri, type XY } from "./modelGeometry";
 import { TOWN_COLORS } from "../ui/palette";
+import type { FlagDesign } from "../sim/heraldry";
 
 // The shared kit of the town's building models (src/buildings/<id>/model.ts): the context a model draws in, walls,
 // roofs, chimneys and porches, the lot split into a building and a yard towards the street, and the yard things.
 // Everything is in the lot's box frame (map/modelGeometry.ts framed): u along the lot, v across it.
 
 export interface TownOptions {
+  flag?: FlagDesign;
   seed?: number; // default: from the ring
   level?: number; // 2: a rebuilt house, a floor higher
   front?: XY | null; // unit vector towards the street in town metres: the door goes on the wall facing it

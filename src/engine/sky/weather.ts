@@ -10,9 +10,13 @@ import weatherWgsl from "./weather.wgsl?raw";
 // textures, and one uniform of drift, shadow and ground parameters. Bound in group 0 with the frame uniform
 // (frame/frameUniforms.ts); the game fills it (view/engine/weather.ts).
 
-// Near the town its own sim weather lies on the ground; from TOWN_FAR_M on, the weather cube's climate does.
+// Wetness, ice and falling precipitation give way to the cube's climate with distance.
 export const TOWN_NEAR_M = 20000;
 export const TOWN_FAR_M = 60000;
+
+// Settled snow gives way to the cube's climate as the local mean differs from the town's (°C).
+export const SNOW_TEMP_NEAR = 1;
+export const SNOW_TEMP_FAR = 6;
 
 const f = (x: number) => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 const sinDeg = (d: number) => Math.sin((d * Math.PI) / 180);
@@ -29,6 +33,8 @@ registerWgsl(
     SHADOW_DUSK: vec3(PALETTE.dusk),
     TOWN_NEAR: f(TOWN_NEAR_M),
     TOWN_FAR: f(TOWN_FAR_M),
+    SNOW_TEMP_NEAR: f(SNOW_TEMP_NEAR),
+    SNOW_TEMP_FAR: f(SNOW_TEMP_FAR),
   }).reduce((code, [k, v]) => code.replaceAll(`\${${k}}`, v), weatherWgsl),
 );
 
@@ -45,6 +51,7 @@ export interface WeatherLook {
   castHeight: number; // m
   shadowDrift: number; // degrees per game day
   snow: number; // 0..1
+  townTemp: number | null; // town's seasonal mean at its elevation (°C)
   wet: number; // 0..1
   ice: number; // 0..1
   climate: boolean; // away from the town the weather cube's climate lies on the ground (the cube is loaded)
@@ -68,6 +75,7 @@ export const calmWeather = (): WeatherLook => ({
   castHeight: 0,
   shadowDrift: 0,
   snow: 0,
+  townTemp: null,
   wet: 0,
   ice: 0,
   climate: false,
@@ -152,7 +160,7 @@ export class WeatherGpu {
     d.set([...l.offsets[0], l.mix], 4);
     d.set([...l.offsets[1], l.shadows ? 1 : 0], 8);
     d.set([...l.wind, l.days], 12);
-    d.set([l.castHeight, l.shadowDrift, 0, 0], 16);
+    d.set([l.castHeight, l.shadowDrift, l.townTemp ?? 0, l.townTemp === null ? 0 : 1], 16);
     d.set([l.snow, l.wet, l.ice, l.climate ? 1 : 0], 20);
     d.set(t ? [...t.eye, 1] : [0, 0, 0, 0], 24);
     d.set(t ? [...t.east, l.groundFade] : [1, 0, 0, 0], 28);

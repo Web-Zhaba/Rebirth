@@ -2,6 +2,7 @@ import "./journal.css";
 import { signal } from "@preact/signals";
 import { Dialog } from "./kit";
 import { L } from "../i18n";
+import { externalLinksAllowed } from "../platform";
 
 export const aboutOpen = signal(false);
 
@@ -17,7 +18,7 @@ const LINKS: { name: string; href: string; what: string }[] = [
   { name: "MapLibre GL JS", href: "https://maplibre.org", what: L("образец поведения камеры, лицензия BSD-3-Clause", "reference for camera behaviour, BSD-3-Clause license") },
   { name: L("Звуки интерфейса", "Interface sounds"), href: "https://developer.mozilla.org/docs/Web/API/Web_Audio_API", what: L("синтезируются в игре средствами Web Audio API, без сторонних файлов", "synthesized in the game with the Web Audio API, no third-party files") },
   { name: "Photon (komoot)", href: "https://photon.komoot.io", what: L("поиск мест по названию перед основанием, данные OpenStreetMap", "place search by name before founding, OpenStreetMap data") },
-  { name: L("Википедия", "Wikipedia"), href: L("https://ru.wikipedia.org", "https://en.wikipedia.org"), what: L("статьи о найденных местах, CC BY-SA 4.0 (ссылка на каждую статью в записной книжке)", "articles about places found, CC BY-SA 4.0 (each article is linked in the notebook)") },
+  { name: L("Википедия", "Wikipedia"), href: L("https://ru.wikipedia.org", "https://en.wikipedia.org"), what: L("статьи о найденных местах, CC BY-SA 4.0", "articles about places found, CC BY-SA 4.0") },
 ];
 
 // «Об игре»: every attribution the licences ask for. The source list is CREDITS.md.
@@ -30,9 +31,7 @@ export function AboutDialog() {
       <ul class="about-list">
         {LINKS.map((l) => (
           <li key={l.name}>
-            <a href={l.href} target="_blank" rel="noopener">
-              {l.name}
-            </a>
+            {externalLinksAllowed ? <a href={l.href} target="_blank" rel="noopener">{l.name}</a> : l.name}
             {" — "}
             {l.what}
           </li>

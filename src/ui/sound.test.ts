@@ -11,7 +11,7 @@ const setup = async () => {
 };
 
 const fakeCtx = () => {
-  const made = { osc: 0 };
+  const made = { osc: 0, gains: [] as { value: number }[] };
   class Ctx {
     state = "running";
     currentTime = 0;
@@ -23,7 +23,9 @@ const fakeCtx = () => {
       return o;
     }
     createGain() {
-      return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect: (x: unknown) => x };
+      const gain = { value: 1, setValueAtTime() {}, exponentialRampToValueAtTime() {} };
+      made.gains.push(gain);
+      return { gain, connect: (x: unknown) => x };
     }
   }
   vi.stubGlobal("AudioContext", Ctx);
@@ -78,6 +80,28 @@ describe("play", () => {
     s.setSoundEnabled(true);
     s.play("finished");
     expect(made.osc).toBe(3);
+  });
+  it("mutes active and new sounds until both the portal setting and the ad pause are lifted", async () => {
+    const made = fakeCtx();
+    const s = await setup();
+    s.setSoundEnabled(true);
+    s.play("click");
+    const output = made.gains[0];
+    expect(output.value).toBe(1);
+
+    s.soundMutedByPlatform.value = true;
+    expect(output.value).toBe(0);
+    s.soundPaused.value = true;
+    s.soundPaused.value = false;
+    s.play("click");
+    expect(output.value).toBe(0);
+    expect(made.osc).toBe(1);
+    expect(s.loadSettings().enabled).toBe(true);
+
+    s.soundMutedByPlatform.value = false;
+    expect(output.value).toBe(1);
+    s.play("click");
+    expect(made.osc).toBe(2);
   });
   it("never throws when the context breaks", async () => {
     vi.stubGlobal("AudioContext", class { constructor() { throw new Error("blocked"); } });

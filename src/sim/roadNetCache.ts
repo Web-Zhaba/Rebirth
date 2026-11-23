@@ -1,5 +1,5 @@
 import { makeIdentityCache } from "./memo";
-import { buildNet, type Net } from "./people";
+import { buildNet, type Net } from "./walkNet";
 import type { RoadGraph } from "./types";
 
 export { makeIdentityCache };

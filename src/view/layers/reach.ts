@@ -7,7 +7,7 @@ import { buildings, frame, roads } from "../../simClient";
 import { PALETTE } from "../../ui/palette";
 import { relationRadius } from "../../map/coveragePreviewModel";
 import { manualOverlay, overlay, placeReach, tool } from "../../map/tools";
-import { selectedBuilding } from "./buildings";
+import { selectedBuilding } from "../selection";
 
 // The road edges a service reaches: for the building being placed (preview from its candidate lot) or, with no tool
 // active, for the selected finished service (whose coverage overlay is then switched on). Same bounded Dijkstra as the

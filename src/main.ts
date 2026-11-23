@@ -12,7 +12,7 @@ import * as simClient from "./simClient";
 import { city, frame, state, gameClock, gameMinPerSec, gameNow, lifeRests, lifeTrips, load, loaded, loadFailure, setSpeed, speed } from "./simClient";
 import type { Speed } from "./sim/clock";
 import { platform } from "./platform";
-import { soundPaused } from "./ui/sound";
+import { soundMutedByPlatform, soundPaused } from "./ui/sound";
 import { tryMountEngineView } from "./view/engine/mount";
 import type { View } from "./view/view";
 import { TOWN_START_MPP } from "./view/scale";
@@ -28,21 +28,28 @@ import { lang } from "./i18n";
 import { LANDMARK_LABELS } from "./ui/semanticModel";
 
 document.documentElement.lang = lang;
-document.getElementById("map")!.setAttribute("aria-label", LANDMARK_LABELS.map);
-document.getElementById("ui")!.setAttribute("aria-label", LANDMARK_LABELS.interface);
+const mapRoot = document.getElementById("map")!;
+const uiRoot = document.getElementById("ui")!;
+mapRoot.setAttribute("aria-label", LANDMARK_LABELS.map);
+uiRoot.setAttribute("aria-label", LANDMARK_LABELS.interface);
 
 // In dev the URL hash keeps the camera across reloads; it wins over the saved city.
 // Read it before creating the map, which writes its own hash on construction.
 const hasHash = import.meta.env.DEV && location.hash.length > 1;
 // The portal's own pauses (its ads and overlays) stop the clock and the sound, then give back the speed the player had.
 let speedBeforePause: Speed | null = null;
+const blockGameKey = (event: KeyboardEvent) => {
+  if (event.key === "Tab") return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+};
 platform.listen({
-  pause() {
+  pause(muteAudio = true) {
     if (speedBeforePause === null) {
       speedBeforePause = speed.peek();
       setSpeed(0);
     }
-    soundPaused.value = true;
+    if (muteAudio) soundPaused.value = true;
   },
   resume() {
     if (speedBeforePause !== null) {
@@ -50,6 +57,15 @@ platform.listen({
       speedBeforePause = null;
     }
     soundPaused.value = false;
+  },
+  blockInput(blocked) {
+    mapRoot.inert = blocked;
+    uiRoot.inert = blocked;
+    if (blocked) window.addEventListener("keydown", blockGameKey, true);
+    else window.removeEventListener("keydown", blockGameKey, true);
+  },
+  muteAudio(muted) {
+    soundMutedByPlatform.value = muted;
   },
 });
 attachExcavation();
@@ -107,7 +123,8 @@ function start(view: View): void {
     }
   });
   // The clock running is what the portal counts as play: a paused town (by the player or the portal) is not.
-  const playing = computed(() => loaded.value && !loadFailure.value && speed.value > 0);
+  const playing = computed(() => loaded.value && !loadFailure.value && speed.value > 0
+    && (import.meta.env.VITE_PLATFORM !== "gamemonetize" || city.value !== null));
   effect(() => platform.gameplay(playing.value));
 
   // Handles for poking at the map and the sim from devtools during development. Use these instead of importing

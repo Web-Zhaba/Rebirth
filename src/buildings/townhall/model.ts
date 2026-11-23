@@ -1,8 +1,43 @@
-import { clamp, cylinder, PATTERN, prism, pyramid, revolve, rgb, shade, square, type XY } from "../../map/modelGeometry";
+import { clamp, clipPoly, cylinder, PATTERN, prism, pyramid, revolve, rgb, shade, signedArea, square, type XY } from "../../map/modelGeometry";
 import { type Ctx, pick, mix, ccw, body, splitLot, part, frameOf, slabIn, up, type TownModel } from "../../map/townKit";
+import { DEFAULT_FLAG, flagShapes } from "../../sim/heraldry";
 import { TOWN_COLORS } from "../../ui/palette";
 
 // The town hall's 3D model (map/townKit.ts has the shared parts).
+
+// Subtract a convex patch before sewing the next colour into the cloth. No faces overlap at any camera angle.
+function uncovered(poly: XY[], patch: XY[]): XY[][] {
+  let inside = poly;
+  const outside: XY[][] = [];
+  for (let i = 0; i < patch.length; i++) {
+    const p = patch[i], q = patch[(i + 1) % patch.length];
+    const a = p[1] - q[1], b = q[0] - p[0], c = a * p[0] + b * p[1];
+    if (a === 0 && b === 0) continue;
+    const off = clipPoly(inside, a, b, c, -1);
+    if (signedArea(off) > 1e-7) outside.push(off);
+    inside = clipPoly(inside, a, b, c, 1);
+    if (signedArea(inside) < 1e-7) return [poly];
+  }
+  return outside;
+}
+
+function drawFlag(c: Ctx, yard: ReturnType<typeof frameOf>): void {
+  let cloth: ReturnType<typeof flagShapes> = [];
+  for (const shape of flagShapes(c.opts.flag ?? DEFAULT_FLAG)) {
+    const patch = ccw(shape.points.slice());
+    cloth = cloth.flatMap(({ color, points }) => uncovered(points, patch).map((part) => ({ color, points: part })));
+    cloth.push({ color: shape.color, points: patch });
+  }
+  // A diagonal fold leaves the hoist on the pole and lifts the free corner into the wind.
+  const vertex = ([x, y]: XY) => up(yard.at(yard.L * 0.36 - 0.05 - 0.02 * x, 1.1 + 0.55 * Math.min(x / 150, y / 100)), 7.65 - 0.02 * y - 0.15 * x / 150);
+  for (const { color, points } of cloth) {
+    const col = rgb(color);
+    for (const side of [-1, 1] as const) {
+      const face = clipPoly(points, 2, -3, 0, side).map(vertex);
+      for (let i = 1; i + 1 < face.length; i++) c.mesh.flat(face[0], face[i], face[i + 1], col);
+    }
+  }
+}
 
 // Town hall: a long two-storey hall under a hip roof with an arcade of columns along its front, a clock tower standing out
 // of the middle (door and steps at its foot, a clock above the door, a belfry with a bell, a spire), and in front a
@@ -77,7 +112,7 @@ function townHall(c: Ctx): void {
   const fp = Y.at(Y.L * 0.36, 1.1);
   prism(c.mesh, square(fp[0], fp[1], 0.6), 0, 0.3, shade(stone, 1.1), shade(stone, 1.25));
   cylinder(c.mesh, up(fp, 0.3), up(fp, 8), 0.06, shade(wood, 1.1), shade(wood, 1.1), 6);
-  slabIn(c, Y, Y.L * 0.36 - 1.2, Y.L * 0.36 - 0.06, 1.1 - 0.015, 1.1 + 0.015, 6.4, 7.6, rgb(TOWN_COLORS.goods[0]), rgb(TOWN_COLORS.goods[0]));
+  drawFlag(c, Y);
   const nb = Y.L * -0.36;
   for (const o of [-0.9, 0.9]) slabIn(c, Y, nb + o - 0.05, nb + o + 0.05, 1.05, 1.15, 0, 2.2, wood, wood);
   slabIn(c, Y, nb - 1, nb + 1, 1.05, 1.15, 1, 2, shade(wood, 1.1), wood, PATTERN.boards);

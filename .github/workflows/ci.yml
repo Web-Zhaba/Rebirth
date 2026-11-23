@@ -23,6 +23,9 @@ jobs:
     timeout-minutes: 15
     env:
       VITE_GD_GAME_ID: ${{ vars.GD_GAME_ID }}
+      VITE_GM_GAME_ID: ${{ vars.GM_GAME_ID }}
+      VITE_Y8_APP_ID: ${{ vars.Y8_APP_ID }}
+      VITE_Y8_GAME_ID: ${{ vars.Y8_GAME_ID }}
 
     steps:
       - name: Checkout

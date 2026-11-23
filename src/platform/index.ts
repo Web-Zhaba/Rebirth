@@ -1,13 +1,17 @@
 // The portal the game is published on, picked at build time: `vite build --mode <portal>` reads `env/.env.<portal>`.
 // The core talks only to this module; a portal's SDK never reaches the standalone bundle (the branch below is a
 // build-time constant, so Vite drops the other adapters; scripts/pack.mjs checks that no other portal's SDK ships).
+import type { Storage } from "../sim/handler";
+
 export interface Platform {
+  saveStorage?: Storage;
   // The portal's interface language as an ISO 639-1 code ('ru', 'en', ...), or null when there is no portal.
   lang: string | null;
   // Loading is over and the player can act.
   ready(): void;
   // Active play started (true) or stopped (false): the clock runs, no menu or ad covers the game.
   gameplay(on: boolean): void;
+  settlementFounded?(): void;
   // What the portal may ask of the game, e.g. around its ads and overlays.
   listen(hooks: PlatformHooks): void;
   // Shows a rewarded ad; true once the player has earned the reward. Null where the portal has no such ads.
@@ -15,11 +19,14 @@ export interface Platform {
 }
 
 export interface PlatformHooks {
-  pause(): void;
+  pause(muteAudio?: boolean): void;
+  blockInput?(blocked: boolean): void;
   resume(): void;
+  muteAudio?(muted: boolean): void;
 }
 
 export const NO_PLATFORM: Platform = { lang: null, ready() {}, gameplay() {}, listen() {}, rewarded: null };
+export const externalLinksAllowed = import.meta.env.VITE_PLATFORM !== "y8" && import.meta.env.VITE_PLATFORM !== "gamepix";
 
 // Set once by initPlatform, before the game's modules load (boot.ts): the language is read from it at their start.
 export let platform: Platform = NO_PLATFORM;
@@ -60,5 +67,7 @@ function portalInit(signal: AbortSignal): Promise<Platform> | null {
   if (import.meta.env.VITE_PLATFORM === "vk") return import("./vk").then((m) => start(m.initVk));
   if (import.meta.env.VITE_PLATFORM === "gamedistribution") return import("./gamedistribution").then((m) => start(m.initGameDistribution));
   if (import.meta.env.VITE_PLATFORM === "gamepix") return import("./gamepix").then((m) => start(m.initGamePix));
+  if (import.meta.env.VITE_PLATFORM === "gamemonetize") return import("./gamemonetize").then((m) => start(m.initGameMonetize));
+  if (import.meta.env.VITE_PLATFORM === "y8") return import("./y8").then((m) => start(m.initY8));
   return null;
 }

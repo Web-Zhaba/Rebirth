@@ -172,6 +172,10 @@
 }
 
 /* Hover and a crate dragged over a room tint it inside the footprint only (drawn in the plan's clipped SVG). */
+.mu-room:hover:not(:disabled) {
+  background-color: transparent;
+}
+
 .mu-room-hot {
   fill: rgba(31, 26, 19, 0.1);
   pointer-events: none;

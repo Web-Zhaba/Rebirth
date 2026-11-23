@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { advanceTo, BASE_TICK, calendar, daylight, OFFLINE_CAP, TICK_MS } from "./clock";
 import { applyDelta, snapshotDelta } from "./delta";
 import { Handler, toSnapshot, type Storage } from "./handler";
+import { DEFAULT_FLAG, type FlagDesign } from "./heraldry";
 import type { FromWorker } from "./protocol";
 import { emptyGrowth, seedOf } from "./growth";
 import { emptyRoads } from "./roads";
@@ -78,6 +79,7 @@ describe("save", () => {
   const valid: SaveV4 = { version: 4, city, sim: { realTime: NOW, gameMinutes: 50, roads: roadsInProgress(), zones: emptyZones(), ...growth(50) } };
   it("accepts valid", () => {
     expect(parseSave(valid, NOW)).toEqual(valid);
+    expect(parseSave({ ...valid, city: { ...city, flag: {} } }, NOW)?.city).toEqual(city);
   });
   it("accepts a v4 save without roads as an empty graph", () => {
     const old = { version: 4, city, sim: { realTime: NOW, gameMinutes: 50 } };
@@ -370,6 +372,32 @@ describe("handler", () => {
     const snap = out[0] as Extract<FromWorker, { t: "snapshot" }>;
     expect(Object.keys(snap.sim.roads!.edges)).toHaveLength(1);
     expect((get() as SaveV4).sim.roads).toEqual(snap.sim.roads);
+  });
+  it("a finished town hall changes the name and flag together and the town reopens with both", async () => {
+    const save = saveForLoad();
+    save.sim.nextBuildingId = 2;
+    save.sim.buildings[1] = {
+      id: 1, template: "townhall", foundationId: "hall", zone: "placed", side: 1, lot: { cx: 0, cy: 0, angle: 0, w: 14, d: 12 },
+      footprint: [[-7, -6], [7, -6], [7, 6], [-7, 6]], height: 9, state: "active", labor: 300, done: 300, created: 0, paid: true, level: 1, streak: 0,
+    };
+    const { h, out, get, puts } = setup(save);
+    await h.handle({ t: "load", legacy: null, now: NOW });
+    out.length = 0;
+    const edit = (name: string, flag = DEFAULT_FLAG) => h.handle({ t: "cmd", id: 8, cmd: { type: "setCityIdentity", name, flag } });
+    await edit("  Речной  ");
+    const changed = { ...city, name: "Речной", flag: DEFAULT_FLAG };
+    expect(out).toEqual([{ t: "cityChanged", city: changed }, { t: "cmdResult", id: 8, ok: true }]);
+    expect(parseSave(get(), NOW)?.city).toEqual(changed);
+    const writes = puts();
+    for (const name of ["   ", "x".repeat(41)]) await edit(name);
+    await edit("Новое", {} as FlagDesign);
+    expect(out.slice(2)).toHaveLength(3);
+    expect(out.slice(2).every((m) => m.t === "cmdResult" && !m.ok)).toBe(true);
+    expect(puts()).toBe(writes);
+    await h.handle({ t: "cmd", id: 9, cmd: { type: "demolish", id: 1 } });
+    await edit("Новое");
+    expect(out.at(-1)).toMatchObject({ t: "cmdResult", ok: false });
+    expect((get() as SaveV4).city).toEqual(changed);
   });
   it("rejected commands change nothing", async () => {
     const { h, out, puts } = setup();

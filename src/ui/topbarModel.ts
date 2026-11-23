@@ -1,5 +1,6 @@
 import { cutOffEdges, needsWork, workLeft } from "../sim/roads";
-import type { EconomyStats, NeedsStats, RoadGraph } from "../sim/types";
+import { massText } from "../sim/units";
+import type { EconomyStats, HarvestStats, NeedsStats, RoadGraph } from "../sim/types";
 import { decimal, L } from "../i18n";
 
 // Pure helpers behind the top bar: number formats, the day phase, daily deltas and warnings.
@@ -31,9 +32,17 @@ export function perDay(v: number, unit = ""): string | null {
 
 export const deltaDir = (v: number): "up" | "down" | "" => (amount(Math.abs(v)) === "0" ? "" : v > 0 ? "up" : "down");
 
-// Food, kg a day: yesterday's production and foraging minus what the town eats. The harvest lands in one day, so
-// autumn spikes; that is what the sim reports.
-export const foodNet = (eco: EconomyStats): number => eco.yesterday.food + eco.forage - eco.foodPerDay;
+// The year's grain in the barn against what the sowing promised: «356 кг из 400 кг», or just what was gathered while
+// nothing stands in the fields.
+export function harvestText(h: HarvestStats): string {
+  const gathered = massText(h.gathered);
+  return h.promised > 0 ? `${gathered} ${L("из", "of")} ${massText(h.promised)}` : gathered;
+}
+
+// Food, kg a day: what the town brings in (the harvest counted as the year's average, the makers and the foraging) minus
+// what it eats. The harvest lands in one autumn week, so yesterday's output is no rate at all — a day of it would show a
+// loss every day but a few (see sim/production.ts foodIncome).
+export const foodNet = (eco: EconomyStats): number => eco.foodIn.total - eco.foodPerDay;
 
 export interface Warning {
   id: string;

@@ -4,11 +4,11 @@ import { foundationScale, sizeBlocker } from "../sim/foundationLots";
 import { canPlaceOnFoundation } from "../sim/growth";
 import { digBlocker, EXCAVATION, streetDigs, streetOf } from "../sim/digging";
 import type { TemplateId } from "../buildings/rules";
-import { asItWasTemplate, MONUMENT_TEMPLATE, earlierOfKind, kindName, MONUMENT, nextInsight, repeatFactor, restoreWeightOf, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE, type Tier } from "../sim/heritage";
+import { asItWasTemplate, MONUMENT_TEMPLATE, earlierOfKind, kindName, MONUMENT, repeatFactor, restoreWeightOf, siteDomain, siteTitle, tierContext, tierOf, TYPICAL_SHARE, type Tier } from "../sim/heritage";
 import { SPEED } from "../sim/research";
 import { TYPICAL_LOCAL } from "../sim/monuments";
 import { SERVICES, isService } from "../sim/services";
-import { INSIGHT_BY_ID, lockReason, TECH_BY_ID } from "../sim/tech";
+import { lockReason } from "../sim/tech";
 import type { FoundFoundation, FoundState, SimState, StoredArticle } from "../sim/types";
 import { decimal, L, plural } from "../i18n";
 
@@ -39,7 +39,6 @@ export interface HeritageView {
   purpose: string; // its name
   effects: string[]; // what the finished building does
   research: string; // «+5 % к скорости: Знание»
-  insight: string | null; // the idea it would bring
   cost: { labor: number } & Materials;
   mul: number; // scarcity multiplier
   repeat: { kind: string; factor: number } | null; // a further site of a kind already restored or ordered: its research factor
@@ -98,12 +97,6 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
   const tier = tierOf(site, tierContext(sim.finds, articles));
   const unique = tier === "unique";
   const w = restoreWeightOf(mul, earlier) * (unique ? 1 : TYPICAL_SHARE);
-  const ins = unique && domain && earlier === 0 ? nextInsight(sim.progress, domain) : null; // only the first unique one of a kind brings an idea
-  const insight = ins
-    ? ins.tech
-      ? L(`«${ins.text}»: «${TECH_BY_ID.get(ins.tech)?.name ?? ins.tech}» изучается быстрее на ${Math.round(ins.cut * 100)} %`, `“${ins.text}”: ${TECH_BY_ID.get(ins.tech)?.name ?? ins.tech} is researched ${Math.round(ins.cut * 100)}% faster`)
-      : L(`«${ins.text}»: +${Math.round((INSIGHT_BY_ID.get(ins.id)?.speed ?? 0) * 100)} % к скорости всех областей`, `“${ins.text}”: +${Math.round((INSIGHT_BY_ID.get(ins.id)?.speed ?? 0) * 100)}% speed in all fields`)
-    : null;
   const state = site.state ?? null;
   let note: string | null = null;
   if (state === "lost") note = L("Постройка утрачена: как было её уже не вернуть", "The building is lost: it cannot come back as it was");
@@ -131,8 +124,8 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
     stateText: state ? STATE_TEXT[state] : null,
     tier,
     tierText: unique
-      ? L("Единственная в своём роде: идея, глава летописи, действует как памятник", "One of a kind: an idea, a chronicle chapter, works as a monument")
-      : L("Типовая постройка: малый вклад в науку, без идеи", "A typical building: a small research contribution, no idea"),
+      ? L("Единственная в своём роде: глава летописи, действует как памятник", "One of a kind: a chronicle chapter, works as a monument")
+      : L("Типовая постройка: малый вклад в науку", "A typical building: a small research contribution"),
     template,
     purpose: t.name,
     effects:
@@ -142,7 +135,6 @@ export function buildHeritageView({ site, sim, mul, articles }: HeritageInput): 
           ? [...purposeEffects(template), L(`Дома в ${TYPICAL_LOCAL.radius} м: стоимость земли +${TYPICAL_LOCAL.land}`, `Houses within ${TYPICAL_LOCAL.radius} m: land value +${TYPICAL_LOCAL.land}`)]
           : purposeEffects(template),
     research: `+${fmt(domain ? speedGain(base, w) : 0)}${L(" % к скорости", "% speed")}: ${domain ? domainName(domain) : "—"}`,
-    insight,
     cost,
     mul,
     repeat: earlier > 0 ? { kind: kindName(site.cls), factor: repeatFactor(earlier) } : null,

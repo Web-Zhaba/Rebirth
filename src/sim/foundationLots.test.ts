@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILDINGS, familyCapacity, FLOOR, floorArea, floorsOf, homesOf, houseCapacity, maxLevel, scaledJobs, storageOf, upgradable, upgradeLabor } from "./buildings";
 import { dailyServices } from "./coverage";
-import { floorBlocker, FOUNDATION_TAKEN, foundationBuilding, lotCheck, lotRing, sizeLimit } from "./foundationLots";
+import { floorBlocker, FOUNDATION_TAKEN, foundationBuilding, foundationsTaken, lotCheck, lotRing, sizeLimit } from "./foundationLots";
 import { simplifyRing } from "./heritageGeo";
 import { advanceBuildings, canPlace, canPlaceOnFoundation, emptyGrowth, placeOnFoundation } from "./growth";
 import { heatShares, HEAT_AREA } from "./production";
@@ -9,7 +9,7 @@ import { parseSave } from "./save";
 import { addRoad, emptyRoads } from "./roads";
 import { applyStroke, planStroke } from "./stroke";
 import { allResearched, initialProgress } from "./tech";
-import type { City, FoundFoundation, ProgressState, RoadGraph, SimState } from "./types";
+import type { Building, City, FoundFoundation, ProgressState, RoadGraph, SimState } from "./types";
 import { firewoodDaily } from "./weatherEffects";
 import { emptyZones, regenerateCells } from "./zones";
 
@@ -102,6 +102,20 @@ describe("foundations as lots", () => {
     const rest = { ...placed.buildings };
     delete rest[1];
     expect(canPlaceOnFoundation({ ...placed, buildings: rest }, BUILDINGS.school, "h").ok).toBe(true);
+  });
+
+  it("says which foundations a building stands on, and which carry a finished one", () => {
+    const b = (id: number, foundationId: string, state: Building["state"], template = "izba"): Building =>
+      ({ ...foundationBuilding(BUILDINGS[template], house, [4, 46], id, 0, allResearched()), state, foundationId }) as Building;
+    const buildings = { 1: b(1, "h", "active"), 2: b(2, "k", "building"), 3: b(3, "s", "active", "excavation") };
+    const taken = foundationsTaken(buildings);
+    expect([...taken.all].sort()).toEqual(["h", "k", "s"]); // a dig under way counts as its site
+    expect([...taken.built]).toEqual(["h"]); // a work site on a foundation is not a building on it
+    expect(foundationsTaken(buildings)).toBe(taken); // kept with the record: a panel asks it per foundation
+    const later = { ...buildings, 4: b(4, "z", "active") };
+    expect(foundationsTaken(later)).not.toBe(taken);
+    expect([...foundationsTaken(later).built]).toEqual(["h", "z"]);
+    expect(foundationsTaken({}).built.size).toBe(0);
   });
 
   it("a big foundation makes a big building: jobs by the square root, storage and cost by the floor area", () => {

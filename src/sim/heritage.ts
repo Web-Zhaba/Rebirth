@@ -95,7 +95,7 @@ export const siteDomain = (cls: string | undefined): DomainId | null => heritage
 // ---------- tiers ----------
 // Ordinary (no known kind): restoring gives the function and counts toward the place's recognisability. Typical (a
 // typical kind, or a candidate that is nameless or whose name repeats in the revealed area: a chain): a small bonus,
-// less for each further one. Unique: an idea, a chronicle line, and it works as a monument. A Wikipedia article of the
+// less for each further one. Unique: a chronicle line and it works as a monument. A Wikipedia article of the
 // notebook with the building's name is the strongest sign of a unique one.
 
 export type Tier = "ordinary" | "typical" | "unique";
@@ -155,7 +155,7 @@ export function tierOf(f: Pick<FoundFoundation, "cls" | "name"> & Ringed, ctx: T
   return (ctx.names.get(n) ?? 0) > 1 ? "typical" : "unique";
 }
 
-// A typical building "as it was" adds this share of a unique one's research weight, and no idea.
+// A typical building "as it was" adds this share of a unique one's research weight.
 export const TYPICAL_SHARE = 0.25;
 
 // ---------- restoration ----------
@@ -284,7 +284,7 @@ export function earlierOfKind(s: Pick<SimState, "finds" | "buildings">, cls: str
 export const doneKinds = (foundations: readonly Pick<FoundFoundation, "cls" | "state">[]): Set<string> =>
   new Set(foundations.flatMap((f) => (f.cls && (f.state === "restoring" || f.state === "restored") ? [f.cls] : [])));
 
-// The insight a restoration in `domain` grants: the first of the domain not held and not used up; with none left, the
+// The first insight of `domain` not held and not used up; with none left, the
 // first such one of a domain that has no real sites (farm, then craft), so those domains stay reachable.
 export function nextInsight(p: Pick<ProgressState, "insights" | "techs">, domain: DomainId): InsightDef | null {
   const open = (d: DomainId) => INSIGHTS.find((i) => i.domain === d && !p.insights.includes(i.id) && !(i.tech && p.techs.includes(i.tech)));

@@ -1,4 +1,5 @@
-import { isFinishedHouse, lotFront, snapToRoad, type Net, type Spot } from "./people";
+import { isFinishedHouse, lotFront } from "./people";
+import { snapToRoad, type Net, type Spot } from "./walkNet";
 import { roadNet } from "./roadNetCache";
 import type { Building, RoadGraph } from "./types";
 

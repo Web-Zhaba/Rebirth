@@ -4,19 +4,80 @@
    Hard rules: no translucent surfaces, no backdrop-filter, no blurred glass, no offset block shadows.
    Imported once, from style.css. */
 
-/* Display: Bitter (slab, incised like a stylus into bark). Body: Golos Text. Both self-hosted (OFL), Cyrillic. */
-@import "@fontsource/bitter/cyrillic-400.css";
-@import "@fontsource/bitter/cyrillic-600.css";
-@import "@fontsource/bitter/cyrillic-800.css";
-@import "@fontsource/bitter/latin-400.css";
-@import "@fontsource/bitter/latin-600.css";
-@import "@fontsource/bitter/latin-800.css";
-@import "@fontsource/golos-text/cyrillic-400.css";
-@import "@fontsource/golos-text/cyrillic-500.css";
-@import "@fontsource/golos-text/cyrillic-700.css";
-@import "@fontsource/golos-text/latin-400.css";
-@import "@fontsource/golos-text/latin-500.css";
-@import "@fontsource/golos-text/latin-700.css";
+/* Display: Bitter (slab, incised like a stylus into bark). Body: Golos Text. Both self-hosted (OFL), Cyrillic.
+   Spelled out here instead of importing the @fontsource css files: those also carry a .woff fallback that no
+   browser with woff2 (all since 2016) ever asks for, 176 KiB of dist, and a Golos 500 the UI used once
+   (perf/reports/coldstart.md, fonts: 321.5 KiB of fonts -> 127). Same families, weights, subsets and order. */
+@font-face {
+  font-family: 'Bitter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/bitter/files/bitter-cyrillic-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Bitter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/bitter/files/bitter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Bitter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url('@fontsource/bitter/files/bitter-cyrillic-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Bitter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url('@fontsource/bitter/files/bitter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Bitter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url('@fontsource/bitter/files/bitter-cyrillic-800-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Bitter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url('@fontsource/bitter/files/bitter-latin-800-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Golos Text';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/golos-text/files/golos-text-cyrillic-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Golos Text';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/golos-text/files/golos-text-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Golos Text';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('@fontsource/golos-text/files/golos-text-cyrillic-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Golos Text';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('@fontsource/golos-text/files/golos-text-latin-700-normal.woff2') format('woff2');
+}
 
 :root {
   /* Bark and tar: the "paper" roles are birch bark, the "ink" roles are tar and soot. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EconomyStats } from "../sim/types";
-import { dayPhase, deltaDir, foodNet, perDay, warnings } from "./topbarModel";
+import { dayPhase, deltaDir, foodNet, harvestText, perDay, warnings } from "./topbarModel";
 import { calendar, isNight } from "../sim/clock";
 
 const eco = (o: Partial<EconomyStats> = {}): EconomyStats => ({
@@ -9,6 +9,8 @@ const eco = (o: Partial<EconomyStats> = {}): EconomyStats => ({
   foodDays: 50,
   yesterday: { food: 0, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 },
   fields: { count: 0, ha: 0, assignedHa: 0, sown: 0, reaped: 0, expected: 0, window: "none" as never },
+  harvest: { year: 1, gathered: 0, promised: 0, potential: 0, perDay: 0 },
+  foodIn: { fields: 0, makers: 0, forage: 0, total: 0 },
   avgMood: 0,
   admin: { pop: 0, capacity: 150, factor: 1 },
   forage: 0,
@@ -40,8 +42,22 @@ describe("top bar model", () => {
     expect(dayPhase(19)).toBe("evening");
   });
 
-  it("food net is production plus foraging minus eating", () => {
-    expect(foodNet(eco({ yesterday: { food: 40, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 }, forage: 24, foodPerDay: 100 }))).toBe(-36);
+  it("food net is the year's income minus eating, not yesterday's output", () => {
+    const income = (fields: number, makers: number, forage: number) => eco({ foodIn: { fields, makers, forage, total: fields + makers + forage }, foodPerDay: 100 });
+    expect(foodNet(income(8, 6, 0))).toBe(-86);
+    expect(foodNet(income(11, 7, 2))).toBe(-80);
+    expect(foodNet(income(11, 7, 90))).toBe(8);
+    // a day of the harvest itself says nothing about the rate: the net stays the year's average
+    const harvestDay = eco({ foodIn: { fields: 11, makers: 0, forage: 0, total: 11 }, foodPerDay: 100, yesterday: { food: 356, logs: 0, planks: 0, stone: 0, clothes: 0, dishes: 0, furniture: 0, tools: 0 } });
+    expect(foodNet(harvestDay)).toBe(-89);
+  });
+
+  it("reads the year's harvest as gathered of promised, or just gathered", () => {
+    const h = (gathered: number, promised: number) => ({ year: 1, gathered, promised, potential: 356, perDay: 11 });
+    expect(harvestText(h(120, 356))).toBe("120 кг из 356 кг");
+    expect(harvestText(h(356, 356))).toBe("356 кг из 356 кг"); // nothing lost, nothing left standing
+    expect(harvestText(h(356, 0))).toBe("356 кг"); // no sowing to compare with
+    expect(harvestText(h(0, 356))).toBe("0 кг из 356 кг"); // sowing done, the reaping ahead
   });
 
   it("warns about famine, low food, missing hands and logs", () => {

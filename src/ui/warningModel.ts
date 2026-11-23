@@ -1,4 +1,5 @@
 import type { ServiceId } from "../sim/types";
+import type { Government, GovView } from "../sim/government";
 import { SERVICE_IDS } from "../sim/services";
 import { L, plural } from "../i18n";
 
@@ -13,6 +14,15 @@ const SERVICES_SET = new Set<string>(SERVICE_IDS);
 
 export function freshWarnings(previous: ReadonlySet<string>, current: readonly WarningLike[]): WarningLike[] {
   return current.filter((w) => !previous.has(w.id));
+}
+
+export function governmentWarning(
+  gov: Pick<Government, "head" | "last" | "headSince"> | null | undefined,
+  view: Pick<GovView, "settled" | "form" | "terms" | "choice"> | null | undefined,
+): { kind: "election" } | { kind: "heir"; reign: string } | null {
+  if (!gov || !view?.settled || view.choice.people.length === 0) return null;
+  if (view.choice.kind === "heir") return { kind: "heir", reign: `${gov.head ?? gov.last}:${gov.headSince}` };
+  return view.form === "republic" && view.choice.kind === "open" && view.terms > 1 ? { kind: "election" } : null;
 }
 
 export function warningAction(id: string): WarningAction {

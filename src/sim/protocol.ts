@@ -6,6 +6,7 @@ import type { StrokeSpan } from "./stroke";
 import type { JobKey, Priority } from "./buildings";
 import type { Rations } from "./levers";
 import type { Form, Term } from "./government";
+import type { FlagDesign } from "./heraldry";
 import type { TradeOrder } from "./trade";
 import type { FeatureKind } from "./types";
 import type { BuildingQuery, ChronicleEntry, City, ClientSave, Finds, ResidentQuery, RoadKind, Site, StoredArticle, ZoneState } from "./types";
@@ -58,6 +59,7 @@ export type Cmd =
   | { type: "callSettlers" }
   | { type: "chooseHead"; id: number } // the head of the town, among those the form allows (sim/government.ts)
   | { type: "setGovForm"; form: Form }
+  | { type: "setCityIdentity"; name: string; flag: FlagDesign }
   | { type: "setTerm"; term: Term } // seasons of a republican term
   | { type: "grantSupplies" } // the reward for a watched ad
   | { type: "setTrade"; orders: TradeOrder[] } // what the markets swap every day, in order; empty stops the trade
@@ -84,7 +86,7 @@ export type Cmd =
     };
 
 export type ToWorker =
-  | { t: "load"; legacy: string | null; now: number }
+  | { t: "load"; legacy: string | null; now: number; savePort?: MessagePort }
   | { t: "found"; city: City; now: number; elevation?: number }
   | { t: "cmd"; id: number; cmd: Cmd }
   | { t: "query"; id: number; q: { type: "building"; id: number } | { type: "resident"; id: number } }
@@ -103,6 +105,7 @@ export interface CmdResult {
 
 export type FromWorker =
   | { t: "loaded"; save: ClientSave | null; migrated: boolean }
+  | { t: "cityChanged"; city: City }
   | { t: "loadFailed"; reason: "locked" | "unavailable" }
   | { t: "loadFailed"; reason: "invalid"; raw: unknown }
   | { t: "foundFailed" }

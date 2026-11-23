@@ -6,7 +6,7 @@ import { buildings, frame, queryBuilding, state } from "../../simClient";
 import { Icon } from "../../ui/Icon";
 import { badgeFor, type BadgeSpec } from "../../map/badgeModel";
 import { mppAtZoom, type View, type ViewMarker } from "../view";
-import { selectedBuilding } from "./buildings";
+import { selectedBuilding } from "../selection";
 import { L } from "../../i18n";
 
 // Small paper tags over buildings that need a look: construction progress, no workers, no input. HTML markers styled

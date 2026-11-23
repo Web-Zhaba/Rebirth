@@ -1,7 +1,7 @@
 import { addChronicle } from "./chronicle";
-import { BUILDINGS } from "./buildings";
 import { centroid } from "./excavation";
-import { FOUNDATION_LOT } from "./foundationLots";
+import { FOUNDATION_LOT, foundationsTaken } from "./foundationLots";
+import { makeIdentityCache } from "./memo";
 import { say } from "./production";
 import { distToEdge } from "./roads";
 import type { FoundFoundation, FoundPlace, RoadGraph, SimState } from "./types";
@@ -35,19 +35,52 @@ function distToLines(x: number, y: number, lines: readonly Pt[][]): number {
   return best;
 }
 
+// The bounding box of a street's line: a point further from the box than `reach` is further than that from every
+// segment of it, so the street is out of reach without measuring (the one build of the map is 120 × 40 streets).
+interface LineBox {
+  t: FoundPlace;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+function lineBoxes(streets: readonly FoundPlace[]): LineBox[] {
+  const out: LineBox[] = [];
+  for (const t of streets) {
+    if (!t.lines || t.lines.length === 0) continue;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const l of t.lines)
+      for (const [x, y] of l) {
+        if (x < x0) x0 = x;
+        if (y < y0) y0 = y;
+        if (x > x1) x1 = x;
+        if (y > y1) y1 = y;
+      }
+    if (x0 <= x1) out.push({ t, x0, y0, x1, y1 });
+  }
+  return out;
+}
+
 // The foundations of a usable size that belong to each street, by street id: each to the nearest street within reach.
-export function streetFoundations(streets: readonly FoundPlace[], foundations: readonly FoundFoundation[]): Map<string, FoundFoundation[]> {
+function buildStreetFoundations(streets: readonly FoundPlace[], foundations: readonly FoundFoundation[]): Map<string, FoundFoundation[]> {
   const out = new Map<string, FoundFoundation[]>();
-  const lined = streets.filter((t) => t.lines && t.lines.length > 0);
+  const lined = lineBoxes(streets);
   if (lined.length === 0) return out;
   for (const f of foundations) {
     if (f.area < FOUNDATION_LOT.minArea) continue;
     const [x, y] = centroid(f.ring);
     let best: FoundPlace | null = null;
     let bd = STREET.reach;
-    for (const t of lined) {
-      const d = distToLines(x, y, t.lines!);
-      if (d <= bd) [best, bd] = [t, d];
+    for (const box of lined) {
+      const dx = Math.max(box.x0 - x, 0, x - box.x1);
+      const dy = Math.max(box.y0 - y, 0, y - box.y1);
+      if (dx * dx + dy * dy > bd * bd) continue; // out of reach of the box, so of the line
+      const d = distToLines(x, y, box.t.lines!);
+      if (d <= bd) [best, bd] = [box.t, d];
     }
     if (!best) continue;
     const list = out.get(best.id);
@@ -57,8 +90,18 @@ export function streetFoundations(streets: readonly FoundPlace[], foundations: r
   return out;
 }
 
+// Every outline's street, by the identity of the two lists it is made from: a panel asks it once per foundation it
+// shows, and the answer only changes when the finds do (copy-on-write). Share the map, never change it.
+const byStreets = makeIdentityCache((streets: readonly FoundPlace[]) =>
+  makeIdentityCache((foundations: readonly FoundFoundation[]) => buildStreetFoundations(streets, foundations)),
+);
+
+export function streetFoundations(streets: readonly FoundPlace[], foundations: readonly FoundFoundation[]): Map<string, FoundFoundation[]> {
+  return byStreets(streets)(foundations);
+}
+
 // Share of the old line that built roads cover.
-export function lineCovered(lines: readonly Pt[][], roads: RoadGraph): number {
+function buildCovered(lines: readonly Pt[][], roads: RoadGraph): number {
   const built = Object.values(roads.edges).filter((e) => e.done >= e.labor);
   if (built.length === 0) return 0;
   let n = 0;
@@ -86,6 +129,15 @@ export function lineCovered(lines: readonly Pt[][], roads: RoadGraph): number {
   return n > 0 ? hit / n : 0;
 }
 
+// The same by the line and the roads it was measured against: the towns panel asks it for every street it lists.
+const byLines = makeIdentityCache((roads: RoadGraph) =>
+  makeIdentityCache((lines: readonly Pt[][]) => buildCovered(lines, roads)),
+);
+
+export function lineCovered(lines: readonly Pt[][], roads: RoadGraph): number {
+  return byLines(roads)(lines);
+}
+
 // How far each street is from being restored in full.
 export interface StreetProgress {
   houses: number; // its foundations
@@ -95,9 +147,10 @@ export interface StreetProgress {
 
 export function streetProgress(s: Pick<SimState, "finds" | "buildings" | "roads">, t: FoundPlace, own?: FoundFoundation[]): StreetProgress {
   const fs = own ?? streetFoundations(s.finds.streets, s.finds.foundations).get(t.id) ?? [];
-  const on = new Set<string>();
-  for (const b of Object.values(s.buildings)) if (b.foundationId && b.state === "active" && !BUILDINGS[b.template]?.workSite) on.add(b.foundationId);
-  return { houses: fs.length, built: fs.filter((f) => on.has(f.id)).length, road: t.lines ? lineCovered(t.lines, s.roads) : 0 };
+  const on = foundationsTaken(s.buildings).built; // one walk of the buildings, kept with the record
+  let built = 0;
+  for (const f of fs) if (on.has(f.id)) built++;
+  return { houses: fs.length, built, road: t.lines ? lineCovered(t.lines, s.roads) : 0 };
 }
 
 export const isComplete = (p: StreetProgress): boolean => p.houses > 0 && p.built === p.houses && p.road >= STREET.share;

@@ -18,8 +18,13 @@ function sdkStub(init = vi.fn(async () => {})) {
   return {
     init,
     environment: "local" as const,
+    data: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() },
     user: { systemInfo: { locale: "ru-RU" } },
-    game: { loadingStart: vi.fn(), loadingStop: vi.fn(), gameplayStart: vi.fn(), gameplayStop: vi.fn() },
+    game: {
+      settings: { muteAudio: true },
+      addSettingsChangeListener: vi.fn<(listener: (settings: { muteAudio: boolean }) => void) => void>(),
+      loadingStart: vi.fn(), loadingStop: vi.fn(), gameplayStart: vi.fn(), gameplayStop: vi.fn(), happytime: vi.fn(),
+    },
     ad: { requestAd: vi.fn() },
   };
 }
@@ -67,4 +72,58 @@ it("keeps standalone active when the CrazyGames SDK initializes after the deadli
   expect(mod.platform).toBe(mod.NO_PLATFORM);
   expect(sdk.game.loadingStart).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it("applies the initial CrazyGames mute setting and follows changes", async () => {
+  const sdk = sdkStub();
+  vi.stubGlobal("window", { CrazyGames: { SDK: sdk } });
+  const mod = await import("./index");
+  await mod.initPlatform();
+
+  const muteAudio = vi.fn();
+  mod.platform.listen({ pause: vi.fn(), resume: vi.fn(), muteAudio });
+  expect(muteAudio).toHaveBeenCalledWith(true);
+  sdk.game.addSettingsChangeListener.mock.calls[0][0]({ muteAudio: false });
+  expect(muteAudio).toHaveBeenLastCalledWith(false);
+});
+
+it("reports a settlement founding as CrazyGames Happytime", async () => {
+  const sdk = sdkStub();
+  vi.stubGlobal("window", { CrazyGames: { SDK: sdk } });
+  const mod = await import("./index");
+  await mod.initPlatform();
+
+  expect(sdk.game.happytime).not.toHaveBeenCalled();
+  mod.platform.settlementFounded?.();
+  expect(sdk.game.happytime).toHaveBeenCalledOnce();
+});
+
+it("blocks progression during a CrazyGames rewarded request and only grants a completed reward", async () => {
+  vi.stubEnv("VITE_REWARDED_ADS", "");
+  const sdk = sdkStub();
+  let callbacks!: Parameters<NonNullable<Window["CrazyGames"]>["SDK"]["ad"]["requestAd"]>[1];
+  sdk.ad.requestAd.mockImplementation((_type, next) => { callbacks = next; });
+  vi.stubGlobal("window", { CrazyGames: { SDK: sdk } });
+  const mod = await import("./index");
+  await mod.initPlatform();
+
+  const pause = vi.fn();
+  const resume = vi.fn();
+  const blockInput = vi.fn();
+  mod.platform.listen({ pause, resume, blockInput });
+  const unavailable = mod.platform.rewarded!();
+  expect(pause).toHaveBeenCalledWith(false);
+  expect(blockInput).toHaveBeenLastCalledWith(true);
+  expect(await mod.platform.rewarded!()).toBe(false);
+  callbacks.adError?.({ code: "unfilled", message: "No ad" });
+  expect(await unavailable).toBe(false);
+  expect(blockInput).toHaveBeenLastCalledWith(false);
+
+  const watched = mod.platform.rewarded!();
+  callbacks.adStarted?.();
+  expect(pause).toHaveBeenLastCalledWith();
+  callbacks.adFinished?.();
+  expect(await watched).toBe(true);
+  expect(resume).toHaveBeenCalledTimes(2);
+  expect(blockInput).toHaveBeenLastCalledWith(false);
 });

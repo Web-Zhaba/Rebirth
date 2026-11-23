@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nodePath, walkTo } from "./paths";
-import { buildNet, snapToRoad, spotTree, treeFrom, walkMetres } from "./people";
+import { nodePath, walkTo, buildNet, snapToRoad, spotTree, treeFrom, walkMetres } from "./walkNet";
 import { addRoad, emptyRoads } from "./roads";
 import type { RoadGraph } from "./types";
 

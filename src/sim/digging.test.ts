@@ -4,8 +4,9 @@ import { BUILDINGS } from "./buildings";
 import { completeExcavations, orderDig, orderStreetDig, streetDigs, streetOf } from "./digging";
 import { salvagedStone } from "./excavation";
 import { canPlaceOnFoundation, emptyGrowth } from "./growth";
+import { workDays } from "./research";
 import { addRoad, emptyRoads } from "./roads";
-import { allResearched } from "./tech";
+import { allResearched, initialProgress, lockReason, TECH_BY_ID } from "./tech";
 import type { FoundFoundation, FoundPlace, RoadGraph, SimState } from "./types";
 import { emptyZones } from "./zones";
 import { buildOutlineView } from "../ui/heritageModel";
@@ -54,15 +55,33 @@ describe("an outline", () => {
   });
   it("a unique old building opens with a discovery: an event with its site, and a chronicle line", () => {
     const church = ghost("c", rect(0, 0, 12, 20), { cls: "place_of_worship", name: "Церковь Покрова" });
-    const s = finishAll(ok(orderDig(mk([church], [], [{ id: "p", name: "Церковь Покрова", kind: "place_of_worship", digId: 1, at: 0 }]), "c")).sim);
+    const second = ghost("d", rect(50, 0, 12, 20), { cls: church.cls, name: "Церковь Николая" });
+    const town = { ...mk([church, second]), progress: initialProgress() };
+    const s = finishAll(ok(orderDig(ok(orderDig(town, "c")).sim, "d")).sim);
     const e = s.events.find((x) => x.kind === "discovery")!;
-    expect(e).toMatchObject({ site: "c", text: "Открыто: Церковь Покрова — культовое здание" });
+    expect(e).toMatchObject({ site: "c", text: "Открыто: Церковь Покрова — культовое здание — идея «Свод»" });
     expect(e.pos).toBeDefined();
     expect(s.chronicle.some((c) => c.kind === "found:c")).toBe(true);
+    expect(s.progress.insights).toEqual(["vault"]);
   });
   it("completes only finished digs", () => {
     const s = ok(orderDig(mk([house]), "h")).sim;
     expect(completeExcavations(s)).toBe(s);
+  });
+  it.each(["hospital", "doctors"])("digging a %s grants the healing insight before the required research", (cls) => {
+    const clinic = ghost("c", rect(0, 46, 20, 20), { cls, name: "Поликлиника" });
+    const second = ghost("d", rect(50, 46, 20, 20), { cls });
+    const planned = ok(orderDig({ ...mk([clinic, second]), progress: initialProgress() }, "c")).sim;
+    const healing = TECH_BY_ID.get("healing")!;
+    expect(planned.progress.insights).toEqual([]);
+    const dug = finishAll(planned);
+    expect(lockReason(dug, "healer")).toBeTruthy();
+    expect(dug.progress.insights).toEqual(["herbal"]);
+    expect(workDays(dug.progress, healing)).toBeCloseTo(healing.days * 0.7);
+    expect(dug.events.some((e) => e.text.includes("идея «Травник»"))).toBe(true);
+    const again = finishAll(ok(orderDig(dug, "d")).sim);
+    expect(again.progress.insights).toEqual(["herbal"]);
+    expect(again.events.filter((e) => e.text.includes("идея «Травник»"))).toHaveLength(1);
   });
 });
 
@@ -95,5 +114,21 @@ describe("a whole street", () => {
     expect(orderStreetDig(r.sim, "nope")).toEqual({ ok: false, reason: "Нет такой улицы" });
     const done = finishAll(r.sim);
     expect(done.finds.foundations.filter((f) => f.ghost).map((f) => f.id)).toEqual(["far"]);
+  });
+
+  it("answers again after a dig, on the streets and buildings the state has now", () => {
+    // The street block of a card is asked for every foundation of the panel; the street of an outline and its digs
+    // still to order are kept with the lists they were made from, so a dig just ordered must show at once.
+    let s = mk(houses, [street]);
+    const view = () => buildOutlineView(s.finds.foundations.find((f) => f.id === "a")!, s);
+    expect(view().street).toEqual({ id: "st", name: "Садовая", left: 3 });
+    expect(view().blocker).toBeNull();
+    s = ok(orderDig(s, "c")).sim;
+    expect(view().street).toEqual({ id: "st", name: "Садовая", left: 2 });
+    expect(view().blocker).toBeNull(); // another outline of the street is under way: this one is free
+    s = ok(orderDig(s, "a")).sim;
+    expect(view().blocker).toBe("Здесь уже копают");
+    expect(streetOf(s, "a")).toEqual({ id: "st", name: "Садовая" });
+    expect(streetDigs(s, "st").map((f) => f.id)).toEqual(["b"]);
   });
 });

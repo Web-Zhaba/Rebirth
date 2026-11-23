@@ -439,8 +439,8 @@ button.link {
     display: contents;
   }
 
-  .tb-mark {
-    display: none;
+  .tb-flag {
+    width: 25px;
   }
 
   .tb-city {
@@ -674,7 +674,10 @@ button.link {
     padding: 0 6px 0 var(--sp-2);
   }
 
-  .tb-mark,
+  .tb-flag {
+    width: 25px;
+  }
+
   .city-date {
     display: none;
   }
