@@ -39,6 +39,10 @@ const CASTER_SLACK = 250; // m a model's shadow can reach beyond the models' ran
 const MAX_SHADOW_REACH = 6; // a shadow's length per metre of height the scatter keeps an out-of-view caster for
 const QUAD_ARGS = SLOTS * 5 * 4; // byte offset of the drawIndirect records that draw the model slots as quads
 const TREE_FAR_CAP = 12_000;
+// Tiles whose height range the scatter has read. A flight over the world would keep every one of them; the cache drops
+// its oldest quarter instead of throwing everything away and rebuilding it, which cost a frame.
+const MAX_TILES = 20_000;
+const KEEP_TILES = Math.floor((MAX_TILES * 3) / 4);
 const DETAIL_FAR_CAP = 2_000;
 const MIN_PX = 1.5; // drawn up to where a typical one is this many px tall
 const SINK = 0.3; // m below the ground, so a slope does not show a floating root
@@ -101,6 +105,117 @@ interface TileInfo extends TileFrame {
   source: number; // the height page the range came from (terrain.ranges.source), NaN = not yet read
 }
 
+// Everything the job table and its counts are built from: the camera and the viewport, the mask, and the pages
+// streaming under the tiles. Two frames with equal keys walk the same tiles, thin them the same and write the same
+// table, so the walk, the thinning, the sort and the caster hash are skipped — a camera standing still, the common
+// case, otherwise pays 0.25-0.3 ms a frame for the same answer (perf/reports/gfx.md 1.1).
+export interface JobsKey {
+  eye: number[]; // 3, ECEF
+  viewProj: number[]; // 16
+  tanHalfY: number;
+  aspect: number;
+  near: number;
+  viewportH: number;
+  eyeAboveGround: number;
+  growOn: boolean; // 0 hides the forest: no jobs at all
+  hasLook: boolean;
+  occlusion: boolean;
+  maskEpoch: number;
+  maskBox: number[] | null; // 4, the game mask's box
+  heights: number; // terrain.ranges.version(): which height pages the tiles read
+  drapeFetched: number; // drape pages decoded so far (TileStream.fetched)
+  drapePending: number; // drape pages wanted or waiting for upload
+  drapeResident: number; // drape pages in the pool
+}
+
+export function emptyJobsKey(): JobsKey {
+  return {
+    eye: [0, 0, 0],
+    viewProj: new Array(16).fill(0) as number[],
+    tanHalfY: 0,
+    aspect: 0,
+    near: 0,
+    viewportH: 0,
+    eyeAboveGround: 0,
+    growOn: false,
+    hasLook: false,
+    occlusion: false,
+    maskEpoch: -1,
+    maskBox: null,
+    heights: -1,
+    drapeFetched: -1,
+    drapePending: -1,
+    drapeResident: -1,
+  };
+}
+
+// Whether a frame would build the same job table as the one in the buffer. Compared bit for bit: a camera that eased
+// by one ulp re-walks the tiles, which is what the frames before this gate did every frame anyway.
+export function sameJobsKey(a: JobsKey, b: JobsKey): boolean {
+  if (
+    a.tanHalfY !== b.tanHalfY ||
+    a.aspect !== b.aspect ||
+    a.near !== b.near ||
+    a.viewportH !== b.viewportH ||
+    a.eyeAboveGround !== b.eyeAboveGround ||
+    a.growOn !== b.growOn ||
+    a.hasLook !== b.hasLook ||
+    a.occlusion !== b.occlusion ||
+    a.maskEpoch !== b.maskEpoch ||
+    a.heights !== b.heights ||
+    a.drapeFetched !== b.drapeFetched ||
+    a.drapePending !== b.drapePending ||
+    a.drapeResident !== b.drapeResident
+  )
+    return false;
+  for (let i = 0; i < 3; i++) if (a.eye[i] !== b.eye[i]) return false;
+  for (let i = 0; i < 16; i++) if (a.viewProj[i] !== b.viewProj[i]) return false;
+  const m = a.maskBox;
+  const n = b.maskBox;
+  if (!m !== !n) return false;
+  if (m && n) for (let i = 0; i < 4; i++) if (m[i] !== n[i]) return false;
+  return true;
+}
+
+// Snapshot a probe into the key the buffer was built from (both are preallocated: a frame allocates nothing).
+export function copyJobsKey(into: JobsKey, from: JobsKey): void {
+  for (let i = 0; i < 3; i++) into.eye[i] = from.eye[i];
+  for (let i = 0; i < 16; i++) into.viewProj[i] = from.viewProj[i];
+  into.tanHalfY = from.tanHalfY;
+  into.aspect = from.aspect;
+  into.near = from.near;
+  into.viewportH = from.viewportH;
+  into.eyeAboveGround = from.eyeAboveGround;
+  into.growOn = from.growOn;
+  into.hasLook = from.hasLook;
+  into.occlusion = from.occlusion;
+  into.maskEpoch = from.maskEpoch;
+  into.maskBox = from.maskBox ? [...from.maskBox] : null;
+  into.heights = from.heights;
+  into.drapeFetched = from.drapeFetched;
+  into.drapePending = from.drapePending;
+  into.drapeResident = from.drapeResident;
+}
+
+// FNV-1 over the job table's words, for the caster version: only run when the table was rebuilt.
+export function hashWords(words: Uint32Array): number {
+  let h = 0;
+  for (let i = 0; i < words.length; i++) h = Math.imul(h ^ words[i], 16777619);
+  return h;
+}
+
+// Drops the oldest entries of a cache down to `keep` (Map keeps insertion order; a hit re-inserts its entry). Returns
+// how many went.
+export function dropOldest<T>(map: Map<number, T>, keep: number): number {
+  let dropped = 0;
+  for (const key of map.keys()) {
+    if (map.size <= keep) break;
+    map.delete(key);
+    dropped++;
+  }
+  return dropped;
+}
+
 export class Forest implements Drawable {
   grow = 0; // 0 hides the forest, 1 full size (the view eases it in with the scale)
   look: ForestLook | null = null;
@@ -146,6 +261,14 @@ export class Forest implements Drawable {
   private scatterEye: Vec3 | null = null; // the eye the instances in the buffer were scattered for
   private castHash = 0;
   private castPending = false;
+  private jobHash = 0;
+  private jobsDirty = true; // the table's words changed: hash them again (noteCasters)
+  private keyValid = false;
+  private readonly key: JobsKey = emptyJobsKey(); // what the job table in the buffer was built from
+  private readonly probe: JobsKey = emptyJobsKey(); // what this frame would build it from
+  private treeFar = 0;
+  private detailFar: number[] = [];
+  private maskEpoch = 0; // bumped by setMask: a new mask is new job data
   shadowVersion = 0; // bumped when the instances the shadow pass draws changed (Drawable.shadowVersion)
 
   constructor(
@@ -255,30 +378,75 @@ export class Forest implements Drawable {
     this.maskTexture.destroy();
     this.maskTexture = this.createMask(mask);
     this.maskBox = mask?.box ?? null;
+    this.maskEpoch++;
     this.scatterGroup = null;
   }
 
   update(view: CameraView, engine: Engine): void {
     this.eye = view.eye;
-    this.prepare(view, engine);
+    this.noteKey(view);
+    // A camera standing still over settled pages would build the same job table as last frame: skip the tile walk, the
+    // thinning and the caster hash (0.25-0.3 ms a frame, perf/reports/gfx.md 1.1) and keep the table and its counts.
+    if (!this.keyValid || !sameJobsKey(this.probe, this.key)) {
+      this.keyValid = true;
+      copyJobsKey(this.key, this.probe);
+      this.prepare(view);
+    }
     this.noteCasters();
+    // The sun, the Hi-Z and the growth move without the camera, so the uniforms are rewritten every frame over the
+    // jobs prepare left.
+    this.writeUniform(view, engine);
+  }
+
+  // What this frame builds its jobs from (JobsKey): the camera and the viewport, the mask, and the pages streaming under
+  // the tiles.
+  private noteKey(view: CameraView): void {
+    const k = this.probe;
+    for (let i = 0; i < 3; i++) k.eye[i] = view.eye[i];
+    for (let i = 0; i < 16; i++) k.viewProj[i] = view.viewProj[i];
+    k.tanHalfY = view.tanHalfY;
+    k.aspect = view.aspect;
+    k.near = view.near;
+    k.viewportH = view.viewportH;
+    k.eyeAboveGround = view.eyeAboveGround;
+    k.growOn = this.grow > 0;
+    k.hasLook = this.look !== null;
+    k.occlusion = this.occlusion;
+    k.maskEpoch = this.maskEpoch;
+    const m = this.maskBox;
+    if (!m) k.maskBox = null;
+    else if (k.maskBox) for (let i = 0; i < 4; i++) k.maskBox[i] = m[i];
+    else k.maskBox = [m[0], m[1], m[2], m[3]];
+    // The height pages have a version of their own; the drape pages (the cover the scatter grows from) only show up as
+    // the stream's counters: a page decoded, wanted or uploaded changes one of them in the frame it happens.
+    k.heights = this.terrain.ranges.version?.() ?? 0;
+    k.drapeFetched = this.terrain.drapeStream.fetched;
+    k.drapePending = this.terrain.drapeStream.pending;
+    k.drapeResident = this.terrain.drape.resident;
   }
 
   // The shadow pass draws the instances last frame's scatter made, so a change of them reaches it one frame later: the
   // version is bumped on the frame after the job table, the growth or the crowns changed.
   private noteCasters(): void {
+    // The table's words are hashed when prepare rebuilt them, not 36 per job 60 times a second.
+    if (this.jobsDirty) {
+      this.jobHash = hashWords(new Uint32Array(this.jobData, 0, this.jobCount * JOB_WORDS));
+      this.jobsDirty = false;
+    }
     let h = Math.imul(this.jobCount + 1, 31) + Math.round(this.grow * 1000);
-    const words = new Uint32Array(this.jobData, 0, this.jobCount * JOB_WORDS);
-    for (let i = 0; i < words.length; i++) h = Math.imul(h ^ words[i], 16777619);
+    h = Math.imul(h ^ this.jobHash, 16777619);
     for (const k of this.look?.kinds ?? []) h = Math.imul(h ^ Math.round(k.bare * 1000), 16777619);
     if (this.castPending) this.shadowVersion++;
     this.castPending = h !== this.castHash;
     this.castHash = h;
   }
 
-  private prepare(view: CameraView, engine: Engine): void {
+  // The job table: the tiles of the scatter, their thinning and the words the compute pass reads. Runs only on a change
+  // of the frame's key (update).
+  private prepare(view: CameraView): void {
     this.total = 0;
     this.jobCount = 0;
+    this.jobsDirty = true;
     if (this.grow <= 0 || !this.look) return;
     const eyeGeo = ecefToGeodetic(view.eye);
     // How far a typical one of each kind is still MIN_PX tall.
@@ -286,6 +454,8 @@ export class Forest implements Drawable {
     const treeFar = Math.min(TREE_FAR_CAP, farOf(this.kinds[0].tall));
     const detailFar = DETAIL_KINDS.map((_, i) => Math.min(DETAIL_FAR_CAP, farOf(this.kinds[3 + i].tall)));
     const maxFar = Math.max(treeFar, ...detailFar);
+    this.treeFar = treeFar;
+    this.detailFar = detailFar;
     if (view.eyeAboveGround > maxFar) return;
 
     const planes = frustumPlanes(view);
@@ -377,17 +547,25 @@ export class Forest implements Drawable {
     this.stats = { jobs: count, candidates: total, reach: this.treeReach, expected: Math.round(trees.reduce((a, t) => a + (t.d < TREE_NEAR ? t.n : t.n * keepAt(t.d, this.treeReach)), 0)) };
     if (!count) return;
     this.device.queue.writeBuffer(this.jobs, 0, this.jobData, 0, count * JOB_WORDS * 4);
+  }
 
+  // The scatter's uniforms and the look: every frame, because the sun, the Hi-Z and the growth move on their own, over
+  // the job table prepare left (nothing here depends on which tiles those are).
+  private writeUniform(view: CameraView, engine: Engine): void {
+    if (!this.jobCount || !this.look) return;
+    const planes = frustumPlanes(view);
     const up = enuAt(engine.state.lat, engine.state.lng);
     const d = this.data;
     let k = 0;
     const put = (...v: number[]) => (d.set(v, k), (k += v.length));
     for (const p of planes) put(...p);
+    const total = this.total;
+    const count = this.jobCount;
     const groups = Math.ceil(total / 64);
     put(...shadowReach(engine, up.up), total);
     new Uint32Array(d.buffer).set([count, Math.min(groups, 65535) * 64, 0, 0], k);
     k += 4;
-    put(treeFar, ...detailFar);
+    put(this.treeFar, ...this.detailFar);
     put(this.treeReach === Infinity ? 1e9 : this.treeReach, this.detailReach === Infinity ? 1e9 : this.detailReach, this.grow, EXAGGERATION);
     put(TREE_NEAR, DETAIL_NEAR, SINK, 0);
     const u = new Uint32Array(d.buffer);
@@ -541,8 +719,12 @@ export class Forest implements Drawable {
   private tile(x: number, y: number): TileInfo {
     const key = y * 2 ** SCATTER_ZOOM + x;
     let t = this.tiles.get(key);
-    if (!t) {
-      if (this.tiles.size > 20000) this.tiles.clear();
+    if (t) {
+      // A hit moves its tile to the end: the newest is the last one dropped when the cache is full.
+      this.tiles.delete(key);
+      this.tiles.set(key, t);
+    } else {
+      if (this.tiles.size >= MAX_TILES) dropOldest(this.tiles, KEEP_TILES);
       t = { ...tileFrame(x, y), seed: (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0, lo: 0, hi: 0, source: NaN };
       this.tiles.set(key, t);
     }

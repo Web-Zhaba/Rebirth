@@ -28,11 +28,16 @@ export interface SchedulerIo {
   cancel(id: number): void;
 }
 
+// Answers kept per set. A flight over the world asks for thousands of tiles; none of them is worth remembering for the
+// whole session, and a tile behind the camera is simply asked for again if the view returns.
+const MAX_REMEMBERED = 4096;
+
 export interface SchedulerOptions {
   maxInFlight: number;
   cancelAfterFrames: number; // a running request not wanted for this many frames is cancelled
   retry: RetryPolicy;
   now: () => number; // ms
+  rememberedCap: number; // answers kept per set (missing, gave up): the rest are forgotten oldest first
 }
 
 interface Running {
@@ -59,7 +64,7 @@ export class RequestScheduler {
     private readonly io: SchedulerIo,
     opt: Partial<SchedulerOptions> = {},
   ) {
-    this.opt = { maxInFlight: 8, cancelAfterFrames: 90, retry: DEFAULT_RETRY, now: () => performance.now(), ...opt };
+    this.opt = { maxInFlight: 8, cancelAfterFrames: 90, retry: DEFAULT_RETRY, now: () => performance.now(), rememberedCap: MAX_REMEMBERED, ...opt };
   }
 
   beginFrame(): void {
@@ -136,14 +141,14 @@ export class RequestScheduler {
     if (key === undefined) return undefined;
     if (isMissing(status)) {
       this.failures.delete(key);
-      this.missing.add(key);
+      this.remember(this.missing, key);
       return "missing";
     }
     const count = (this.failures.get(key)?.count ?? 0) + 1;
     const delay = retryDelay(count, this.opt.retry);
     if (delay === null) {
       this.failures.delete(key);
-      this.gaveUp.add(key);
+      this.remember(this.gaveUp, key);
       return "failed";
     }
     this.failures.set(key, { count, retryAt: this.opt.now() + delay });
@@ -165,6 +170,16 @@ export class RequestScheduler {
 
   get failedCount(): number {
     return this.gaveUp.size;
+  }
+
+  // Remembers an answer, forgetting the oldest ones when the set is full (Set keeps insertion order).
+  private remember(set: Set<number>, key: number): void {
+    set.add(key);
+    while (set.size > this.opt.rememberedCap) {
+      const oldest = set.values().next().value;
+      if (oldest === undefined) break;
+      set.delete(oldest);
+    }
   }
 
   private finish(id: number): number | undefined {
