@@ -27,9 +27,9 @@ export function SuppliesOffer() {
   return (
     <div class="supplies-offer">
       <Button icon="gumno" disabled={phase === "showing"} onClick={watch}>
-        {L("Припасы за просмотр рекламы", "Supplies for watching an ad")}
+        {phase === "showing" ? L("Запрашиваем рекламу…", "Requesting an ad…") : L("Припасы за просмотр рекламы", "Supplies for watching an ad")}
       </Button>
-      {phase === "missed" && <p class="supplies-note" role="status">{L("Реклама не досмотрена, припасов нет.", "The ad was not watched to the end, no supplies.")}</p>}
+      {phase === "missed" && <p class="supplies-note" role="status">{L("Реклама недоступна или прервана. Можно попробовать позже.", "The ad was unavailable or interrupted. Try again later.")}</p>}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { areaText } from "./inspectorModel";
 import "./heritage.css";
 import { SEMANTIC_IDS } from "./semanticIds";
 import { decimal, L } from "../i18n";
+import { externalLinksAllowed } from "../platform";
 
 function Body({ v }: { v: HeritageView }) {
   const order = async () => {
@@ -60,7 +61,7 @@ function Body({ v }: { v: HeritageView }) {
           </div>
         </>
       )}
-      {v.article && (
+      {externalLinksAllowed && v.article && (
         <a class="link" href={v.article.url} target="_blank" rel="noopener noreferrer">
           {L("Статья:", "Article:")} {v.article.title}
         </a>

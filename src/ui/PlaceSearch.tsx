@@ -5,6 +5,7 @@ import { KIND_LABEL, MIN_QUERY, searchPlaces, type PlaceHit } from "../world/geo
 import { IconButton } from "./kit";
 import { Icon } from "./Icon";
 import { L } from "../i18n";
+import { externalLinksAllowed } from "../platform";
 
 const DEBOUNCE_MS = 400; // Photon fair use: no request per keystroke
 const LOCATE_MPP = mppAtZoom(13); // old zoom 13
@@ -164,7 +165,7 @@ export function PlaceSearch({ view }: { view: View }) {
             </li>
           ))}
           <li class="place-hit-credit" role="presentation">
-            {L("Поиск:", "Search:")} <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>, {"\u00a9"} OpenStreetMap
+            {L("Поиск:", "Search:")} {externalLinksAllowed ? <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a> : "Photon"}, {"\u00a9"} OpenStreetMap
           </li>
         </ul>
       )}
