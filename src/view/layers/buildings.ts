@@ -2,7 +2,7 @@ import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import { BUILDINGS } from "../../sim/buildings";
 import type { Feature, FeatureCollection } from "geojson";
 import { covers } from "../../sim/services";
-import type { Building, ClientState } from "../../sim/types";
+import type { Building, ClientState, FoundFoundation } from "../../sim/types";
 import { pointInPolygon } from "../../sim/zones";
 import { buildings, buildingSet, city, frame, lifeLights, state } from "../../simClient";
 import type { Frame } from "../../world/frame";
@@ -12,6 +12,7 @@ import { lastTool, overlay, OVERLAY_COLORS, tool, toolOfTemplate, type Overlay }
 import { pickTool } from "../../map/toolPick";
 import { shouldRepeatTool } from "../../ui/inputModel";
 import { buildBuildingSpatialIndex, buildingSpatialCandidates, type BuildingSpatialIndex } from "../../map/buildingHitIndex";
+import { progressStep, sameKey, type ItemKey } from "./itemMemo";
 import type { View } from "../view";
 import { selectedBuilding } from "../selection";
 
@@ -69,25 +70,61 @@ const towardsRoad = (b: Building): [number, number] => {
 // What the model layer draws of the buildings: every one that is not just planned. A restored old building is drawn by its OSM class.
 // The same list comes back while nothing visible changed, so the layer does not rebuild every tick.
 let lastItems: ModelItem[] = [];
-const itemSig = (i: ModelItem): string => `${i.id}|${i.kind}|${i.height}|${i.progress >= 1 ? 1 : Math.floor(i.progress * 24)}|${i.level ?? 1}|${i.tint ?? ""}|${i.upgrading ? 1 : 0}|${i.lamp ?? ""}`;
+// The foundations of the finds by id: a heritage building looked its site up by scanning them all, on every snapshot.
+let findsFor: ClientState["finds"] | null = null;
+let foundationsById = new Map<string, FoundFoundation>();
+function foundationsOf(finds: ClientState["finds"]): Map<string, FoundFoundation> {
+  if (finds !== findsFor) {
+    findsFor = finds;
+    foundationsById = new Map(finds.foundations.map((f) => [f.id, f]));
+  }
+  return foundationsById;
+}
+// What each item was made of (itemMemo.ts decides whether that is still the same picture). An untouched building is
+// the same object in the next snapshot (sim/delta.ts sends only what changed), so its item comes back instead of being
+// built again.
+const itemMemos = new Map<number, { key: ItemKey; item: ModelItem }>();
 export const buildingItems: ReadonlySignal<ModelItem[]> = computed(() => {
   const st = state.value;
   const ov = overlay.value;
   if (!st) return lastItems;
   // which buildings light up in the evening, and how (sim/life.ts)
   const lamps = new Map(lifeLights.value.map((l) => [l.id, l.kind]));
+  const flag = city.value?.flag;
+  const foundations = foundationsOf(st.finds);
   const out: ModelItem[] = [];
+  let changed = false;
   for (const b of Object.values(st.buildings)) {
     if (b.state === "planned" || BUILDINGS[b.template]?.workSite) continue; // a foundation dig draws on the ruins layer
     const progress = b.state === "active" ? 1 : b.labor > 0 ? Math.min(1, b.done / b.labor) : 0;
+    const lamp = lamps.get(b.id);
     // an old building brought back as it was, or kept as a monument, is drawn as the old one
-    if (b.foundationId && (b.asItWas || BUILDINGS[b.template]?.monument)) {
-      const site = st.finds.foundations.find((f) => f.id === b.foundationId);
-      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: site?.cls ?? "", progress, style: "heritage", lamp: lamps.get(b.id) });
-    } else
-      out.push({ id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: tintOf(b, ov, st), upgrading: !!b.upgrade, lamp: lamps.get(b.id), flag: progress === 1 && BUILDINGS[b.template]?.seat ? city.value?.flag : undefined });
+    const heritage = !!(b.foundationId && (b.asItWas || BUILDINGS[b.template]?.monument));
+    const flies = !heritage && progress === 1 && BUILDINGS[b.template]?.seat ? flag : undefined;
+    const key: ItemKey = {
+      building: b,
+      finds: st.finds,
+      overlay: ov,
+      lamp,
+      flag: flies,
+      tint: heritage ? "" : tintOf(b, ov, st),
+      step: progressStep(progress),
+    };
+    const memo = itemMemos.get(b.id);
+    if (memo && sameKey(memo.key, key)) {
+      out.push(memo.item);
+      continue;
+    }
+    const item: ModelItem = heritage
+      ? { id: b.id, ring: b.footprint, height: b.height, kind: foundations.get(b.foundationId!)?.cls ?? "", progress, style: "heritage", lamp }
+      : { id: b.id, ring: b.footprint, height: b.height, kind: b.template, progress, style: "town", level: b.level, front: towardsRoad(b), tint: key.tint, upgrading: !!b.upgrade, lamp, flag: flies };
+    itemMemos.set(b.id, { key, item });
+    out.push(item);
+    changed = true;
   }
-  if (out.length !== lastItems.length || out.some((it, k) => it.flag !== lastItems[k].flag || itemSig(it) !== itemSig(lastItems[k]))) lastItems = out;
+  if (changed || out.length !== lastItems.length) lastItems = out;
+  // memos of buildings that are gone, once they outnumber the living ones
+  if (itemMemos.size > lastItems.length * 2 + 64) for (const id of itemMemos.keys()) if (!(id in st.buildings)) itemMemos.delete(id);
   return lastItems;
 });
 
