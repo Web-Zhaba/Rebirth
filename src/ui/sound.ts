@@ -1,4 +1,4 @@
-import { signal } from "@preact/signals";
+import { computed, effect, signal } from "@preact/signals";
 
 // Optional UI sounds, synthesized with the Web Audio API (no files). Off by default; the AudioContext is created lazily
 // on the first play, which always comes from a user gesture or a game event after one. Nothing here ever throws.
@@ -85,6 +85,8 @@ export const soundEnabled = signal(initial.enabled);
 export const soundVolume = signal(initial.volume);
 // Silence asked by the portal (its ads and overlays, see src/platform); not saved, the settings stay as they are.
 export const soundPaused = signal(false);
+export const soundMutedByPlatform = signal(false);
+const soundMuted = computed(() => soundPaused.value || soundMutedByPlatform.value);
 
 function save(): void {
   try {
@@ -105,6 +107,11 @@ export function setSoundVolume(v: number): void {
 }
 
 let ctx: AudioContext | null = null;
+let output: GainNode | null = null;
+effect(() => {
+  const muted = soundMuted.value;
+  if (output) output.gain.value = muted ? 0 : 1;
+});
 
 function context(): AudioContext | null {
   if (ctx) return ctx;
@@ -120,15 +127,20 @@ function context(): AudioContext | null {
 // For tests: forget the cached context.
 export const resetSound = (): void => {
   ctx = null;
+  output = null;
 };
 
 export function play(name: SoundName): void {
-  if (!soundEnabled.peek() || soundVolume.peek() <= 0 || soundPaused.peek()) return;
+  if (!soundEnabled.peek() || soundVolume.peek() <= 0 || soundMuted.peek()) return;
   // Game events keep coming in a background tab; a hidden game stays silent.
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
   try {
     const c = context();
     if (!c) return;
+    if (!output) {
+      output = c.createGain();
+      output.connect(c.destination);
+    }
     if (c.state === "suspended") void c.resume().catch(() => {});
     const t0 = c.currentTime;
     const master = soundVolume.peek() * 0.25;
@@ -142,7 +154,7 @@ export function play(name: SoundName): void {
       g.gain.setValueAtTime(0.0001, s);
       g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), s + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, s + n.len);
-      o.connect(g).connect(c.destination);
+      o.connect(g).connect(output);
       o.start(s);
       o.stop(s + n.len + 0.02);
     }

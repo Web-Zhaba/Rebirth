@@ -86,7 +86,7 @@ export type Cmd =
     };
 
 export type ToWorker =
-  | { t: "load"; legacy: string | null; now: number }
+  | { t: "load"; legacy: string | null; now: number; savePort?: MessagePort }
   | { t: "found"; city: City; now: number; elevation?: number }
   | { t: "cmd"; id: number; cmd: Cmd }
   | { t: "query"; id: number; q: { type: "building"; id: number } | { type: "resident"; id: number } }

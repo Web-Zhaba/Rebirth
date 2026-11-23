@@ -4,8 +4,10 @@ import type { Light, Rest, Trip } from "./map/life";
 import { BASE_TICK, clockAt, tickFraction, tickMs, type Speed } from "./sim/clock";
 import { applyDelta } from "./sim/delta";
 import type { Cmd, CmdResult, FromWorker, ToWorker } from "./sim/protocol";
+import { serveSaveStorage } from "./sim/savePort";
 import type { BuildingQuery, City, ClientState, ResidentQuery } from "./sim/types";
 import { makeFrame, type Frame } from "./world/frame";
+import { platform } from "./platform";
 
 const LEGACY_KEY = "rebirth.save";
 
@@ -74,8 +76,18 @@ export const gameNow = (): number => {
   return s ? clockOf(s) : gameClock.peek();
 };
 
-const worker = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module", name: lang }); // the worker reads its language from its name (i18n.ts)
-const send = (msg: ToWorker) => worker.postMessage(msg);
+// The worker comes up on first use, not with this module: its bundle is around 100 kB gzip and neither the first frame
+// nor the engine's start-up waits for it. Nothing is sent before `load()`, so the first use is the load itself.
+let worker: Worker | null = null;
+function simWorker(): Worker {
+  if (worker) return worker;
+  const w = new Worker(new URL("./sim/worker.ts", import.meta.url), { type: "module", name: lang }); // the worker reads its language from its name (i18n.ts)
+  w.onmessage = onWorkerMessage;
+  w.onerror = onWorkerError;
+  worker = w;
+  return w;
+}
+const send = (msg: ToWorker) => simWorker().postMessage(msg);
 
 let nextCmdId = 1;
 const pending = new Map<number, (r: CmdResult) => void>();
@@ -109,10 +121,11 @@ export function queryResident(id: number): Promise<ResidentQuery | null> {
   });
 }
 
-worker.onmessage = (e: MessageEvent<FromWorker>) => {
+function onWorkerMessage(e: MessageEvent<FromWorker>): void {
   const m = e.data;
   switch (m.t) {
-    case "loaded":
+    case "loaded": {
+      const founded = foundPending.peek() && m.save !== null;
       if (m.migrated) {
         try {
           localStorage.removeItem(LEGACY_KEY); // only after the v4 copy is persisted
@@ -128,7 +141,9 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
         foundFailed.value = false;
         loaded.value = true;
       });
+      if (founded) platform.settlementFounded?.();
       break;
+    }
     case "cityChanged":
       city.value = m.city;
       break;
@@ -178,11 +193,13 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       console.error("sim worker:", m.message);
       break;
   }
-};
+}
 
-worker.onerror = (error) => {
+// The worker died: the town is gone and the page says so. A later load may bring it back.
+function onWorkerError(error: ErrorEvent): void {
   console.error("sim worker:", error.message);
-  worker.terminate();
+  worker?.terminate();
+  worker = null;
   batch(() => {
     loadFailure.value = "unavailable";
     speed.value = 0;
@@ -194,9 +211,21 @@ worker.onerror = (error) => {
   for (const done of queries.values()) done(null);
   pending.clear();
   queries.clear();
-};
+}
 
 export function load(): void {
+  if (import.meta.env.VITE_PLATFORM === "crazygames") {
+    const storage = platform.saveStorage;
+    if (!storage) {
+      loadFailure.value = "unavailable";
+      return;
+    }
+    const { port1, port2 } = new MessageChannel();
+    serveSaveStorage(port1, storage);
+    simWorker().postMessage({ t: "load", legacy: null, now: Date.now(), savePort: port2 } satisfies ToWorker, [port2]);
+    return;
+  }
+
   let legacy: string | null = null;
   try {
     legacy = localStorage.getItem(LEGACY_KEY);
