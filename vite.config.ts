@@ -8,6 +8,7 @@ const { version } = JSON.parse(readFileSync(new URL("./package.json", import.met
 // missing unless the tag is there (src/platform/crazygames.ts waits for the async script).
 const HEAD_SDK: Record<string, string> = {
   crazygames: "https://sdk.crazygames.com/crazygames-sdk-v3.js",
+  y8: "https://cdn.y8.com/minimal-sdk/2-0/y8.min.js",
 };
 
 function portalSdkTag(mode: string): Plugin {
@@ -26,9 +27,10 @@ export default defineConfig(({ mode }) => ({
   envDir: "env",
   // One release number on every portal; release-please bumps it in package.json.
   define: { __APP_VERSION__: JSON.stringify(version) },
-  plugins: [Icons({ compiler: "jsx", jsx: "preact" }), portalSdkTag(mode)],
+  plugins: [Icons({ compiler: "jsx", jsx: "preact" }), portalSdkTag(mode === "crazygames-full" ? "crazygames" : mode)],
   esbuild: { jsx: "automatic", jsxImportSource: "preact" },
-  // Agent worktrees under .claude/ hold other copies of src/.
+  // Agent worktrees under .claude/ hold other copies of src/; perf/bench/ measures instead of asserting and runs on its
+  // own (`npx vitest run --config vitest.perf.config.ts`), so it stays out of the suite.
   // Workers are reused across test files: the suite is pure logic with no module-mock games, so isolation buys nothing.
-  test: { exclude: ["**/node_modules/**", ".claude/**"], isolate: false },
+  test: { exclude: ["**/node_modules/**", ".claude/**", "perf/**"], isolate: false },
 }));
