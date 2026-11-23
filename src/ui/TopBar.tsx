@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { clearingLogs, isCleared } from "../sim/clearing";
 import { SERVICE_LIST } from "../sim/services";
 import { lockReason, techOf } from "../sim/tech";
-import { calendar, isNight, NIGHT_BOOST, type Speed } from "../sim/clock";
+import { calendar, type Speed } from "../sim/clock";
 import type { City, Stock } from "../sim/types";
 import { DEFAULT_FLAG } from "../sim/heraldry";
 import { setManualOverlay, tool } from "../map/tools";
@@ -21,16 +21,15 @@ import { BADGE_TEXT } from "./techModel";
 import { badge } from "./techState";
 import { Stat, Tooltip } from "./kit";
 import { researchStatusView } from "./researchStatusModel";
-import { amount, dayPhase, deltaDir, foodNet, LOW_FOOD_DAYS, pad, PHASE_LABEL, perDay, roadQueue, tons, warnings } from "./topbarModel";
+import { amount, deltaDir, foodNet, harvestText, LOW_FOOD_DAYS, perDay, roadQueue, tons, warnings } from "./topbarModel";
 import { weatherChip } from "./weatherModel";
-import { useGameMinutes } from "./useGameMinutes";
+import { Clock, ClockDate, NightBoost } from "./Clock";
 import { signedDaily } from "./resourceModel";
 import { OUTPUT } from "./inspectorModel";
 import { freshWarnings, serviceWarningText, warningAction } from "./warningModel";
 import { screenshotMode } from "./screenshotMode";
 import { SEMANTIC_IDS } from "./semanticIds";
 import { decimal, L, plural } from "../i18n";
-import { SEASON_NAMES } from "../map/seasonPreview";
 import { SettlementFlag } from "./SettlementFlag";
 import { hallReady, openTownhall } from "./TownhallPanel";
 
@@ -97,9 +96,6 @@ const GOODS: { id: Good; icon: IconName; title: string; cap: string }[] = [
 const figure = (st: Stock, id: Good): number => (id === "wares" ? goodsTotal(st) : st[id]);
 
 export function TopBar({ city, view }: { city: City; view?: View }) {
-  const gm = useGameMinutes();
-  const cal = calendar(gm);
-  const phase = dayPhase(cal.hour);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       onSpeedKey(e);
@@ -129,15 +125,16 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
   const p = people.value;
   const st = stock.value;
   const eco = economy.value;
-  const clearing = (state.value?.clearings ?? []).filter((c) => !isCleared(c));
+  const snap = state.value;
+  const clearing = (snap?.clearings ?? []).filter((c) => !isCleared(c));
   const clearGot = clearing.reduce((a, c) => a + (clearingLogs(c.area, c.forest) * c.done) / c.labor, 0);
   const clearAll = clearing.reduce((a, c) => a + clearingLogs(c.area, c.forest), 0);
   const mood = eco ? Math.round(eco.avgMood) : 0;
   const net = eco ? foodNet(eco) : 0;
-  const wx = weatherChip(state.value?.weather, cal.season, eco);
+  // The season comes from the snapshot, like the weather itself: the bar no longer follows the clock (that is Clock's
+  // job), and a season turns over within one tick of the clock anyway.
+  const wx = weatherChip(snap?.weather, calendar(snap?.gameMinutes ?? 0).season, eco);
   const text = (id: Good) => (st ? (id === "wares" ? String(Math.floor(goodsTotal(st))) : amount(st[id])) : "");
-
-  const time = `${pad(cal.hour)}:${pad(cal.minute)}`;
 
   return (
     <header class="topbar" aria-label={L("Верхняя панель управления", "Top control bar")}>
@@ -157,31 +154,16 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
           ) : (
             <div class="city-name">{city.name}</div>
           )}
-          <div class="city-date">
-            {L("Год", "Year")} {cal.year} · {SEASON_NAMES[cal.season]}, {L("день", "day")} {cal.dayOfSeason}
-          </div>
+          <ClockDate />
         </div>
-        <div class="tb-clock" role="group" aria-label={`${L("Время", "Time")} ${time}, ${PHASE_LABEL[phase]}`}>
-          <span class="tb-time" aria-hidden="true">
-            <Icon name={phase} size={14} class={`phase-${phase}`} />
-            {time}
-          </span>
-          {/* The day as a ruler: night, morning, day and evening spans, a resin needle at the current minute. */}
-          <span class="tb-ruler" aria-hidden="true">
-            <i style={{ left: `${((cal.hour * 60 + cal.minute) / 1440) * 100}%` }} />
-          </span>
-        </div>
+        <Clock />
         <div class="speed" role="toolbar" aria-label={L("Скорость времени", "Time speed")} aria-orientation="horizontal">
           {SPEEDS.map((s) => (
             <button key={s.v} type="button" aria-pressed={speed.value === s.v} aria-keyshortcuts={s.key} title={`${s.label} · ${L("клавиша", "key")} ${s.key}`} aria-label={s.v === 0 ? L("Пауза", "Pause") : undefined} onClick={() => setSpeed(s.v)}>
               {s.v === 0 ? <Icon name="pause" size={14} /> : s.label}
             </button>
           ))}
-          {speed.value > 0 && isNight(gm) && (
-            <span class="speed-note" title={L("Ночью время идёт быстрее", "Night passes faster")}>
-              <Icon name="night" size={12} />×{NIGHT_BOOST}
-            </span>
-          )}
+          <NightBoost />
         </div>
       </div>
       {p && st && eco && (
@@ -239,10 +221,13 @@ export function TopBar({ city, view }: { city: City; view?: View }) {
               <>
                 <Row label={L("На складах", "In store")} value={L(`${tons(st.food)} из ${tons(eco.foodCap)} т`, `${tons(st.food)} of ${tons(eco.foodCap)} t`)} />
                 {eco.foodPerDay > 0 && <Row label={L("Хватит на", "Lasts")} value={`${eco.foodDays >= 999 ? "999+" : Math.floor(eco.foodDays)} ${L("дн.", "d")}`} />}
-                <Row label={L("Сделано вчера", "Made yesterday")} value={`+${amount(eco.yesterday.food)} ${L("кг", "kg")}`} />
-                <Row label={L("Собирают за день", "Gathered per day")} value={`+${amount(eco.forage)} ${L("кг", "kg")}`} />
+                {eco.harvest.potential > 0 && <Row label={L("С полей в этом году", "From the fields this year")} value={harvestText(eco.harvest)} />}
+                {eco.foodIn.fields > 0 && <Row label={L("С полей, в среднем за день", "Fields, a day on average")} value={`+${amount(eco.foodIn.fields)} ${L("кг", "kg")}`} />}
+                {eco.foodIn.makers >= 0.05 && <Row label={L("Промыслы и сады, в среднем за день", "Trades and orchards, a day on average")} value={`+${amount(eco.foodIn.makers)} ${L("кг", "kg")}`} />}
+                {eco.foodIn.forage >= 0.05 && <Row label={L("Собирают за день", "Gathered per day")} value={`+${amount(eco.foodIn.forage)} ${L("кг", "kg")}`} />}
                 <Row label={L("Съедают за день", "Eaten per day")} value={`−${amount(eco.foodPerDay)} ${L("кг", "kg")}`} />
                 <Row label={L("Чистый баланс", "Net balance")} value={signedDaily(net, L("кг", "kg"))} tone={net < 0 ? "warn" : "ok"} />
+                {eco.harvest.potential > 0 && <span class="tip-note">{L("Урожай зерна приходит раз в год, в первые дни осени: приход и баланс считают его в среднем за год.", "The grain harvest comes once a year, in the first autumn days: income and balance count it as a year’s average.")}</span>}
                 {eco.foodPerDay > 0 && eco.outlook < 1 && <span class="tip-note">{L("Запасов и одного урожая не хватит на год вперёд: приезжих меньше.", "Stores plus one harvest won’t last a year ahead: fewer newcomers.")}</span>}
               </>
             }
