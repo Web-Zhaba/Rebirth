@@ -291,7 +291,7 @@ button.city-name-btn:hover .city-name {
 .bar-stat .stat-delta {
   grid-column: 2;
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.2;
   white-space: nowrap;
   color: var(--frame-dim);
